@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class Media3PlaybackEngine(
+internal class Media3PlaybackEngine(
     context: Context,
 ) : PlaybackEngine, Player.Listener {
     private val player: ExoPlayer = ExoPlayer.Builder(context.applicationContext).build()
@@ -20,9 +20,7 @@ class Media3PlaybackEngine(
 
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
 
-    init {
-        player.addListener(this)
-    }
+    init { player.addListener(this) }
 
     override suspend fun prepare(request: PlaybackRequest) {
         mutableState.value = PlaybackState.Preparing
@@ -30,9 +28,7 @@ class Media3PlaybackEngine(
         player.prepare()
     }
 
-    override suspend fun play() {
-        player.play()
-    }
+    override suspend fun play() { player.play() }
 
     override suspend fun pause() {
         player.pause()
