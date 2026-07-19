@@ -16,8 +16,8 @@ import androidx.room3.RoomDatabase
     version = 1,
     exportSchema = true,
 )
-abstract class MuxTvDatabase : RoomDatabase() {
+internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun catalogDao(): CatalogDao
-    internal abstract fun initializationDao(): InitializationDao
+    abstract fun initializationDao(): InitializationDao
 }
