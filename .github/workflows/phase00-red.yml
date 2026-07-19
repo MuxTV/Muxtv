@@ -29,3 +29,11 @@ jobs:
           status=$?
           tail -n 30 phase00-build.log
           exit "$status"
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: phase00-build-log
+          path: phase00-build.log
+          if-no-files-found: error
+          retention-days: 3
