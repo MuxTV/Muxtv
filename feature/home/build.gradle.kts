@@ -15,5 +15,6 @@ dependencies {
     implementation(project(":player:api"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
     implementation(libs.tv.material)
 }
