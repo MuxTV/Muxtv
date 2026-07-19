@@ -1,9 +1,9 @@
 package app.muxtv.di
 
 import android.content.Context
-import androidx.room3.Room
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.MuxTvDatabase
+import app.muxtv.database.MuxTvDatabaseFactory
 import app.muxtv.player.PlaybackEngine
 import app.muxtv.player.media3.Media3PlaybackEngine
 import dagger.Module
@@ -18,11 +18,13 @@ import javax.inject.Singleton
 object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): MuxTvDatabase =
-        Room.databaseBuilder(context, MuxTvDatabase::class.java, "muxtv.db").build()
+        MuxTvDatabaseFactory.create(context)
 
     @Provides @Singleton
-    fun provideDatabaseInitializer(database: MuxTvDatabase): DatabaseInitializer = DatabaseInitializer(database)
+    fun provideDatabaseInitializer(database: MuxTvDatabase): DatabaseInitializer =
+        DatabaseInitializer(database)
 
     @Provides @Singleton
-    fun providePlaybackEngine(@ApplicationContext context: Context): PlaybackEngine = Media3PlaybackEngine(context)
+    fun providePlaybackEngine(@ApplicationContext context: Context): PlaybackEngine =
+        Media3PlaybackEngine(context)
 }
