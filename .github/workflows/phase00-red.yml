@@ -24,13 +24,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
-      - name: Run focused Media3 RED gate
+      - name: Run focused TV shell and diagnostics RED gate
         shell: bash
         run: |
           set +e
-          ./gradlew :player:media3:testDebugUnitTest --stacktrace > phase00-build.log 2>&1
+          ./gradlew :core:common:test :core:designsystem:testDebugUnitTest :app:tv:testDebugUnitTest --stacktrace > phase00-build.log 2>&1
           status=$?
-          tail -n 100 phase00-build.log
+          tail -n 120 phase00-build.log
           exit "$status"
       - name: Upload diagnostic log
         if: always()
