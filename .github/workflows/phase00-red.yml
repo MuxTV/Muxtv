@@ -7,45 +7,33 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   foundation-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
-        with:
-          gradle-version: '9.5.0'
-      - name: Validate build and contract tests
+      - name: Validate wrapper, build and contract tests
         shell: bash
         run: |
           set +e
           {
-            gradle wrapper --gradle-version 9.5.0 --distribution-type bin
+            ./gradlew --version
             ./gradlew help --configuration-cache
             ./gradlew help --configuration-cache
             ./gradlew -p build-logic :convention:test
             ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test --stacktrace
           } > phase00-build.log 2>&1
           status=$?
-          tail -n 60 phase00-build.log
+          tail -n 80 phase00-build.log
           exit "$status"
-      - name: Commit generated wrapper jar
-        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties
-          git add -f gradle/wrapper/gradle-wrapper.jar
-          git diff --cached --quiet || git commit -m "build: complete Gradle 9.5 wrapper"
-          git push
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
