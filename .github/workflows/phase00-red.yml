@@ -1,4 +1,4 @@
-name: Phase 00 build foundation
+name: Phase 00 foundation
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  convention-test:
+  foundation-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -23,18 +23,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
         with:
           gradle-version: '9.5.0'
-      - name: Generate wrapper and validate conventions
+      - name: Validate build and contract tests
         shell: bash
         run: |
           set +e
           {
             gradle wrapper --gradle-version 9.5.0 --distribution-type bin
-            gradle help --configuration-cache
-            gradle help --configuration-cache
-            gradle -p build-logic :convention:test --stacktrace
+            ./gradlew help --configuration-cache
+            ./gradlew help --configuration-cache
+            ./gradlew -p build-logic :convention:test
+            ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test --stacktrace
           } > phase00-build.log 2>&1
           status=$?
-          tail -n 40 phase00-build.log
+          tail -n 60 phase00-build.log
           exit "$status"
       - name: Commit generated wrapper jar
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
