@@ -1,4 +1,5 @@
 schema_version: 2
+architecture_version: 2
 architecture:
   style: modular_monolith
   state_model: unidirectional_data_flow
