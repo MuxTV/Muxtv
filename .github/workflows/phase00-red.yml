@@ -20,8 +20,15 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
       - name: Validate wrapper and convention tests
+        shell: bash
         run: |
-          ./gradlew --version
-          ./gradlew help --configuration-cache
-          ./gradlew help --configuration-cache
-          ./gradlew -p build-logic :convention:test --stacktrace
+          set +e
+          {
+            ./gradlew --version
+            ./gradlew help --configuration-cache
+            ./gradlew help --configuration-cache
+            ./gradlew -p build-logic :convention:test --stacktrace
+          } > phase00-build.log 2>&1
+          status=$?
+          tail -n 120 phase00-build.log
+          exit "$status"
