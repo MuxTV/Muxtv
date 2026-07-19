@@ -1,0 +1,91 @@
+schema_version: 1
+status: accepted
+last_reviewed: 2026-07-19
+normative_document: .work/specifications/playback-errors.md
+
+categories:
+  SOURCE:
+    - SOURCE_NOT_FOUND
+    - SOURCE_UNAUTHORIZED
+    - SOURCE_RATE_LIMITED
+    - SOURCE_REDIRECT_REJECTED
+    - SOURCE_RESPONSE_INVALID
+    - SOURCE_EMPTY
+    - SOURCE_EXPIRED_LOCATOR
+    - SOURCE_UNSUPPORTED_SCHEME
+  NETWORK:
+    - NETWORK_UNAVAILABLE
+    - NETWORK_TIMEOUT_CONNECT
+    - NETWORK_TIMEOUT_READ
+    - NETWORK_DNS_FAILED
+    - NETWORK_TLS_FAILED
+    - NETWORK_CONNECTION_RESET
+    - NETWORK_IPV4_IPV6_PATH_FAILED
+    - NETWORK_CAPTIVE_OR_UNVALIDATED
+  LIVE:
+    - LIVE_BEHIND_WINDOW
+    - LIVE_MANIFEST_STALE
+    - LIVE_SEGMENT_MISSING
+    - LIVE_TIMELINE_DISCONTINUITY
+    - LIVE_EDGE_UNKNOWN
+  DECODER:
+    - DECODER_VIDEO_UNSUPPORTED
+    - DECODER_AUDIO_UNSUPPORTED
+    - DECODER_INIT_FAILED
+    - DECODER_RUNTIME_FAILED
+    - DECODER_SECURE_REQUIRED
+    - AUDIO_PASSTHROUGH_FAILED
+    - HDR_MODE_UNSUPPORTED
+  TRACK:
+    - TRACK_SELECTION_STALE
+    - SUBTITLE_UNSUPPORTED
+    - SUBTITLE_PARSE_FAILED
+    - AUDIO_TRACK_UNAVAILABLE
+  RENDERING:
+    - VIDEO_SURFACE_LOST
+    - VIDEO_FIRST_FRAME_TIMEOUT
+    - VIDEO_FROZEN_AUDIO_CONTINUES
+    - AUDIO_SILENT_VIDEO_CONTINUES
+    - DISPLAY_MODE_CHANGE_FAILED
+  POLICY:
+    - PROFILE_CONTENT_RESTRICTED
+    - USER_STOPPED
+    - RECOVERY_BUDGET_EXHAUSTED
+    - VARIANT_PIN_UNAVAILABLE
+  INTERNAL:
+    - PLAYER_STATE_INVARIANT
+    - PLAYER_ENGINE_CRASHED
+    - UNKNOWN_PLAYBACK_ERROR
+
+retryability:
+  values:
+    - Never
+    - ImmediateOnce
+    - Backoff
+    - WaitForCondition
+    - RefreshResolver
+    - TryNextVariant
+    - UserActionRequired
+  owner: PlaybackOrchestrator
+  multiplicative_retry_loops_forbidden: true
+
+ui_contract:
+  raw_exception_visible: false
+  required_fields:
+    - user_message_key
+    - attempted_actions
+    - next_actions
+    - correlation_id
+  default_focus_must_be_safe: true
+  recovery_cancellable: true
+
+privacy:
+  forbidden_in_logs_and_exports:
+    - url_userinfo
+    - url_query_secrets
+    - authorization_values
+    - cookie_values
+    - provider_passwords
+    - provider_tokens
+    - pin_values
+  mapper_contract_tests_required_on_media3_upgrade: true
