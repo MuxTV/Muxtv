@@ -23,6 +23,7 @@ dependencies {
     testImplementation(libs.truth)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.coroutines.test)
     androidTestImplementation(libs.room3.testing)
     androidTestImplementation(libs.truth)
