@@ -1,0 +1,40 @@
+schema_version: 1
+verified_at: 2026-07-19
+policy:
+  production_uses_stable_only: true
+  preview_requires_adr: true
+  source_priority: official_release_notes
+build:
+  agp: 9.3.0
+  gradle: 9.5.0
+  jdk: 17
+  kotlin: 2.4.10
+  compile_sdk: 37
+  target_sdk: 37
+  min_sdk: 26
+ui:
+  compose_bom: 2026.06.00
+  tv_material: 1.1.0
+  tv_foundation: 1.0.0
+  navigation3: 1.1.4
+media:
+  media3: 1.10.1
+storage:
+  room3: 3.0.0
+  datastore: 1.2.1
+background:
+  workmanager: 2.11.2
+di:
+  dagger_hilt: 2.59.2
+  androidx_hilt: 1.4.0
+images:
+  coil: 3.5.0
+local_control:
+  ktor: 3.5.1
+quality:
+  benchmark: 1.4.1
+  profileinstaller: 1.4.1
+notes:
+  okhttp: Pin during Phase 00 after resolving the Ktor, Coil and direct-client dependency graph; use one aligned major version through the version catalog.
+  rust: No Rust dependency in Phase 00-02. UniFFI version is selected only by an accepted benchmark ADR.
+  libmpv: Not included in standard APK before a separate compatibility ADR.

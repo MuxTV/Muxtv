@@ -1,0 +1,53 @@
+schema_version: 1
+updated_at: 2026-07-19
+risks:
+  - id: R-001
+    title: Weak and fragmented TV hardware
+    probability: high
+    impact: high
+    mitigation: Device capability profiles, minSdk 26, performance budgets, reference-device matrix, no mandatory heavy animations.
+  - id: R-002
+    title: Unreliable and heterogeneous streams
+    probability: high
+    impact: high
+    mitigation: Stable error taxonomy, Stream Variant model, bounded recovery, health history and explicit failover.
+  - id: R-003
+    title: Very large playlists and XMLTV files
+    probability: high
+    impact: high
+    mitigation: Streaming parsers, bounded batches, staging tables, rolling EPG window and benchmark corpus.
+  - id: R-004
+    title: Architecture over-expansion before MVP
+    probability: medium
+    impact: high
+    mitigation: Modular-monolith rule, module creation criteria, deferred capability list and phase exit gates.
+  - id: R-005
+    title: KMP complexity without a second client
+    probability: medium
+    impact: medium
+    mitigation: Share only isolated platform-neutral modules; Android application remains separate.
+  - id: R-006
+    title: Rust/NDK debugging and APK overhead
+    probability: medium
+    impact: medium
+    mitigation: Rust disabled until benchmark ADR satisfies explicit thresholds.
+  - id: R-007
+    title: Plugin security boundary failure
+    probability: medium
+    impact: high
+    mitigation: No dynamic code in main process; declarative extensions and isolated companion APK capabilities.
+  - id: R-008
+    title: Sideload update and signature failures
+    probability: medium
+    impact: high
+    mitigation: Stable signing key, checksums, signature verification, rollback-safe data migrations and documented updater flow.
+  - id: R-009
+    title: User sources may be legally restricted
+    probability: high
+    impact: high
+    mitigation: No bundled paid channels, clear content policy, user-owned sources and review of any public catalog inclusion.
+  - id: R-010
+    title: Room 3 ecosystem regressions in a new major line
+    probability: low
+    impact: high
+    mitigation: Stable-only pin, migration tests, export schema, abstraction through repositories and version upgrade ADRs.

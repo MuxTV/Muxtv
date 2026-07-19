@@ -1,0 +1,29 @@
+schema_version: 1
+project:
+  name: MuxTV
+  repository: MuxTV/Muxtv
+  license: BSD-3-Clause
+  status: architecture_foundation
+  primary_language: Kotlin
+  primary_platforms:
+    - android_tv
+    - google_tv
+    - fire_tv
+  distribution:
+    primary: github_releases
+    google_play_required: false
+  product_type: local_first_iptv_player_and_catalog
+  content_policy:
+    provides_channels: false
+    sells_subscriptions: false
+    user_supplied_sources: true
+principles:
+  - tv_first
+  - local_first
+  - privacy_first
+  - reliability_before_breadth
+  - user_controls_channels_not_urls
+  - measured_optimization
+  - versioned_extension_contracts
+documentation_root: .work
+last_reviewed: 2026-07-19

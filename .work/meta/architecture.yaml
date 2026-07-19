@@ -1,0 +1,38 @@
+schema_version: 1
+architecture:
+  style: modular_monolith
+  state_model: unidirectional_data_flow
+  source_of_truth: room_sqlite
+  async_model: coroutines_flow
+  ui:
+    framework: compose_for_tv
+    shared_multiplatform_ui: false
+  navigation: navigation3
+  playback:
+    primary_engine: media3
+    boundary: PlaybackEngine
+    optional_engine: libmpv_compatibility_flavor
+  shared_core:
+    technology: kotlin_multiplatform
+    scope:
+      - domain_models
+      - playlist_and_epg_parsing
+      - normalization_and_matching
+      - stream_scoring
+      - backup_schema
+      - extension_contracts
+  rust:
+    default: disabled
+    bridge: uniffi
+    adoption_requires_benchmark_adr: true
+  extensions:
+    levels:
+      - built_in_adapter
+      - declarative_manifest
+      - companion_apk_aidl
+    arbitrary_code_in_main_process: forbidden
+  security:
+    credentials: android_keystore_backed
+    telemetry_default: disabled
+    local_control_pairing: one_time_token
+last_reviewed: 2026-07-19

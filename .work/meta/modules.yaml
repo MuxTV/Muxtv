@@ -1,0 +1,63 @@
+schema_version: 1
+modules:
+  app-tv:
+    type: android_application
+    owns: [composition_root, tv_navigation, app_lifecycle]
+    depends_on: [feature_modules, player-media3, core_modules]
+  core-common:
+    type: kmp_library
+    owns: [result, errors, typed_ids, clock, dispatchers]
+    android_dependencies: forbidden
+  core-model:
+    type: kmp_library
+    owns: [domain_models, contracts_dto]
+    android_dependencies: forbidden
+  core-database:
+    type: android_or_kmp_library
+    owns: [room_database, dao, migrations, transactions]
+  core-network:
+    type: android_library
+    owns: [okhttp_clients, auth, download_policies, redaction]
+  core-designsystem:
+    type: android_library
+    owns: [tokens, focus_components, tv_theme]
+  catalog-api:
+    type: kmp_library
+    owns: [source_ports, catalog_ports]
+  catalog-m3u:
+    type: kmp_candidate
+    owns: [m3u_parser, m3u_adapter]
+  catalog-normalization:
+    type: kmp_library
+    owns: [aliases, normalization, duplicate_candidates]
+  epg-api:
+    type: kmp_library
+    owns: [epg_ports, epg_models]
+  epg-xmltv:
+    type: kmp_candidate
+    owns: [streaming_xmltv_parser]
+  player-api:
+    type: kotlin_library
+    owns: [playback_contracts, stable_errors, diagnostics]
+  player-media3:
+    type: android_library
+    owns: [media3_adapter, media_session, device_capabilities]
+  local-control-server:
+    type: android_library
+    owns: [ktor_server, pairing, local_api]
+  feature-modules:
+    type: android_feature_group
+    children: [onboarding, home, live, guide, search, sources, doctor, profiles, settings]
+  benchmark:
+    type: android_test
+    owns: [macrobenchmarks, performance_corpus]
+  baseline-profile:
+    type: android_test
+    owns: [critical_user_journeys, baseline_profile_generation]
+rules:
+  - domain_must_not_depend_on_android
+  - features_must_not_access_dao_directly
+  - features_must_not_import_media3
+  - adapters_depend_on_ports_not_other_adapters
+  - cyclic_dependencies_forbidden
+last_reviewed: 2026-07-19
