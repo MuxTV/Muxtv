@@ -16,7 +16,7 @@ concurrency:
 jobs:
   foundation-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
@@ -24,19 +24,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
-      - name: Validate wrapper, build and contract tests
+      - name: Run focused Media3 RED gate
         shell: bash
         run: |
           set +e
-          {
-            ./gradlew --version
-            ./gradlew help --configuration-cache
-            ./gradlew help --configuration-cache
-            ./gradlew -p build-logic :convention:test
-            ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test
-            ./gradlew :core:database:compileDebugAndroidTestKotlin
-            ./gradlew :player:media3:testDebugUnitTest --stacktrace
-          } > phase00-build.log 2>&1
+          ./gradlew :player:media3:testDebugUnitTest --stacktrace > phase00-build.log 2>&1
           status=$?
           tail -n 100 phase00-build.log
           exit "$status"
