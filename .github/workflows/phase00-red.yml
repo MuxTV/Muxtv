@@ -14,20 +14,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Validate wrapper and convention tests
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
+        with:
+          gradle-version: '9.5.0'
+      - name: Generate wrapper and validate conventions
         shell: bash
         run: |
-          export JAVA_HOME="$JAVA_HOME_17_X64"
-          export PATH="$JAVA_HOME/bin:$PATH"
           set +e
           {
-            ./gradlew --version
-            ./gradlew help --configuration-cache
-            ./gradlew help --configuration-cache
-            ./gradlew -p build-logic :convention:test --stacktrace
+            gradle wrapper --gradle-version 9.5.0 --distribution-type bin
+            gradle help --configuration-cache
+            gradle help --configuration-cache
+            gradle -p build-logic :convention:test --stacktrace
           } > phase00-build.log 2>&1
           status=$?
-          tail -n 30 phase00-build.log
+          tail -n 40 phase00-build.log
           exit "$status"
       - name: Upload diagnostic log
         if: always()
@@ -35,5 +40,13 @@ jobs:
         with:
           name: phase00-build-log
           path: phase00-build.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload generated wrapper jar
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gradle-wrapper-jar
+          path: gradle/wrapper/gradle-wrapper.jar
           if-no-files-found: error
           retention-days: 3
