@@ -29,10 +29,11 @@ jobs:
             ./gradlew help --configuration-cache
             ./gradlew help --configuration-cache
             ./gradlew -p build-logic :convention:test
-            ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test --stacktrace
+            ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test
+            ./gradlew :core:database:compileDebugAndroidTestKotlin --stacktrace
           } > phase00-build.log 2>&1
           status=$?
-          tail -n 80 phase00-build.log
+          tail -n 100 phase00-build.log
           exit "$status"
       - name: Upload diagnostic log
         if: always()
