@@ -1,0 +1,89 @@
+schema_version: 1
+status: accepted
+last_reviewed: 2026-07-19
+
+roots:
+  project: .work/PROJECT.md
+  product: .work/PRODUCT.md
+  architecture: .work/ARCHITECTURE.md
+  roadmap: .work/ROADMAP.md
+  current_state: .work/CURRENT-STATE.md
+  navigation: .work/README.md
+
+normative:
+  profiles:
+    - .work/specifications/profiles.md
+    - .work/adr/0004-profile-and-installation-scope.md
+    - .work/meta/profiles.yaml
+  catalog:
+    - .work/architecture/domain-model.md
+    - .work/architecture/source-refresh.md
+    - .work/architecture/data-flow.md
+  ingestion:
+    - .work/specifications/m3u-ingestion.md
+    - .work/specifications/xmltv-processing.md
+  playback:
+    - .work/architecture/playback-runtime.md
+    - .work/specifications/playback-errors.md
+    - .work/meta/playback-error-catalog.yaml
+  smart_channels_doctor:
+    - .work/specifications/smart-channels.md
+    - .work/specifications/tv-doctor.md
+    - .work/meta/scoring-model.yaml
+  user_experience:
+    - .work/design/focus-navigation.md
+    - .work/design/design-system.md
+    - .work/specifications/search.md
+    - .work/specifications/user-journeys.md
+  local_control:
+    - .work/specifications/local-control.md
+  backup_restore:
+    - .work/specifications/backup-and-restore.md
+  extensions:
+    - .work/architecture/extensions.md
+  security:
+    - .work/security/threat-model.md
+    - .work/security/network-and-source-policy.md
+  release:
+    - .work/release/self-update-and-signing.md
+  platforms:
+    - .work/platforms/fire-tv.md
+  quality:
+    - .work/quality/quality-gates.md
+    - .work/quality/benchmark-methodology.md
+  traceability:
+    - .work/specifications/requirements-traceability.md
+  decisions:
+    - .work/adr/0001-platform-and-stack.md
+    - .work/adr/0002-kmp-and-rust-policy.md
+    - .work/adr/0003-database-platform-boundary.md
+    - .work/adr/0004-profile-and-installation-scope.md
+  evidence_sources:
+    - .work/research/official-sources.md
+    - .work/research/reference-repositories.md
+    - .work/research/technology-evaluation.md
+
+plans:
+  phase_00: .work/plans/2026-07-19-phase-00-foundation.md
+
+machine_metadata:
+  - .work/meta/project.yaml
+  - .work/meta/architecture.yaml
+  - .work/meta/modules.yaml
+  - .work/meta/dependencies.yaml
+  - .work/meta/status.yaml
+  - .work/meta/risks.yaml
+  - .work/meta/profiles.yaml
+  - .work/meta/playback-error-catalog.yaml
+  - .work/meta/scoring-model.yaml
+  - .work/meta/documents.yaml
+
+consistency_rules:
+  - all_paths_must_exist
+  - accepted_markdown_requires_status_and_last_reviewed_frontmatter_except_indexes_and_plans
+  - machine_metadata_requires_schema_version_and_status_or_state
+  - current_state_and_status_yaml_must_not_claim_unverified_implementation
+  - architecture_version_must_match_between_architecture_md_status_and_architecture_yaml
+  - profile_invariants_must_match_product_profiles_adr_and_meta
+  - phase_00_plan_must_not_include_deferred_features
+  - reference_repositories_are_non_normative_evidence
