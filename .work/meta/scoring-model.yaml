@@ -1,0 +1,59 @@
+schema_version: 1
+status: calibration_required
+last_reviewed: 2026-07-19
+
+smart_channel_matching:
+  auto_merge_enabled: false
+  thresholds:
+    review_min: 0.72
+    auto_merge_min: 0.92
+  required_auto_merge_precision: 0.995
+  missing_feature_contribution: neutral_zero_evidence
+  features:
+    confirmed_external_id: 0.45
+    exact_tvg_id: 0.30
+    exact_normalized_name: 0.18
+    strong_alias: 0.22
+    compatible_country_language: 0.10
+    same_epg_binding: 0.25
+    high_logo_similarity: 0.08
+    schedule_similarity: 0.12
+    stable_stream_program_relation: 0.18
+    region_or_timeshift_conflict: -0.45
+  hard_rejects:
+    - manual_reject_or_split
+    - confirmed_distinct_external_ids
+    - incompatible_radio_tv_type
+    - conflicting_manual_epg_bindings
+    - confirmed_distinct_regional_feeds
+  normative_document: .work/specifications/smart-channels.md
+
+stream_selection:
+  score_range: [0.0, 1.0]
+  weights:
+    stability: 0.30
+    startup_latency: 0.20
+    stall_rate: 0.15
+    effective_quality: 0.15
+    device_compatibility: 0.10
+    audio_subtitle_completeness: 0.05
+    freshness: 0.05
+  evidence:
+    observed_session_weight_over_short_synthetic: true
+    device_specific_compatibility: true
+    missing_component: neutral_prior_low_confidence
+    recent_failure_penalty: decaying
+  switching:
+    minimum_score_improvement: 0.10
+    failure_override: true
+    failed_variant_session_cooldown_minutes: 10
+    manual_pin_priority: true
+    manual_pin_fallback_requires_profile_policy: true
+  calibration_required_before_public_defaults: true
+  normative_document: .work/specifications/tv-doctor.md
+
+versioning:
+  algorithm_version_required_on_decisions: true
+  feature_schema_version_required: true
+  silent_threshold_lowering_forbidden: true
+  manual_decisions_survive_upgrade: true
