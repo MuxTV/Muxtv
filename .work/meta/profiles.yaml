@@ -1,0 +1,79 @@
+schema_version: 1
+status: accepted
+last_reviewed: 2026-07-19
+
+invariants:
+  primary_profile_count: 1
+  primary_profile_initial_name: "Основной"
+  primary_profile_deletable: false
+  primary_profile_renamable: true
+  profile_picker_when_single_profile: false
+  built_in_profile_types: []
+  profile_type_field_allowed: false
+  additional_profiles:
+    creation: user_only
+    naming: user_defined
+
+scopes:
+  installation:
+    - sources
+    - provider_credentials
+    - provider_catalog
+    - canonical_channels
+    - stream_variants
+    - base_epg_data
+    - stream_health
+    - device_capabilities
+    - extensions
+    - update_state
+  profile:
+    - favorites
+    - playback_history
+    - last_channel
+    - custom_groups
+    - channel_order
+    - channel_numbers
+    - hidden_channels_and_groups
+    - display_overlays
+    - manual_epg_overrides
+    - audio_subtitle_preferences
+    - playback_preferences
+    - ui_mode
+    - accessibility_preferences
+    - search_history
+    - profile_policy
+
+policies:
+  separate_from_profile_identity: true
+  applicable_to_any_profile: true
+  dimensions:
+    - pin_for_switch
+    - pin_for_settings
+    - hidden_ratings
+    - hidden_groups
+    - viewing_schedule
+  security_claim: household_ui_barrier_not_device_security
+
+startup_after_multiple_profiles:
+  allowed_modes:
+    - last_active
+    - primary
+    - picker
+  default: last_active
+
+lifecycle:
+  states:
+    - active
+    - archived
+    - deleted
+  additional_profile_delete:
+    default_operation: archive
+    permanent_delete_requires_confirmation: true
+    must_not_delete_installation_sources: true
+  switching:
+    source_refresh_required: false
+    restore_focus: true
+    enforce_new_profile_policy_before_continuing_playback: true
+
+normative_document: .work/specifications/profiles.md
+adr: .work/adr/0004-profile-and-installation-scope.md

@@ -1,53 +1,108 @@
-schema_version: 1
+schema_version: 2
 updated_at: 2026-07-19
 risks:
   - id: R-001
     title: Weak and fragmented TV hardware
     probability: high
     impact: high
-    mitigation: Device capability profiles, minSdk 26, performance budgets, reference-device matrix, no mandatory heavy animations.
+    mitigation: Physical Tier A/B/Fire matrix, observed device capability profiles, performance budgets, reduced visual profile, no unsupported universal codec claims.
   - id: R-002
     title: Unreliable and heterogeneous streams
     probability: high
     impact: high
-    mitigation: Stable error taxonomy, Stream Variant model, bounded recovery, health history and explicit failover.
+    mitigation: Stable error taxonomy, Stream Variant model, bounded recovery, health evidence, circuit breakers, transparent failover.
   - id: R-003
-    title: Very large playlists and XMLTV files
+    title: Very large or hostile playlists/XMLTV/images
     probability: high
     impact: high
-    mitigation: Streaming parsers, bounded batches, staging tables, rolling EPG window and benchmark corpus.
+    mitigation: Secure streaming parsers, DTD/entities disabled, decompression and dimension limits, bounded batches/temp quota, staging and corpus/fuzz tests.
   - id: R-004
-    title: Architecture over-expansion before MVP
-    probability: medium
+    title: Architecture and feature over-expansion before reliable Live TV
+    probability: high
     impact: high
-    mitigation: Modular-monolith rule, module creation criteria, deferred capability list and phase exit gates.
+    mitigation: Modular monolith, minimum physical module graph, phase exit gates, VOD/DVR/multiview/extensions deferred, no parity-driven roadmap.
   - id: R-005
     title: KMP complexity without a second client
     probability: medium
     impact: medium
-    mitigation: Share only isolated platform-neutral modules; Android application remains separate.
+    mitigation: Pure Kotlin KMP-compatible boundaries only; Android-first Room; actual KMP target requires second-platform ADR and prototype.
   - id: R-006
-    title: Rust/NDK debugging and APK overhead
+    title: Rust/libmpv/FFmpeg native maintenance and APK overhead
     probability: medium
-    impact: medium
-    mitigation: Rust disabled until benchmark ADR satisfies explicit thresholds.
+    impact: high
+    mitigation: Disabled baseline; per-operation corpus benchmark, ABI/security/license/startup/crash ADR before adoption.
   - id: R-007
-    title: Plugin security boundary failure
+    title: Extension security boundary failure
     probability: medium
     impact: high
-    mitigation: No dynamic code in main process; declarative extensions and isolated companion APK capabilities.
+    mitigation: No dynamic code in main process, declarative-first model, companion APK Binder isolation, default-deny capabilities, host validation and conformance kit.
   - id: R-008
-    title: Sideload update and signature failures
+    title: Sideload update/signing/supply-chain failure
     probability: medium
-    impact: high
-    mitigation: Stable signing key, checksums, signature verification, rollback-safe data migrations and documented updater flow.
+    impact: critical
+    mitigation: Fixed package/signing identity, protected/pinned release workflow, package/certificate/hash/version verification, PackageInstaller consent, migration/recovery tests and incident plan.
   - id: R-009
-    title: User sources may be legally restricted
+    title: User/public sources may be legally restricted or unstable
     probability: high
     impact: high
-    mitigation: No bundled paid channels, clear content policy, user-owned sources and review of any public catalog inclusion.
+    mitigation: No bundled paid channels, player/catalog disclaimer, legal/license review for public catalogs, provenance and no availability guarantee.
   - id: R-010
-    title: Room 3 ecosystem regressions in a new major line
-    probability: low
+    title: Room 3/toolchain regressions in a new major line
+    probability: medium
     impact: high
-    mitigation: Stable-only pin, migration tests, export schema, abstraction through repositories and version upgrade ADRs.
+    mitigation: Scaffold prototype before schema commitment, stable pins, Android-first boundary, schema export/migration tests, repository ports and upgrade ADR.
+  - id: R-011
+    title: False-positive Smart Channel merge corrupts user catalog
+    probability: medium
+    impact: high
+    mitigation: Auto-merge disabled until >=99.5% labeled precision, hard conflicts, evidence preview, manual reject/split persistence and exact undo journal.
+  - id: R-012
+    title: Source refresh destroys favorites/order/manual EPG
+    probability: medium
+    impact: critical
+    mitigation: Provider/canonical/profile separation, immutable revisions/staging, suspicious churn gates, atomic commit, tombstones and overlay-preservation tests.
+  - id: R-013
+    title: SSRF or credential leakage through user URLs and redirects
+    probability: medium
+    impact: critical
+    mitigation: Per-source address scope, private/loopback blocking, DNS/redirect revalidation, origin-bound credentials, no global TLS bypass, redaction canaries.
+  - id: R-014
+    title: Local phone-control server exposed or hijacked
+    probability: medium
+    impact: high
+    mitigation: Ephemeral activation, TV-confirmed one-time pairing, scoped sessions/capabilities, Host/origin/CSRF/rate limits, no generic proxy and revoke UI.
+  - id: R-015
+    title: Profile model duplicates sources or encodes rigid household roles
+    probability: low
+    impact: medium
+    mitigation: Exactly one primary profile, only user-created additional profiles, no profileType, installation/profile schema separation and invariant tests.
+  - id: R-016
+    title: TV focus/navigation visually polished but unusable
+    probability: high
+    impact: high
+    mitigation: Five-button journey requirement, deterministic focus graph/restoration, selected/focused contrast screenshots, Back/keyboard/EPG tests and physical remotes.
+  - id: R-017
+    title: Playback retries multiply across Media3/network/provider/WorkManager
+    probability: medium
+    impact: high
+    mitigation: Explicit retry ownership, global recovery budget, per-host/variant circuit breakers, deterministic fake-engine tests and chronology diagnostics.
+  - id: R-018
+    title: Device advertises codec support but fails at runtime
+    probability: high
+    impact: high
+    mitigation: Observed capability registry, semantic fallback, physical matrix, expiring evidence and no permanent unreviewed model blacklist.
+  - id: R-019
+    title: EPG timezone/identity errors mislead users or overload guide
+    probability: high
+    impact: medium
+    mitigation: Explicit timezone resolution, Instant storage, conflict/dedup provenance, lazy interval queries, manual binding protection and generated corpus.
+  - id: R-020
+    title: Backup/restore partially corrupts data or leaks secrets
+    probability: medium
+    impact: critical
+    mitigation: Secrets excluded by default, versioned/checksummed bounded archive, staging/preview/atomic commit, primary profile invariant, migration/golden/canary tests.
+  - id: R-021
+    title: Documentation drifts from implementation
+    probability: high
+    impact: high
+    mitigation: CURRENT-STATE facts only, machine/Markdown consistency tests, requirement traceability, phase verification report and ADR/document updates in affected PR.

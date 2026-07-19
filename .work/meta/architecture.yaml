@@ -1,19 +1,43 @@
-schema_version: 1
+schema_version: 2
+architecture_version: 2
 architecture:
   style: modular_monolith
   state_model: unidirectional_data_flow
-  source_of_truth: room_sqlite
+  source_of_truth: room_sqlite_android_first
   async_model: coroutines_flow
   ui:
     framework: compose_for_tv
     shared_multiplatform_ui: false
-  navigation: navigation3
+    focus_is_primary_cursor: true
+    design_system: muxtv_tv_design_system
+    required_resolutions: [720p, 1080p, 4k]
+  navigation:
+    framework: navigation3
+    stable_key_focus_restoration: true
   playback:
     primary_engine: media3
     boundary: PlaybackEngine
+    owner: process_scoped_service_controller
+    stable_error_catalog: .work/meta/playback-error-catalog.yaml
     optional_engine: libmpv_compatibility_flavor
+    optional_engine_requires_adr: true
+  data:
+    revisions_and_staging: true
+    atomic_source_commit: true
+    provider_canonical_overlay_separation: true
+    urls_are_stable_identity: false
+    reversible_catalog_mutations: true
+    database_kmp_initially: false
+    database_kmp_revisit_adr: .work/adr/0003-database-platform-boundary.md
+  profiles:
+    primary_profile_count: 1
+    user_created_additional_profiles: true
+    built_in_profile_types: false
+    policy_separate_from_identity: true
+    metadata: .work/meta/profiles.yaml
   shared_core:
-    technology: kotlin_multiplatform
+    technology: pure_kotlin_kmp_compatible
+    actual_kmp_requires_second_target_adr: true
     scope:
       - domain_models
       - playlist_and_epg_parsing
@@ -21,18 +45,44 @@ architecture:
       - stream_scoring
       - backup_schema
       - extension_contracts
+  matching:
+    auto_merge_default: disabled_until_calibrated
+    decisions_explainable: true
+    merge_split_undo: true
+    scoring_metadata: .work/meta/scoring-model.yaml
   rust:
     default: disabled
-    bridge: uniffi
+    bridge_candidate: uniffi
     adoption_requires_benchmark_adr: true
+  local_control:
+    server: embedded_ktor
+    default_persistent_server: false
+    pairing: tv_confirmed_one_time_token
+    capabilities_scoped: true
   extensions:
     levels:
       - built_in_adapter
       - declarative_manifest
       - companion_apk_aidl
     arbitrary_code_in_main_process: forbidden
+    shared_database: forbidden
   security:
-    credentials: android_keystore_backed
+    credentials: android_keystore_backed_reference
     telemetry_default: disabled
-    local_control_pairing: one_time_token
+    remote_input_trust: untrusted
+    per_source_network_policy: true
+    cross_origin_sensitive_headers: stripped_by_default
+    xml_external_entities: disabled
+    automatic_mutations_require_preview_and_undo: true
+  release:
+    distribution: github_releases
+    package_signature_root_of_trust: true
+    packageinstaller_user_confirmation: required
+    nightly_separate_application_id: true
+  platforms:
+    first_line:
+      - android_tv
+      - google_tv
+      - fire_tv
+    mandatory_google_play_services: false
 last_reviewed: 2026-07-19

@@ -2,23 +2,52 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Создать воспроизводимый Android TV проект MuxTV с TV-first shell, архитектурными контрактами, database schema v1, CI, tests и debug APK artifact.
+**Goal:** Создать воспроизводимый Android TV проект MuxTV с premium TV shell, deterministic D-pad focus, architecture/domain/playback contracts, Room schema v1 с одним Основным профилем, CI, tests, benchmark baseline и downloadable debug APK.
 
-**Architecture:** Модульный монолит с отдельным Android application entry point, platform-neutral domain modules и adapter modules. UI использует Compose for TV и Navigation 3; playback изолирован контрактом `PlaybackEngine`; persistence проходит через repository boundary.
+**Architecture:** Android-first modular monolith. Pure Kotlin modules remain Android-free/KMP-compatible, but no KMP plugin/database target is introduced before a real second platform. Room is Android-only behind repositories; Media3 is isolated behind `PlaybackEngine`; features depend on contracts/use cases, not DAO/OkHttp/Media3.
 
-**Tech Stack:** Kotlin 2.4.10, AGP 9.3.0, Gradle 9.5.0, JDK 17, Compose for TV 1.1.0, Navigation 3 1.1.4, Media3 1.10.1, Room 3.0.0, Hilt 2.59.2, AndroidX Hilt 1.4.0.
+**Tech Stack:** Kotlin 2.4.10, AGP 9.3.0, Gradle 9.5.0, JDK 17, Compose BOM 2026.06.00, Compose for TV 1.1.0, TV Foundation 1.0.0, Navigation 3 1.1.4, Media3 1.10.1, Room 3.0.0 after scaffold validation, Hilt 2.59.2, AndroidX Hilt 1.4.0, WorkManager 2.11.2, DataStore 1.2.1.
 
 ## Global Constraints
 
 - `minSdk=26`, `compileSdk=37`, `targetSdk=37`.
 - Production dependencies use stable releases only.
-- Domain modules must not import Android, Room, Media3, OkHttp or Compose types.
-- TV controls use `androidx.tv.material3` variants and expose a visible focus state.
-- No Rust, libmpv, Xtream, DVR or external plugins in Phase 00.
-- Release signing secrets must never be committed.
-- All architecture documentation and project status metadata remain under `.work`.
+- Application ID baseline: `app.muxtv.tv`; debug builds use `.debug` suffix.
+- Domain/pure Kotlin modules must not import Android, Room, Media3, OkHttp, Ktor, Compose or Hilt.
+- Database remains Android-first per ADR-0003; no `commonMain`/KMP database in Phase 00.
+- Clean database creation must atomically create exactly one undeletable primary profile named `Основной`.
+- No built-in profile types (`Дети`, `Родители`, `Гости`) and no `profileType` field.
+- TV controls use `androidx.tv.material3` variants and expose visible default/focused/pressed/selected/disabled states.
+- All primary journeys must work with five-button D-pad and Back.
+- Player lifetime belongs to process-scoped controller/service boundary, never Activity/Composable.
+- No Rust, libmpv, Xtream, Stalker, DVR, VOD, multiview or executable extensions in Phase 00.
+- Release signing secrets must never be committed or exposed to untrusted PR workflows.
+- All architecture documentation and status metadata remain under `.work`.
+- Every task ends in independently testable state and separate commit.
 
 ---
+
+## Planned physical structure
+
+```text
+app/tv
+core/common
+core/model
+core/database
+core/designsystem
+core/ui
+core/testing
+catalog/api
+player/api
+player/media3
+player/fake
+feature/home
+benchmark
+baseline-profile
+build-logic/convention
+```
+
+Do not create future feature/provider modules in Phase 00. Add modules only when the task needs their boundary.
 
 ### Task 1: Reproducible Gradle foundation
 
@@ -27,38 +56,46 @@
 - Create: `build.gradle.kts`
 - Create: `gradle.properties`
 - Create: `gradle/libs.versions.toml`
-- Generate: `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`
 - Create: `gradle/wrapper/gradle-wrapper.properties`
+- Create: `gradle/wrapper/gradle-wrapper.jar`
+- Create: `gradlew`
+- Create: `gradlew.bat`
 - Create: `build-logic/settings.gradle.kts`
 - Create: `build-logic/convention/build.gradle.kts`
 - Create: `build-logic/convention/src/main/kotlin/muxtv.android.application.gradle.kts`
 - Create: `build-logic/convention/src/main/kotlin/muxtv.android.library.gradle.kts`
 - Create: `build-logic/convention/src/main/kotlin/muxtv.kotlin.library.gradle.kts`
-- Test: `build-logic/convention/src/test/kotlin/ConventionPluginFilesTest.kt`
+- Test: `build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/ConventionFilesTest.kt`
 
-**Produces:** version catalog, Gradle wrapper and three convention plugins used by every later task.
+**Produces:** pinned toolchain/version catalog and three minimal convention plugins.
 
-- [ ] **Step 1: Write the failing repository-structure test**
+- [ ] **Step 1: Generate official Gradle 9.5 wrapper**
 
-The test asserts that the three convention plugin files exist and the version catalog contains `agp`, `kotlin`, `compose-bom`, `media3`, `room3`, and `navigation3` keys.
-
-- [ ] **Step 2: Run the test and verify failure**
+Run using a trusted local Gradle installation:
 
 ```bash
-gradle -p build-logic :convention:test
+gradle wrapper --gradle-version 9.5 --distribution-type bin
 ```
 
-Expected: FAIL because convention plugins and catalog entries do not exist.
+Expected: wrapper scripts/JAR/properties exist and `./gradlew --version` reports Gradle 9.5 with JDK 17.
 
-- [ ] **Step 3: Implement the Gradle foundation**
+- [ ] **Step 2: Write failing convention/version-catalog test**
 
-Use `google()`, `mavenCentral()`, and `gradlePluginPortal()`. Set JVM toolchain 17. Enable configuration cache and parallel execution. Pin versions exactly from `.work/meta/dependencies.yaml`. Generate the wrapper with:
+Test must assert that version catalog contains exact aliases for AGP, Kotlin, Compose BOM, TV Material, TV Foundation, Navigation 3, Media3, Room, Hilt, WorkManager and DataStore; three convention plugin source files must exist.
+
+- [ ] **Step 3: Verify red state**
 
 ```bash
-gradle wrapper --gradle-version 9.5.0 --distribution-type all
+./gradlew -p build-logic :convention:test
 ```
 
-- [ ] **Step 4: Verify build configuration**
+Expected: FAIL because catalog/plugins are not complete.
+
+- [ ] **Step 4: Implement minimal build foundation**
+
+Use `google()`, `mavenCentral()`, `gradlePluginPortal()` only. Set JVM toolchain 17. Enable configuration cache, parallel execution and Gradle build cache. Do not add JitPack or snapshot repositories.
+
+- [ ] **Step 5: Verify**
 
 ```bash
 ./gradlew help --configuration-cache
@@ -66,16 +103,16 @@ gradle wrapper --gradle-version 9.5.0 --distribution-type all
 ./gradlew -p build-logic :convention:test
 ```
 
-Expected: tests PASS and the second `help` run reports configuration-cache reuse.
+Expected: PASS; second help run reports configuration cache reuse.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add settings.gradle.kts build.gradle.kts gradle.properties gradle gradlew gradlew.bat build-logic
-git commit -m "build: add reproducible Android TV toolchain"
+git commit -m "build: establish reproducible Android TV toolchain"
 ```
 
-### Task 2: Module graph and architecture enforcement
+### Task 2: Minimal module graph and dependency enforcement
 
 **Files:**
 - Create: `app/tv/build.gradle.kts`
@@ -83,30 +120,52 @@ git commit -m "build: add reproducible Android TV toolchain"
 - Create: `core/model/build.gradle.kts`
 - Create: `core/database/build.gradle.kts`
 - Create: `core/designsystem/build.gradle.kts`
+- Create: `core/ui/build.gradle.kts`
 - Create: `core/testing/build.gradle.kts`
+- Create: `catalog/api/build.gradle.kts`
 - Create: `player/api/build.gradle.kts`
 - Create: `player/media3/build.gradle.kts`
+- Create: `player/fake/build.gradle.kts`
 - Create: `feature/home/build.gradle.kts`
 - Modify: `settings.gradle.kts`
-- Test: `core/testing/src/test/kotlin/ModuleDependencyRulesTest.kt`
+- Test: `core/testing/src/test/kotlin/app/muxtv/testing/ModuleDependencyRulesTest.kt`
 
-**Produces:** the minimal physical graph needed by all Phase 00 tasks.
+**Produces:** physical graph matching `.work/meta/modules.yaml` without premature modules.
 
-- [ ] **Step 1: Write failing architecture assertions**
+- [ ] **Step 1: Write failing architecture tests**
 
-Reject Android plugins in `core:model`, direct `feature:* → player:media3`, direct `feature:* → core:database`, and dependency cycles.
+Test reads Gradle project/build files and rejects:
 
-- [ ] **Step 2: Run and verify failure**
+```text
+core:model → Android/Room/Media3/OkHttp/Compose/Hilt
+catalog:api → Android
+player:api → Media3/Android
+feature:* → core:database or player:media3
+cycles
+```
+
+- [ ] **Step 2: Verify red state**
 
 ```bash
 ./gradlew :core:testing:test
 ```
 
-Expected: FAIL because modules are not included.
+Expected: FAIL because modules/dependency rules are not present.
 
-- [ ] **Step 3: Create modules and dependencies**
+- [ ] **Step 3: Create minimal modules**
 
-`app:tv` depends on `feature:home`, `core:designsystem`, `core:database`, and `player:media3`. `player:media3` implements `player:api`. `feature:home` depends only on `player:api`, `core:model`, and `core:designsystem`.
+Dependencies:
+
+```text
+app:tv → feature:home, player:media3, core:database, core:designsystem, core:ui
+feature:home → core:model, core:designsystem, core:ui, player:api
+player:media3 → player:api, core:common
+player:fake → player:api
+core:database → core:model, core:common
+catalog:api → core:model, core:common
+```
+
+Pure Kotlin modules apply JVM plugin/toolchain only. Do not add KMP plugin.
 
 - [ ] **Step 4: Verify graph**
 
@@ -115,135 +174,119 @@ Expected: FAIL because modules are not included.
 ./gradlew :core:testing:test
 ```
 
-Expected: modules are listed and architecture tests PASS.
+Expected: listed projects match plan and architecture tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add settings.gradle.kts app core player feature
+git add settings.gradle.kts app core catalog player feature
 git commit -m "build: establish MuxTV module boundaries"
 ```
 
-### Task 3: TV design system and navigation shell
+### Task 3: Domain identifiers, profile invariant and catalog skeleton
 
 **Files:**
-- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/MuxTvTheme.kt`
-- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/TvTokens.kt`
-- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/component/MuxTvFocusSurface.kt`
-- Create: `feature/home/src/main/kotlin/app/muxtv/feature/home/HomeRoute.kt`
-- Create: `app/tv/src/main/AndroidManifest.xml`
-- Create: `app/tv/src/main/kotlin/app/muxtv/MuxTvApplication.kt`
-- Create: `app/tv/src/main/kotlin/app/muxtv/MainActivity.kt`
-- Create: `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
-- Test: `core/designsystem/src/test/kotlin/app/muxtv/designsystem/TvTokensTest.kt`
-- Test: `app/tv/src/androidTest/kotlin/app/muxtv/NavigationFocusTest.kt`
+- Create: `core/common/src/main/kotlin/app/muxtv/common/Identifiers.kt`
+- Create: `core/common/src/main/kotlin/app/muxtv/common/Clock.kt`
+- Create: `core/model/src/main/kotlin/app/muxtv/model/ProfileModels.kt`
+- Create: `core/model/src/main/kotlin/app/muxtv/model/CatalogModels.kt`
+- Create: `catalog/api/src/main/kotlin/app/muxtv/catalog/CatalogRepository.kt`
+- Test: `core/model/src/test/kotlin/app/muxtv/model/ProfileInvariantTest.kt`
+- Test: `core/model/src/test/kotlin/app/muxtv/model/CatalogIdentityTest.kt`
 
-**Produces:** launchable TV shell with deterministic D-pad focus and TV launcher declaration.
+**Interfaces:**
 
-- [ ] **Step 1: Write failing token and focus tests**
+```kotlin
+@JvmInline value class ProfileId(val value: String)
+@JvmInline value class SourceId(val value: String)
+@JvmInline value class CanonicalChannelId(val value: String)
+@JvmInline value class StreamVariantId(val value: String)
 
-Assert focus-scale/contrast tokens and that DPAD_RIGHT moves focus between two Home actions.
-
-- [ ] **Step 2: Run and verify failure**
-
-```bash
-./gradlew :core:designsystem:test :app:tv:connectedDebugAndroidTest
+data class UserProfile(
+    val id: ProfileId,
+    val name: String,
+    val isPrimary: Boolean,
+)
 ```
 
-Expected: FAIL because theme, components and activity do not exist.
+No `profileType` enum/property.
 
-- [ ] **Step 3: Implement the TV shell**
+- [ ] **Step 1: Write failing model tests**
 
-Use `androidx.tv.material3.MaterialTheme`, Navigation 3 `NavDisplay`, immutable destinations and a focus surface with default/focused/pressed/disabled states. Declare `LEANBACK_LAUNCHER` and touchscreen-not-required metadata.
+Assert typed ID equality, primary profile name/invariant validation, additional arbitrary names, and absence of role/type semantics. Catalog test asserts URL is locator data, not channel ID.
 
-- [ ] **Step 4: Verify shell**
+- [ ] **Step 2: Verify red state**
 
 ```bash
-./gradlew :app:tv:assembleDebug :core:designsystem:test :app:tv:connectedDebugAndroidTest
+./gradlew :core:model:test
 ```
 
-Expected: APK builds and focus test PASS.
+Expected: compilation FAIL because types are absent.
+
+- [ ] **Step 3: Implement minimal immutable models/contracts**
+
+Use only Kotlin/JDK types and injected clock/ID factory contracts. Keep lifecycle/business policy in use-case layer, not Android constructor side effects.
+
+- [ ] **Step 4: Verify**
+
+```bash
+./gradlew :core:model:test :catalog:api:test
+```
+
+Expected: PASS; dependency report confirms no Android dependencies.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/tv core/designsystem feature/home
-git commit -m "feat: add TV-first application shell"
+git add core/common core/model catalog/api
+git commit -m "feat: define profile and catalog domain contracts"
 ```
 
-### Task 4: Domain IDs and playback contract
-
-**Files:**
-- Create: `core/model/src/commonMain/kotlin/app/muxtv/model/Identifiers.kt`
-- Create: `core/model/src/commonMain/kotlin/app/muxtv/model/ChannelModels.kt`
-- Create: `player/api/src/main/kotlin/app/muxtv/player/PlaybackEngine.kt`
-- Create: `player/api/src/main/kotlin/app/muxtv/player/PlaybackModels.kt`
-- Create: `player/media3/src/main/kotlin/app/muxtv/player/media3/Media3PlaybackEngine.kt`
-- Test: `player/api/src/test/kotlin/app/muxtv/player/PlaybackContractTest.kt`
-
-**Produces:** stable platform-neutral channel models and replaceable playback boundary.
-
-- [ ] **Step 1: Write failing contract tests**
-
-Test typed IDs, immutable `PlaybackRequest`, stable error categories, and legal Idle → Preparing → Playing → Recovering → Failed transitions.
-
-- [ ] **Step 2: Run and verify failure**
-
-```bash
-./gradlew :player:api:test
-```
-
-Expected: FAIL because contract types do not exist.
-
-- [ ] **Step 3: Implement contracts and minimal Media3 adapter**
-
-The adapter wraps Media3 1.10.1 but exposes only MuxTV types. Phase 00 supports prepare, play, pause and stop for one media item; failover is excluded.
-
-- [ ] **Step 4: Verify contracts**
-
-```bash
-./gradlew :player:api:test :player:media3:test
-```
-
-Expected: PASS and `player:api` has no Media3 dependency.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add core/model player
-git commit -m "feat: define playback and channel contracts"
-```
-
-### Task 5: Room schema v1 and migration harness
+### Task 4: Room schema v1 with installation/profile separation
 
 **Files:**
 - Create: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabase.kt`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/entity/InstallationEntity.kt`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/entity/ProfileEntity.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/entity/SourceEntity.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/entity/ProviderChannelEntity.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/entity/CanonicalChannelEntity.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/entity/StreamVariantEntity.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/entity/UserChannelOverlayEntity.kt`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/dao/ProfileDao.kt`
 - Create: `core/database/src/main/kotlin/app/muxtv/database/dao/CatalogDao.kt`
-- Test: `core/database/src/androidTest/kotlin/app/muxtv/database/SchemaV1Test.kt`
-- Generate: `core/database/schemas/app.muxtv.database.MuxTvDatabase/1.json`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/DatabaseInitializer.kt`
+- Test: `core/database/src/androidTest/kotlin/app/muxtv/database/SchemaV1ProfileTest.kt`
+- Test: `core/database/src/androidTest/kotlin/app/muxtv/database/OverlayIsolationTest.kt`
+- Create after test/build: `core/database/schemas/app.muxtv.database.MuxTvDatabase/1.json`
 
-**Produces:** Room 3 schema v1 with separated provider, canonical and user-overlay data.
+**Produces:** exported schema v1 with one primary profile and correct cascade boundaries.
 
-- [ ] **Step 1: Write failing schema test**
+- [ ] **Step 1: Write failing database tests**
 
-Insert provider data, a canonical channel, variant and overlay; replacing provider metadata must preserve the overlay.
+Tests assert:
 
-- [ ] **Step 2: Run and verify failure**
+- empty database initialization creates one profile named `Основной`, `isPrimary=true`;
+- initializer is idempotent;
+- second primary profile violates invariant/transaction policy;
+- primary cannot be deleted through repository/use case;
+- arbitrary additional profile name works;
+- no role/type column exists;
+- deleting additional profile deletes only its overlays/history rows;
+- source/provider/canonical/variant rows remain;
+- provider metadata replacement preserves profile overlay.
+
+- [ ] **Step 2: Verify red state**
 
 ```bash
 ./gradlew :core:database:connectedDebugAndroidTest
 ```
 
-Expected: FAIL because schema and DAO do not exist.
+Expected: FAIL because schema/DAO/initializer do not exist.
 
-- [ ] **Step 3: Implement schema v1**
+- [ ] **Step 3: Implement schema v1 and initializer**
 
-Enable schema export. Use foreign keys and unique indexes. Do not configure destructive migration fallback for release builds.
+Use foreign keys/unique indexes, schema export and short transactions. Do not use destructive migration fallback in release configuration. Keep secrets outside ordinary source entity fields through credential reference.
 
 - [ ] **Step 4: Verify schema**
 
@@ -251,91 +294,261 @@ Enable schema export. Use foreign keys and unique indexes. Do not configure dest
 ./gradlew :core:database:connectedDebugAndroidTest
 ```
 
-Expected: PASS and schema JSON is generated.
+Expected: PASS and exported schema JSON committed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add core/database
-git commit -m "feat: add catalog database schema v1"
+git commit -m "feat: add database schema v1 and primary profile invariant"
 ```
 
-### Task 6: CI, screenshots, benchmark and APK artifact
+### Task 5: Playback API, deterministic fake and minimal Media3 adapter
+
+**Files:**
+- Create: `player/api/src/main/kotlin/app/muxtv/player/PlaybackEngine.kt`
+- Create: `player/api/src/main/kotlin/app/muxtv/player/PlaybackModels.kt`
+- Create: `player/api/src/main/kotlin/app/muxtv/player/PlaybackError.kt`
+- Create: `player/fake/src/main/kotlin/app/muxtv/player/fake/FakePlaybackEngine.kt`
+- Create: `player/media3/src/main/kotlin/app/muxtv/player/media3/Media3PlaybackEngine.kt`
+- Test: `player/api/src/test/kotlin/app/muxtv/player/PlaybackContractTest.kt`
+- Test: `player/fake/src/test/kotlin/app/muxtv/player/fake/FakePlaybackEngineTest.kt`
+- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/Media3ErrorMappingTest.kt`
+
+**Produces:** stable engine-independent playback contract; no service/full playback UI yet.
+
+- [ ] **Step 1: Write failing contract/state/error tests**
+
+Assert legal state transitions, cancellable stop, semantic track IDs, stable error codes and redacted diagnostics. Test fake can emit first-frame, buffering, failure and recovery events deterministically.
+
+- [ ] **Step 2: Verify red state**
+
+```bash
+./gradlew :player:api:test :player:fake:test :player:media3:test
+```
+
+Expected: FAIL because contracts/adapters are absent.
+
+- [ ] **Step 3: Implement contracts and minimal adapter**
+
+Media3 adapter may prepare/play/pause/stop one item and map a minimal set of current Media3 errors. It must not expose `Player`, `MediaItem`, `PlaybackException` outside module. No failover in Phase 00.
+
+- [ ] **Step 4: Verify**
+
+```bash
+./gradlew :player:api:test :player:fake:test :player:media3:test
+./gradlew :player:api:dependencies
+```
+
+Expected: tests PASS and `player:api` has no Media3/Android dependency.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add player
+git commit -m "feat: establish playback engine boundary"
+```
+
+### Task 6: TV design system, shell and deterministic focus
+
+**Files:**
+- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/MuxTvTheme.kt`
+- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/TvTokens.kt`
+- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/component/MuxTvFocusSurface.kt`
+- Create: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/component/MuxTvActionButton.kt`
+- Create: `core/ui/src/main/kotlin/app/muxtv/ui/FocusBookmark.kt`
+- Create: `feature/home/src/main/kotlin/app/muxtv/feature/home/HomeRoute.kt`
+- Create: `app/tv/src/main/kotlin/app/muxtv/MuxTvApplication.kt`
+- Create: `app/tv/src/main/kotlin/app/muxtv/MainActivity.kt`
+- Create: `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
+- Create: `app/tv/src/main/AndroidManifest.xml`
+- Test: `core/designsystem/src/test/kotlin/app/muxtv/designsystem/TvTokensTest.kt`
+- Test: `app/tv/src/androidTest/kotlin/app/muxtv/NavigationFocusTest.kt`
+- Test: `app/tv/src/test/kotlin/app/muxtv/HomeScreenshotTest.kt`
+
+**Produces:** launchable TV shell with one primary profile context and visible focus.
+
+- [ ] **Step 1: Write failing token/focus/screenshot tests**
+
+Assert semantic focus tokens, minimum visible state cues, DPAD_RIGHT/LEFT movement, Back behavior and focus restoration after route round-trip. Initial screenshot states: default, focused, selected, high-contrast at 1080p reference.
+
+- [ ] **Step 2: Verify red state**
+
+```bash
+./gradlew :core:designsystem:test :app:tv:testDebugUnitTest :app:tv:connectedDebugAndroidTest
+```
+
+Expected: FAIL because UI/activity/components are absent.
+
+- [ ] **Step 3: Implement minimal shell**
+
+Use Compose for TV Material components and Navigation 3. Show Home, Channels placeholder, Guide placeholder, Search placeholder and current `Основной` profile affordance. Do not show profile picker. Avoid mobile Material focusable controls.
+
+Manifest declares leanback launcher, no touchscreen requirement, network permission and TV banner placeholder. No Google Play Services dependency.
+
+- [ ] **Step 4: Verify APK and focus**
+
+```bash
+./gradlew :app:tv:assembleDebug :core:designsystem:test :app:tv:testDebugUnitTest :app:tv:connectedDebugAndroidTest
+```
+
+Expected: APK builds; all tests PASS; D-pad can traverse and return predictably.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/tv core/designsystem core/ui feature/home
+git commit -m "feat: add TV-first shell and focus design system"
+```
+
+### Task 7: Composition root and safe local observability
+
+**Files:**
+- Create: `app/tv/src/main/kotlin/app/muxtv/di/AppModule.kt`
+- Create: `core/common/src/main/kotlin/app/muxtv/common/diagnostics/DiagnosticEvent.kt`
+- Create: `core/common/src/main/kotlin/app/muxtv/common/diagnostics/Redactor.kt`
+- Create: `core/common/src/main/kotlin/app/muxtv/common/diagnostics/BoundedEventBuffer.kt`
+- Test: `core/common/src/test/kotlin/app/muxtv/common/diagnostics/RedactorTest.kt`
+- Test: `core/common/src/test/kotlin/app/muxtv/common/diagnostics/BoundedEventBufferTest.kt`
+
+**Produces:** Hilt composition root and secret-safe bounded local diagnostics foundation.
+
+- [ ] **Step 1: Write failing canary redaction/buffer tests**
+
+Cover URL userinfo/query, Authorization/Cookie, common token/password keys, bounded eviction and correlation ID preservation.
+
+- [ ] **Step 2: Verify red state**
+
+```bash
+./gradlew :core:common:test :app:tv:assembleDebug
+```
+
+Expected: FAIL before implementation/wiring.
+
+- [ ] **Step 3: Implement minimal DI and diagnostics**
+
+Hilt provides database/repositories/player contract implementations at composition root. Release logging accepts only redacted structured events. No telemetry/crash upload SDK.
+
+- [ ] **Step 4: Verify**
+
+```bash
+./gradlew :core:common:test :app:tv:assembleDebug
+```
+
+Expected: PASS and debug app starts with injected dependencies.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/tv core/common
+git commit -m "feat: add composition root and redacted diagnostics"
+```
+
+### Task 8: CI, screenshots, benchmark baseline and debug artifact
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/debug-apk.yml`
 - Create: `benchmark/build.gradle.kts`
 - Create: `benchmark/src/main/kotlin/app/muxtv/benchmark/StartupBenchmark.kt`
+- Create: `benchmark/src/main/kotlin/app/muxtv/benchmark/HomeFocusBenchmark.kt`
 - Create: `baseline-profile/build.gradle.kts`
 - Create: `baseline-profile/src/main/kotlin/app/muxtv/baselineprofile/BaselineProfileGenerator.kt`
-- Test: `core/designsystem/src/test/kotlin/app/muxtv/designsystem/MuxTvFocusSurfaceScreenshotTest.kt`
+- Create: `.work/quality/reference-devices.md`
+- Create: `.work/reviews/phase-00-baseline.md`
 - Modify: `.gitignore`
-- Modify: `settings.gradle.kts`
 
-**Produces:** required PR checks, screenshot regression coverage, Baseline Profile and downloadable debug APK artifact.
+**Produces:** required PR checks, baseline evidence template and downloadable debug APK.
 
-- [ ] **Step 1: Run the incomplete verification command**
+- [ ] **Step 1: Add workflows with minimal permissions**
 
-```bash
-./gradlew check lintDebug :app:tv:assembleDebug
-```
+CI uses JDK 17, official Gradle setup/wrapper validation, read-only default permissions, `check`, lint, architecture tests, database instrumentation where runner supports it, screenshot verification and debug APK upload. Third-party actions pinned to immutable commit SHA.
 
-Expected before implementation: FAIL because benchmark/profile/screenshot configuration is absent.
+- [ ] **Step 2: Implement benchmark/baseline modules**
 
-- [ ] **Step 2: Implement workflows and performance modules**
-
-CI uses JDK 17, Gradle wrapper validation, dependency caching, `check`, lint, screenshot verification and APK artifact upload. Baseline Profile covers startup and Home navigation.
+Baseline Profile covers cold start to Home and opening first focusable action. Macrobenchmark records startup and rapid Home focus navigation. Reports identify emulator/reference device and are not claimed as physical codec evidence.
 
 - [ ] **Step 3: Run full local verification**
 
 ```bash
-./gradlew check lintDebug :app:tv:assembleDebug
+./gradlew clean check lintDebug :app:tv:assembleDebug
 ./gradlew :baseline-profile:generateBaselineProfile
+./gradlew :benchmark:connectedCheck
 ```
 
-Expected: PASS; APK and baseline profile are generated.
+Expected: all commands exit 0; debug APK and baseline profile generated; benchmark report saved/referenced.
 
 - [ ] **Step 4: Inspect APK**
 
-Use `apkanalyzer` or APK Analyzer to verify package name, SDK values, TV launcher intent and `assets/dexopt/baseline.prof` in the release-like APK.
+Use `apkanalyzer`/Android Studio APK Analyzer and verify:
+
+```text
+applicationId app.muxtv.tv.debug
+minSdk 26 / targetSdk 37
+LEANBACK_LAUNCHER
+no touchscreen requirement
+baseline.prof packaged in release-like build
+no release signing secret
+```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github benchmark baseline-profile core/designsystem app/tv settings.gradle.kts .gitignore
-git commit -m "ci: add quality gates and debug APK pipeline"
+git add .github benchmark baseline-profile .work/quality/reference-devices.md .work/reviews/phase-00-baseline.md .gitignore
+git commit -m "ci: add quality gates benchmark and debug APK pipeline"
 ```
 
-### Task 7: Close Phase 00 documentation
+### Task 9: Final verification and factual documentation update
 
 **Files:**
 - Modify: `.work/CURRENT-STATE.md`
 - Modify: `.work/meta/status.yaml`
-- Modify: `.work/meta/modules.yaml`
+- Modify: `.work/meta/modules.yaml` only if actual graph differs with accepted reason
 - Create: `.work/reviews/phase-00-verification.md`
 
-**Produces:** factual documentation matching the implemented repository.
+**Produces:** evidence-backed completion record; target docs no longer confused with implemented state.
 
-- [ ] **Step 1: Run final verification**
+- [ ] **Step 1: Run fresh final verification**
 
 ```bash
 ./gradlew clean check lintDebug :app:tv:assembleDebug
+./gradlew :core:database:connectedDebugAndroidTest
+./gradlew :app:tv:connectedDebugAndroidTest
 ```
 
-Expected: successful clean build.
+Expected: exit 0 for every command, zero failing tests/lint errors.
 
-- [ ] **Step 2: Record evidence**
+- [ ] **Step 2: Verify repository facts**
 
-Record the exact commit, commands, test counts, APK path, APK SHA-256, emulator/device configuration and known limitations.
+Confirm exact module list, schema JSON, APK path/metadata, CI files, baseline profile, primary profile test and current commit. Do not mark features such as M3U playback/EPG/QR implemented.
 
-- [ ] **Step 3: Update status**
+- [ ] **Step 3: Update `.work` status and review report**
 
-Set `phase: phase_01_reliable_live_tv`, mark all Phase 00 exit criteria true, and keep deferred features unchanged.
+`CURRENT-STATE.md` and `status.yaml` list only implemented Phase 00 facts, commands and evidence. `phase-00-verification.md` records outputs, device/emulator, known limitations and next Phase 01 entry conditions.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .work
-git commit -m "docs: close Phase 00 foundation milestone"
+git add .work/CURRENT-STATE.md .work/meta/status.yaml .work/meta/modules.yaml .work/reviews/phase-00-verification.md
+git commit -m "docs: record verified Phase 00 foundation"
 ```
+
+## Phase 00 final acceptance checklist
+
+- [ ] Gradle 9.5/JDK17 build is reproducible and configuration cache works.
+- [ ] Module dependency rules pass and no KMP/database premature target exists.
+- [ ] Schema v1 exports and initializes exactly one primary `Основной` profile.
+- [ ] Additional arbitrary profiles are supported by model/schema without built-in roles.
+- [ ] Provider/canonical/profile overlay tables have non-destructive boundaries.
+- [ ] `player:api` contains no Media3/Android types and fake engine tests pass.
+- [ ] TV shell is remote-operable with visible focus and Back restoration.
+- [ ] No profile picker appears for the single primary profile.
+- [ ] Redaction canary tests pass; no telemetry SDK/signing secret committed.
+- [ ] Debug APK contains TV launcher metadata and baseline profile.
+- [ ] CI uploads debug APK and runs quality gates.
+- [ ] Benchmark/report identifies environment and does not overclaim.
+- [ ] `.work` factual status matches repository.
+
+## Execution handoff
+
+Implementation starts in an isolated worktree/branch and follows this plan task by task with review between tasks. No Phase 01 feature work is mixed into Phase 00.

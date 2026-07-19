@@ -5,64 +5,172 @@ last_reviewed: 2026-07-19
 
 # Потоки данных каталога и EPG
 
-## Import/refresh pipeline
+## 1. Source import/refresh
 
 ```text
-Source request
-  → download stream
-  → bounded parser batches
-  → staging tables
-  → validation report
-  → normalization
-  → identity reconciliation
-  → duplicate candidates
-  → EPG matching
-  → transactional publish
-  → search-index refresh
-  → cleanup old staging data
+User/scheduled refresh request
+  → source lease/unique work
+  → bounded fetch to app-private temporary storage
+  → secure decompression/decoding
+  → streaming parser batches
+  → immutable SourceRevision staging rows
+  → syntax/security/resource validation
+  → previous-revision reconciliation and diff
+  → normalization and canonical membership proposals
+  → EPG match proposals for unconfirmed bindings
+  → guardrails/preview when suspicious
+  → short atomic database commit
+  → activeRevisionId switch
+  → post-commit search/image/probe/cleanup jobs
 ```
 
-## Гарантии
+Normative algorithm: `architecture/source-refresh.md`.
 
-- Активный каталог остаётся доступным до успешного publish.
-- Отмена или падение refresh не оставляет наполовину обновлённые данные.
-- URL и credentials не используются как стабильная identity канала.
-- Source-native identifiers сохраняются, но canonical identity формируется отдельно.
-- User overlays применяются после provider refresh.
-- Все автоматические объединения имеют confidence и provenance.
-- Неуверенные изменения требуют подтверждения пользователя.
+## 2. Guarantees
 
-## Identity reconciliation
+- active catalog/guide remains readable until successful commit;
+- cancellation/process death/parser/DB failure cannot publish a partial revision;
+- source URL, signed token and credentials are not stable channel identity;
+- raw provider metadata and normalized values are both retained with provenance;
+- provider refresh cannot delete profile overlays through cascade;
+- source count/identity churn guardrails reject suspicious revisions;
+- automatic merge/fix has evidence, confidence, algorithm version, preview and undo where impactful;
+- manual EPG/profile decisions survive refresh;
+- post-commit failure does not invalidate committed catalog and remains retryable.
 
-Сопоставление старой и новой provider-записи выполняется по убыванию доверия:
+## 3. Identity reconciliation
 
-1. стабильный provider ID;
-2. нормализованный URL fingerprint без короткоживущих токенов;
-3. `tvg-id` + source identity;
-4. normalized name + group + language/country;
-5. fuzzy candidate, который не применяется автоматически ниже порога.
+Within the same source, old/new provider entries use strongest compatible evidence:
 
-## Canonical channel
+1. stable provider-native identity;
+2. prior variant fingerprint excluding volatile token/query values;
+3. `tvg-id` plus source/context;
+4. stable programme/stream identifier;
+5. normalized metadata candidate with confidence and conflict rules.
 
-`CanonicalChannel` не принадлежит одному плейлисту. Он содержит ссылки на `StreamVariant`, выбранную EPG binding и user overlay. Удаление source удаляет только принадлежащие ему варианты; canonical channel удаляется, когда не осталось вариантов и пользователь не закрепил его вручную.
+Fuzzy/uncertain match becomes proposal. It does not silently transfer user data below accepted confidence.
 
-## EPG storage policy
+Cross-source Smart Channel matching is a separate pipeline and never conflated with same-source revision reconciliation.
 
-- XMLTV разбирается потоково.
-- В БД хранится rolling window: по умолчанию 2 дня назад и 14 дней вперёд.
-- Исторические записи очищаются отдельной maintenance job.
-- Timezone source нормализуется в UTC; отображение происходит в timezone профиля/устройства.
-- Программы индексируются для поиска по title, subtitle, category и participants, когда данные доступны.
+## 4. Canonical channel lifecycle
 
-## Backup
+`CanonicalChannel` is installation-scoped and source-independent.
 
-Backup является версионированным архивом и содержит:
+```text
+ProviderChannel memberships
+        ↓
+CanonicalChannel
+        ├─ StreamVariants
+        ├─ global suggested/confirmed EPG binding
+        └─ Profile-specific overlays and optional EPG override
+```
 
-- sources без секретов по умолчанию;
-- canonical channels и overlays;
-- EPG bindings;
-- profiles и parental rules;
-- app settings;
-- schema/version manifest и checksums.
+Removing one source retires only its provider entries/variants. Canonical channel may remain as tombstone/unresolved object while profile favorite/history/overlay/manual binding exists. Physical removal follows retention and explicit rules in `architecture/domain-model.md`.
 
-Секреты экспортируются только отдельной явной опцией с паролем и authenticated encryption.
+## 5. Profile read composition
+
+UI query composes:
+
+```text
+active installation catalog
++ canonical metadata priority/provenance
++ current ProfileOverlay
++ current ProfilePolicy visibility
++ current EPG interval
++ current health/playback state
+= ProfileChannelView
+```
+
+Profile switching changes overlays/policies/preferences but does not duplicate or refresh sources/base EPG.
+
+## 6. EPG flow
+
+```text
+EpgSource fetch/decode/secure XML parse
+  → EpgRevision staging
+  → channel/programme normalization
+  → timezone/conflict/dedup validation
+  → atomic active revision commit
+  → binding candidate evaluation
+  → interval/query indexes
+  → retention cleanup
+```
+
+- exact external timestamp offset has priority;
+- missing timezone remains unresolved until source setting/confirmation;
+- programmes stored as Instants with original/provenance metadata;
+- EPG grid queries bounded channel/time intervals and lazily extends;
+- retention uses policy plus byte/record caps and preserves referenced catch-up/recording items;
+- manual bindings never overwritten automatically.
+
+## 7. Playback flow
+
+```text
+Profile selects CanonicalChannel
+ → use case loads allowed/ranked StreamVariants
+ → PlaybackOrchestrator resolves volatile locator
+ → Media3 adapter prepares/renders
+ → events map to stable playback state/errors
+ → observed session updates device-scoped health evidence
+ → failure may trigger bounded retry/re-resolution/failover
+```
+
+Player never queries M3U/Room DAO directly. Playback session holds IDs/preferences snapshot and short-lived resolved request only.
+
+## 8. TV Doctor flow
+
+```text
+Manual/passive audit request
+ → ProbeScheduler resource checks
+ → L0/L1/L2/L3/L4 evidence
+ → health/findings with confidence/provenance
+ → user-visible summary
+ → selected mutation preview
+ → atomic DoctorMutationSet
+ → inverse journal for undo
+```
+
+Background audit does not open many decoders and is suspended/deferred when it could harm playback/device/provider.
+
+## 9. Local control flow
+
+```text
+TV opens pairing screen
+ → one-time token/QR
+ → phone connects and TV confirms
+ → short-lived capability session
+ → bounded DTO/use-case request
+ → normal source/catalog/profile pipelines
+ → live progress/result
+ → expiry/revoke
+```
+
+Phone server/API never bypasses application ports or receives existing plaintext credentials.
+
+## 10. Backup flow
+
+```text
+Snapshot request
+ → consistent logical read/checkpoint
+ → versioned manifest and entity sections
+ → stable ID/reference validation
+ → checksums
+ → optional explicit encrypted secret section
+ → app-private temporary archive
+ → user-selected export destination
+```
+
+Baseline backup includes:
+
+- installation/source configuration without secrets by default;
+- canonical channels, aliases/mutation state needed for restore;
+- profiles and profile overlays/policies;
+- EPG bindings, not necessarily full replaceable programme cache;
+- user settings;
+- schema/app/version/provenance/checksums.
+
+Restore always parses/validates to staging, presents impact/conflicts and commits atomically. Primary profile identity and source/profile scope follow `.work/specifications/profiles.md`. Details require separate backup specification before Phase 02 implementation.
+
+## 11. Secrets and diagnostics
+
+Secrets move only through credential store references. They are excluded from domain events, normal DB exports, logs, crash reports, EPG/logo clients and cross-origin redirects. Explicit encrypted secret export, if implemented, requires authenticated encryption, password KDF parameters, independent threat review and user warning.
