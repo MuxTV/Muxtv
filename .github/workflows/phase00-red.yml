@@ -7,13 +7,15 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   convention-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: temurin
@@ -34,19 +36,20 @@ jobs:
           status=$?
           tail -n 40 phase00-build.log
           exit "$status"
+      - name: Commit generated wrapper jar
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties
+          git add -f gradle/wrapper/gradle-wrapper.jar
+          git diff --cached --quiet || git commit -m "build: complete Gradle 9.5 wrapper"
+          git push
       - name: Upload diagnostic log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: phase00-build-log
           path: phase00-build.log
-          if-no-files-found: error
-          retention-days: 3
-      - name: Upload generated wrapper jar
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: gradle-wrapper-jar
-          path: gradle/wrapper/gradle-wrapper.jar
           if-no-files-found: error
           retention-days: 3
