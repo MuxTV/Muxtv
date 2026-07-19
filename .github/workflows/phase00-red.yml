@@ -34,7 +34,8 @@ jobs:
             ./gradlew help --configuration-cache
             ./gradlew -p build-logic :convention:test
             ./gradlew :core:testing:test :core:model:test :player:api:test :player:fake:test
-            ./gradlew :core:database:compileDebugAndroidTestKotlin --stacktrace
+            ./gradlew :core:database:compileDebugAndroidTestKotlin
+            ./gradlew :player:media3:testDebugUnitTest --stacktrace
           } > phase00-build.log 2>&1
           status=$?
           tail -n 100 phase00-build.log
