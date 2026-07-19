@@ -1,0 +1,30 @@
+schema_version: 1
+updated_at: 2026-07-19
+phase: architecture_foundation
+repository_state:
+  application_code: absent
+  gradle_project: absent
+  ci: absent
+  tests: absent
+  release_pipeline: absent
+  documentation: in_review
+active_branch: docs/architecture-foundation
+next_milestone:
+  id: phase-00-foundation
+  exit_criteria:
+    - android_tv_project_builds
+    - tv_shell_has_dpad_focus
+    - room_schema_v1_has_migration_test
+    - media3_adapter_contract_exists
+    - unit_lint_screenshot_ci_passes
+    - github_actions_publishes_debug_apk
+blocked: []
+deferred:
+  - xtream
+  - stalker_ministra
+  - dvr
+  - libmpv
+  - rust_engine
+  - tizen
+  - webos
+  - apple_tv
