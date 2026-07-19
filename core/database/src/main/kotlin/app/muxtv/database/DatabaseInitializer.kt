@@ -1,6 +1,6 @@
 package app.muxtv.database
 
-class DatabaseInitializer(
+class DatabaseInitializer internal constructor(
     private val database: MuxTvDatabase,
 ) {
     suspend fun initialize() {
