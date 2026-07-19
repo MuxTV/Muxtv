@@ -1,0 +1,40 @@
+package app.muxtv.buildlogic
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertTrue
+
+class ConventionFilesTest {
+    private val repositoryRoot = File(System.getProperty("user.dir")).parentFile.parentFile
+
+    @Test
+    fun `version catalog contains the approved Phase 00 aliases`() {
+        val catalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
+        listOf(
+            "agp = \"9.3.0\"",
+            "kotlin = \"2.4.10\"",
+            "compose-bom = \"2026.06.00\"",
+            "tv-material = \"1.1.0\"",
+            "tv-foundation = \"1.0.0\"",
+            "navigation3 = \"1.1.4\"",
+            "media3 = \"1.10.1\"",
+            "room3 = \"3.0.0\"",
+            "dagger-hilt = \"2.59.2\"",
+            "work = \"2.11.2\"",
+            "datastore = \"1.2.1\"",
+        ).forEach { expected -> assertContains(catalog, expected) }
+    }
+
+    @Test
+    fun `three convention plugin sources exist`() {
+        val sourceRoot = repositoryRoot.resolve("build-logic/convention/src/main/kotlin/app/muxtv/buildlogic")
+        listOf(
+            "AndroidApplicationConventionPlugin.kt",
+            "AndroidLibraryConventionPlugin.kt",
+            "KotlinLibraryConventionPlugin.kt",
+        ).forEach { name ->
+            assertTrue(sourceRoot.resolve(name).isFile, "Missing convention plugin source: $name")
+        }
+    }
+}
