@@ -7,6 +7,7 @@ import okhttp3.Response
 
 data class SourceRequestContext(
     val insecureHttpApproved: Boolean = false,
+    val responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
 )
 
 class RedirectRejectedException(
