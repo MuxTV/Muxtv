@@ -19,7 +19,7 @@ class RedirectRejectedException(
 class SecureRedirectInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
-        val requestContext = request.tag<SourceRequestContext>() ?: SourceRequestContext()
+        val requestContext = request.tag(SourceRequestContext::class) ?: SourceRequestContext()
         var completedRedirects = 0
 
         while (true) {
