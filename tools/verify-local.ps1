@@ -10,6 +10,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $gradleWrapper = Join-Path $repositoryRoot "gradlew.bat"
@@ -24,7 +27,10 @@ function Get-GitValue {
     param([string[]]$Arguments, [string]$Fallback)
 
     try {
-        $value = (& git @Arguments 2>$null | Select-Object -First 1).Trim()
+        $firstLine = & git @Arguments 2>$null | Select-Object -First 1
+        if ($null -eq $firstLine) { return $Fallback }
+
+        $value = ([string]$firstLine).Trim()
         if ([string]::IsNullOrWhiteSpace($value)) { return $Fallback }
         return $value
     }
@@ -36,7 +42,12 @@ function Get-GitValue {
 $commit = Get-GitValue -Arguments @("rev-parse", "--short=12", "HEAD") -Fallback "unknown"
 $branch = Get-GitValue -Arguments @("branch", "--show-current") -Fallback "unknown"
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
-$evidenceDirectory = Join-Path $repositoryRoot (Join-Path $EvidenceRoot "$timestamp-$commit-$($Mode.ToLowerInvariant())")
+$evidenceBase = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
+    $EvidenceRoot
+} else {
+    Join-Path $repositoryRoot $EvidenceRoot
+}
+$evidenceDirectory = Join-Path $evidenceBase "$timestamp-$commit-$($Mode.ToLowerInvariant())"
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 
 $commonArguments = @("--stacktrace", "--console=plain")
@@ -59,7 +70,9 @@ function Add-Step {
 }
 
 Add-Step -Name "gradle-version" -Arguments @("--version")
+Add-Step -Name "build-logic-tests" -Arguments @("-p", "build-logic", ":convention:test")
 Add-Step -Name "configuration-cache" -Arguments @("help", "--configuration-cache")
+Add-Step -Name "configuration-cache-reuse" -Arguments @("help", "--configuration-cache")
 Add-Step -Name "pure-kotlin-tests" -Arguments @(
     ":core:common:test",
     ":core:model:test",
@@ -68,8 +81,12 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
     ":player:fake:test"
 )
 Add-Step -Name "android-unit-tests" -Arguments @(
+    ":app:tv:testDebugUnitTest",
+    ":core:database:testDebugUnitTest",
+    ":core:designsystem:testDebugUnitTest",
     ":core:ui:testDebugUnitTest",
-    ":player:media3:testDebugUnitTest"
+    ":player:media3:testDebugUnitTest",
+    ":feature:home:testDebugUnitTest"
 )
 Add-Step -Name "debug-apk" -Arguments @(
     ":app:tv:assembleDebug"
