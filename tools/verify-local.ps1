@@ -104,6 +104,9 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":player:media3:testDebugUnitTest",
     ":feature:home:testDebugUnitTest"
 )
+Add-Step -Name "credentials-instrumentation-compile" -Arguments @(
+    ":core:credentials:assembleDebugAndroidTest"
+)
 Add-Step -Name "debug-apk" -Arguments @(
     ":app:tv:assembleDebug"
 )
