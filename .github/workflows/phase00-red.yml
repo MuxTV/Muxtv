@@ -1,10 +1,7 @@
-name: Phase 00 foundation
+name: Phase 00 foundation (legacy manual)
 
 on:
-  push:
-    branches: [feat/phase-00-foundation]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,7 +21,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
-      - name: Run focused TV shell and diagnostics RED gate
+      - name: Run focused TV shell and diagnostics gate
         shell: bash
         run: |
           set +e

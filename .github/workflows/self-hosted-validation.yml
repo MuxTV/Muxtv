@@ -1,0 +1,81 @@
+name: Self-hosted validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      validation_mode:
+        description: Validation depth
+        required: true
+        default: Fast
+        type: choice
+        options:
+          - Fast
+          - Full
+          - Device
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Manual validation' }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Inspect runner environment
+        shell: pwsh
+        run: |
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "OS: $env:RUNNER_OS"
+          Write-Host "Architecture: $env:RUNNER_ARCH"
+          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
+          java -version
+          if ($env:ANDROID_SDK_ROOT) {
+            Write-Host "ANDROID_SDK_ROOT is configured."
+          } elseif ($env:ANDROID_HOME) {
+            Write-Host "ANDROID_HOME is configured."
+          } else {
+            throw "ANDROID_SDK_ROOT or ANDROID_HOME must be configured on the self-hosted runner."
+          }
+
+      - name: Select validation mode
+        id: validation
+        shell: pwsh
+        run: |
+          $mode = "Full"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $mode = "${{ inputs.validation_mode }}"
+          }
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Validation mode: $mode"
+
+      - name: Run MuxTV validation
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\verify-local.ps1 `
+            -Mode "${{ steps.validation.outputs.mode }}" `
+            -SourceBranch "${{ github.head_ref || github.ref_name }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha || github.sha }}" `
+            -NoDaemon
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: self-hosted-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/**/manifest.json
+            .work/evidence/**/*.log
+          if-no-files-found: warn
+          retention-days: 7
