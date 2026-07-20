@@ -16,9 +16,16 @@ class CredentialEnvelopeCodecTest {
         ciphertext.fill(88)
         val decoded = CredentialEnvelopeCodec.decode(encoded)
 
-        assertThat(encoded.copyOfRange(0, 4)).isEqualTo(byteArrayOf('M'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'R'.code.toByte()))
-        assertThat(encoded[4]).isEqualTo(1)
-        assertThat(encoded[5]).isEqualTo(12)
+        assertThat(encoded.copyOfRange(0, 4)).isEqualTo(
+            byteArrayOf(
+                'M'.code.toByte(),
+                'X'.code.toByte(),
+                'C'.code.toByte(),
+                'R'.code.toByte(),
+            ),
+        )
+        assertThat(encoded[4]).isEqualTo(1.toByte())
+        assertThat(encoded[5]).isEqualTo(12.toByte())
         assertThat(ByteBuffer.wrap(encoded, 18, 4).int).isEqualTo(32)
         assertThat(decoded.iv()).isEqualTo(ByteArray(12) { index -> index.toByte() })
         assertThat(decoded.ciphertext()).isEqualTo(ByteArray(32) { index -> (index + 20).toByte() })
@@ -52,14 +59,14 @@ class CredentialEnvelopeCodecTest {
         assertDecodeFailure(encoded, CredentialEnvelopeFormatReason.InvalidMagic)
 
         val unsupported = validEnvelope()
-        unsupported[4] = 2
+        unsupported[4] = 2.toByte()
         assertDecodeFailure(unsupported, CredentialEnvelopeFormatReason.UnsupportedVersion)
     }
 
     @Test
     fun `decoder rejects invalid iv and ciphertext lengths`() {
         val badIv = validEnvelope()
-        badIv[5] = 11
+        badIv[5] = 11.toByte()
         assertDecodeFailure(badIv, CredentialEnvelopeFormatReason.InvalidIvLength)
 
         val tooShort = validEnvelope()
@@ -75,7 +82,7 @@ class CredentialEnvelopeCodecTest {
     fun `decoder rejects truncated and trailing data`() {
         val encoded = validEnvelope()
         assertDecodeFailure(encoded.copyOf(encoded.size - 1), CredentialEnvelopeFormatReason.Truncated)
-        assertDecodeFailure(encoded + 0x7f, CredentialEnvelopeFormatReason.TrailingData)
+        assertDecodeFailure(encoded + 0x7f.toByte(), CredentialEnvelopeFormatReason.TrailingData)
         assertDecodeFailure(ByteArray(5), CredentialEnvelopeFormatReason.Truncated)
     }
 
