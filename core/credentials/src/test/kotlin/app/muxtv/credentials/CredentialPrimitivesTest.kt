@@ -42,13 +42,13 @@ class CredentialPrimitivesTest {
         val firstCopy = secret.copyBytes()
         val secondCopy = secret.copyBytes()
 
-        assertThat(firstCopy).asList().containsExactly(1, 2, 3).inOrder()
-        assertThat(secondCopy).asList().containsExactly(1, 2, 3).inOrder()
+        assertThat(firstCopy).isEqualTo(byteArrayOf(1, 2, 3))
+        assertThat(secondCopy).isEqualTo(byteArrayOf(1, 2, 3))
         assertThat(firstCopy).isNotSameInstanceAs(secondCopy)
         assertThat(secret.toString()).isEqualTo("<redacted>")
 
         firstCopy.fill(8)
-        assertThat(secret.copyBytes().asList()).containsExactly(1, 2, 3).inOrder()
+        assertThat(secret.copyBytes()).isEqualTo(byteArrayOf(1, 2, 3))
     }
 
     @Test
@@ -75,7 +75,7 @@ class CredentialPrimitivesTest {
         }
 
         assertThat(sum).isEqualTo(24)
-        assertThat(leakedReference.asList()).containsExactly(0, 0, 0)
-        assertThat(secret.copyBytes().asList()).containsExactly(7, 8, 9).inOrder()
+        assertThat(leakedReference).isEqualTo(byteArrayOf(0, 0, 0))
+        assertThat(secret.copyBytes()).isEqualTo(byteArrayOf(7, 8, 9))
     }
 }
