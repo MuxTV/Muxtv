@@ -11,7 +11,7 @@ value class CredentialId private constructor(
 
         fun parse(value: String): CredentialId {
             require(value.isNotEmpty()) { "Credential ID must not be empty." }
-            val parsed = runCatching(UUID::fromString)
+            val parsed = runCatching { UUID.fromString(value) }
                 .getOrElse { throw IllegalArgumentException("Credential ID must be a canonical UUID.", it) }
             val canonical = parsed.toString()
             require(value == canonical) { "Credential ID must be a canonical lower-case UUID." }
