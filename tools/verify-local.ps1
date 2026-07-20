@@ -5,6 +5,10 @@ param(
 
     [string]$EvidenceRoot = ".work/evidence",
 
+    [string]$SourceBranch = "",
+
+    [string]$SourceCommit = "",
+
     [switch]$NoDaemon
 )
 
@@ -39,8 +43,18 @@ function Get-GitValue {
     }
 }
 
-$commit = Get-GitValue -Arguments @("rev-parse", "--short=12", "HEAD") -Fallback "unknown"
-$branch = Get-GitValue -Arguments @("branch", "--show-current") -Fallback "unknown"
+function Get-ShortCommit {
+    param([string]$Value)
+
+    $trimmed = $Value.Trim()
+    if ($trimmed.Length -le 12) { return $trimmed }
+    return $trimmed.Substring(0, 12)
+}
+
+$gitCommit = Get-GitValue -Arguments @("rev-parse", "--short=12", "HEAD") -Fallback "unknown"
+$gitBranch = Get-GitValue -Arguments @("branch", "--show-current") -Fallback "unknown"
+$commit = if ([string]::IsNullOrWhiteSpace($SourceCommit)) { $gitCommit } else { Get-ShortCommit $SourceCommit }
+$branch = if ([string]::IsNullOrWhiteSpace($SourceBranch)) { $gitBranch } else { $SourceBranch.Trim() }
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $evidenceBase = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
     $EvidenceRoot
