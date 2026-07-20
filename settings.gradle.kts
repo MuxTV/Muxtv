@@ -25,6 +25,7 @@ include(
     ":core:designsystem",
     ":core:ui",
     ":core:testing",
+    ":core:network",
     ":catalog:api",
     ":player:api",
     ":player:media3",

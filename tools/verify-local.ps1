@@ -98,6 +98,7 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
     ":core:database:testDebugUnitTest",
     ":core:designsystem:testDebugUnitTest",
+    ":core:network:testDebugUnitTest",
     ":core:ui:testDebugUnitTest",
     ":player:media3:testDebugUnitTest",
     ":feature:home:testDebugUnitTest"
@@ -111,6 +112,7 @@ if ($Mode -in @("Full", "Device")) {
         ":app:tv:lintDebug",
         ":core:database:lintDebug",
         ":core:designsystem:lintDebug",
+        ":core:network:lintDebug",
         ":core:ui:lintDebug",
         ":player:media3:lintDebug",
         ":feature:home:lintDebug"
