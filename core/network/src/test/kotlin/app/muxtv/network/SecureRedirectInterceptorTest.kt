@@ -27,7 +27,10 @@ class SecureRedirectInterceptorTest {
                 Request.Builder()
                     .url(server.url("/start.m3u"))
                     .header("Authorization", "Bearer secret")
-                    .tag(SourceRequestContext(insecureHttpApproved = true))
+                    .tag(
+                        SourceRequestContext::class,
+                        SourceRequestContext(insecureHttpApproved = true),
+                    )
                     .build(),
             ).execute().use { response ->
                 assertThat(response.code).isEqualTo(200)
@@ -65,7 +68,10 @@ class SecureRedirectInterceptorTest {
                         .header("Origin", "http://provider.example")
                         .header("X-Api-Key", "api-secret")
                         .header("User-Agent", "MuxTV/1")
-                        .tag(SourceRequestContext(insecureHttpApproved = true))
+                        .tag(
+                            SourceRequestContext::class,
+                            SourceRequestContext(insecureHttpApproved = true),
+                        )
                         .build(),
                 ).execute().use { response ->
                     assertThat(response.code).isEqualTo(200)
@@ -100,7 +106,10 @@ class SecureRedirectInterceptorTest {
                 client().newCall(
                     Request.Builder()
                         .url(server.url("/start.m3u"))
-                        .tag(SourceRequestContext(insecureHttpApproved = false))
+                        .tag(
+                            SourceRequestContext::class,
+                            SourceRequestContext(insecureHttpApproved = false),
+                        )
                         .build(),
                 ).execute()
             }
