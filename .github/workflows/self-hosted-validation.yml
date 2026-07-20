@@ -12,10 +12,6 @@ on:
           - Fast
           - Full
           - Device
-  push:
-    branches:
-      - "feat/**"
-      - "fix/**"
   pull_request:
     branches:
       - main
@@ -29,7 +25,7 @@ concurrency:
 
 jobs:
   validate:
-    name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Branch validation' }}
+    name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Manual validation' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 60
 
@@ -57,11 +53,9 @@ jobs:
         id: validation
         shell: pwsh
         run: |
-          $mode = "Fast"
+          $mode = "Full"
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $mode = "${{ inputs.validation_mode }}"
-          } elseif ("${{ github.event_name }}" -eq "pull_request") {
-            $mode = "Full"
           }
           "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "Validation mode: $mode"
