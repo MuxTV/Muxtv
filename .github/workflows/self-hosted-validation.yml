@@ -63,7 +63,11 @@ jobs:
       - name: Run MuxTV validation
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\tools\verify-local.ps1 -Mode "${{ steps.validation.outputs.mode }}" -NoDaemon
+          pwsh -NoProfile -File .\tools\verify-local.ps1 `
+            -Mode "${{ steps.validation.outputs.mode }}" `
+            -SourceBranch "${{ github.head_ref || github.ref_name }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha || github.sha }}" `
+            -NoDaemon
 
       - name: Upload validation evidence
         if: always()
