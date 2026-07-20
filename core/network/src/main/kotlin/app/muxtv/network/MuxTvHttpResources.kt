@@ -22,6 +22,8 @@ class MuxTvHttpClients(
 ) {
     val source: OkHttpClient = resources.baseClient.newBuilder()
         .addInterceptor(SecureRedirectInterceptor())
+        .addInterceptor(ResponseSizeLimitInterceptor(ResponseSizeKind.Decoded))
+        .addNetworkInterceptor(ResponseSizeLimitInterceptor(ResponseSizeKind.Compressed))
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
