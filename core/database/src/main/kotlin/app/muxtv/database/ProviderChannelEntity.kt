@@ -19,7 +19,7 @@ import androidx.room3.PrimaryKey
     indices = [
         Index(value = ["sourceId"]),
         Index(value = ["sourceId", "revisionNumber"]),
-        Index(value = ["sourceId", "providerKey", "revisionNumber"], unique = true),
+        Index(value = ["sourceId", "providerKey", "revisionNumber"]),
     ],
 )
 data class ProviderChannelEntity(
