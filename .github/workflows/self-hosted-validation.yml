@@ -53,7 +53,21 @@ jobs:
       - name: Validate Android TV harness syntax
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\tools\android\Test-TvHarnessSyntax.ps1
+          $diagnosticDirectory = ".work\evidence\harness-syntax"
+          $diagnosticPath = Join-Path $diagnosticDirectory "harness-syntax.log"
+          New-Item -ItemType Directory -Force -Path $diagnosticDirectory | Out-Null
+
+          try {
+            & .\tools\android\Test-TvHarnessSyntax.ps1
+          } catch {
+            $details = $_ | Out-String
+            if (-not (Test-Path $diagnosticPath -PathType Leaf)) {
+              Set-Content -Path $diagnosticPath -Value $details -Encoding utf8
+            }
+            Write-Host "Android TV harness validation failed:"
+            Get-Content $diagnosticPath
+            throw
+          }
 
       - name: Select validation mode
         id: validation
@@ -100,4 +114,5 @@ jobs:
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 7
