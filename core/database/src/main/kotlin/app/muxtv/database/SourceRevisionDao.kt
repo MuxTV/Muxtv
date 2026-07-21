@@ -8,6 +8,40 @@ import androidx.room3.Transaction
 
 @Dao
 internal abstract class SourceRevisionDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertSource(source: SourceEntity): Long
+
+    @Query(
+        """
+        UPDATE sources
+        SET name = :name, credentialRef = :credentialRef
+        WHERE id = :sourceId
+        """,
+    )
+    abstract suspend fun updateSourceMetadata(
+        sourceId: String,
+        name: String,
+        credentialRef: String?,
+    ): Int
+
+    @Transaction
+    open suspend fun upsertSource(source: SourceDefinition) {
+        insertSource(
+            SourceEntity(
+                id = source.id,
+                name = source.name,
+                credentialRef = source.credentialRef,
+            ),
+        )
+        check(
+            updateSourceMetadata(
+                sourceId = source.id,
+                name = source.name,
+                credentialRef = source.credentialRef,
+            ) == 1,
+        ) { "Unable to persist source metadata." }
+    }
+
     @Query(
         """
         SELECT COALESCE(MAX(revisionNumber), 0) + 1
