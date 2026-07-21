@@ -3,6 +3,10 @@ package app.muxtv.database
 internal class RoomSourceRevisionStore(
     private val dao: SourceRevisionDao,
 ) : SourceRevisionStore {
+    override suspend fun upsertSource(source: SourceDefinition) {
+        dao.upsertSource(source)
+    }
+
     override suspend fun nextRevisionNumber(sourceId: String): Long {
         require(sourceId.isNotBlank())
         return dao.nextRevisionNumber(sourceId)
