@@ -50,6 +50,11 @@ jobs:
             throw "ANDROID_SDK_ROOT or ANDROID_HOME must be configured on the self-hosted runner."
           }
 
+      - name: Validate Android TV harness syntax
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\android\Test-TvHarnessSyntax.ps1
+
       - name: Select validation mode
         id: validation
         shell: pwsh
