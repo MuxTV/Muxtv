@@ -57,6 +57,70 @@ function Write-HarnessManifest {
     $Manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding utf8
 }
 
+function Update-AndroidRuntimePackages {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$EvidenceDirectory
+    )
+
+    $logPath = Join-Path $EvidenceDirectory "sdkmanager-runtime-update.log"
+    $accept = 1..200 | ForEach-Object { "y" }
+    $accept | & $Tools.SdkManager "platform-tools" "emulator" 2>&1 |
+        Tee-Object -FilePath $logPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to install or update platform-tools and emulator. See $logPath"
+    }
+}
+
+function Reset-AdbServer {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$EvidenceDirectory
+    )
+
+    $logPath = Join-Path $EvidenceDirectory "adb-server.log"
+    & $Tools.Adb version 2>&1 | Set-Content -Path $logPath -Encoding utf8
+    & $Tools.Adb kill-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
+    Start-Sleep -Seconds 1
+    & $Tools.Adb start-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to start the selected ADB server. See $logPath"
+    }
+    & $Tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
+}
+
+function Test-TcpPortAvailable {
+    param([Parameter(Mandatory)][int]$Port)
+
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new(
+            [System.Net.IPAddress]::Loopback,
+            $Port
+        )
+        $listener.Start()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $listener) {
+            $listener.Stop()
+        }
+    }
+}
+
+function Get-FreeEmulatorPort {
+    for ($consolePort = 5554; $consolePort -le 5680; $consolePort += 2) {
+        $adbPort = $consolePort + 1
+        if ((Test-TcpPortAvailable -Port $consolePort) -and
+            (Test-TcpPortAvailable -Port $adbPort)) {
+            return $consolePort
+        }
+    }
+
+    throw "No free Android Emulator console/ADB port pair was found in 5554-5682."
+}
+
 function Test-AdbDeviceReady {
     param(
         [Parameter(Mandatory)]$Tools,
@@ -74,23 +138,40 @@ function Test-AdbDeviceReady {
 function Wait-AdbDevice {
     param(
         [Parameter(Mandatory)]$Tools,
-        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string]$ConsoleSerial,
+        [Parameter(Mandatory)][string]$TcpSerial,
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [int]$TimeoutSeconds = 90
+        [Parameter(Mandatory)][string]$EvidenceDirectory,
+        [int]$TimeoutSeconds = 150
     )
 
+    $logPath = Join-Path $EvidenceDirectory "adb-registration.log"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $connectAfter = (Get-Date).AddSeconds(15)
+    $nextConnect = $connectAfter
+
     do {
         if ($Process.HasExited) {
             throw "Android TV emulator process exited before ADB became ready. Exit code: $($Process.ExitCode)."
         }
-        if (Test-AdbDeviceReady -Tools $Tools -Serial $Serial) {
-            return
+
+        & $Tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
+        if (Test-AdbDeviceReady -Tools $Tools -Serial $ConsoleSerial) {
+            return $ConsoleSerial
         }
+        if (Test-AdbDeviceReady -Tools $Tools -Serial $TcpSerial) {
+            return $TcpSerial
+        }
+
+        if ((Get-Date) -ge $nextConnect) {
+            & $Tools.Adb connect $TcpSerial 2>&1 | Add-Content -Path $logPath -Encoding utf8
+            $nextConnect = (Get-Date).AddSeconds(10)
+        }
+
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
 
-    throw "Android TV emulator $Serial did not become visible to ADB within $TimeoutSeconds seconds."
+    throw "Android TV emulator did not register with ADB as $ConsoleSerial or $TcpSerial within $TimeoutSeconds seconds. See $logPath"
 }
 
 Set-Location $repositoryRoot
@@ -128,10 +209,10 @@ $previousAndroidSerial = $env:ANDROID_SERIAL
 
 try {
     $bootstrapTools = Get-AndroidSdkTools -AllowMissingRuntime
-    Install-AndroidPackage -Tools $bootstrapTools -Package "platform-tools" -EvidenceDirectory $evidenceDirectory
-    Install-AndroidPackage -Tools $bootstrapTools -Package "emulator" -EvidenceDirectory $evidenceDirectory
+    Update-AndroidRuntimePackages -Tools $bootstrapTools -EvidenceDirectory $evidenceDirectory
 
     $tools = Get-AndroidSdkTools
+    Reset-AdbServer -Tools $tools -EvidenceDirectory $evidenceDirectory
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $evidenceDirectory
 
     $currentImage = Resolve-TvSystemImage -Tools $tools -PreferredApi 36
@@ -143,7 +224,6 @@ try {
             RequestedApi = 26
             Image = $oldImage
             AvdName = "MuxTV_TV_OLD_API$($oldImage.Api)"
-            Port = 5554
             RamMb = 1536
             CpuCores = 2
             FallbackUsed = $oldImage.Api -ne 26
@@ -154,7 +234,6 @@ try {
         RequestedApi = 36
         Image = $currentImage
         AvdName = "MuxTV_TV_CURRENT_API$($currentImage.Api)"
-        Port = if ($Mode -eq "DeviceMatrix") { 5556 } else { 5554 }
         RamMb = 2048
         CpuCores = 2
         FallbackUsed = $false
@@ -177,7 +256,11 @@ try {
     foreach ($profile in $profiles) {
         $profileDirectory = Join-Path $evidenceDirectory "api-$($profile.Image.Api)-$($profile.Image.Flavor)-$($profile.Image.Abi)"
         New-Item -ItemType Directory -Force -Path $profileDirectory | Out-Null
-        $serial = "emulator-$($profile.Port)"
+        $consolePort = Get-FreeEmulatorPort
+        $adbPort = $consolePort + 1
+        $consoleSerial = "emulator-$consolePort"
+        $tcpSerial = "127.0.0.1:$adbPort"
+        $deviceSerial = $null
         $emulatorProcess = $null
         $profileRecord = [ordered]@{
             requestedApi = $profile.RequestedApi
@@ -186,8 +269,10 @@ try {
             flavor = $profile.Image.Flavor
             abi = $profile.Image.Abi
             avdName = $profile.AvdName
-            serial = $serial
-            port = $profile.Port
+            consolePort = $consolePort
+            adbPort = $adbPort
+            consoleSerial = $consoleSerial
+            deviceSerial = $null
             ramMb = $profile.RamMb
             cpuCores = $profile.CpuCores
             fallbackUsed = $profile.FallbackUsed
@@ -208,17 +293,26 @@ try {
                 -RamMb $profile.RamMb `
                 -CpuCores $profile.CpuCores
 
-            & $tools.Adb -s $serial emu kill 2>$null | Out-Null
+            Reset-AdbServer -Tools $tools -EvidenceDirectory $profileDirectory
             $emulatorProcess = Start-TvEmulator `
                 -Tools $tools `
                 -AvdName $profile.AvdName `
-                -Port $profile.Port `
+                -Port $consolePort `
                 -EvidenceDirectory $profileDirectory
 
-            Wait-AdbDevice -Tools $tools -Serial $serial -Process $emulatorProcess -TimeoutSeconds 90
-            Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
-            $env:ANDROID_SERIAL = $serial
-            Collect-AndroidEvidence -Tools $tools -Serial $serial -OutputDirectory $profileDirectory
+            $deviceSerial = Wait-AdbDevice `
+                -Tools $tools `
+                -ConsoleSerial $consoleSerial `
+                -TcpSerial $tcpSerial `
+                -Process $emulatorProcess `
+                -EvidenceDirectory $profileDirectory `
+                -TimeoutSeconds 150
+            $profileRecord.deviceSerial = $deviceSerial
+            Write-HarnessManifest -Manifest $manifest -Path $manifestPath
+
+            Wait-AndroidBoot -Tools $tools -Serial $deviceSerial -TimeoutSeconds 360
+            $env:ANDROID_SERIAL = $deviceSerial
+            Collect-AndroidEvidence -Tools $tools -Serial $deviceSerial -OutputDirectory $profileDirectory
 
             $validationRoot = Join-Path $profileDirectory "validation"
             $validationArguments = @(
@@ -233,11 +327,11 @@ try {
                 $validationArguments += "-NoDaemon"
             }
 
-            Write-Host "`n==> Device validation for Android TV API $($profile.Image.Api) ($serial)"
+            Write-Host "`n==> Device validation for Android TV API $($profile.Image.Api) ($deviceSerial)"
             & pwsh @validationArguments
             $validationExitCode = $LASTEXITCODE
             if ($validationExitCode -ne 0) {
-                throw "Device validation failed with exit code $validationExitCode on $serial."
+                throw "Device validation failed with exit code $validationExitCode on $deviceSerial."
             }
 
             $profileRecord.status = "passed"
@@ -248,18 +342,19 @@ try {
         } finally {
             $profileRecord.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
 
-            if (Test-AdbDeviceReady -Tools $tools -Serial $serial) {
+            if ($null -ne $deviceSerial -and
+                (Test-AdbDeviceReady -Tools $tools -Serial $deviceSerial)) {
                 try {
-                    Collect-AndroidEvidence -Tools $tools -Serial $serial -OutputDirectory $profileDirectory
+                    Collect-AndroidEvidence -Tools $tools -Serial $deviceSerial -OutputDirectory $profileDirectory
                 } catch {
-                    Write-Warning "Unable to collect final emulator evidence for ${serial}: $($_.Exception.Message)"
+                    Write-Warning "Unable to collect final emulator evidence for ${deviceSerial}: $($_.Exception.Message)"
                 }
             }
 
             try {
-                Stop-TvEmulator -Tools $tools -Serial $serial -Process $emulatorProcess
+                Stop-TvEmulator -Tools $tools -Serial $consoleSerial -Process $emulatorProcess
             } catch {
-                Write-Warning "Unable to stop emulator cleanly for ${serial}: $($_.Exception.Message)"
+                Write-Warning "Unable to stop emulator cleanly for ${consoleSerial}: $($_.Exception.Message)"
                 if ($null -ne $emulatorProcess) {
                     Stop-Process -Id $emulatorProcess.Id -Force -ErrorAction SilentlyContinue
                 }
