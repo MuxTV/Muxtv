@@ -11,7 +11,7 @@ internal class RoomCatalogRepository(
 ) : CatalogRepository {
     override fun observeChannels(): Flow<List<CanonicalChannel>> =
         catalogDao.observeActiveCanonicalChannels().map { channels ->
-            channels.map(CanonicalChannelEntity::toModel)
+            channels.map { channel -> channel.toModel() }
         }
 
     override suspend fun findChannel(id: CanonicalChannelId): CanonicalChannel? =
