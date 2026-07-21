@@ -4,6 +4,11 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$evidenceDirectory = Join-Path $repositoryRoot ".work\evidence"
+New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+$diagnosticPath = Join-Path $evidenceDirectory "harness-syntax.log"
+
 $files = @(
     (Join-Path $PSScriptRoot "AndroidSdk.ps1")
     (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1")
@@ -27,7 +32,10 @@ foreach ($file in $files) {
 }
 
 if ($allErrors.Count -gt 0) {
-    throw "Android TV harness PowerShell syntax validation failed:`n$($allErrors -join "`n")"
+    $message = "Android TV harness PowerShell syntax validation failed:`n$($allErrors -join "`n")"
+    $message | Set-Content -Path $diagnosticPath -Encoding utf8
+    Write-Host $message
+    throw $message
 }
 
 . (Join-Path $PSScriptRoot "AndroidSdk.ps1")
@@ -49,7 +57,12 @@ $missingFunctions = @(
     }
 )
 if ($missingFunctions.Count -gt 0) {
-    throw "Android TV harness functions are missing: $($missingFunctions -join ', ')"
+    $message = "Android TV harness functions are missing: $($missingFunctions -join ', ')"
+    $message | Set-Content -Path $diagnosticPath -Encoding utf8
+    Write-Host $message
+    throw $message
 }
 
+"Android TV harness PowerShell syntax and function surface are valid." |
+    Set-Content -Path $diagnosticPath -Encoding utf8
 Write-Host "Android TV harness PowerShell syntax and function surface are valid."
