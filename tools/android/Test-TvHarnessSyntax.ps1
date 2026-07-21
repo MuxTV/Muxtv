@@ -5,8 +5,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $files = @(
-    Join-Path $PSScriptRoot "AndroidSdk.ps1"
-    Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"
+    (Join-Path $PSScriptRoot "AndroidSdk.ps1")
+    (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1")
 )
 
 $allErrors = [System.Collections.Generic.List[string]]::new()
@@ -19,8 +19,10 @@ foreach ($file in $files) {
         [ref]$parseErrors
     )
 
-    foreach ($parseError in $parseErrors) {
-        $allErrors.Add("$file:$($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber) $($parseError.Message)")
+    foreach ($parseError in @($parseErrors)) {
+        $allErrors.Add(
+            "${file}:$($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber) $($parseError.Message)"
+        )
     }
 }
 
