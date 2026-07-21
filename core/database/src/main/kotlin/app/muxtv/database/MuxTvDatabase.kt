@@ -1,5 +1,6 @@
 package app.muxtv.database
 
+import androidx.room3.AutoMigration
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 
@@ -8,16 +9,19 @@ import androidx.room3.RoomDatabase
         InstallationEntity::class,
         ProfileEntity::class,
         SourceEntity::class,
+        SourceRevisionEntity::class,
         ProviderChannelEntity::class,
         CanonicalChannelEntity::class,
         StreamVariantEntity::class,
         UserChannelOverlayEntity::class,
     ],
-    version = 1,
+    version = 2,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun profileDao(): ProfileDao
     abstract fun catalogDao(): CatalogDao
     abstract fun initializationDao(): InitializationDao
+    abstract fun sourceRevisionDao(): SourceRevisionDao
 }
