@@ -147,8 +147,7 @@ function Wait-AdbDevice {
 
     $logPath = Join-Path $EvidenceDirectory "adb-registration.log"
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    $connectAfter = (Get-Date).AddSeconds(15)
-    $nextConnect = $connectAfter
+    $nextConnect = (Get-Date).AddSeconds(15)
 
     do {
         if ($Process.HasExited) {
@@ -172,6 +171,68 @@ function Wait-AdbDevice {
     } while ((Get-Date) -lt $deadline)
 
     throw "Android TV emulator did not register with ADB as $ConsoleSerial or $TcpSerial within $TimeoutSeconds seconds. See $logPath"
+}
+
+function Get-AdbFirstLine {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string[]]$Arguments
+    )
+
+    $lines = @(& $Tools.Adb -s $Serial @Arguments 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $lines.Count -eq 0) {
+        return ""
+    }
+    return ([string]$lines[0]).Trim()
+}
+
+function Wait-AndroidSystemReady {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string]$EvidenceDirectory,
+        [int]$TimeoutSeconds = 360
+    )
+
+    $logPath = Join-Path $EvidenceDirectory "android-readiness.log"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $bootCompleted = ""
+    do {
+        $bootCompleted = Get-AdbFirstLine `
+            -Tools $Tools `
+            -Serial $Serial `
+            -Arguments @("shell", "getprop", "sys.boot_completed")
+        "boot=$bootCompleted" | Add-Content -Path $logPath -Encoding utf8
+        if ($bootCompleted -eq "1") { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    if ($bootCompleted -ne "1") {
+        throw "Android TV emulator $Serial did not complete Android boot within $TimeoutSeconds seconds. See $logPath"
+    }
+
+    $packageDeadline = (Get-Date).AddSeconds(90)
+    $androidPackage = ""
+    do {
+        $androidPackage = Get-AdbFirstLine `
+            -Tools $Tools `
+            -Serial $Serial `
+            -Arguments @("shell", "pm", "path", "android")
+        "packageManager=$androidPackage" | Add-Content -Path $logPath -Encoding utf8
+        if ($androidPackage -like "package:*") { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $packageDeadline)
+
+    if ($androidPackage -notlike "package:*") {
+        throw "Android package manager did not become ready on $Serial. See $logPath"
+    }
+
+    & $Tools.Adb -s $Serial shell input keyevent 82 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global window_animation_scale 0 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global transition_animation_scale 0 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global animator_duration_scale 0 | Out-Null
+    Write-Host "Android TV emulator $Serial completed boot and package-manager readiness."
 }
 
 Set-Location $repositoryRoot
@@ -202,6 +263,8 @@ $manifest = [ordered]@{
     requestedProfiles = @()
     profiles = @()
     failure = $null
+    failureType = $null
+    failureTrace = $null
 }
 Write-HarnessManifest -Manifest $manifest -Path $manifestPath
 
@@ -280,6 +343,8 @@ try {
             completedAtUtc = $null
             status = "running"
             failure = $null
+            failureType = $null
+            failureTrace = $null
         }
         $manifest.profiles += $profileRecord
         Write-HarnessManifest -Manifest $manifest -Path $manifestPath
@@ -310,7 +375,11 @@ try {
             $profileRecord.deviceSerial = $deviceSerial
             Write-HarnessManifest -Manifest $manifest -Path $manifestPath
 
-            Wait-AndroidBoot -Tools $tools -Serial $deviceSerial -TimeoutSeconds 360
+            Wait-AndroidSystemReady `
+                -Tools $tools `
+                -Serial $deviceSerial `
+                -EvidenceDirectory $profileDirectory `
+                -TimeoutSeconds 360
             $env:ANDROID_SERIAL = $deviceSerial
             Collect-AndroidEvidence -Tools $tools -Serial $deviceSerial -OutputDirectory $profileDirectory
 
@@ -338,6 +407,8 @@ try {
         } catch {
             $profileRecord.status = "failed"
             $profileRecord.failure = $_.Exception.Message
+            $profileRecord.failureType = $_.Exception.GetType().FullName
+            $profileRecord.failureTrace = $_.ScriptStackTrace
             throw
         } finally {
             $profileRecord.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
@@ -368,6 +439,8 @@ try {
 } catch {
     $manifest.status = "failed"
     $manifest.failure = $_.Exception.Message
+    $manifest.failureType = $_.Exception.GetType().FullName
+    $manifest.failureTrace = $_.ScriptStackTrace
     throw
 } finally {
     if ([string]::IsNullOrWhiteSpace($previousAndroidSerial)) {
