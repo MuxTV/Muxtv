@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.Upsert
 
 @Dao
 internal abstract class SourceRevisionDao {
@@ -54,8 +55,8 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRevision(revision: SourceRevisionEntity)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    abstract suspend fun insertCanonicalChannels(channels: List<CanonicalChannelEntity>)
+    @Upsert
+    abstract suspend fun upsertCanonicalChannels(channels: List<CanonicalChannelEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertProviderChannels(channels: List<ProviderChannelEntity>)
