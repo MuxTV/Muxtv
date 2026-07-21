@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$evidenceDirectory = Join-Path $repositoryRoot ".work\evidence"
+$evidenceDirectory = Join-Path $repositoryRoot ".work\evidence\harness-syntax"
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 $diagnosticPath = Join-Path $evidenceDirectory "harness-syntax.log"
 
