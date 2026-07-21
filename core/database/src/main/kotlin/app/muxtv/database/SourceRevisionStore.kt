@@ -1,5 +1,16 @@
 package app.muxtv.database
 
+data class SourceDefinition(
+    val id: String,
+    val name: String,
+    val credentialRef: String? = null,
+) {
+    init {
+        require(id.isNotBlank())
+        require(name.isNotBlank())
+    }
+}
+
 data class StagedCatalogEntry(
     val providerChannelId: String,
     val providerKey: String,
@@ -54,6 +65,8 @@ sealed interface SourceRevisionActivationResult {
 }
 
 interface SourceRevisionStore {
+    suspend fun upsertSource(source: SourceDefinition)
+
     suspend fun nextRevisionNumber(sourceId: String): Long
 
     suspend fun beginRevision(
