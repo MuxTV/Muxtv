@@ -16,7 +16,9 @@ object MuxTvDatabaseFactory {
             context = context.applicationContext,
             klass = MuxTvDatabase::class.java,
             name = "muxtv.db",
-        ).build()
+        )
+            .addMigrations(MIGRATION_1_2)
+            .build()
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
