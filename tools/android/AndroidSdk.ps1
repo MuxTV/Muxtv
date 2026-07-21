@@ -34,7 +34,7 @@ function Get-FirstExistingFile {
 
 function Get-AndroidSdkTools {
     [CmdletBinding()]
-    param()
+    param([switch]$AllowMissingRuntime)
 
     $sdkRoot = Get-AndroidSdkRoot
     $cmdlineToolsRoot = Join-Path $sdkRoot "cmdline-tools"
@@ -52,28 +52,28 @@ function Get-AndroidSdkTools {
     $avdManager = Get-FirstExistingFile -Candidates @(
         $cmdlineBins | ForEach-Object { Join-Path $_ "avdmanager.bat" }
     )
-    $emulator = Get-FirstExistingFile -Candidates @(
-        (Join-Path $sdkRoot "emulator\emulator.exe")
-    )
-    $adb = Get-FirstExistingFile -Candidates @(
-        (Join-Path $sdkRoot "platform-tools\adb.exe")
-    )
 
-    $missing = [System.Collections.Generic.List[string]]::new()
-    if ($null -eq $sdkManager) { $missing.Add("sdkmanager.bat") }
-    if ($null -eq $avdManager) { $missing.Add("avdmanager.bat") }
-    if ($null -eq $emulator) { $missing.Add("emulator.exe") }
-    if ($null -eq $adb) { $missing.Add("adb.exe") }
-    if ($missing.Count -gt 0) {
-        throw "Android SDK tools are missing: $($missing -join ', '). Install Android command-line tools, platform-tools and emulator."
+    if ($null -eq $sdkManager -or $null -eq $avdManager) {
+        throw "Android command-line tools are missing. Install cmdline-tools so sdkmanager.bat and avdmanager.bat are available."
+    }
+
+    $emulatorPath = Join-Path $sdkRoot "emulator\emulator.exe"
+    $adbPath = Join-Path $sdkRoot "platform-tools\adb.exe"
+    if (-not $AllowMissingRuntime) {
+        $missing = [System.Collections.Generic.List[string]]::new()
+        if (-not (Test-Path $emulatorPath -PathType Leaf)) { $missing.Add("emulator.exe") }
+        if (-not (Test-Path $adbPath -PathType Leaf)) { $missing.Add("adb.exe") }
+        if ($missing.Count -gt 0) {
+            throw "Android SDK runtime tools are missing: $($missing -join ', '). Install platform-tools and emulator."
+        }
     }
 
     return [pscustomobject]@{
         Root = $sdkRoot
         SdkManager = $sdkManager
         AvdManager = $avdManager
-        Emulator = $emulator
-        Adb = $adb
+        Emulator = $emulatorPath
+        Adb = $adbPath
     }
 }
 
@@ -115,13 +115,16 @@ function Get-AvailableTvSystemImages {
         $text = [string]$line
         if ($text -match '(system-images;android-(\d+);(android-tv|google-tv);(x86_64|x86))') {
             $package = $Matches[1]
+            $api = [int]$Matches[2]
+            $flavor = $Matches[3]
+            $abi = $Matches[4]
             if (-not $seen.ContainsKey($package)) {
                 $seen[$package] = $true
                 [pscustomobject]@{
                     Package = $package
-                    Api = [int]$Matches[2]
-                    Flavor = $Matches[3]
-                    Abi = $Matches[4]
+                    Api = $api
+                    Flavor = $flavor
+                    Abi = $abi
                 }
             }
         }
@@ -146,19 +149,23 @@ function Resolve-TvSystemImage {
     $flavorRank = @{ "android-tv" = 0; "google-tv" = 1 }
     $abiRank = @{ "x86_64" = 0; "x86" = 1 }
 
-    $exact = @($images |
-        Where-Object Api -eq $PreferredApi |
-        Sort-Object @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } })
+    $exact = @(
+        $images |
+            Where-Object { $_.Api -eq $PreferredApi } |
+            Sort-Object @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } }
+    )
     if ($exact.Count -gt 0) {
         return $exact[0]
     }
 
     if ($AllowOldEdgeFallback) {
-        $fallback = @($images |
-            Where-Object { $_.Api -ge 26 -and $_.Api -le 30 } |
-            Sort-Object Api, @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } })
+        $fallback = @(
+            $images |
+                Where-Object { $_.Api -ge 26 -and $_.Api -le 30 } |
+                Sort-Object Api, @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } }
+        )
         if ($fallback.Count -gt 0) {
-            Write-Warning "Android TV API $PreferredApi image is unavailable. Using the nearest available old-edge image: API $($fallback[0].Api), $($fallback[0].Package)."
+            Write-Warning "Android TV API $PreferredApi image is unavailable. Using old-edge API $($fallback[0].Api): $($fallback[0].Package)."
             return $fallback[0]
         }
     }
@@ -186,12 +193,28 @@ function Install-AndroidPackage {
         return
     }
 
-    $logPath = Join-Path $EvidenceDirectory "sdkmanager-install.log"
+    New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
+    $safeName = $Package -replace '[^a-zA-Z0-9._-]', '-'
+    $logPath = Join-Path $EvidenceDirectory "sdkmanager-install-$safeName.log"
     Write-Host "Installing Android package: $Package"
     $accept = 1..200 | ForEach-Object { "y" }
     $accept | & $Tools.SdkManager $Package 2>&1 | Tee-Object -FilePath $logPath
     if ($LASTEXITCODE -ne 0) {
         throw "sdkmanager failed to install $Package. See $logPath"
+    }
+}
+
+function Test-AndroidAcceleration {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$EvidenceDirectory
+    )
+
+    $logPath = Join-Path $EvidenceDirectory "emulator-acceleration.log"
+    & $Tools.Emulator -accel-check 2>&1 | Tee-Object -FilePath $logPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Android Emulator hardware acceleration is unavailable. Enable CPU virtualization and Windows Hypervisor Platform, restart Windows if required, and rerun. See $logPath"
     }
 }
 
@@ -235,10 +258,14 @@ function New-TvAvd {
         throw "avdmanager failed to create $Name."
     }
 
+    $userHome = $env:USERPROFILE
+    if ([string]::IsNullOrWhiteSpace($userHome)) {
+        $userHome = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    }
     $avdHome = if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_AVD_HOME)) {
         $env:ANDROID_AVD_HOME
     } else {
-        Join-Path $env:USERPROFILE ".android\avd"
+        Join-Path $userHome ".android\avd"
     }
     $configPath = Join-Path $avdHome "$Name.avd\config.ini"
     if (-not (Test-Path $configPath -PathType Leaf)) {
@@ -266,6 +293,7 @@ function Start-TvEmulator {
         [Parameter(Mandatory)][string]$EvidenceDirectory
     )
 
+    New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
     $stdout = Join-Path $EvidenceDirectory "emulator-stdout.log"
     $stderr = Join-Path $EvidenceDirectory "emulator-stderr.log"
     $arguments = @(
@@ -306,6 +334,7 @@ function Wait-AndroidBoot {
     }
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $completed = ""
     do {
         Start-Sleep -Seconds 2
         $completed = (& $Tools.Adb -s $Serial shell getprop sys.boot_completed 2>$null | Select-Object -First 1)
@@ -316,6 +345,16 @@ function Wait-AndroidBoot {
 
     if (([string]$completed).Trim() -ne "1") {
         throw "Android TV emulator $Serial did not complete boot within $TimeoutSeconds seconds."
+    }
+
+    $packageDeadline = (Get-Date).AddSeconds(60)
+    do {
+        $androidPackage = (& $Tools.Adb -s $Serial shell pm path android 2>$null | Select-Object -First 1)
+        if (([string]$androidPackage).Trim().StartsWith("package:")) { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $packageDeadline)
+    if (-not ([string]$androidPackage).Trim().StartsWith("package:")) {
+        throw "Android package manager did not become ready on $Serial."
     }
 
     & $Tools.Adb -s $Serial shell input keyevent 82 | Out-Null
@@ -375,5 +414,3 @@ function Stop-TvEmulator {
         }
     }
 }
-
-Export-ModuleMember -Function *
