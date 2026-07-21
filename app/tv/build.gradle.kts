@@ -21,6 +21,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":catalog:importer"))
     implementation(project(":core:credentials"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
