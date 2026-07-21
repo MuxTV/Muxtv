@@ -98,6 +98,7 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
 Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
     ":catalog:importer:testDebugUnitTest",
+    ":catalog:refresh:testDebugUnitTest",
     ":core:credentials:testDebugUnitTest",
     ":core:database:testDebugUnitTest",
     ":core:designsystem:testDebugUnitTest",
@@ -117,6 +118,7 @@ if ($Mode -in @("Full", "Device")) {
     Add-Step -Name "android-lint" -Arguments @(
         ":app:tv:lintDebug",
         ":catalog:importer:lintDebug",
+        ":catalog:refresh:lintDebug",
         ":core:credentials:lintDebug",
         ":core:database:lintDebug",
         ":core:designsystem:lintDebug",
