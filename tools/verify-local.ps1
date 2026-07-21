@@ -91,6 +91,7 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
     ":core:common:test",
     ":core:model:test",
     ":catalog:api:test",
+    ":catalog:ingest:test",
     ":player:api:test",
     ":player:fake:test"
 )
