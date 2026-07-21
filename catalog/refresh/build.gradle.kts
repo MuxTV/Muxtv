@@ -6,6 +6,7 @@ android {
 
 dependencies {
     implementation(project(":catalog:importer"))
+    implementation(project(":catalog:ingest"))
     implementation(project(":core:credentials"))
     implementation(project(":core:network"))
     implementation(libs.coroutines.core)
