@@ -4,6 +4,10 @@ import android.content.Context
 import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
+import app.muxtv.catalog.refresh.RemoteSourceAccessManager
+import app.muxtv.catalog.refresh.RemoteSourceRefreshFactory
+import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
@@ -46,6 +50,22 @@ object AppModule {
     fun provideCatalogRevisionImporter(
         revisionStore: SourceRevisionStore,
     ): CatalogRevisionImporter = CatalogRevisionImporterFactory.create(revisionStore)
+
+    @Provides
+    @Singleton
+    fun provideRemoteSourceAccessManager(
+        credentialStore: CredentialStore,
+    ): RemoteSourceAccessManager = RemoteSourceRefreshFactory.createAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun provideRemoteSourceRefresher(
+        credentialStore: CredentialStore,
+        importer: CatalogRevisionImporter,
+    ): RemoteSourceRefresher = RemoteSourceRefreshFactory.create(
+        credentialStore = credentialStore,
+        importer = importer,
+    )
 
     @Provides
     @Singleton
