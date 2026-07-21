@@ -30,6 +30,7 @@ include(
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
+    ":catalog:refresh",
     ":player:api",
     ":player:media3",
     ":player:fake",

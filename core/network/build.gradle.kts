@@ -5,8 +5,8 @@ android {
 }
 
 dependencies {
-    implementation(platform(libs.okhttp.bom))
-    implementation(libs.okhttp)
+    api(platform(libs.okhttp.bom))
+    api(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

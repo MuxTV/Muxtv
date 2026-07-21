@@ -4,10 +4,15 @@ import android.content.Context
 import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
+import app.muxtv.catalog.refresh.RemoteSourceAccessManager
+import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
 import app.muxtv.database.SourceRevisionStore
+import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.PlaybackEngine
 import app.muxtv.player.media3.Media3PlaybackEngineFactory
 import dagger.Module
@@ -46,6 +51,34 @@ object AppModule {
     fun provideCatalogRevisionImporter(
         revisionStore: SourceRevisionStore,
     ): CatalogRevisionImporter = CatalogRevisionImporterFactory.create(revisionStore)
+
+    @Provides
+    @Singleton
+    fun provideHttpResources(): MuxTvHttpResources = MuxTvHttpResources()
+
+    @Provides
+    @Singleton
+    fun provideHttpClients(
+        resources: MuxTvHttpResources,
+    ): MuxTvHttpClients = MuxTvHttpClients(resources)
+
+    @Provides
+    @Singleton
+    fun provideRemoteSourceAccessManager(
+        credentialStore: CredentialStore,
+    ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun provideRemoteSourceRefresher(
+        credentialStore: CredentialStore,
+        importer: CatalogRevisionImporter,
+        clients: MuxTvHttpClients,
+    ): RemoteSourceRefresher = RemoteSourceRefresher(
+        credentialStore = credentialStore,
+        importer = importer,
+        sourceClient = clients.source,
+    )
 
     @Provides
     @Singleton
