@@ -156,6 +156,8 @@ class RemoteSourceRefresher(
         val networkRequest = Request.Builder()
             .url(normalizedUrl)
             .get()
+            .header("Accept", M3U_ACCEPT)
+            .header("User-Agent", access.userAgent ?: DEFAULT_USER_AGENT)
             .tag(
                 SourceRequestContext::class,
                 SourceRequestContext(
@@ -164,7 +166,6 @@ class RemoteSourceRefresher(
                 ),
             )
             .apply {
-                access.userAgent?.let { header("User-Agent", it) }
                 access.referrer?.let { header("Referer", it) }
                 access.sensitiveHeaders.forEach { (name, value) -> header(name, value) }
             }
@@ -223,6 +224,12 @@ class RemoteSourceRefresher(
         } catch (_: IOException) {
             RemoteSourceRefreshResult.NetworkFailure(RemoteSourceNetworkFailureReason.Io)
         }
+    }
+
+    private companion object {
+        const val DEFAULT_USER_AGENT = "MuxTV/0.0.1"
+        const val M3U_ACCEPT =
+            "application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, text/plain, */*"
     }
 }
 
