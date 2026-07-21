@@ -40,7 +40,7 @@ internal class RoomSourceRevisionStore(
         }
         if (entries.isEmpty()) return
 
-        dao.insertCanonicalChannels(
+        dao.upsertCanonicalChannels(
             entries.map { entry ->
                 CanonicalChannelEntity(
                     id = entry.canonicalChannelId,
