@@ -97,7 +97,7 @@ function Invoke-CheckedNative {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Native command failed with exit code $LASTEXITCODE: $FilePath $($Arguments -join ' ')"
+        throw "Native command failed with exit code ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')"
     }
 }
 
