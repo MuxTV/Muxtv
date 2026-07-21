@@ -96,12 +96,16 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
 )
 Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
+    ":core:credentials:testDebugUnitTest",
     ":core:database:testDebugUnitTest",
     ":core:designsystem:testDebugUnitTest",
     ":core:network:testDebugUnitTest",
     ":core:ui:testDebugUnitTest",
     ":player:media3:testDebugUnitTest",
     ":feature:home:testDebugUnitTest"
+)
+Add-Step -Name "credentials-instrumentation-compile" -Arguments @(
+    ":core:credentials:assembleDebugAndroidTest"
 )
 Add-Step -Name "debug-apk" -Arguments @(
     ":app:tv:assembleDebug"
@@ -110,6 +114,7 @@ Add-Step -Name "debug-apk" -Arguments @(
 if ($Mode -in @("Full", "Device")) {
     Add-Step -Name "android-lint" -Arguments @(
         ":app:tv:lintDebug",
+        ":core:credentials:lintDebug",
         ":core:database:lintDebug",
         ":core:designsystem:lintDebug",
         ":core:network:lintDebug",
@@ -123,6 +128,9 @@ if ($Mode -in @("Full", "Device")) {
 }
 
 if ($Mode -eq "Device") {
+    Add-Step -Name "credentials-device-tests" -Arguments @(
+        ":core:credentials:connectedDebugAndroidTest"
+    )
     Add-Step -Name "database-device-tests" -Arguments @(
         ":core:database:connectedDebugAndroidTest"
     )

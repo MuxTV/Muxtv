@@ -5,14 +5,12 @@ import app.muxtv.database.DatabaseInitializer
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 @HiltAndroidApp
 class MuxTvApplication : Application() {
     @Inject lateinit var databaseInitializer: DatabaseInitializer
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject @ApplicationIoScope lateinit var applicationScope: CoroutineScope
 
     override fun onCreate() {
         super.onCreate()

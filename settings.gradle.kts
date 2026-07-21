@@ -26,6 +26,7 @@ include(
     ":core:ui",
     ":core:testing",
     ":core:network",
+    ":core:credentials",
     ":catalog:api",
     ":player:api",
     ":player:media3",

@@ -21,6 +21,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:credentials"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:ui"))
