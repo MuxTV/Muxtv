@@ -71,6 +71,28 @@ function Test-AdbDeviceReady {
     }
 }
 
+function Wait-AdbDevice {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds = 90
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        if ($Process.HasExited) {
+            throw "Android TV emulator process exited before ADB became ready. Exit code: $($Process.ExitCode)."
+        }
+        if (Test-AdbDeviceReady -Tools $Tools -Serial $Serial) {
+            return
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Android TV emulator $Serial did not become visible to ADB within $TimeoutSeconds seconds."
+}
+
 Set-Location $repositoryRoot
 
 $gitCommit = Get-GitValue -Arguments @("rev-parse", "--short=12", "HEAD") -Fallback "unknown"
@@ -193,6 +215,7 @@ try {
                 -Port $profile.Port `
                 -EvidenceDirectory $profileDirectory
 
+            Wait-AdbDevice -Tools $tools -Serial $serial -Process $emulatorProcess -TimeoutSeconds 90
             Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
             $env:ANDROID_SERIAL = $serial
             Collect-AndroidEvidence -Tools $tools -Serial $serial -OutputDirectory $profileDirectory
@@ -229,14 +252,14 @@ try {
                 try {
                     Collect-AndroidEvidence -Tools $tools -Serial $serial -OutputDirectory $profileDirectory
                 } catch {
-                    Write-Warning "Unable to collect final emulator evidence for $serial: $($_.Exception.Message)"
+                    Write-Warning "Unable to collect final emulator evidence for ${serial}: $($_.Exception.Message)"
                 }
             }
 
             try {
                 Stop-TvEmulator -Tools $tools -Serial $serial -Process $emulatorProcess
             } catch {
-                Write-Warning "Unable to stop emulator cleanly for $serial: $($_.Exception.Message)"
+                Write-Warning "Unable to stop emulator cleanly for ${serial}: $($_.Exception.Message)"
                 if ($null -ne $emulatorProcess) {
                     Stop-Process -Id $emulatorProcess.Id -Force -ErrorAction SilentlyContinue
                 }
