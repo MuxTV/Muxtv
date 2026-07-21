@@ -1,8 +1,13 @@
 package app.muxtv.di
 
 import android.content.Context
+import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.importer.CatalogRevisionImporter
+import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.database.DatabaseInitializer
+import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
+import app.muxtv.database.SourceRevisionStore
 import app.muxtv.player.PlaybackEngine
 import app.muxtv.player.media3.Media3PlaybackEngineFactory
 import dagger.Module
@@ -17,8 +22,30 @@ import javax.inject.Singleton
 object AppModule {
     @Provides
     @Singleton
-    fun provideDatabaseInitializer(@ApplicationContext context: Context): DatabaseInitializer =
-        MuxTvDatabaseFactory.createInitializer(context)
+    fun provideDatabaseComponents(
+        @ApplicationContext context: Context,
+    ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(context)
+
+    @Provides
+    fun provideDatabaseInitializer(
+        components: MuxTvDatabaseComponents,
+    ): DatabaseInitializer = components.initializer
+
+    @Provides
+    fun provideSourceRevisionStore(
+        components: MuxTvDatabaseComponents,
+    ): SourceRevisionStore = components.sourceRevisionStore
+
+    @Provides
+    fun provideCatalogRepository(
+        components: MuxTvDatabaseComponents,
+    ): CatalogRepository = components.catalogRepository
+
+    @Provides
+    @Singleton
+    fun provideCatalogRevisionImporter(
+        revisionStore: SourceRevisionStore,
+    ): CatalogRevisionImporter = CatalogRevisionImporterFactory.create(revisionStore)
 
     @Provides
     @Singleton

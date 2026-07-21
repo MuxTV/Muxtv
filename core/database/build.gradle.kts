@@ -14,6 +14,7 @@ room3 {
 }
 
 dependencies {
+    implementation(project(":catalog:api"))
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(libs.coroutines.android)

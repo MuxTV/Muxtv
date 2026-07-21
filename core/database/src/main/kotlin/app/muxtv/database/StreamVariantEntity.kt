@@ -28,4 +28,6 @@ data class StreamVariantEntity(
     val providerChannelId: String,
     val canonicalChannelId: String,
     val locator: String,
+    val userAgent: String? = null,
+    val referrer: String? = null,
 )

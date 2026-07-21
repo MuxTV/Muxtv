@@ -29,6 +29,7 @@ include(
     ":core:credentials",
     ":catalog:api",
     ":catalog:ingest",
+    ":catalog:importer",
     ":player:api",
     ":player:media3",
     ":player:fake",
