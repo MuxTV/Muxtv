@@ -23,9 +23,11 @@ android {
 dependencies {
     implementation(project(":catalog:api"))
     implementation(project(":catalog:importer"))
+    implementation(project(":catalog:refresh"))
     implementation(project(":core:credentials"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
+    implementation(project(":core:network"))
     implementation(project(":core:ui"))
     implementation(project(":feature:home"))
     implementation(project(":player:media3"))
