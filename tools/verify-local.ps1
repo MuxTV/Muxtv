@@ -97,6 +97,7 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
 )
 Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
+    ":catalog:importer:testDebugUnitTest",
     ":core:credentials:testDebugUnitTest",
     ":core:database:testDebugUnitTest",
     ":core:designsystem:testDebugUnitTest",
@@ -115,6 +116,7 @@ Add-Step -Name "debug-apk" -Arguments @(
 if ($Mode -in @("Full", "Device")) {
     Add-Step -Name "android-lint" -Arguments @(
         ":app:tv:lintDebug",
+        ":catalog:importer:lintDebug",
         ":core:credentials:lintDebug",
         ":core:database:lintDebug",
         ":core:designsystem:lintDebug",
