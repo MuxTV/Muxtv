@@ -2,10 +2,12 @@ package app.muxtv.database
 
 import android.content.Context
 import androidx.room3.Room
+import app.muxtv.catalog.CatalogRepository
 
 class MuxTvDatabaseComponents internal constructor(
     val initializer: DatabaseInitializer,
     val sourceRevisionStore: SourceRevisionStore,
+    val catalogRepository: CatalogRepository,
 )
 
 object MuxTvDatabaseFactory {
@@ -18,6 +20,7 @@ object MuxTvDatabaseFactory {
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
+            catalogRepository = RoomCatalogRepository(database.catalogDao()),
         )
     }
 
