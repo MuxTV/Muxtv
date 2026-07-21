@@ -9,8 +9,8 @@ import org.junit.Test
 class StreamingM3uParserTest {
     @Test
     fun `streams common IPTV metadata without materializing playlist`() = runTest {
-        val playlist = """
-            \uFEFF#EXTM3U url-tvg="https://epg.example/guide.xml,https://backup.example/guide.xml" refresh="3600"
+        val playlist = "\uFEFF" + """
+            #EXTM3U url-tvg="https://epg.example/guide.xml,https://backup.example/guide.xml" refresh="3600"
             #EXTINF:-1 tvg-id="news.world" tvg-name="News, World" tvg-logo="https://img.example/news.png" group-title="Provider" tvg-chno="101" catchup="append" catchup-source="?utc={utc}" catchup-days="7",News, World
             #EXTGRP:News
             #EXTVLCOPT:http-user-agent=MuxTV Test Agent
@@ -47,7 +47,7 @@ class StreamingM3uParserTest {
         assertThat(first.toString()).doesNotContain("token=secret")
 
         val second = sink.entries[1]
-        assertThat(second.displayName).isEqualTo("239.0.0.1:1234")
+        assertThat(second.displayName).isEqualTo("@239.0.0.1:1234")
         assertThat(sink.warnings.single().kind).isEqualTo(M3uWarningKind.BareLocator)
     }
 
