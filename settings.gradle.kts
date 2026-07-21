@@ -28,6 +28,7 @@ include(
     ":core:network",
     ":core:credentials",
     ":catalog:api",
+    ":catalog:ingest",
     ":player:api",
     ":player:media3",
     ":player:fake",
