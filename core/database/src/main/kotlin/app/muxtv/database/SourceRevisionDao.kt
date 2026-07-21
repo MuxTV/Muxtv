@@ -54,7 +54,7 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRevision(revision: SourceRevisionEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertCanonicalChannels(channels: List<CanonicalChannelEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
