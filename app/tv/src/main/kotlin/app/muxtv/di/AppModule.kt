@@ -1,6 +1,8 @@
 package app.muxtv.di
 
 import android.content.Context
+import app.muxtv.catalog.importer.CatalogRevisionImporter
+import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
@@ -32,6 +34,12 @@ object AppModule {
     fun provideSourceRevisionStore(
         components: MuxTvDatabaseComponents,
     ): SourceRevisionStore = components.sourceRevisionStore
+
+    @Provides
+    @Singleton
+    fun provideCatalogRevisionImporter(
+        revisionStore: SourceRevisionStore,
+    ): CatalogRevisionImporter = CatalogRevisionImporterFactory.create(revisionStore)
 
     @Provides
     @Singleton
