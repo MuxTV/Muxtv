@@ -70,7 +70,7 @@ The artifact `self-hosted-validation-29863649053-1` is bound to the same head. C
 
 ## Verified final Full run
 
-Self-hosted run `29864418870` passed on final head `bca47a843671e0074e726311174d15fb6ac89ac7` after the temporary PR-only `DeviceCurrent` override was removed. The permanent workflow therefore retains normal PR `Full` behavior and exposes `DeviceCurrent`/`DeviceMatrix` only as explicit manual modes.
+Self-hosted run `29943748575` passed on final head `5c976d2b925678ec924751306c1b0af532feb8de`. The permanent workflow retains normal PR `Full` behavior and exposes `DeviceCurrent`/`DeviceMatrix` only as explicit manual modes.
 
 ## Remaining release checkpoint
 
