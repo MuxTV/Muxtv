@@ -9,9 +9,12 @@ android {
 }
 
 dependencies {
+    implementation(project(":catalog:importer"))
+    implementation(project(":catalog:ingest"))
     implementation(project(":catalog:refresh"))
     implementation(project(":core:credentials"))
     implementation(project(":core:database"))
+    implementation(project(":core:network"))
     implementation(libs.coroutines.core)
     implementation(libs.work.runtime)
     implementation(libs.androidx.hilt.work)
