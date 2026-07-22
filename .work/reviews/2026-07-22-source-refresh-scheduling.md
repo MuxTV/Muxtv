@@ -37,16 +37,51 @@ This checkpoint adds durable per-source WorkManager scheduling and Room-backed r
 - cancellation writes a typed CANCELLED state and rethrows `CancellationException`;
 - failed refreshes cannot activate a revision because activation remains owned by the existing importer transaction.
 
-## Required gates
+## Verified Full gate
 
-1. Fresh self-hosted Full on exact PR head.
-2. DeviceMatrix because Room schema and application/WorkManager initialization change.
-3. Final diff and evidence review.
+Self-hosted run `29946568554` passed on head `64d2629b3a72b6688b4e5c1b4a35a370770ec8df`.
+
+It covered:
+
+- Kotlin and Android unit tests, including `catalog:sync` outcome mapping;
+- Room/KSP and Hilt worker generation;
+- app compilation with custom WorkManager initialization;
+- Android lint for the sync module and application;
+- debug and release APK assembly.
+
+## Verified DeviceMatrix gate
+
+Self-hosted run `29947548905` passed on head `bac0d10b43c14f533636890ec79bceb2a337daee`. Artifact `self-hosted-validation-29947548905-1` is bound to the same branch/head.
+
+The matrix resolved both requested profiles without fallback:
+
+1. `system-images;android-26;android-tv;x86`, AVD `MuxTV_TV_OLD_API26`, 1536 MB RAM;
+2. `system-images;android-36;android-tv;x86_64`, AVD `MuxTV_TV_CURRENT_API36`, 2048 MB RAM.
+
+Both profiles passed sequentially:
+
+- build-logic and configuration-cache create/reuse;
+- pure Kotlin and Android unit tests;
+- `catalog:sync` tests and app/Hilt compilation;
+- debug APK, Android lint and release APK;
+- real Android Keystore instrumentation;
+- Room/database instrumentation, including lease overlap, stale reclamation, late-token rejection and policy privacy;
+- application instrumentation with the custom WorkManager configuration;
+- emulator shutdown and evidence collection.
+
+The DeviceMatrix manifest completed with `status=passed`, no fallback, no failure and exact commit identity `bac0d10b43c1`.
+
+## Remaining merge gates
+
+1. commit the generated Room schema v3 JSON;
+2. restore the permanent workflow without the PR-only DeviceMatrix override;
+3. pass a final self-hosted Full run on the exact final head;
+4. perform final diff and evidence review.
 
 ## Deferred
 
 - source policy UI;
-- exported v2 migration fixture cleanup;
+- exported v2 fixture migration test cleanup;
 - foreground notification policy for very large catalogs;
 - EPG scheduling;
 - active playback catalog queries.
