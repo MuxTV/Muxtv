@@ -68,9 +68,13 @@ The nested Device evidence manifest passed all steps:
 
 The artifact `self-hosted-validation-29863649053-1` is bound to the same head. Connected-test reports contain one actual target, `MuxTV_TV_CURRENT_API36(AVD)`.
 
-## Remaining gate
+## Verified final Full run
 
-`DeviceMatrix` has not yet been claimed as passed. It remains a manual/release checkpoint for resolving the old Android TV image and running old/current profiles sequentially.
+Self-hosted run `29864418870` passed on final head `bca47a843671e0074e726311174d15fb6ac89ac7` after the temporary PR-only `DeviceCurrent` override was removed. The permanent workflow therefore retains normal PR `Full` behavior and exposes `DeviceCurrent`/`DeviceMatrix` only as explicit manual modes.
+
+## Remaining release checkpoint
+
+`DeviceMatrix` has not yet been claimed as passed. It remains a manual/release checkpoint for resolving the old Android TV image and running old/current profiles sequentially. It becomes mandatory before merging Keystore schema changes, Room migrations that affect persisted user data, MediaSessionService, player-surface lifecycle and TV focus/navigation packages.
 
 ## Known environment requirement
 
