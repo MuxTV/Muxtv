@@ -111,7 +111,6 @@ jobs:
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             .work/evidence/**/*.png
-            core/database/schemas/**/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn
