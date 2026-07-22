@@ -9,12 +9,15 @@ import androidx.room3.RoomDatabase
         ProfileEntity::class,
         SourceEntity::class,
         SourceRevisionEntity::class,
+        SourceRefreshPolicyEntity::class,
+        SourceRefreshStateEntity::class,
+        SourceRefreshAttemptEntity::class,
         ProviderChannelEntity::class,
         CanonicalChannelEntity::class,
         StreamVariantEntity::class,
         UserChannelOverlayEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
@@ -22,4 +25,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun catalogDao(): CatalogDao
     abstract fun initializationDao(): InitializationDao
     abstract fun sourceRevisionDao(): SourceRevisionDao
+    abstract fun sourceRefreshDao(): SourceRefreshDao
 }
