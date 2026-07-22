@@ -76,6 +76,8 @@ jobs:
           $mode = "Full"
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $mode = "${{ inputs.validation_mode }}"
+          } elseif ("${{ github.head_ref }}" -eq "feat/source-scheduling") {
+            $mode = "DeviceMatrix"
           }
           "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "Validation mode: $mode"
