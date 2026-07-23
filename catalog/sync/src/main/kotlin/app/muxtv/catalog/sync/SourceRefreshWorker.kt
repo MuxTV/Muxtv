@@ -33,25 +33,22 @@ class SourceRefreshWorker @AssistedInject constructor(
             ?.let { value -> runCatching { SourceRefreshTrigger.valueOf(value) }.getOrNull() }
             ?: return Result.failure()
 
-        val target = try {
-            refreshStore.getTarget(sourceId)
-        } catch (_: Exception) {
-            return transientWorkResult()
-        } ?: return Result.failure()
+        val targetResult = runWorkerBoundary { refreshStore.getTarget(sourceId) }
+        if (targetResult.isFailure) return transientWorkResult()
+        val target = targetResult.getOrNull() ?: return Result.failure()
 
         val runToken = UUID.randomUUID().toString()
         val startedAtEpochMillis = System.currentTimeMillis()
-        val acquired = try {
+        val acquiredResult = runWorkerBoundary {
             refreshStore.tryAcquire(
                 sourceId = sourceId,
                 runToken = runToken,
                 startedAtEpochMillis = startedAtEpochMillis,
                 staleBeforeEpochMillis = startedAtEpochMillis - LEASE_STALE_AFTER_MILLIS,
             )
-        } catch (_: Exception) {
-            return transientWorkResult()
         }
-        if (!acquired) return Result.success()
+        if (acquiredResult.isFailure) return transientWorkResult()
+        if (!acquiredResult.getOrThrow()) return Result.success()
 
         return try {
             val decision = refresh(target)
