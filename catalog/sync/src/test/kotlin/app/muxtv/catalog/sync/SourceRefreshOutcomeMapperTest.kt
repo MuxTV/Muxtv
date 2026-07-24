@@ -62,4 +62,15 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.resultCode).isEqualTo("IO")
         assertThat(decision.retryable).isTrue()
     }
+
+    @Test
+    fun `runtime timeout is retryable and secret safe`() {
+        val decision = SourceRefreshOutcomeMapper.runtimeTimeout()
+
+        assertThat(decision.state).isEqualTo(SourceRefreshRunState.FAILED)
+        assertThat(decision.resultFamily).isEqualTo("WORK")
+        assertThat(decision.resultCode).isEqualTo("TIMEOUT")
+        assertThat(decision.retryable).isTrue()
+        assertThat(decision.httpStatus).isNull()
+    }
 }
