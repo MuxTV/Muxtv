@@ -3,14 +3,23 @@ package app.muxtv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.navigation.AppNavigation
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var playbackCatalog: PlaybackCatalog
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MuxTvTheme { AppNavigation() } }
+        setContent {
+            MuxTvTheme {
+                AppNavigation(playbackCatalog = playbackCatalog)
+            }
+        }
     }
 }

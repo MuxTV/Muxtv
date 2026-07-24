@@ -1,10 +1,21 @@
 package app.muxtv.navigation
 
-enum class AppDestination {
-    Home,
-    Channels,
-    Guide,
-    Search;
+sealed interface AppDestination {
+    data object Home : AppDestination
+    data object Channels : AppDestination
+    data object Guide : AppDestination
+    data object Search : AppDestination
 
-    companion object { val initial: AppDestination = Home }
+    data class Player(
+        val channelId: String,
+    ) : AppDestination {
+        init {
+            require(channelId.isNotBlank())
+        }
+    }
+
+    companion object {
+        val initial: AppDestination = Home
+        val topLevel: List<AppDestination> = listOf(Home, Channels, Guide, Search)
+    }
 }
