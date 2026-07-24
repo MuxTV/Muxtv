@@ -9,8 +9,33 @@ typealias TrackId = CommonTrackId
 data class PlaybackRequest(
     val variantId: StreamVariantId,
     val locator: String,
+    val mediaId: String = variantId.toString(),
+    val displayName: String? = null,
+    val artworkUri: String? = null,
+    val requestHeaders: Map<String, String> = emptyMap(),
 ) {
-    init { require(locator.isNotBlank()) }
+    init {
+        require(locator.isNotBlank())
+        require(mediaId.isNotBlank())
+        require(displayName == null || displayName.isNotBlank())
+        require(artworkUri == null || artworkUri.isNotBlank())
+        require(requestHeaders.size <= MAX_REQUEST_HEADERS)
+        requestHeaders.forEach { (name, value) ->
+            require(name.isNotBlank())
+            require(value.isNotBlank())
+            require(!name.contains('\r') && !name.contains('\n'))
+            require(!value.contains('\r') && !value.contains('\n'))
+        }
+    }
+
+    override fun toString(): String =
+        "PlaybackRequest(variantId=$variantId, mediaId=$mediaId, locator=<redacted>, " +
+            "displayName=$displayName, artworkUri=${artworkUri != null}, " +
+            "requestHeaders=${requestHeaders.keys.sorted()})"
+
+    private companion object {
+        const val MAX_REQUEST_HEADERS = 32
+    }
 }
 
 enum class PlaybackTrackKind { AUDIO, SUBTITLE, VIDEO }
