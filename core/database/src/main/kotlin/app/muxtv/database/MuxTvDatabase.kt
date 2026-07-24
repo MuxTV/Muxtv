@@ -26,4 +26,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun initializationDao(): InitializationDao
     abstract fun sourceRevisionDao(): SourceRevisionDao
     abstract fun sourceRefreshDao(): SourceRefreshDao
+    abstract fun playbackCatalogDao(): PlaybackCatalogDao
 }

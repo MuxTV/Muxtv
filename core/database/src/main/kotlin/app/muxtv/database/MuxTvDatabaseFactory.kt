@@ -3,12 +3,14 @@ package app.muxtv.database
 import android.content.Context
 import androidx.room3.Room
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackCatalog
 
 class MuxTvDatabaseComponents internal constructor(
     val initializer: DatabaseInitializer,
     val sourceRevisionStore: SourceRevisionStore,
     val sourceRefreshStore: SourceRefreshStore,
     val catalogRepository: CatalogRepository,
+    val playbackCatalog: PlaybackCatalog,
 )
 
 object MuxTvDatabaseFactory {
@@ -25,6 +27,7 @@ object MuxTvDatabaseFactory {
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
             sourceRefreshStore = RoomSourceRefreshStore(database.sourceRefreshDao()),
             catalogRepository = RoomCatalogRepository(database.catalogDao()),
+            playbackCatalog = RoomPlaybackCatalog(database.playbackCatalogDao()),
         )
     }
 

@@ -2,6 +2,7 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
@@ -51,6 +52,11 @@ object AppModule {
     fun provideCatalogRepository(
         components: MuxTvDatabaseComponents,
     ): CatalogRepository = components.catalogRepository
+
+    @Provides
+    fun providePlaybackCatalog(
+        components: MuxTvDatabaseComponents,
+    ): PlaybackCatalog = components.playbackCatalog
 
     @Provides
     @Singleton
