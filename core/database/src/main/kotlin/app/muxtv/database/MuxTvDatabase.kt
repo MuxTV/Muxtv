@@ -12,12 +12,13 @@ import androidx.room3.RoomDatabase
         SourceRefreshPolicyEntity::class,
         SourceRefreshStateEntity::class,
         SourceRefreshAttemptEntity::class,
+        PendingSourcePreparationEntity::class,
         ProviderChannelEntity::class,
         CanonicalChannelEntity::class,
         StreamVariantEntity::class,
         UserChannelOverlayEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
@@ -26,5 +27,6 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun initializationDao(): InitializationDao
     abstract fun sourceRevisionDao(): SourceRevisionDao
     abstract fun sourceRefreshDao(): SourceRefreshDao
+    abstract fun pendingSourcePreparationDao(): PendingSourcePreparationDao
     abstract fun playbackCatalogDao(): PlaybackCatalogDao
 }
