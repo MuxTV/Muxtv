@@ -80,6 +80,13 @@ internal object SourceRefreshOutcomeMapper {
 
     fun invalidCredentialReference(): SourceRefreshDecision = needsAuth("INVALID_REFERENCE")
 
+    fun runtimeTimeout(): SourceRefreshDecision = SourceRefreshDecision(
+        state = SourceRefreshRunState.FAILED,
+        resultFamily = FAMILY_WORK,
+        resultCode = "TIMEOUT",
+        retryable = true,
+    )
+
     fun internalFailure(): SourceRefreshDecision = SourceRefreshDecision(
         state = SourceRefreshRunState.FAILED,
         resultFamily = FAMILY_INTERNAL,
@@ -148,5 +155,6 @@ internal object SourceRefreshOutcomeMapper {
     private const val FAMILY_NETWORK = "NETWORK"
     private const val FAMILY_CONTENT = "CONTENT"
     private const val FAMILY_IMPORT = "IMPORT"
+    private const val FAMILY_WORK = "WORK"
     private const val FAMILY_INTERNAL = "INTERNAL"
 }
