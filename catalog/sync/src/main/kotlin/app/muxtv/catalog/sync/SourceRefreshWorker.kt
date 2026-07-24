@@ -17,7 +17,12 @@ import dagger.assisted.AssistedInject
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+
+internal const val REFRESH_TIMEOUT_MILLIS = 20 * 60 * 1000L
+internal const val LEASE_STALE_AFTER_MILLIS = 30 * 60 * 1000L
 
 @HiltWorker
 class SourceRefreshWorker @AssistedInject constructor(
@@ -80,16 +85,19 @@ class SourceRefreshWorker @AssistedInject constructor(
             ?: return SourceRefreshOutcomeMapper.missingCredentialReference()
         val credentialId = runCatching { CredentialId.parse(credentialRef) }
             .getOrElse { return SourceRefreshOutcomeMapper.invalidCredentialReference() }
-
-        return SourceRefreshOutcomeMapper.map(
-            sourceRefresher.refresh(
-                RemoteSourceRefreshRequest(
-                    sourceId = target.sourceId,
-                    sourceName = target.sourceName,
-                    accessCredentialId = credentialId,
-                ),
-            ),
+        val request = RemoteSourceRefreshRequest(
+            sourceId = target.sourceId,
+            sourceName = target.sourceName,
+            accessCredentialId = credentialId,
         )
+
+        return try {
+            withTimeout(REFRESH_TIMEOUT_MILLIS) {
+                SourceRefreshOutcomeMapper.map(sourceRefresher.refresh(request))
+            }
+        } catch (_: TimeoutCancellationException) {
+            SourceRefreshOutcomeMapper.runtimeTimeout()
+        }
     }
 
     private suspend fun complete(
@@ -129,7 +137,6 @@ class SourceRefreshWorker @AssistedInject constructor(
         const val KEY_SOURCE_ID = "source_id"
         const val KEY_TRIGGER = "trigger"
 
-        private const val LEASE_STALE_AFTER_MILLIS = 30 * 60 * 1000L
         private const val MAX_RETRY_INDEX = 2
     }
 }
