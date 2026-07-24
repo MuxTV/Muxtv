@@ -51,6 +51,63 @@ function Get-ShortCommit {
     return $trimmed.Substring(0, 12)
 }
 
+function Assert-AndroidTestCount {
+    param(
+        [string]$ModulePath,
+        [string]$DisplayName
+    )
+
+    $resultsRoot = Join-Path $repositoryRoot (Join-Path $ModulePath "build\outputs\androidTest-results")
+    if (-not (Test-Path $resultsRoot -PathType Container)) {
+        throw "$DisplayName produced no Android test result directory: $resultsRoot"
+    }
+
+    $resultFiles = @(Get-ChildItem -Path $resultsRoot -Recurse -File -Filter "TEST-*.xml")
+    if ($resultFiles.Count -eq 0) {
+        throw "$DisplayName produced no TEST-*.xml results under $resultsRoot"
+    }
+
+    $testCount = 0
+    $failureCount = 0
+    $errorCount = 0
+    $skippedCount = 0
+    foreach ($resultFile in $resultFiles) {
+        [xml]$document = Get-Content -Path $resultFile.FullName -Raw
+        foreach ($suite in @($document.SelectNodes("//testsuite"))) {
+            if ($null -ne $suite.Attributes["tests"]) {
+                $testCount += [int]$suite.Attributes["tests"].Value
+            }
+            if ($null -ne $suite.Attributes["failures"]) {
+                $failureCount += [int]$suite.Attributes["failures"].Value
+            }
+            if ($null -ne $suite.Attributes["errors"]) {
+                $errorCount += [int]$suite.Attributes["errors"].Value
+            }
+            if ($null -ne $suite.Attributes["skipped"]) {
+                $skippedCount += [int]$suite.Attributes["skipped"].Value
+            }
+        }
+    }
+
+    if ($testCount -lt 1) {
+        throw "$DisplayName executed zero tests. A successful Gradle task without tests is not validation."
+    }
+    if (($failureCount + $errorCount) -gt 0) {
+        throw "$DisplayName XML reports failures=$failureCount errors=$errorCount."
+    }
+
+    Write-Host "$DisplayName executed $testCount test(s); skipped=$skippedCount."
+    return [ordered]@{
+        module = $ModulePath
+        displayName = $DisplayName
+        tests = $testCount
+        failures = $failureCount
+        errors = $errorCount
+        skipped = $skippedCount
+        resultFiles = $resultFiles.Count
+    }
+}
+
 $gitCommit = Get-GitValue -Arguments @("rev-parse", "--short=12", "HEAD") -Fallback "unknown"
 $gitBranch = Get-GitValue -Arguments @("branch", "--show-current") -Fallback "unknown"
 $commit = if ([string]::IsNullOrWhiteSpace($SourceCommit)) { $gitCommit } else { Get-ShortCommit $SourceCommit }
@@ -99,6 +156,7 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
     ":catalog:importer:testDebugUnitTest",
     ":catalog:refresh:testDebugUnitTest",
+    ":catalog:sync:testDebugUnitTest",
     ":core:credentials:testDebugUnitTest",
     ":core:database:testDebugUnitTest",
     ":core:designsystem:testDebugUnitTest",
@@ -119,6 +177,7 @@ if ($Mode -in @("Full", "Device")) {
         ":app:tv:lintDebug",
         ":catalog:importer:lintDebug",
         ":catalog:refresh:lintDebug",
+        ":catalog:sync:lintDebug",
         ":core:credentials:lintDebug",
         ":core:database:lintDebug",
         ":core:designsystem:lintDebug",
@@ -132,7 +191,18 @@ if ($Mode -in @("Full", "Device")) {
     )
 }
 
+$deviceTestModules = @(
+    [ordered]@{ ModulePath = "core\credentials"; DisplayName = "Credential instrumentation" },
+    [ordered]@{ ModulePath = "core\database"; DisplayName = "Database instrumentation" },
+    [ordered]@{ ModulePath = "app\tv"; DisplayName = "Application instrumentation" }
+)
+
 if ($Mode -eq "Device") {
+    foreach ($module in $deviceTestModules) {
+        $staleResults = Join-Path $repositoryRoot (Join-Path $module.ModulePath "build\outputs\androidTest-results")
+        Remove-Item -Path $staleResults -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Add-Step -Name "credentials-device-tests" -Arguments @(
         ":core:credentials:connectedDebugAndroidTest"
     )
@@ -154,6 +224,7 @@ $manifest = [ordered]@{
     completedAtUtc = $null
     status = "running"
     steps = @()
+    instrumentationTests = @()
 }
 
 $manifestPath = Join-Path $evidenceDirectory "manifest.json"
@@ -187,6 +258,16 @@ try {
         if ($exitCode -ne 0) {
             throw "Verification step '$($step.Name)' failed with exit code $exitCode. See $logPath"
         }
+    }
+
+    if ($Mode -eq "Device") {
+        foreach ($module in $deviceTestModules) {
+            $manifest.instrumentationTests += Assert-AndroidTestCount `
+                -ModulePath $module.ModulePath `
+                -DisplayName $module.DisplayName
+        }
+        $countPath = Join-Path $evidenceDirectory "instrumentation-test-counts.json"
+        $manifest.instrumentationTests | ConvertTo-Json -Depth 5 | Set-Content -Path $countPath -Encoding utf8
     }
 
     $manifest.status = "passed"

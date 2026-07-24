@@ -31,6 +31,7 @@ include(
     ":catalog:ingest",
     ":catalog:importer",
     ":catalog:refresh",
+    ":catalog:sync",
     ":player:api",
     ":player:media3",
     ":player:fake",

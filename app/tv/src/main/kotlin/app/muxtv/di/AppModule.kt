@@ -10,6 +10,7 @@ import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
+import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
@@ -40,6 +41,11 @@ object AppModule {
     fun provideSourceRevisionStore(
         components: MuxTvDatabaseComponents,
     ): SourceRevisionStore = components.sourceRevisionStore
+
+    @Provides
+    fun provideSourceRefreshStore(
+        components: MuxTvDatabaseComponents,
+    ): SourceRefreshStore = components.sourceRefreshStore
 
     @Provides
     fun provideCatalogRepository(

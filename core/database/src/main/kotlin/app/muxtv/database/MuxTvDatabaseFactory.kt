@@ -7,6 +7,7 @@ import app.muxtv.catalog.CatalogRepository
 class MuxTvDatabaseComponents internal constructor(
     val initializer: DatabaseInitializer,
     val sourceRevisionStore: SourceRevisionStore,
+    val sourceRefreshStore: SourceRefreshStore,
     val catalogRepository: CatalogRepository,
 )
 
@@ -17,11 +18,12 @@ object MuxTvDatabaseFactory {
             klass = MuxTvDatabase::class.java,
             name = "muxtv.db",
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
+            sourceRefreshStore = RoomSourceRefreshStore(database.sourceRefreshDao()),
             catalogRepository = RoomCatalogRepository(database.catalogDao()),
         )
     }
