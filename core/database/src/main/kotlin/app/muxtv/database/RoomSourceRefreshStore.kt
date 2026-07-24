@@ -24,6 +24,11 @@ internal class RoomSourceRefreshStore(
         dao.upsertPolicy(policy.toEntity())
     }
 
+    override suspend fun removePolicy(sourceId: String) {
+        require(sourceId.isNotBlank())
+        dao.deletePolicy(sourceId)
+    }
+
     override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> {
         require(sourceId.isNotBlank())
         return dao.observeState(sourceId).map { entity -> entity?.toModel() }
