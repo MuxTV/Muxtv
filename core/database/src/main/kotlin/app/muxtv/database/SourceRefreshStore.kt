@@ -110,6 +110,8 @@ interface SourceRefreshStore {
 
     suspend fun upsertPolicy(policy: SourceRefreshPolicy)
 
+    suspend fun removePolicy(sourceId: String)
+
     fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?>
 
     suspend fun getRecentAttempts(
