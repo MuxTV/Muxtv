@@ -30,6 +30,12 @@ class SourceRefreshScheduler @Inject constructor(
         applyPolicy(policy)
     }
 
+    suspend fun removePolicy(sourceId: String) {
+        require(sourceId.isNotBlank())
+        cancel(sourceId)
+        refreshStore.removePolicy(sourceId)
+    }
+
     suspend fun reconcile() {
         refreshStore.getPolicies().forEach(::applyPolicy)
     }
