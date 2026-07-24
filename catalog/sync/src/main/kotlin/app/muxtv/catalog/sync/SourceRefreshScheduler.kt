@@ -40,9 +40,13 @@ class SourceRefreshScheduler @Inject constructor(
         refreshStore.getPolicies().forEach(::applyPolicy)
     }
 
+    fun refreshNow(sourceId: String) {
+        refreshNow(sourceId, SourceRefreshTrigger.MANUAL)
+    }
+
     fun refreshNow(
         sourceId: String,
-        trigger: SourceRefreshTrigger = SourceRefreshTrigger.MANUAL,
+        trigger: SourceRefreshTrigger,
     ) {
         require(sourceId.isNotBlank())
         val request = OneTimeWorkRequestBuilder<SourceRefreshWorker>()
