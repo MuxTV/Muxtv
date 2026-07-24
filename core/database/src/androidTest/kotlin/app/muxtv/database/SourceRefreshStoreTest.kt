@@ -89,19 +89,32 @@ class SourceRefreshStoreTest {
     @Test
     fun policyRoundTripsWithoutEmbeddingCredentialData() = runTest {
         insertSource()
-        val policy = SourceRefreshPolicy(
-            sourceId = SOURCE_ID,
-            enabled = true,
-            intervalMinutes = 60,
-            unmeteredOnly = true,
-            requiresCharging = false,
-            updatedAtEpochMillis = 5_000,
-        )
+        val policy = policy()
 
         store.upsertPolicy(policy)
 
         assertThat(store.getPolicies()).containsExactly(policy)
     }
+
+    @Test
+    fun removePolicyDeletesOnlySchedulingConfiguration() = runTest {
+        insertSource()
+        store.upsertPolicy(policy())
+
+        store.removePolicy(SOURCE_ID)
+
+        assertThat(store.getPolicies()).isEmpty()
+        assertThat(store.getTarget(SOURCE_ID)?.sourceName).isEqualTo("Primary")
+    }
+
+    private fun policy(): SourceRefreshPolicy = SourceRefreshPolicy(
+        sourceId = SOURCE_ID,
+        enabled = true,
+        intervalMinutes = 60,
+        unmeteredOnly = true,
+        requiresCharging = false,
+        updatedAtEpochMillis = 5_000,
+    )
 
     private suspend fun insertSource() {
         database.sourceRevisionDao().upsertSource(
