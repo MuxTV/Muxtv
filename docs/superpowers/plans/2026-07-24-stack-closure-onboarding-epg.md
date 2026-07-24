@@ -1,19 +1,21 @@
 # Stack Closure, Secure Onboarding, and EPG Plan
 
+> **Status:** The post-onboarding numbering is superseded by `2026-07-24-performance-reliability-hardening.md`. PR #20 is the durable preparation registry, PR #21 implements catalog staging/importer hardening, and XMLTV moves to PR #26.
+
 > Execute in order. Do not start a new irreversible layer while an earlier layer has an unresolved compile or data-integrity defect.
 
 ## Objective
 
-Close the accumulated PR stack into `main`, deliver secure remote-M3U onboarding, then add XMLTV revisions and the first usable guide/now-next experience without duplicating the existing credentials, network, importer, Room revision, or Media3 infrastructure.
+Close the accumulated PR stack into `main`, deliver secure and durable remote-M3U onboarding, harden the source-to-playback path, then add XMLTV revisions and the first usable Guide/now-next experience without duplicating credentials, networking, importer, Room revision, or Media3 infrastructure.
 
 ## Non-negotiable invariants
 
 - Raw playlist URLs, query tokens, Authorization/Cookie values, User-Agent values, and Referrer values never enter Room, WorkManager Data, logs, exceptions, analytics, navigation routes, or `toString()` output.
 - The UI receives only opaque IDs, sanitized scheme/host information, typed result codes, counts, and user-facing status text.
-- A failed refresh, onboarding activation, or EPG import never replaces the previous-good active revision.
-- Cancellation always propagates as `CancellationException` after bounded cleanup.
-- Every PR is one functional commit over its immediate base before merge.
-- Full validation is required on every exact head. DeviceMatrix is consolidated at integration boundaries where device behavior actually changes: Media3 service/player UI, TV focus/navigation, and final source-management/onboarding integration.
+- A failed refresh, onboarding activation, registry write, catalog batch, or EPG import never replaces the previous-good active revision or creates an unsafe dangling credential reference.
+- Cancellation propagates as `CancellationException` after bounded cleanup.
+- Every final functional PR is one functional commit over its immediate merged base before merge.
+- Full validation is required on every exact head. DeviceMatrix is consolidated where device behavior changes: Media3 service/player UI, TV focus/navigation, Room migrations, and final onboarding integration.
 
 ---
 
@@ -22,36 +24,34 @@ Close the accumulated PR stack into `main`, deliver secure remote-M3U onboarding
 ### A1. Scheduling and playback catalog
 
 - [x] Merge PR #13 durable scheduling.
-- [x] Rebuild PR #14 as one commit over `main`.
-- [x] Run exact-head Full for PR #14.
-- [x] Merge PR #14 active playback catalog.
+- [x] Rebuild and merge PR #14 active playback catalog.
 
 ### A2. Media3 service
 
 - [x] Rebuild PR #15 as one Media3 commit over merged catalog.
 - [ ] Resolve exact-head Full failures.
-- [ ] Run API 26/API 36 DeviceMatrix covering service creation, controller connection, Bundle request transport, and process-owned player lifecycle.
-- [ ] Remove stale stacked-language from the PR body.
+- [ ] Run API 26/API 36 DeviceMatrix for service creation, controller connection, Bundle request transport, and process-owned player lifecycle.
 - [ ] Merge PR #15.
 
-### A3. Channels, player, and source management
+### A3. Channels, player, sources, onboarding, and registry
 
-For PR #16, #17, and #18, repeat:
+For PR #16, #17, #18, #19, and #20:
 
-1. reparent the one-commit tree onto the newly merged predecessor;
+1. rebuild the functional diff onto the newly merged predecessor;
 2. retarget to `main`;
-3. run exact-head Full;
-4. fix only concrete failures;
-5. run one consolidated DeviceMatrix on PR #18 covering Channels → Player → Back and Sources controls;
-6. merge sequentially.
+3. squash to one functional commit;
+4. run exact-head Full;
+5. fix only failures owned by that PR;
+6. run consolidated DeviceMatrix on the final integration head;
+7. merge sequentially.
+
+Do not use a descendant PR to hide or validate repairs that belong to an earlier PR.
 
 ---
 
 ## Phase B — PR #19 secure remote-M3U onboarding
 
-### B1. Domain contract
-
-Create `RemoteSourceOnboarding` in `catalog:refresh` with:
+### Domain and security
 
 ```kotlin
 suspend fun prepare(input: RemoteSourceOnboardingInput): RemoteSourcePreparationResult
@@ -59,53 +59,75 @@ suspend fun activate(token: RemoteSourcePreparationToken, sourceName: String): R
 suspend fun cancel(token: RemoteSourcePreparationToken): RemoteSourceCancellationResult
 ```
 
-The input contains the locator, explicit HTTP approval, optional User-Agent/Referrer, and an allow-listed sensitive-header map. Its `toString()` must redact all values.
+- Validate access through `RemoteSourceAccess` and `SourceUrlPolicy`.
+- Reject embedded credentials, fragments, unsupported schemes, encoded control separators, and HTTP without approval.
+- Store encoded access in `CredentialStore` under a random UUID; return only a redacted token and sanitized scheme/host.
+- Derive a domain-separated opaque source ID without embedding the credential UUID.
+- Reuse `RemoteSourceRefresher`; do not duplicate HTTP/M3U paths.
+- Remove inactive source metadata only when `activeRevision = 0` and the expected credential reference still matches.
+- Remove a credential only after metadata is removed or absent; retain it when metadata is active or changed.
+- Perform cancellation cleanup in `NonCancellable`, then rethrow cancellation.
 
-### B2. Preparation
+### Tests
 
-- Validate source name-independent access through `RemoteSourceAccess` and `SourceUrlPolicy`.
-- Reject embedded URL credentials, fragments, unsupported schemes, encoded control separators, and HTTP without explicit approval.
-- Store the encoded `RemoteSourceAccess` in `CredentialStore` under a random canonical UUID.
-- Return a token whose `toString()` is redacted, plus only normalized scheme and host.
-- Never return the full normalized URL.
-
-### B3. Activation
-
-- Derive a stable source ID from the preparation token so repeated activation cannot create duplicate sources.
-- Consume the existing `RemoteSourceRefresher`; do not implement another HTTP or M3U path.
-- On success, retain the credential as the source credential reference and return counts/revision.
-- On any non-success result, remove the temporary credential and return a typed, secret-free failure.
-- On cancellation, remove the credential in `NonCancellable`, then rethrow cancellation.
-
-### B4. Tests
-
-- Preparation stores one encrypted access record and returns only scheme/host.
-- HTTP requires explicit approval.
-- Embedded credentials and fragments are rejected before storage.
-- Activation calls the existing refresher with deterministic source/credential IDs.
-- Failed activation removes the temporary credential.
-- Successful activation retains it.
-- Cancellation cleanup executes and cancellation propagates.
-- All model `toString()` methods exclude locator and header values.
-
-### B5. TV wizard
-
-Implement after the domain contract is green:
-
-1. source name;
-2. locator and optional HTTP approval;
-3. optional headers/authentication;
-4. preparation result with sanitized host;
-5. activate/cancel;
-6. open Channels on success.
-
-Use TV focus order, masked sensitive fields, bounded text lengths, and no secret persistence in `rememberSaveable`.
+- secret-free preparation, activation, cancellation, and `toString()` contracts;
+- safe failure cleanup;
+- active/concurrently changed metadata prevents credential deletion;
+- success retains the source credential.
 
 ---
 
-## Phase C — PR #20 XMLTV revisions
+## Phase C — PR #20 durable preparation registry
 
-### C1. Storage model
+- Decorate PR #19 through `catalog:onboarding`; keep `catalog:refresh` independent from Room.
+- Persist only opaque preparation ID, sanitized scheme/host, creation time, and expiry time.
+- Use a 24-hour TTL and bounded startup cleanup.
+- Roll back the prepared credential through domain cancel if registry persistence fails.
+- Remove rows after activation or complete cleanup; retain rows when cleanup is incomplete.
+- Commit Room schema `4.json` and prove `MIGRATION_3_4` from representative v3 data.
+- Rebuild as one functional commit after #19 merges, then run exact-head Full and DeviceMatrix.
+
+The TV wizard begins only after the domain and registry are green. Prepared URLs and tokens must not enter `rememberSaveable` or navigation strings.
+
+---
+
+## Phase D — PR #21 catalog staging and importer hardening
+
+Implemented in the current stacked PR:
+
+- one Room transaction for canonical, provider, and stream-variant batch writes;
+- Android rollback contract for a stream-variant primary-key failure;
+- one-pass entity materialization;
+- one SHA-256 digest instance per import;
+- direct lowercase hex conversion;
+- one `providerKey` computation per entry;
+- buffer swapping instead of `batch.toList()`;
+- exact stable-ID golden tests and 250/1 batching test.
+
+Still required before ready-for-review:
+
+- importer unit tests;
+- database Android-test compilation;
+- exact-head Full;
+- API 26/API 36 atomicity test execution;
+- rebuild/squash onto `main` after #20 merges.
+
+---
+
+## Phase E — PR #22–#25 remaining hardening
+
+1. PR #22: stack-aware validation and ancestry gate;
+2. PR #23: cancellation-safe source mutations and real D-pad focus restoration;
+3. PR #24: shared OkHttp Media3 transport, immutable per-item headers, and controller reconnect;
+4. PR #25: deterministic 1k/10k/50k/100k benchmark evidence and only justified structural catalog optimization.
+
+Projection, FTS5, pagination, ID migration, asynchronous pruning, R8 gating, Rust, and a second player engine remain evidence-triggered—not default scope.
+
+---
+
+## Phase F — PR #26 XMLTV revisions
+
+### Storage
 
 - EPG source metadata with opaque credential reference only.
 - Staging and active EPG revisions.
@@ -113,7 +135,7 @@ Use TV focus order, masked sensitive fields, bounded text lengths, and no secret
 - Programme rows with normalized UTC start/stop, title, description, category, and optional episode metadata.
 - Indices for channel/time-window queries.
 
-### C2. Import pipeline
+### Pipeline
 
 ```text
 CredentialStore
@@ -121,44 +143,39 @@ CredentialStore
 → compressed-size limit
 → bounded decoded stream
 → XmlPullParser
-→ batched staging writes
+→ transactional batched staging
 → validation
 → atomic activation
 ```
 
-No DOM and no full-document byte array.
-
-### C3. Scheduling
-
-Reuse the durable scheduling pattern but use independent EPG work names, typed states, leases, and attempt history. M3U and XMLTV jobs for the same source may not overwrite each other's state.
+No DOM and no full-document byte array. M3U and XMLTV scheduling use independent work names, states, leases, and attempt histories.
 
 ---
 
-## Phase D — PR #21 Guide and Now/Next
+## Phase G — PR #27 Guide and Now/Next
 
-- Add bounded Room queries for now/next and guide windows.
-- Show now/next in Channels without rebuilding the whole catalog list.
-- Replace the Guide placeholder with a time-window grid optimized for D-pad navigation.
-- Add search and favorites against canonical channels and overlays.
-- Preserve focus and scroll across player navigation and EPG refresh.
+- Add bounded now/next and guide-window queries.
+- Show now/next without rebuilding the whole channel list.
+- Implement a D-pad-optimized time-window grid.
+- Preserve focus/scroll across player navigation and EPG refresh.
 
 ---
 
-## Phase E — PR #22 Playback recovery and TV Doctor Lite
+## Phase H — PR #28 Playback Recovery and TV Doctor Lite
 
 - Persist preferred variant per profile/channel.
-- Add previous/next zapping with cancellation of obsolete requests.
-- Classify Media3 failures into bounded typed families.
-- Retry the current variant only within policy, then try another active variant.
-- Record secret-free observations: startup latency, buffering count, terminal family, last-success timestamp.
-- Expose a TV Doctor screen with manual retry and variant selection; no irreversible automatic bans.
+- Add previous/next zapping with obsolete-request cancellation.
+- Classify Media3 failures into typed families.
+- Apply bounded retry/fallback policy.
+- Record secret-free startup/buffering/terminal observations.
+- Expose manual retry and variant selection; no irreversible automatic bans.
 
 ---
 
-## Phase F — integration and alpha gate
+## Phase I — PR #29 integration and alpha gate
 
-- API 26 and API 36 DeviceMatrix.
-- Real Android TV and Fire TV corpus for HLS, MPEG-TS, redirects, custom headers, decoder failures, and service recreation.
-- Empty/small/10k/50k channel catalogs.
-- Process death during playback and refresh.
+- API 26/API 36 DeviceMatrix.
+- Real Android TV and Fire TV HLS/MPEG-TS/redirect/header/decoder/service-recreation corpus.
+- Empty/small/10k/50k/100k catalogs.
+- Process death during playback, onboarding, registry cleanup, and refresh.
 - Configuration-cache reuse, lint, debug/release assembly, R8, Baseline Profile, and startup/zapping benchmarks.

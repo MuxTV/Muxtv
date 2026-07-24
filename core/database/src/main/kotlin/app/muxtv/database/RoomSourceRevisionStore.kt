@@ -40,45 +40,45 @@ internal class RoomSourceRevisionStore(
         }
         if (entries.isEmpty()) return
 
-        dao.upsertCanonicalChannels(
-            entries.map { entry ->
-                CanonicalChannelEntity(
-                    id = entry.canonicalChannelId,
-                    displayName = entry.canonicalDisplayName,
-                )
-            },
-        )
-        dao.insertProviderChannels(
-            entries.map { entry ->
-                ProviderChannelEntity(
-                    id = entry.providerChannelId,
-                    sourceId = sourceId,
-                    revisionNumber = revisionNumber,
-                    providerKey = entry.providerKey,
-                    rawName = entry.rawName,
-                    tvgId = entry.tvgId,
-                    tvgName = entry.tvgName,
-                    logoUrl = entry.logoUrl,
-                    groupTitle = entry.groupTitle,
-                    channelNumber = entry.channelNumber,
-                    catchupMode = entry.catchupMode,
-                    catchupSource = entry.catchupSource,
-                    catchupDays = entry.catchupDays,
-                    catchupCorrection = entry.catchupCorrection,
-                )
-            },
-        )
-        dao.insertStreamVariants(
-            entries.map { entry ->
-                StreamVariantEntity(
-                    id = entry.streamVariantId,
-                    providerChannelId = entry.providerChannelId,
-                    canonicalChannelId = entry.canonicalChannelId,
-                    locator = entry.locator,
-                    userAgent = entry.userAgent,
-                    referrer = entry.referrer,
-                )
-            },
+        val canonicalChannels = ArrayList<CanonicalChannelEntity>(entries.size)
+        val providerChannels = ArrayList<ProviderChannelEntity>(entries.size)
+        val streamVariants = ArrayList<StreamVariantEntity>(entries.size)
+
+        entries.forEach { entry ->
+            canonicalChannels += CanonicalChannelEntity(
+                id = entry.canonicalChannelId,
+                displayName = entry.canonicalDisplayName,
+            )
+            providerChannels += ProviderChannelEntity(
+                id = entry.providerChannelId,
+                sourceId = sourceId,
+                revisionNumber = revisionNumber,
+                providerKey = entry.providerKey,
+                rawName = entry.rawName,
+                tvgId = entry.tvgId,
+                tvgName = entry.tvgName,
+                logoUrl = entry.logoUrl,
+                groupTitle = entry.groupTitle,
+                channelNumber = entry.channelNumber,
+                catchupMode = entry.catchupMode,
+                catchupSource = entry.catchupSource,
+                catchupDays = entry.catchupDays,
+                catchupCorrection = entry.catchupCorrection,
+            )
+            streamVariants += StreamVariantEntity(
+                id = entry.streamVariantId,
+                providerChannelId = entry.providerChannelId,
+                canonicalChannelId = entry.canonicalChannelId,
+                locator = entry.locator,
+                userAgent = entry.userAgent,
+                referrer = entry.referrer,
+            )
+        }
+
+        dao.stageCatalogBatch(
+            canonicalChannels = canonicalChannels,
+            providerChannels = providerChannels,
+            streamVariants = streamVariants,
         )
     }
 
