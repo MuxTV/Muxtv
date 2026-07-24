@@ -7,6 +7,11 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Upsert
 
+internal data class SourceRemovalSnapshot(
+    val activeRevision: Long,
+    val credentialRef: String?,
+)
+
 @Dao
 internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -41,6 +46,49 @@ internal abstract class SourceRevisionDao {
                 credentialRef = source.credentialRef,
             ) == 1,
         ) { "Unable to persist source metadata." }
+    }
+
+    @Query(
+        """
+        SELECT activeRevision, credentialRef
+        FROM sources
+        WHERE id = :sourceId
+        LIMIT 1
+        """,
+    )
+    abstract suspend fun sourceRemovalSnapshot(sourceId: String): SourceRemovalSnapshot?
+
+    @Query(
+        """
+        DELETE FROM sources
+        WHERE id = :sourceId
+          AND activeRevision = 0
+          AND credentialRef = :expectedCredentialRef
+        """,
+    )
+    abstract suspend fun deleteInactiveSource(
+        sourceId: String,
+        expectedCredentialRef: String,
+    ): Int
+
+    @Transaction
+    open suspend fun removeInactiveSource(
+        sourceId: String,
+        expectedCredentialRef: String,
+    ): InactiveSourceRemovalResult {
+        val snapshot = sourceRemovalSnapshot(sourceId)
+            ?: return InactiveSourceRemovalResult.NotFound
+        if (snapshot.activeRevision != 0L) {
+            return InactiveSourceRemovalResult.Active
+        }
+        if (snapshot.credentialRef != expectedCredentialRef) {
+            return InactiveSourceRemovalResult.CredentialMismatch
+        }
+        return if (deleteInactiveSource(sourceId, expectedCredentialRef) == 1) {
+            InactiveSourceRemovalResult.Removed
+        } else {
+            InactiveSourceRemovalResult.ConcurrentChange
+        }
     }
 
     @Query(
