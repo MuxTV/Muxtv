@@ -32,6 +32,9 @@ internal abstract class SourceRefreshDao {
     @Upsert
     abstract suspend fun upsertPolicy(policy: SourceRefreshPolicyEntity)
 
+    @Query("DELETE FROM source_refresh_policies WHERE sourceId = :sourceId")
+    abstract suspend fun deletePolicy(sourceId: String): Int
+
     @Query("SELECT * FROM source_refresh_states WHERE sourceId = :sourceId LIMIT 1")
     abstract fun observeState(sourceId: String): Flow<SourceRefreshStateEntity?>
 
