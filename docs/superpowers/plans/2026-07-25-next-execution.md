@@ -9,24 +9,24 @@
 - PR #20: durable pending-source preparation registry and Room schema v4.
 - PR #22: transactional catalog staging and rollback hardening.
 - PR #32: secure Android TV source-entry wizard.
-- PR #34 implementation: deterministic focus ownership, secure locator semantics, D-pad source-entry routing, Player return restoration and app-level Navigation 3 source journey.
+- PR #34 implementation: deterministic focus ownership, secure locator semantics, D-pad source-entry routing, Player return restoration, removed-channel fallback and app-level Navigation 3 source journey.
 
 ### PR #34 exact evidence
 
-Matrix head before cleanup: `f3d9d21a6e6e67450ca42479c0ca70448a60916b`.
+Final matrix head before workflow cleanup: `9c048b677e7d772a40e0f462c8f162c54a856f3c`.
 
-Sequential DeviceMatrix run `30169291048` passed:
+Sequential DeviceMatrix run `30170573346` passed:
 
 | Profile | Image | RAM / CPU | Credentials | Database | App |
 |---|---|---:|---:|---:|---:|
-| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 19 | 9 |
-| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 19 | 9 |
+| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 19 | 10 |
+| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 19 | 10 |
 
-Both profiles completed with zero failures, errors and skips. API 26 was available directly; no fallback image was used. The matrix executed the Room 3→4 migration, catalog staging rollback, Android Keystore contracts, source-entry security/focus contracts, Channels → Player → Back, save/restore and the full Home → Sources → Add Source → activate → Channels D-pad journey.
+Both profiles completed with zero failures, errors and skips. API 26 was available directly; no fallback image was used. The matrix executed the Room 3→4 migration, catalog staging rollback, Android Keystore contracts, source-entry security/focus contracts, Channels → Player → Back, save/restore, removal of the focused channel while Player is open with nearest-previous fallback, and the full Home → Sources → Add Source → activate → Channels D-pad journey.
 
 Secret review found no known locator/token fixtures in reports, logcat, manifests or screenshots. The final screenshots show the system launcher after instrumentation shutdown, not a screen containing source data.
 
-Full run `30169291040` also passed on the same pre-cleanup head. No PR discussion or review comments are open.
+Full run `30170573307` passed on the same matrix head. No PR discussion or review threads are open.
 
 ## Non-negotiable constraints
 
@@ -45,6 +45,7 @@ Full run `30169291040` also passed on the same pre-cleanup head. No PR discussio
 
 - [x] Implement stable `FocusAnchor` resolution and fallback.
 - [x] Restore actual channel focus after Player → Back and save/restore.
+- [x] Prove nearest-previous fallback when the focused channel is removed while Player is open.
 - [x] Give Home/top-level navigation deterministic initial focus.
 - [x] Give Sources, Add Source and Player states explicit safe focus targets.
 - [x] Route D-pad Up/Down explicitly through ordinary and secure text fields.
@@ -54,7 +55,8 @@ Full run `30169291040` also passed on the same pre-cleanup head. No PR discussio
 - [x] Pass API 26/API 36 DeviceMatrix with non-zero tests.
 - [x] Execute Room 3→4 migration and catalog atomicity on both profiles.
 - [x] Review matrix artifacts for known secret fixtures.
-- [ ] Delete the temporary `.github/workflows/pr34-device-current.yml`.
+- [x] Pass Full on the final matrix head.
+- [ ] Delete the temporary `.github/workflows/pr34-device-matrix.yml`.
 - [ ] Pass final Full on the cleaned exact head.
 - [ ] Update PR #34 with final head, Full and matrix evidence.
 - [ ] Mark ready and squash merge.
@@ -68,12 +70,14 @@ Files:
 
 - `README.md`
 - `.work/meta/status.yaml`
-- canonical roadmap/current-state documents referenced by `.work/meta/documents.yaml`
+- `.work/CURRENT-STATE.md`
+- machine-readable module/current-state metadata that still describes planned rather than actual modules
 
 Deliverables:
 
 - replace obsolete statements that application code, Gradle, CI and tests are absent;
-- record the current module graph, Room schema v4 and implemented M3U/source/player path;
+- record the current 23-module graph, Room schema v4 and implemented M3U/source/player path;
+- distinguish implemented modules from deferred target architecture;
 - state the actual pre-alpha limitations;
 - preserve deferred Rust/libmpv/KMP/platform decisions;
 - validate machine-readable metadata and paths;
@@ -83,7 +87,7 @@ Deliverables:
 
 ## Package B — issue #26: Media3 transport and reconnect
 
-This is the next production-code package after repository-truth synchronization.
+This is the next production-code package after repository-truth synchronization. The executable design is also recorded on issue #26.
 
 ### B1. RED transport contracts
 
