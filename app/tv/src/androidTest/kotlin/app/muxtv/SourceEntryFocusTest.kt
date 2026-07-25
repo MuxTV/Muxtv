@@ -1,11 +1,15 @@
 package app.muxtv
 
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -85,10 +89,20 @@ class SourceEntryFocusTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("source-locator")
-            .performClick()
-            .performTextInput("http://192.168.1.10/list.m3u")
-        composeRule.onNodeWithText("Проверить").performClick()
-        composeRule.waitForIdle()
+            .performTextReplacement("http://192.168.1.10/list.m3u")
+        composeRule.onNodeWithText("Проверить")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("source-http-cancel")
+                .fetchSemanticsNodes()
+                .size == 1
+        }
 
         composeRule.onNodeWithTag("source-http-cancel").assertIsFocused()
     }
