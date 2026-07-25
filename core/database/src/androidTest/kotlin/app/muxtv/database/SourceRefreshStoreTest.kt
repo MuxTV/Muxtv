@@ -107,6 +107,37 @@ class SourceRefreshStoreTest {
         assertThat(store.getTarget(SOURCE_ID)?.sourceName).isEqualTo("Primary")
     }
 
+    @Test
+    fun overviewCombinesPolicyAndTypedStatusWithoutCredentialReferenceValue() = runTest {
+        insertSource()
+        store.upsertPolicy(policy())
+        assertThat(
+            store.tryAcquire(
+                sourceId = SOURCE_ID,
+                runToken = "run-overview",
+                startedAtEpochMillis = 10_000,
+                staleBeforeEpochMillis = 0,
+            ),
+        ).isTrue()
+        store.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-overview",
+            trigger = SourceRefreshTrigger.MANUAL,
+            completion = success(completedAt = 11_000, revision = 3),
+        )
+
+        val overview = store.observeOverviews().first().single()
+
+        assertThat(overview.sourceId).isEqualTo(SOURCE_ID)
+        assertThat(overview.sourceName).isEqualTo("Primary")
+        assertThat(overview.hasCredentialReference).isTrue()
+        assertThat(overview.activeRevision).isEqualTo(0)
+        assertThat(overview.policy).isEqualTo(policy())
+        assertThat(overview.status?.state).isEqualTo(SourceRefreshRunState.SUCCEEDED)
+        assertThat(overview.status?.lastSuccessRevision).isEqualTo(3)
+        assertThat(overview.toString()).doesNotContain(CREDENTIAL_REFERENCE)
+    }
+
     private fun policy(): SourceRefreshPolicy = SourceRefreshPolicy(
         sourceId = SOURCE_ID,
         enabled = true,
@@ -121,7 +152,7 @@ class SourceRefreshStoreTest {
             SourceDefinition(
                 id = SOURCE_ID,
                 name = "Primary",
-                credentialRef = "4b86c9b3-e9e9-4af7-a8ac-02ea23574989",
+                credentialRef = CREDENTIAL_REFERENCE,
             ),
         )
     }
@@ -142,5 +173,6 @@ class SourceRefreshStoreTest {
 
     private companion object {
         const val SOURCE_ID = "source-1"
+        const val CREDENTIAL_REFERENCE = "4b86c9b3-e9e9-4af7-a8ac-02ea23574989"
     }
 }

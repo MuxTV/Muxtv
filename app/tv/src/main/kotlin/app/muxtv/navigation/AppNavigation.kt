@@ -16,18 +16,23 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
+import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 
 @Composable
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
     controllerConnector: MuxTvMediaControllerConnector,
+    sourceRefreshStore: SourceRefreshStore,
+    sourceRefreshScheduler: SourceRefreshScheduler,
     modifier: Modifier = Modifier,
 ) {
     val backStack = remember { mutableStateListOf(AppDestination.initial) }
@@ -66,6 +71,11 @@ fun AppNavigation(
 
                         AppDestination.Guide -> PlaceholderRoute("Телепрограмма")
                         AppDestination.Search -> PlaceholderRoute("Поиск")
+                        AppDestination.Sources -> SourcesRoute(
+                            refreshStore = sourceRefreshStore,
+                            refreshScheduler = sourceRefreshScheduler,
+                        )
+
                         is AppDestination.Player -> PlayerRoute(
                             playbackCatalog = playbackCatalog,
                             controllerConnector = controllerConnector,
@@ -95,6 +105,7 @@ private fun NavigationRow(
                 AppDestination.Channels -> "Каналы"
                 AppDestination.Guide -> "Программа"
                 AppDestination.Search -> "Поиск"
+                AppDestination.Sources -> "Источники"
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             MuxTvActionButton(

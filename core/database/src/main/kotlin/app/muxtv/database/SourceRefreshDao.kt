@@ -14,6 +14,28 @@ internal data class SourceRefreshTargetRow(
     val credentialRef: String?,
 )
 
+internal data class SourceRefreshOverviewRow(
+    val sourceId: String,
+    val sourceName: String,
+    val hasCredentialReference: Boolean,
+    val activeRevision: Long,
+    val policyEnabled: Boolean?,
+    val policyIntervalMinutes: Long?,
+    val policyUnmeteredOnly: Boolean?,
+    val policyRequiresCharging: Boolean?,
+    val policyUpdatedAtEpochMillis: Long?,
+    val refreshState: String?,
+    val startedAtEpochMillis: Long?,
+    val completedAtEpochMillis: Long?,
+    val lastSuccessRevision: Long?,
+    val lastSuccessAtEpochMillis: Long?,
+    val failureFamily: String?,
+    val failureCode: String?,
+    val httpStatus: Int?,
+    val skippedEntries: Int?,
+    val warningCount: Int?,
+)
+
 @Dao
 internal abstract class SourceRefreshDao {
     @Query(
@@ -25,6 +47,42 @@ internal abstract class SourceRefreshDao {
         """,
     )
     abstract suspend fun getTarget(sourceId: String): SourceRefreshTargetRow?
+
+    @Query(
+        """
+        SELECT
+            sources.id AS sourceId,
+            sources.name AS sourceName,
+            CASE
+                WHEN sources.credentialRef IS NOT NULL
+                 AND TRIM(sources.credentialRef) != '' THEN 1
+                ELSE 0
+            END AS hasCredentialReference,
+            sources.activeRevision AS activeRevision,
+            source_refresh_policies.enabled AS policyEnabled,
+            source_refresh_policies.intervalMinutes AS policyIntervalMinutes,
+            source_refresh_policies.unmeteredOnly AS policyUnmeteredOnly,
+            source_refresh_policies.requiresCharging AS policyRequiresCharging,
+            source_refresh_policies.updatedAtEpochMillis AS policyUpdatedAtEpochMillis,
+            source_refresh_states.state AS refreshState,
+            source_refresh_states.startedAtEpochMillis AS startedAtEpochMillis,
+            source_refresh_states.completedAtEpochMillis AS completedAtEpochMillis,
+            source_refresh_states.lastSuccessRevision AS lastSuccessRevision,
+            source_refresh_states.lastSuccessAtEpochMillis AS lastSuccessAtEpochMillis,
+            source_refresh_states.failureFamily AS failureFamily,
+            source_refresh_states.failureCode AS failureCode,
+            source_refresh_states.httpStatus AS httpStatus,
+            source_refresh_states.skippedEntries AS skippedEntries,
+            source_refresh_states.warningCount AS warningCount
+        FROM sources
+        LEFT JOIN source_refresh_policies
+            ON source_refresh_policies.sourceId = sources.id
+        LEFT JOIN source_refresh_states
+            ON source_refresh_states.sourceId = sources.id
+        ORDER BY sources.name COLLATE NOCASE, sources.id
+        """,
+    )
+    abstract fun observeOverviews(): Flow<List<SourceRefreshOverviewRow>>
 
     @Query("SELECT * FROM source_refresh_policies ORDER BY sourceId")
     abstract suspend fun getPolicies(): List<SourceRefreshPolicyEntity>

@@ -38,4 +38,5 @@ include(
     ":feature:home",
     ":feature:channels",
     ":feature:player",
+    ":feature:sources",
 )

@@ -13,6 +13,7 @@ class AppNavigationModelTest {
                 AppDestination.Channels,
                 AppDestination.Guide,
                 AppDestination.Search,
+                AppDestination.Sources,
             )
             .inOrder()
         assertThat(AppDestination.topLevel)
