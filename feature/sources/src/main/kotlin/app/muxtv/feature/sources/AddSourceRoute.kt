@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +32,19 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.inputText
+import androidx.compose.ui.semantics.isEditable
+import androidx.compose.ui.semantics.isSensitiveData
+import androidx.compose.ui.semantics.maxTextLength
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.password
+import androidx.compose.ui.semantics.requestFocus
+import androidx.compose.ui.semantics.setText
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -266,7 +280,14 @@ private fun TvSecureTextInput(
     state: TextFieldState,
     revealed: Boolean,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val maskedText = if (state.text.isEmpty()) {
+        AnnotatedString("")
+    } else {
+        AnnotatedString("Скрыто")
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
         Text(label, style = MaterialTheme.typography.titleMedium)
         BasicSecureTextField(
@@ -274,15 +295,40 @@ private fun TvSecureTextInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(SOURCE_LOCATOR_TEST_TAG)
-                .onFocusChanged { focused = it.isFocused }
+                .focusRequester(focusRequester)
+                .onFocusChanged { hasFocus = it.isFocused }
                 .background(
-                    if (focused) {
+                    if (hasFocus) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
                 )
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .clearAndSetSemantics {
+                    contentDescription = "Ссылка M3U, значение скрыто"
+                    password()
+                    focused = hasFocus
+                    isEditable = true
+                    isSensitiveData = true
+                    maxTextLength = MAX_LOCATOR_CHARACTERS
+                    editableText = maskedText
+                    inputText = AnnotatedString("")
+                    onClick {
+                        focusRequester.requestFocus()
+                        true
+                    }
+                    requestFocus {
+                        focusRequester.requestFocus()
+                        true
+                    }
+                    setText { replacement ->
+                        state.setTextAndPlaceCursorAtEnd(
+                            replacement.text.take(MAX_LOCATOR_CHARACTERS),
+                        )
+                        true
+                    }
+                },
             inputTransformation = InputTransformation.maxLength(MAX_LOCATOR_CHARACTERS),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface,
