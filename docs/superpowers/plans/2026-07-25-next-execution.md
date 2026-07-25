@@ -56,7 +56,7 @@ Full run `30170573307` passed on the same matrix head. No PR discussion or revie
 - [x] Execute Room 3→4 migration and catalog atomicity on both profiles.
 - [x] Review matrix artifacts for known secret fixtures.
 - [x] Pass Full on the final matrix head.
-- [ ] Delete the temporary `.github/workflows/pr34-device-matrix.yml`.
+- [x] Delete the temporary `.github/workflows/pr34-device-matrix.yml`.
 - [ ] Pass final Full on the cleaned exact head.
 - [ ] Update PR #34 with final head, Full and matrix evidence.
 - [ ] Mark ready and squash merge.
