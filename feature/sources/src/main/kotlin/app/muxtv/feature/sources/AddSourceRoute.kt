@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -208,6 +209,7 @@ private fun TvSecureTextInput(
             state = state,
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag(SOURCE_LOCATOR_TEST_TAG)
                 .onFocusChanged { focused = it.isFocused }
                 .background(
                     if (focused) {
@@ -255,5 +257,6 @@ private fun SourceEntryFailure.userMessage(): String = when (this) {
     SourceEntryFailure.Unexpected -> "Не удалось добавить источник."
 }
 
+private const val SOURCE_LOCATOR_TEST_TAG = "source-locator"
 private const val MAX_SOURCE_NAME_CHARACTERS = 200
 private const val MAX_LOCATOR_CHARACTERS = 4_096
