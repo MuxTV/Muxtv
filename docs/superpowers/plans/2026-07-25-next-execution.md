@@ -12,8 +12,9 @@
 
 - PR #20 merged as `05ffb62d97034d17ed2cb00064a6a8d81d0e3344`.
 - PR #22 merged as `755fe955a8b61f33117d3e83cec9c9a526e988b6` after fixing diagnostic tracing that incorrectly changed local-JVM importer results.
-- PR #32 contains the secure source-entry wizard and is the current merge target.
-- Issue #25 is next and owns real focus restoration plus the first complete D-pad journey matrix.
+- PR #32 merged as `2c61bab514248677c7b78620d615a4567f32087b` with the secure source-entry wizard.
+- Draft PR #34 is current and implements real focus restoration from issue #25; its first pure focus-anchor increment is complete.
+- Issue #24 stays open only for the shared API 26/current-TV D-pad and Room instrumentation acceptance gate.
 - Device validation remains a gate, not a substitute for delivering product behavior.
 
 ## Global constraints
@@ -27,7 +28,7 @@
 
 ---
 
-## Task 1: Durable onboarding registry — completed (PR #20)
+## Task 1: Durable onboarding registry — code completed (PR #20)
 
 - [x] Reparent to `main`.
 - [x] Add Room 3 migration contract for 3 → 4.
@@ -39,9 +40,9 @@
 - [x] Mark ready and squash merge.
 - [ ] Execute migration instrumentation in the consolidated focus/source-entry DeviceMatrix gate.
 
-**Acceptance:** `main` contains one squash commit; schema v4 contains only `preparationId`, `scheme`, `host`, `createdAtEpochMillis`, `expiresAtEpochMillis`; recovery never exposes the token through public UI state.
+**Acceptance:** schema v4 contains only `preparationId`, `scheme`, `host`, `createdAtEpochMillis`, `expiresAtEpochMillis`; recovery never exposes the token through public UI state.
 
-## Task 2: Catalog staging hardening — completed (PR #22)
+## Task 2: Catalog staging hardening — code completed (PR #22)
 
 - [x] Restrict the diff to importer/database/dependency/test/plan files.
 - [x] Make canonical, provider and stream-variant staging one Room transaction.
@@ -57,7 +58,7 @@
 
 **Acceptance:** duplicate stream-variant insertion rolls back all three write groups; stable IDs remain byte-compatible; no per-entry trace or user-controlled trace name exists; tracing never changes importer behavior.
 
-## Task 3: Secure TV source-entry wizard — current (PR #32 / issue #24)
+## Task 3: Secure TV source-entry wizard — code completed (PR #32 / issue #24)
 
 - [x] Define no-argument `AppDestination.AddSource`.
 - [x] Make destinations serializable `NavKey` values.
@@ -71,31 +72,32 @@
 - [x] Compile the complete Hilt/Navigation 3 graph.
 - [x] Add a Compose semantics contract proving the masked field does not publish the locator as text.
 - [x] Align serialization dependencies with the tracing baseline merged from PR #22.
-- [ ] Pass the final exact-head Full after alignment with `main`.
-- [ ] Mark ready, squash merge and close issue #24.
+- [x] Pass exact-head Full #192.
+- [x] Squash merge as `2c61bab514248677c7b78620d615a4567f32087b`.
+- [ ] Close issue #24 after the shared API 26/current-TV touch-free journey and deferred Room contracts execute.
 
 **Acceptance:** HTTPS source can be prepared and activated; HTTP requires explicit approval; process recreation restores only a sanitized endpoint; Back cannot silently abandon a stored credential.
 
-**Deliberately moved to issue #25:** complete touch-free Home → Sources → Add Source and Channels → Player → Back journeys, actual focus ownership, and API 26/current-TV DeviceMatrix execution. This prevents a ready source-entry feature from being blocked by the broader focus architecture it does not own.
-
-## Task 4: Real TV focus restoration — next (issue #25)
+## Task 4: Real TV focus restoration — current (issue #25 / PR #34)
 
 ### 4.1 Pure focus-anchor policy
 
-- [ ] Introduce `FocusAnchor(itemKey, previousIndex, scrollOffset)`.
-- [ ] Resolve exact key first.
-- [ ] If removed, choose the nearest preceding still-visible item.
-- [ ] If identities changed, clamp the previous index.
-- [ ] Fall back to the first focusable item.
-- [ ] Cover reorder, removal, empty list and bounded-index cases with JVM tests.
+- [x] Introduce `FocusAnchor(itemKey, previousIndex, scrollOffset)`.
+- [x] Resolve exact key first.
+- [x] If removed, choose the nearest preceding valid position.
+- [x] Clamp shrinking lists to a valid previous item.
+- [x] Fall back to the first focusable item.
+- [x] Cover reorder, removal, empty list and bounded-index cases with JVM contracts.
+- [ ] Confirm exact-head Full for the synchronized PR #34 branch.
 
 ### 4.2 Channels implementation
 
 - [ ] Replace the visual `•` marker with one `FocusRequester` per visible stable channel key.
-- [ ] Save focused channel identity separately from list scroll position.
+- [ ] Save focused channel identity separately from `LazyListState` position.
 - [ ] Scroll to the resolved target before `requestFocus()`.
 - [ ] Restore actual focus after Player → Back.
 - [ ] Prevent repeated requests during ordinary recomposition.
+- [ ] Add bounded Compose restoration tests before device journeys.
 
 ### 4.3 Sources, Add Source and Player
 
@@ -110,6 +112,7 @@
 - [ ] Execute non-zero D-pad journeys on the current TV image first.
 - [ ] Execute the old supported edge (API 26, or nearest available old TV image recorded in evidence).
 - [ ] Execute Room 3→4 migration and catalog atomicity contracts in the same sequential matrix.
+- [ ] Close issues #24 and #25 only after their explicit journey criteria are evidenced.
 - [ ] Add representative API 30 and low-RAM profiles after the browser/player journeys are stable, not on every ordinary PR.
 
 ## Task 5: Media3 transport and reconnect hardening (issue #26)
@@ -146,7 +149,7 @@
 
 ## Definition of done for the current sequence
 
-1. PR #32 is merged and issue #24 is closed.
-2. Issue #25 has executable focus-policy tests and real Channels focus restoration before broader visual redesign.
-3. The sequential DeviceMatrix proves old/current Android TV behavior and executes the deferred Room contracts.
+1. PR #34 restores actual Channels focus and passes exact-head Full.
+2. The sequential DeviceMatrix proves old/current Android TV behavior and executes the deferred Room contracts.
+3. Issues #24 and #25 close with executable journey evidence rather than code-only claims.
 4. Issue #26 removes shared mutable playback headers before stream fallback or diagnostics are added.
