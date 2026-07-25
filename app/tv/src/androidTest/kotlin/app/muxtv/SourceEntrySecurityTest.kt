@@ -39,6 +39,7 @@ class SourceEntrySecurityTest {
 
         composeRule.onNodeWithTag("source-locator")
             .performTextReplacement(secretLocator)
+        composeRule.onNodeWithTag("source-locator")
             .assertContentDescriptionEquals("Ссылка M3U, значение скрыто")
 
         composeRule.onAllNodes(
