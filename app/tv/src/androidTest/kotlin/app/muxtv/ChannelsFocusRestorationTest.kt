@@ -25,6 +25,7 @@ import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
@@ -62,18 +63,7 @@ class ChannelsFocusRestorationTest {
             val stateHolder = rememberSaveableStateHolder()
             MuxTvTheme {
                 if (playerOpen.value) {
-                    val backFocusRequester = remember { FocusRequester() }
-                    LaunchedEffect(backFocusRequester) {
-                        withFrameNanos { }
-                        backFocusRequester.requestFocus()
-                    }
-                    MuxTvActionButton(
-                        text = "Назад к каналам",
-                        onClick = { playerOpen.value = false },
-                        modifier = Modifier
-                            .testTag("test-player-back")
-                            .focusRequester(backFocusRequester),
-                    )
+                    TestPlayer(onBack = { playerOpen.value = false })
                 } else {
                     stateHolder.SaveableStateProvider("channels") {
                         ChannelsRoute(
@@ -89,22 +79,50 @@ class ChannelsFocusRestorationTest {
 
         moveFocusToSecondChannel()
         composeRule.onNodeWithTag("channel-row-1").pressEnter()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("test-player-back")
-                .fetchSemanticsNodes()
-                .size == 1
-        }
+        composeRule.waitUntilPlayerBack()
         composeRule.onNodeWithTag("test-player-back")
             .assertIsFocused()
             .pressEnter()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("channel-row-1")
-                .fetchSemanticsNodes()
-                .size == 1
-        }
+        composeRule.waitUntilChannelRow(index = 1)
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
+    }
+
+    @Test
+    fun removedFocusedChannelFallsBackToNearestPreviousRowAfterPlayerBack() {
+        val playerOpen = mutableStateOf(false)
+        val catalog = MutablePlaybackCatalog()
+        composeRule.setContent {
+            val stateHolder = rememberSaveableStateHolder()
+            MuxTvTheme {
+                if (playerOpen.value) {
+                    TestPlayer(onBack = { playerOpen.value = false })
+                } else {
+                    stateHolder.SaveableStateProvider("channels") {
+                        ChannelsRoute(
+                            playbackCatalog = catalog,
+                            profileId = "profile-main",
+                            onOpenChannel = { playerOpen.value = true },
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        moveFocusToSecondChannel()
+        composeRule.onNodeWithTag("channel-row-1").pressEnter()
+        composeRule.waitUntilPlayerBack()
+
+        catalog.remove("channel-b")
+        composeRule.onNodeWithTag("test-player-back")
+            .assertIsFocused()
+            .pressEnter()
+        composeRule.waitUntilChannelRow(index = 0)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
     }
 
     private fun moveFocusToSecondChannel() {
@@ -115,6 +133,34 @@ class ChannelsFocusRestorationTest {
         }
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
     }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilPlayerBack() {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithTag("test-player-back").fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilChannelRow(index: Int) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithTag("channel-row-$index").fetchSemanticsNodes().size == 1
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun TestPlayer(onBack: () -> Unit) {
+    val backFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(backFocusRequester) {
+        withFrameNanos { }
+        backFocusRequester.requestFocus()
+    }
+    MuxTvActionButton(
+        text = "Назад к каналам",
+        onClick = onBack,
+        modifier = Modifier
+            .testTag("test-player-back")
+            .focusRequester(backFocusRequester),
+    )
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = performKeyInput {
@@ -122,15 +168,15 @@ private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = per
     keyUp(Key.Enter)
 }
 
-private object StaticPlaybackCatalog : PlaybackCatalog {
-    private val channels = listOf(
-        channel(id = "channel-a", name = "Первый"),
-        channel(id = "channel-b", name = "Второй"),
-        channel(id = "channel-c", name = "Третий"),
-    )
+private val testChannels = listOf(
+    testChannel(id = "channel-a", name = "Первый"),
+    testChannel(id = "channel-b", name = "Второй"),
+    testChannel(id = "channel-c", name = "Третий"),
+)
 
+private object StaticPlaybackCatalog : PlaybackCatalog {
     override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
-        flowOf(channels)
+        flowOf(testChannels)
 
     override suspend fun getChannel(
         profileId: String,
@@ -142,17 +188,38 @@ private object StaticPlaybackCatalog : PlaybackCatalog {
         channelId: String,
         preferredVariantId: String?,
     ): ResolvedPlaybackRequest? = null
-
-    private fun channel(
-        id: String,
-        name: String,
-    ) = PlayableChannelSummary(
-        channelId = id,
-        displayName = name,
-        logoUrl = null,
-        groupTitle = "Тест",
-        channelNumber = null,
-        isFavorite = false,
-        variantCount = 1,
-    )
 }
+
+private class MutablePlaybackCatalog : PlaybackCatalog {
+    private val channels = MutableStateFlow(testChannels)
+
+    fun remove(channelId: String) {
+        channels.value = channels.value.filterNot { it.channelId == channelId }
+    }
+
+    override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> = channels
+
+    override suspend fun getChannel(
+        profileId: String,
+        channelId: String,
+    ): PlayableChannel? = null
+
+    override suspend fun resolveVariant(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+    ): ResolvedPlaybackRequest? = null
+}
+
+private fun testChannel(
+    id: String,
+    name: String,
+) = PlayableChannelSummary(
+    channelId = id,
+    displayName = name,
+    logoUrl = null,
+    groupTitle = "Тест",
+    channelNumber = null,
+    isFavorite = false,
+    variantCount = 1,
+)
