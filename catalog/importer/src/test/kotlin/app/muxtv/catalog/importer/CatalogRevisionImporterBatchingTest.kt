@@ -31,8 +31,10 @@ class CatalogRevisionImporterBatchingTest {
             input = ByteArrayInputStream(playlist(entryCount = 251).toByteArray()),
         )
 
-        val diagnostic = File(".work/evidence/catalog-batch-diagnostic.txt")
-        diagnostic.parentFile.mkdirs()
+        val diagnostic = File(System.getProperty("user.dir"))
+            .resolve("../../.work/evidence/catalog-batch-diagnostic.txt")
+            .canonicalFile
+        diagnostic.parentFile?.mkdirs()
         diagnostic.writeText(
             buildString {
                 appendLine("result=$result")
