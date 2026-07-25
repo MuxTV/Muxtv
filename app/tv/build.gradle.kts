@@ -25,6 +25,7 @@ dependencies {
     implementation(project(":catalog:importer"))
     implementation(project(":catalog:refresh"))
     implementation(project(":catalog:sync"))
+    implementation(project(":catalog:onboarding"))
     implementation(project(":core:credentials"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))

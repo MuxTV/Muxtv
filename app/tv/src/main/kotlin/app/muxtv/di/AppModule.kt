@@ -5,6 +5,7 @@ import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
+import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
@@ -17,6 +18,7 @@ import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.InactiveSourceRemovalResult
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
+import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.network.MuxTvHttpClients
@@ -54,6 +56,11 @@ object AppModule {
     fun provideSourceRefreshStore(
         components: MuxTvDatabaseComponents,
     ): SourceRefreshStore = components.sourceRefreshStore
+
+    @Provides
+    fun providePendingSourcePreparationStore(
+        components: MuxTvDatabaseComponents,
+    ): PendingSourcePreparationStore = components.pendingSourcePreparationStore
 
     @Provides
     fun provideCatalogRepository(
@@ -101,11 +108,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRemoteSourceOnboarding(
+    fun provideDefaultRemoteSourceOnboarding(
         accessManager: RemoteSourceAccessManager,
         refresher: RemoteSourceRefresher,
         revisionStore: SourceRevisionStore,
-    ): RemoteSourceOnboarding = DefaultRemoteSourceOnboarding(
+    ): DefaultRemoteSourceOnboarding = DefaultRemoteSourceOnboarding(
         accessManager = accessManager,
         activator = RemoteSourceActivator { request -> refresher.refresh(request) },
         activationCleanup = RemoteSourceActivationCleanup { sourceId, credentialRef ->
@@ -119,6 +126,21 @@ object AppModule {
             }
         },
     )
+
+    @Provides
+    @Singleton
+    fun provideDurableRemoteSourceOnboarding(
+        delegate: DefaultRemoteSourceOnboarding,
+        pendingStore: PendingSourcePreparationStore,
+    ): DurableRemoteSourceOnboarding = DurableRemoteSourceOnboarding(
+        delegate = delegate,
+        registry = pendingStore,
+    )
+
+    @Provides
+    fun provideRemoteSourceOnboarding(
+        durable: DurableRemoteSourceOnboarding,
+    ): RemoteSourceOnboarding = durable
 
     @Provides
     @Singleton

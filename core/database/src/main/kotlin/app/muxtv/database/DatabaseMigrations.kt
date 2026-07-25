@@ -116,3 +116,21 @@ internal val MIGRATION_2_3 = Migration(2, 3) { connection ->
         "CREATE UNIQUE INDEX IF NOT EXISTS `index_source_refresh_attempts_runToken` ON `source_refresh_attempts` (`runToken`)",
     )
 }
+
+internal val MIGRATION_3_4 = Migration(3, 4) { connection ->
+    connection.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS `pending_source_preparations` (
+            `preparationId` TEXT NOT NULL,
+            `scheme` TEXT NOT NULL,
+            `host` TEXT NOT NULL,
+            `createdAtEpochMillis` INTEGER NOT NULL,
+            `expiresAtEpochMillis` INTEGER NOT NULL,
+            PRIMARY KEY(`preparationId`)
+        )
+        """.trimIndent(),
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_pending_source_preparations_expiresAtEpochMillis` ON `pending_source_preparations` (`expiresAtEpochMillis`)",
+    )
+}

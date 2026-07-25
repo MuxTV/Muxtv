@@ -32,6 +32,7 @@ include(
     ":catalog:importer",
     ":catalog:refresh",
     ":catalog:sync",
+    ":catalog:onboarding",
     ":player:api",
     ":player:media3",
     ":player:fake",
