@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -21,8 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -41,7 +44,7 @@ fun AddSourceRoute(
     val state by session.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sourceName by remember { mutableStateOf("") }
-    var locator by remember { mutableStateOf("") }
+    val locatorState = remember { TextFieldState() }
     var revealLocator by remember { mutableStateOf(false) }
 
     fun cancelAndLeave() {
@@ -57,13 +60,16 @@ fun AddSourceRoute(
     }
     LaunchedEffect(state) {
         if (state is SourceEntryUiState.Confirming) {
-            locator = ""
+            locatorState.clearText()
             revealLocator = false
         }
         if (state is SourceEntryUiState.Completed) onCompleted()
     }
     DisposableEffect(session) {
-        onDispose { session.clearTransientLocator() }
+        onDispose {
+            locatorState.clearText()
+            session.clearTransientLocator()
+        }
     }
 
     Column(
@@ -79,11 +85,10 @@ fun AddSourceRoute(
                     value = sourceName,
                     onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
                 )
-                TvTextInput(
+                TvSecureTextInput(
                     label = "Ссылка M3U",
-                    value = locator,
-                    onValueChange = { locator = it.take(MAX_LOCATOR_CHARACTERS) },
-                    masked = !revealLocator,
+                    state = locatorState,
+                    revealed = revealLocator,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                     MuxTvActionButton(
@@ -92,8 +97,12 @@ fun AddSourceRoute(
                     )
                     MuxTvActionButton(
                         text = "Проверить",
-                        onClick = { scope.launch { session.prepare(locator) } },
-                        enabled = locator.isNotBlank(),
+                        onClick = {
+                            scope.launch {
+                                session.prepare(locatorState.text.toString())
+                            }
+                        },
+                        enabled = locatorState.text.isNotBlank(),
                     )
                     MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
                 }
@@ -158,7 +167,6 @@ private fun TvTextInput(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    masked: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
@@ -181,10 +189,41 @@ private fun TvTextInput(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             singleLine = true,
-            visualTransformation = if (masked) {
-                PasswordVisualTransformation()
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        )
+    }
+}
+
+@Composable
+private fun TvSecureTextInput(
+    label: String,
+    state: TextFieldState,
+    revealed: Boolean,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+        Text(label, style = MaterialTheme.typography.titleMedium)
+        BasicSecureTextField(
+            state = state,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focused = it.isFocused }
+                .background(
+                    if (focused) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                )
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            inputTransformation = InputTransformation.maxLength(MAX_LOCATOR_CHARACTERS),
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            textObfuscationMode = if (revealed) {
+                TextObfuscationMode.Visible
             } else {
-                VisualTransformation.None
+                TextObfuscationMode.Hidden
             },
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         )
