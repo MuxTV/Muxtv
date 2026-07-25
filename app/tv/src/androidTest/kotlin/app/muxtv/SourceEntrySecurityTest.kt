@@ -1,11 +1,13 @@
 package app.muxtv
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.AnnotatedString
 import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
@@ -38,7 +40,9 @@ class SourceEntrySecurityTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("source-locator")
-            .performTextReplacement(secretLocator)
+            .performSemanticsAction(SemanticsActions.SetText) { action ->
+                action(AnnotatedString(secretLocator))
+            }
         composeRule.onNodeWithTag("source-locator")
             .assertContentDescriptionEquals("Ссылка M3U, значение скрыто")
 
