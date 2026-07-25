@@ -1,0 +1,64 @@
+name: PR34 DeviceCurrent gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr34-device-current-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  device-current:
+    if: github.head_ref == 'feat/focus-restoration'
+    name: PR34 current TV journey
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Inspect runner environment
+        shell: pwsh
+        run: |
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "OS: $env:RUNNER_OS"
+          Write-Host "Architecture: $env:RUNNER_ARCH"
+          java -version
+          if (-not $env:ANDROID_SDK_ROOT -and -not $env:ANDROID_HOME) {
+            throw "ANDROID_SDK_ROOT or ANDROID_HOME must be configured."
+          }
+
+      - name: Validate Android TV harness syntax
+        shell: pwsh
+        run: .\tools\android\Test-TvHarnessSyntax.ps1
+
+      - name: Run current Android TV journey
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
+            -Mode DeviceCurrent `
+            -SourceBranch "${{ github.head_ref }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha }}" `
+            -NoDaemon
+
+      - name: Upload device evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr34-device-current-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/**/*.json
+            .work/evidence/**/*.log
+            .work/evidence/**/*.txt
+            .work/evidence/**/*.png
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
