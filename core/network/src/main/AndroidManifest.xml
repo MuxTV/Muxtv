@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Android's platform cleartext gate is process-wide and cannot express per-request approval.
+      MuxTV therefore enables the capability here and enforces the narrower decision in
+      SourceUrlPolicy / SecureRedirectInterceptor. HTTPS downgrade remains rejected.
+    -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>
