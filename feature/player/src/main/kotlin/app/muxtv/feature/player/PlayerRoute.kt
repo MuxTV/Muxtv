@@ -11,14 +11,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -183,6 +188,7 @@ private fun PlayerContent(
     var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
     var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
     var hasError by remember(controller) { mutableStateOf(controller.playerError != null) }
+    val primaryActionFocusRequester = remember(controller) { FocusRequester() }
 
     DisposableEffect(controller) {
         val listener = object : Player.Listener {
@@ -198,6 +204,10 @@ private fun PlayerContent(
         }
         controller.addListener(listener)
         onDispose { controller.removeListener(listener) }
+    }
+    LaunchedEffect(controller) {
+        withFrameNanos { }
+        primaryActionFocusRequester.requestFocus()
     }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -227,6 +237,9 @@ private fun PlayerContent(
                     onClick = {
                         if (isPlaying) controller.pause() else controller.play()
                     },
+                    modifier = Modifier
+                        .testTag(PLAYER_PRIMARY_ACTION_TEST_TAG)
+                        .focusRequester(primaryActionFocusRequester),
                 )
                 MuxTvActionButton(
                     text = "Остановить",
@@ -247,12 +260,24 @@ private fun PlayerMessage(
     onBack: () -> Unit,
     modifier: Modifier,
 ) {
+    val backFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        backFocusRequester.requestFocus()
+    }
+
     Column(
         modifier = modifier.fillMaxSize().padding(56.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
-        MuxTvActionButton(text = "Назад к каналам", onClick = onBack)
+        MuxTvActionButton(
+            text = "Назад к каналам",
+            onClick = onBack,
+            modifier = Modifier
+                .testTag(PLAYER_BACK_TEST_TAG)
+                .focusRequester(backFocusRequester),
+        )
     }
 }
 
@@ -274,5 +299,7 @@ private fun playbackStatus(
     else -> "Подготовка"
 }
 
+private const val PLAYER_PRIMARY_ACTION_TEST_TAG = "player-primary-action"
+private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
 private const val COMMAND_TIMEOUT_MILLIS = 10_000L
