@@ -7,7 +7,6 @@ import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.database.StagedCatalogEntry
-import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -30,12 +29,25 @@ class CatalogRevisionImporterBatchingTest {
             input = ByteArrayInputStream(playlist(entryCount = 251).toByteArray()),
         )
 
-        assertThat(result).isInstanceOf(CatalogImportResult.Imported::class.java)
-        assertThat(store.batches.map { it.size }).containsExactly(250, 1).inOrder()
-        assertThat(store.batches[0] === store.batches[1]).isFalse()
-        assertThat(store.batches[0].first().rawName).isEqualTo("Channel 1")
-        assertThat(store.batches[0].last().rawName).isEqualTo("Channel 250")
-        assertThat(store.batches[1].single().rawName).isEqualTo("Channel 251")
+        val batchSizes = store.batches.map(List<StagedCatalogEntry>::size)
+        check(result is CatalogImportResult.Imported) {
+            "Expected Imported, actual=$result, batchSizes=$batchSizes"
+        }
+        check(batchSizes == listOf(250, 1)) {
+            "Unexpected batchSizes=$batchSizes, importedEntryCount=${result.entryCount}"
+        }
+        check(store.batches[0] !== store.batches[1]) {
+            "The same mutable batch instance was reused."
+        }
+        check(store.batches[0].first().rawName == "Channel 1") {
+            "Unexpected first entry=${store.batches[0].first().rawName}"
+        }
+        check(store.batches[0].last().rawName == "Channel 250") {
+            "Unexpected full-batch tail=${store.batches[0].last().rawName}"
+        }
+        check(store.batches[1].single().rawName == "Channel 251") {
+            "Unexpected remainder=${store.batches[1].map(StagedCatalogEntry::rawName)}"
+        }
     }
 
     private fun playlist(entryCount: Int): String = buildString {
