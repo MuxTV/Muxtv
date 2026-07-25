@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(libs.coroutines.android)
     implementation(libs.room3.runtime)
+    implementation(libs.androidx.tracing)
     ksp(libs.room3.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.truth)

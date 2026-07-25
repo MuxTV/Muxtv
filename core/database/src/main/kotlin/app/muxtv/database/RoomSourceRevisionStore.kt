@@ -1,5 +1,8 @@
 package app.muxtv.database
 
+import androidx.tracing.Trace
+import java.util.concurrent.atomic.AtomicInteger
+
 internal class RoomSourceRevisionStore(
     private val dao: SourceRevisionDao,
 ) : SourceRevisionStore {
@@ -40,17 +43,17 @@ internal class RoomSourceRevisionStore(
         }
         if (entries.isEmpty()) return
 
-        dao.upsertCanonicalChannels(
-            entries.map { entry ->
-                CanonicalChannelEntity(
+        traceAsyncSection(TRACE_STAGE_BATCH) {
+            val canonicalChannels = ArrayList<CanonicalChannelEntity>(entries.size)
+            val providerChannels = ArrayList<ProviderChannelEntity>(entries.size)
+            val streamVariants = ArrayList<StreamVariantEntity>(entries.size)
+
+            entries.forEach { entry ->
+                canonicalChannels += CanonicalChannelEntity(
                     id = entry.canonicalChannelId,
                     displayName = entry.canonicalDisplayName,
                 )
-            },
-        )
-        dao.insertProviderChannels(
-            entries.map { entry ->
-                ProviderChannelEntity(
+                providerChannels += ProviderChannelEntity(
                     id = entry.providerChannelId,
                     sourceId = sourceId,
                     revisionNumber = revisionNumber,
@@ -66,11 +69,7 @@ internal class RoomSourceRevisionStore(
                     catchupDays = entry.catchupDays,
                     catchupCorrection = entry.catchupCorrection,
                 )
-            },
-        )
-        dao.insertStreamVariants(
-            entries.map { entry ->
-                StreamVariantEntity(
+                streamVariants += StreamVariantEntity(
                     id = entry.streamVariantId,
                     providerChannelId = entry.providerChannelId,
                     canonicalChannelId = entry.canonicalChannelId,
@@ -78,8 +77,14 @@ internal class RoomSourceRevisionStore(
                     userAgent = entry.userAgent,
                     referrer = entry.referrer,
                 )
-            },
-        )
+            }
+
+            dao.stageCatalogBatch(
+                canonicalChannels = canonicalChannels,
+                providerChannels = providerChannels,
+                streamVariants = streamVariants,
+            )
+        }
     }
 
     override suspend fun activate(
@@ -117,3 +122,21 @@ internal class RoomSourceRevisionStore(
         const val MAX_BATCH_SIZE = 500
     }
 }
+
+private suspend inline fun <T> traceAsyncSection(
+    sectionName: String,
+    block: () -> T,
+): T {
+    if (!Trace.isEnabled()) return block()
+
+    val cookie = TRACE_COOKIE.incrementAndGet()
+    Trace.beginAsyncSection(sectionName, cookie)
+    return try {
+        block()
+    } finally {
+        Trace.endAsyncSection(sectionName, cookie)
+    }
+}
+
+private const val TRACE_STAGE_BATCH = "MuxTV.catalog.stageBatch"
+private val TRACE_COOKIE = AtomicInteger()
