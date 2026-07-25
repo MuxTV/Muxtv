@@ -36,4 +36,5 @@ include(
     ":player:media3",
     ":player:fake",
     ":feature:home",
+    ":feature:channels",
 )

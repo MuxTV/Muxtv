@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:ui"))
     implementation(project(":feature:home"))
+    implementation(project(":feature:channels"))
     implementation(project(":player:media3"))
     implementation(project(":player:api"))
     implementation(platform(libs.compose.bom))
