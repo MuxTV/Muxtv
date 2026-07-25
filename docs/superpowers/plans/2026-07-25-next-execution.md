@@ -1,155 +1,202 @@
 # MuxTV Next Execution Plan
 
-> **For agentic workers:** execute tasks sequentially with RED/GREEN checkpoints. Every task must leave a reviewable, working increment.
+> Execute sequentially. Each functional package starts from merged `main`, uses RED/GREEN contracts, and ends as a reviewable squash-merged increment. A green Action is evidence, not a substitute for product, architecture and security review.
 
-**Goal:** close the durable onboarding and catalog-hardening stack, deliver the first safe Android TV source-entry flow, then replace visual selection with deterministic D-pad focus and harden playback transport.
+## Current status — 2026-07-25
 
-**Architecture:** keep credentials and full locators outside Room, navigation keys, saved Compose state, logs, traces and diagnostics. Navigation 3 owns only serializable screen keys. The add-source session owns the opaque preparation token privately and reconstructs it after process death through the durable registry merged in PR #20.
+### Completed product foundations
 
-**Tech Stack:** Kotlin 2.4.10, Android Gradle Plugin 9.3.0, Compose BOM 2026.06.00, Navigation 3 1.1.4, Room 3.0.0, Hilt 2.60.1, Coroutines 1.11.0, Media3 1.10.1, OkHttp 5.3.0.
+- PR #20: durable pending-source preparation registry and Room schema v4.
+- PR #22: transactional catalog staging and rollback hardening.
+- PR #32: secure Android TV source-entry wizard.
+- PR #34 implementation: deterministic focus ownership, secure locator semantics, D-pad source-entry routing, Player return restoration and app-level Navigation 3 source journey.
 
-## Execution status — 2026-07-25
+### PR #34 exact evidence
 
-- PR #20 merged as `05ffb62d97034d17ed2cb00064a6a8d81d0e3344`.
-- PR #22 merged as `755fe955a8b61f33117d3e83cec9c9a526e988b6` after fixing diagnostic tracing that incorrectly changed local-JVM importer results.
-- PR #32 merged as `2c61bab514248677c7b78620d615a4567f32087b` with the secure source-entry wizard.
-- Draft PR #34 is current and implements real focus restoration from issue #25; its first pure focus-anchor increment is complete.
-- Issue #24 stays open only for the shared API 26/current-TV D-pad and Room instrumentation acceptance gate.
-- Device validation remains a gate, not a substitute for delivering product behavior.
+Matrix head before cleanup: `f3d9d21a6e6e67450ca42479c0ca70448a60916b`.
 
-## Global constraints
+Sequential DeviceMatrix run `30169291048` passed:
 
-- Preserve `minSdk = 26`.
-- No raw playlist locator, query, user-info, authorization value, cookie, referrer value or opaque preparation token in navigation, `rememberSaveable`, `SavedStateHandle`, Room projections, logs, traces, screenshots or exception text.
-- Use standard Compose Foundation `LazyColumn`/`LazyRow`; do not introduce deprecated TV lazy layouts.
-- One functional concern per PR; squash merge to `main`.
-- Run TV emulators sequentially on the self-hosted Windows runner.
-- Do not add Rust, a second player engine, bundled SQLite, Paging, Retrofit, Ktor or global state frameworks without a separate evidence-backed ADR.
+| Profile | Image | RAM / CPU | Credentials | Database | App |
+|---|---|---:|---:|---:|---:|
+| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 19 | 9 |
+| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 19 | 9 |
+
+Both profiles completed with zero failures, errors and skips. API 26 was available directly; no fallback image was used. The matrix executed the Room 3→4 migration, catalog staging rollback, Android Keystore contracts, source-entry security/focus contracts, Channels → Player → Back, save/restore and the full Home → Sources → Add Source → activate → Channels D-pad journey.
+
+Secret review found no known locator/token fixtures in reports, logcat, manifests or screenshots. The final screenshots show the system launcher after instrumentation shutdown, not a screen containing source data.
+
+Full run `30169291040` also passed on the same pre-cleanup head. No PR discussion or review comments are open.
+
+## Non-negotiable constraints
+
+- Preserve `minSdk = 26` until an explicit compatibility decision changes it.
+- Keep playlist locators, queries, cookies, authorization values, referrers, sensitive headers and preparation tokens out of Navigation 3 keys, `SavedStateHandle`, `rememberSaveable`, Room projections, logs, traces, screenshots, semantics and exception text.
+- Keep one process-owned `ExoPlayer` and `MediaSession`.
+- Use standard Compose Foundation lazy containers; do not reintroduce deprecated TV lazy APIs.
+- Keep functional concerns isolated by PR. Do not mix playback transport, visual redesign, EPG and release hardening.
+- Do not adopt Rust, libmpv, bundled SQLite, Paging or a second player engine without corpus-backed measurements and an ADR.
 
 ---
 
-## Task 1: Durable onboarding registry — code completed (PR #20)
+## Package A — close the source-entry/focus stack
 
-- [x] Reparent to `main`.
-- [x] Add Room 3 migration contract for 3 → 4.
-- [x] Add deterministic latest-active recovery.
-- [x] Add bounded corrupted-row skip and RED/GREEN contract.
-- [x] Commit exact generated schema v4.
-- [x] Remove temporary schema-export workflow.
-- [x] Confirm exact-head Full #172.
-- [x] Mark ready and squash merge.
-- [ ] Execute migration instrumentation in the consolidated focus/source-entry DeviceMatrix gate.
+### A1. Clean PR #34
 
-**Acceptance:** schema v4 contains only `preparationId`, `scheme`, `host`, `createdAtEpochMillis`, `expiresAtEpochMillis`; recovery never exposes the token through public UI state.
+- [x] Implement stable `FocusAnchor` resolution and fallback.
+- [x] Restore actual channel focus after Player → Back and save/restore.
+- [x] Give Home/top-level navigation deterministic initial focus.
+- [x] Give Sources, Add Source and Player states explicit safe focus targets.
+- [x] Route D-pad Up/Down explicitly through ordinary and secure text fields.
+- [x] Remove raw locator values from merged and unmerged Compose semantics.
+- [x] Release `MediaController` on its application thread.
+- [x] Add the full touch-free HTTPS source journey through Navigation 3.
+- [x] Pass API 26/API 36 DeviceMatrix with non-zero tests.
+- [x] Execute Room 3→4 migration and catalog atomicity on both profiles.
+- [x] Review matrix artifacts for known secret fixtures.
+- [ ] Delete the temporary `.github/workflows/pr34-device-current.yml`.
+- [ ] Pass final Full on the cleaned exact head.
+- [ ] Update PR #34 with final head, Full and matrix evidence.
+- [ ] Mark ready and squash merge.
+- [ ] Close #24 and #25 with linked acceptance evidence.
 
-## Task 2: Catalog staging hardening — code completed (PR #22)
+### A2. Repository truth PR
 
-- [x] Restrict the diff to importer/database/dependency/test/plan files.
-- [x] Make canonical, provider and stream-variant staging one Room transaction.
-- [x] Assert rollback of all three write groups after a duplicate variant failure.
-- [x] Preserve stable IDs with one import-scoped SHA-256 digest.
-- [x] Preserve immutable 250/1 batch ownership and ordering.
-- [x] Preserve original cancellation when discard fails.
-- [x] Keep async trace names static and secret-free.
-- [x] Make unavailable tracing a no-op so diagnostics cannot produce `StorageFailure`.
-- [x] Pass exact-head Full #189.
-- [x] Squash merge as `755fe955a8b61f33117d3e83cec9c9a526e988b6`.
-- [ ] Execute the retained Room atomicity instrumentation contract in the consolidated DeviceMatrix gate.
+Create a documentation-only branch from the PR #34 squash commit.
 
-**Acceptance:** duplicate stream-variant insertion rolls back all three write groups; stable IDs remain byte-compatible; no per-entry trace or user-controlled trace name exists; tracing never changes importer behavior.
+Files:
 
-## Task 3: Secure TV source-entry wizard — code completed (PR #32 / issue #24)
+- `README.md`
+- `.work/meta/status.yaml`
+- canonical roadmap/current-state documents referenced by `.work/meta/documents.yaml`
 
-- [x] Define no-argument `AppDestination.AddSource`.
-- [x] Make destinations serializable `NavKey` values.
-- [x] Replace the transient back stack with `rememberNavBackStack`.
-- [x] Add “Добавить источник” from loading, empty, failed and content states.
-- [x] Build a session with private token and public redacted state.
-- [x] Implement HTTPS prepare, HTTP approval, restore, activate and cancel states.
-- [x] Mask the locator with `BasicSecureTextField` and clear it after preparation/disposal.
-- [x] Intercept system Back and require cleanup before leaving.
-- [x] Add unit contracts for sanitization, HTTP approval, restore, activation and cleanup retention.
-- [x] Compile the complete Hilt/Navigation 3 graph.
-- [x] Add a Compose semantics contract proving the masked field does not publish the locator as text.
-- [x] Align serialization dependencies with the tracing baseline merged from PR #22.
-- [x] Pass exact-head Full #192.
-- [x] Squash merge as `2c61bab514248677c7b78620d615a4567f32087b`.
-- [ ] Close issue #24 after the shared API 26/current-TV touch-free journey and deferred Room contracts execute.
+Deliverables:
 
-**Acceptance:** HTTPS source can be prepared and activated; HTTP requires explicit approval; process recreation restores only a sanitized endpoint; Back cannot silently abandon a stored credential.
+- replace obsolete statements that application code, Gradle, CI and tests are absent;
+- record the current module graph, Room schema v4 and implemented M3U/source/player path;
+- state the actual pre-alpha limitations;
+- preserve deferred Rust/libmpv/KMP/platform decisions;
+- validate machine-readable metadata and paths;
+- Full verification, review and squash merge.
 
-## Task 4: Real TV focus restoration — current (issue #25 / PR #34)
+---
 
-### 4.1 Pure focus-anchor policy
+## Package B — issue #26: Media3 transport and reconnect
 
-- [x] Introduce `FocusAnchor(itemKey, previousIndex, scrollOffset)`.
-- [x] Resolve exact key first.
-- [x] If removed, choose the nearest preceding valid position.
-- [x] Clamp shrinking lists to a valid previous item.
-- [x] Fall back to the first focusable item.
-- [x] Cover reorder, removal, empty list and bounded-index cases with JVM contracts.
-- [ ] Confirm exact-head Full for the synchronized PR #34 branch.
+This is the next production-code package after repository-truth synchronization.
 
-### 4.2 Channels implementation
+### B1. RED transport contracts
 
-- [ ] Replace the visual `•` marker with one `FocusRequester` per visible stable channel key.
-- [ ] Save focused channel identity separately from `LazyListState` position.
-- [ ] Scroll to the resolved target before `requestFocus()`.
-- [ ] Restore actual focus after Player → Back.
-- [ ] Prevent repeated requests during ordinary recomposition.
-- [ ] Add bounded Compose restoration tests before device journeys.
+Files:
 
-### 4.3 Sources, Add Source and Player
+- `player/media3/build.gradle.kts`
+- `gradle/libs.versions.toml`
+- new focused tests under `player/media3/src/test` or `src/androidTest`
+- MockWebServer fixtures where JVM/Android boundaries permit
 
-- [ ] Define deterministic initial focus for every state.
-- [ ] Restore the source/action that launched a modal or nested destination.
-- [ ] Ensure disabled controls cannot receive or execute focus actions.
-- [ ] Ensure cleanup-pending states focus the safe recovery action.
+Contracts:
 
-### 4.4 Executable TV journeys
+1. Installing playback request A and then request B must never send A headers on B manifest or segment requests.
+2. Redirects must strip credentials across origins and reject HTTPS → HTTP downgrade unless an explicit playback policy allows it.
+3. Request factories must be immutable or request-scoped; no mutable singleton default-header state.
+4. Locator/header values must remain redacted in `toString`, logs and failures.
 
-- [ ] Add stable secret-free semantics/test tags.
-- [ ] Execute non-zero D-pad journeys on the current TV image first.
-- [ ] Execute the old supported edge (API 26, or nearest available old TV image recorded in evidence).
-- [ ] Execute Room 3→4 migration and catalog atomicity contracts in the same sequential matrix.
-- [ ] Close issues #24 and #25 only after their explicit journey criteria are evidenced.
-- [ ] Add representative API 30 and low-RAM profiles after the browser/player journeys are stable, not on every ordinary PR.
+### B2. Production transport
 
-## Task 5: Media3 transport and reconnect hardening (issue #26)
+- add `media3-datasource-okhttp` aligned exactly with Media3 `1.10.1`;
+- use the repository OkHttp/network policy boundary rather than a separate `DefaultHttpDataSource.Factory` policy island;
+- build one immutable request-scoped data-source chain per installed playback request;
+- preserve one process-owned player/session;
+- keep fallback and TV Doctor out of this PR.
 
-- [ ] Add `media3-datasource-okhttp` aligned to Media3 1.10.1.
-- [ ] Use immutable per-playback request headers; never mutate one shared factory between channels.
-- [ ] Prove A → B manifest and segment requests do not leak headers.
-- [ ] Define redirect, HTTP downgrade and cross-origin credential policy consistently with refresh.
-- [ ] Replace blocking future waits with cancellation-aware suspend/timeout logic.
-- [ ] Clear failed and disconnected controller instances so retry reconnects.
-- [ ] Preserve one process-owned player/session.
+### B3. Controller lifecycle
 
-## Task 6: Deterministic corpus and measured decisions (issue #27)
+RED contracts first:
 
-- [ ] Add a secret-free M3U/HLS corpus with malformed, large, redirect and encoding cases.
-- [ ] Benchmark parse, staging, activation and first-frame paths.
-- [ ] Record device/API/tool versions in evidence.
-- [ ] Use measurements before adopting bundled SQLite, Rust, a second player engine or preload.
+- failed or cancelled connect future is evicted;
+- a later `connect()` retries instead of returning a poisoned future;
+- controller created after connector close is released on its application thread;
+- close is idempotent;
+- service disconnect permits a bounded reconnect;
+- UI adapters use cancellation-aware suspension/timeout, not unbounded blocking `Future.get()`.
 
-## Task 7: XMLTV, Guide and user value (issues #28–#29)
+Verification:
 
-- [ ] Stream XMLTV into immutable EPG revisions.
-- [ ] Keep active/previous-good revision semantics.
-- [ ] Build now/next first, then bounded Guide windows and search.
-- [ ] Add Favorites and Recent using canonical channel identity, not raw stream URLs.
+- focused unit tests;
+- Full;
+- current-TV controller/service journey;
+- old/current DeviceMatrix when lifecycle behavior changes;
+- secret review;
+- squash merge and close #26.
 
-## Task 8: Playback recovery and release hardening (issues #30–#31)
+---
 
-- [ ] Add bounded variant fallback and TV Doctor Lite with typed secret-free diagnostics.
-- [ ] Add Baseline Profile only with before/after measurements.
-- [ ] Update command-line tools before claiming the highest available TV API image.
-- [ ] Use the release matrix: old supported edge, representative API 30, and highest actually available Android TV image.
-- [ ] Run physical Android TV/Google TV/Fire TV playback and codec checks before alpha.
+## Package C — issue #27: deterministic corpus and measurements
 
-## Definition of done for the current sequence
+Create redistributable, provider-neutral fixtures:
 
-1. PR #34 restores actual Channels focus and passes exact-head Full.
-2. The sequential DeviceMatrix proves old/current Android TV behavior and executes the deferred Room contracts.
-3. Issues #24 and #25 close with executable journey evidence rather than code-only claims.
-4. Issue #26 removes shared mutable playback headers before stream fallback or diagnostics are added.
+- small, medium and large M3U;
+- malformed attributes, controls, duplicate identities and mixed encodings;
+- HLS master/media playlists and redirects;
+- header-sensitive and cross-origin cases;
+- starter XMLTV fixtures for the following package.
+
+Measure and record:
+
+- parse time and allocation;
+- 250-entry staging batches;
+- activation transaction;
+- active channel and source-overview queries;
+- player request installation and first-frame proxy;
+- hardware, API, emulator/device, JDK, Gradle and Android tool versions.
+
+Do not approve Paging, bundled SQLite, Rust, preload or another player engine without a measured bottleneck and ADR.
+
+---
+
+## Package D — issues #28/#29: EPG and daily-use value
+
+Order:
+
+1. bounded streaming XMLTV parser;
+2. immutable EPG revisions with previous-good retention;
+3. atomic activation and cleanup;
+4. now/next projections keyed by canonical channel identity;
+5. bounded Guide time windows;
+6. debounced bounded search;
+7. Favorites and Recent as profile overlays;
+8. focus/recreation journeys on old/current TV profiles.
+
+No provider URL or programme payload belongs in navigation keys or focus tags.
+
+---
+
+## Package E — issues #30/#31: recovery and alpha release
+
+### Playback recovery
+
+- deterministic variant ordering;
+- explicit maximum attempt and wall-clock budgets;
+- no endless retry;
+- typed, secret-free TV Doctor observations;
+- safe user-confirmed recovery actions.
+
+### Release hardening
+
+- enable R8/resource shrinking with evidence-backed keep rules;
+- measure and generate Baseline Profile for startup, Channels, Sources, Player and Guide;
+- add representative API 30 and low-RAM endurance after browser/player paths are stable;
+- test one current Android/Google TV, one constrained physical device and Fire TV/Quality Central where available;
+- validate Room upgrades, Keystore persistence/reset, signing, SBOM, changelog and reproducible release steps;
+- publish `0.1.0-alpha` only after issue #31 acceptance criteria are evidenced.
+
+## Immediate execution order
+
+1. Remove the temporary PR #34 workflow.
+2. Pass final cleaned-head Full.
+3. Merge PR #34 and close #24/#25.
+4. Merge the repository-truth documentation PR.
+5. Implement issue #26 with transport isolation first, reconnect second.
+6. Build corpus/benchmarks before EPG and optimization decisions.
+7. Implement XMLTV/Guide/Search/Favorites/Recent.
+8. Implement bounded fallback/TV Doctor and complete release hardening.
