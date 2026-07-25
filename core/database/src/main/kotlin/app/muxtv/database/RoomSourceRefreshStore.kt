@@ -17,6 +17,9 @@ internal class RoomSourceRefreshStore(
         }
     }
 
+    override fun observeOverviews(): Flow<List<SourceRefreshOverview>> =
+        dao.observeOverviews().map { rows -> rows.map(SourceRefreshOverviewRow::toModel) }
+
     override suspend fun getPolicies(): List<SourceRefreshPolicy> =
         dao.getPolicies().map(SourceRefreshPolicyEntity::toModel)
 
@@ -76,6 +79,42 @@ internal class RoomSourceRefreshStore(
             completion = completion,
         )
     }
+}
+
+private fun SourceRefreshOverviewRow.toModel(): SourceRefreshOverview {
+    val policy = policyEnabled?.let { enabled ->
+        SourceRefreshPolicy(
+            sourceId = sourceId,
+            enabled = enabled,
+            intervalMinutes = requireNotNull(policyIntervalMinutes),
+            unmeteredOnly = requireNotNull(policyUnmeteredOnly),
+            requiresCharging = requireNotNull(policyRequiresCharging),
+            updatedAtEpochMillis = requireNotNull(policyUpdatedAtEpochMillis),
+        )
+    }
+    val status = refreshState?.let { state ->
+        SourceRefreshStatus(
+            sourceId = sourceId,
+            state = SourceRefreshRunState.valueOf(state),
+            startedAtEpochMillis = startedAtEpochMillis,
+            completedAtEpochMillis = completedAtEpochMillis,
+            lastSuccessRevision = lastSuccessRevision,
+            lastSuccessAtEpochMillis = lastSuccessAtEpochMillis,
+            failureFamily = failureFamily,
+            failureCode = failureCode,
+            httpStatus = httpStatus,
+            skippedEntries = skippedEntries ?: 0,
+            warningCount = warningCount ?: 0,
+        )
+    }
+    return SourceRefreshOverview(
+        sourceId = sourceId,
+        sourceName = sourceName,
+        hasCredentialReference = hasCredentialReference,
+        activeRevision = activeRevision,
+        policy = policy,
+        status = status,
+    )
 }
 
 private fun SourceRefreshPolicyEntity.toModel(): SourceRefreshPolicy = SourceRefreshPolicy(

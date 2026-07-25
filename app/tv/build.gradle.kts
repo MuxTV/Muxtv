@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":feature:home"))
     implementation(project(":feature:channels"))
     implementation(project(":feature:player"))
+    implementation(project(":feature:sources"))
     implementation(project(":player:media3"))
     implementation(project(":player:api"))
     implementation(platform(libs.compose.bom))

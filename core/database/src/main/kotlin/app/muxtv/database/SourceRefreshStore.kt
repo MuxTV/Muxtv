@@ -60,6 +60,23 @@ data class SourceRefreshStatus(
     val warningCount: Int,
 )
 
+data class SourceRefreshOverview(
+    val sourceId: String,
+    val sourceName: String,
+    val hasCredentialReference: Boolean,
+    val activeRevision: Long,
+    val policy: SourceRefreshPolicy?,
+    val status: SourceRefreshStatus?,
+) {
+    init {
+        require(sourceId.isNotBlank())
+        require(sourceName.isNotBlank())
+        require(activeRevision >= 0)
+        require(policy == null || policy.sourceId == sourceId)
+        require(status == null || status.sourceId == sourceId)
+    }
+}
+
 data class SourceRefreshAttempt(
     val id: Long,
     val sourceId: String,
@@ -105,6 +122,8 @@ data class SourceRefreshCompletion(
 
 interface SourceRefreshStore {
     suspend fun getTarget(sourceId: String): SourceRefreshTarget?
+
+    fun observeOverviews(): Flow<List<SourceRefreshOverview>>
 
     suspend fun getPolicies(): List<SourceRefreshPolicy>
 

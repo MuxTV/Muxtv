@@ -6,6 +6,17 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 
 @Composable
-fun MuxTvActionButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(onClick = onClick, modifier = modifier) { Text(text) }
+fun MuxTvActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+    ) {
+        Text(text)
+    }
 }
