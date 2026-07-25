@@ -64,6 +64,14 @@ sealed interface SourceRevisionActivationResult {
     data object EmptyRevisionRejected : SourceRevisionActivationResult
 }
 
+enum class InactiveSourceRemovalResult {
+    Removed,
+    NotFound,
+    Active,
+    CredentialMismatch,
+    ConcurrentChange,
+}
+
 interface SourceRevisionStore {
     suspend fun upsertSource(source: SourceDefinition)
 
@@ -92,4 +100,9 @@ interface SourceRevisionStore {
         sourceId: String,
         revisionNumber: Long,
     )
+
+    suspend fun removeInactiveSource(
+        sourceId: String,
+        expectedCredentialRef: String,
+    ): InactiveSourceRemovalResult = InactiveSourceRemovalResult.ConcurrentChange
 }

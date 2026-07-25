@@ -101,6 +101,18 @@ internal class RoomSourceRevisionStore(
         dao.discardRevision(sourceId, revisionNumber)
     }
 
+    override suspend fun removeInactiveSource(
+        sourceId: String,
+        expectedCredentialRef: String,
+    ): InactiveSourceRemovalResult {
+        require(sourceId.isNotBlank())
+        require(expectedCredentialRef.isNotBlank())
+        return dao.removeInactiveSource(
+            sourceId = sourceId,
+            expectedCredentialRef = expectedCredentialRef,
+        )
+    }
+
     private companion object {
         const val MAX_BATCH_SIZE = 500
     }

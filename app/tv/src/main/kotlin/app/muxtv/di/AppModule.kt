@@ -5,10 +5,16 @@ import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
+import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
+import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
+import app.muxtv.catalog.refresh.RemoteSourceActivator
+import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
+import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
+import app.muxtv.database.InactiveSourceRemovalResult
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
 import app.muxtv.database.SourceRefreshStore
@@ -91,6 +97,27 @@ object AppModule {
         credentialStore = credentialStore,
         importer = importer,
         sourceClient = clients.source,
+    )
+
+    @Provides
+    @Singleton
+    fun provideRemoteSourceOnboarding(
+        accessManager: RemoteSourceAccessManager,
+        refresher: RemoteSourceRefresher,
+        revisionStore: SourceRevisionStore,
+    ): RemoteSourceOnboarding = DefaultRemoteSourceOnboarding(
+        accessManager = accessManager,
+        activator = RemoteSourceActivator { request -> refresher.refresh(request) },
+        activationCleanup = RemoteSourceActivationCleanup { sourceId, credentialRef ->
+            when (revisionStore.removeInactiveSource(sourceId, credentialRef)) {
+                InactiveSourceRemovalResult.Removed -> RemoteSourceMetadataCleanupResult.Removed
+                InactiveSourceRemovalResult.NotFound -> RemoteSourceMetadataCleanupResult.NotFound
+                InactiveSourceRemovalResult.Active,
+                InactiveSourceRemovalResult.CredentialMismatch,
+                InactiveSourceRemovalResult.ConcurrentChange,
+                -> RemoteSourceMetadataCleanupResult.Retained
+            }
+        },
     )
 
     @Provides
