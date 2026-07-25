@@ -9,9 +9,14 @@ import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
+import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceActivator
+import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
+import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
+import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
+import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
@@ -21,6 +26,7 @@ import app.muxtv.database.MuxTvDatabaseFactory
 import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
+import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.PlaybackEngine
@@ -141,6 +147,28 @@ object AppModule {
     fun provideRemoteSourceOnboarding(
         durable: DurableRemoteSourceOnboarding,
     ): RemoteSourceOnboarding = durable
+
+    @Provides
+    @Singleton
+    fun provideSourceEntryOnboarding(
+        durable: DurableRemoteSourceOnboarding,
+    ): SourceEntryOnboarding = object : SourceEntryOnboarding {
+        override suspend fun prepare(
+            input: RemoteSourceOnboardingInput,
+        ): RemoteSourcePreparationResult = durable.prepare(input)
+
+        override suspend fun activate(
+            token: RemoteSourcePreparationToken,
+            sourceName: String,
+        ): RemoteSourceActivationResult = durable.activate(token, sourceName)
+
+        override suspend fun cancel(
+            token: RemoteSourcePreparationToken,
+        ): RemoteSourceCancellationResult = durable.cancel(token)
+
+        override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? =
+            durable.restoreLatestPrepared()
+    }
 
     @Provides
     @Singleton
