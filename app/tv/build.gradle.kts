@@ -1,6 +1,7 @@
 plugins {
     id("muxtv.android.application")
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
@@ -44,6 +45,7 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)
+    implementation(libs.kotlinx.serialization.core)
     implementation(libs.tv.material)
     implementation(libs.coroutines.android)
     implementation(libs.hilt.android)
