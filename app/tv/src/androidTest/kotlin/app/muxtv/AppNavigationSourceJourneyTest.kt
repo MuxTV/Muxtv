@@ -55,10 +55,14 @@ class AppNavigationSourceJourneyTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = JourneySourceRefreshStore()
         val playbackCatalog = JourneyPlaybackCatalog()
-        val onboarding = JourneySourceEntryOnboarding(sourceStore, playbackCatalog)
+        val secretLocator = "https://provider.example/list.m3u?token=journey-secret"
+        val onboarding = JourneySourceEntryOnboarding(
+            sourceStore = sourceStore,
+            playbackCatalog = playbackCatalog,
+            expectedLocator = secretLocator,
+        )
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
-        val secretLocator = "https://provider.example/list.m3u?token=journey-secret"
 
         try {
             composeRule.setContent {
@@ -85,20 +89,20 @@ class AppNavigationSourceJourneyTest {
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-name").fetchSemanticsNodes().size == 1
             }
-            composeRule.onNodeWithTag("source-name")
-                .assertIsFocused()
-                .performTextInput("Домашний IPTV")
-                .press(Key.DirectionDown)
+            composeRule.onNodeWithTag("source-name").assertIsFocused()
+            composeRule.onNodeWithTag("source-name").performTextInput("Домашний IPTV")
+            composeRule.onNodeWithTag("source-name").press(Key.DirectionDown)
+
+            composeRule.onNodeWithTag("source-locator").assertIsFocused()
             composeRule.onNodeWithTag("source-locator")
-                .assertIsFocused()
                 .performSemanticsAction(SemanticsActions.SetText) { action ->
                     action(AnnotatedString(secretLocator))
                 }
-                .press(Key.DirectionDown)
+            composeRule.onNodeWithTag("source-locator").press(Key.DirectionDown)
             composeRule.onNodeWithText("Показать временно")
                 .assertIsFocused()
                 .press(Key.DirectionRight)
-            composeRule.onNodeWithTag("source-check").assertIsFocused().press(Key.Enter)
+            composeRule.onNodeWithText("Проверить").assertIsFocused().press(Key.Enter)
 
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-confirm").fetchSemanticsNodes().size == 1
@@ -151,6 +155,7 @@ private fun SemanticsNodeInteraction.press(
 private class JourneySourceEntryOnboarding(
     private val sourceStore: JourneySourceRefreshStore,
     private val playbackCatalog: JourneyPlaybackCatalog,
+    private val expectedLocator: String,
 ) : SourceEntryOnboarding {
     private val token = RemoteSourcePreparationToken.parse(
         "00000000-0000-4000-8000-000000000101",
@@ -158,16 +163,21 @@ private class JourneySourceEntryOnboarding(
 
     override suspend fun prepare(
         input: RemoteSourceOnboardingInput,
-    ): RemoteSourcePreparationResult = RemoteSourcePreparationResult.Prepared(
-        token = token,
-        scheme = "https",
-        host = "provider.example",
-    )
+    ): RemoteSourcePreparationResult {
+        check(input.locator == expectedLocator)
+        check(!input.insecureHttpApproved)
+        return RemoteSourcePreparationResult.Prepared(
+            token = token,
+            scheme = "https",
+            host = "provider.example",
+        )
+    }
 
     override suspend fun activate(
         token: RemoteSourcePreparationToken,
         sourceName: String,
     ): RemoteSourceActivationResult {
+        check(token == this.token)
         sourceStore.publish(sourceName)
         playbackCatalog.publish(sourceName)
         return RemoteSourceActivationResult.Activated(
@@ -237,8 +247,10 @@ private class JourneySourceRefreshStore : SourceRefreshStore {
 
 private class JourneyPlaybackCatalog : PlaybackCatalog {
     private val channels = MutableStateFlow<List<PlayableChannelSummary>>(emptyList())
+    private var sourceName: String = "Домашний IPTV"
 
     fun publish(sourceName: String) {
+        this.sourceName = sourceName
         channels.value = listOf(channelSummary())
     }
 
@@ -254,7 +266,7 @@ private class JourneyPlaybackCatalog : PlaybackCatalog {
                 PlayableVariant(
                     variantId = "variant-journey",
                     sourceId = JOURNEY_SOURCE_ID,
-                    sourceName = "Домашний IPTV",
+                    sourceName = sourceName,
                     locator = "https://stream.example/live.m3u8",
                     userAgent = null,
                     referrer = null,
