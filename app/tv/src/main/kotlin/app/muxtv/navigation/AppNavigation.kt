@@ -7,11 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -24,6 +23,8 @@ import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.feature.sources.AddSourceRoute
+import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 
@@ -33,9 +34,10 @@ fun AppNavigation(
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
+    sourceEntryOnboarding: SourceEntryOnboarding,
     modifier: Modifier = Modifier,
 ) {
-    val backStack = remember { mutableStateListOf(AppDestination.initial) }
+    val backStack = rememberNavBackStack(AppDestination.initial)
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
     }
@@ -43,17 +45,18 @@ fun AppNavigation(
         if (backStack.size > 1) backStack.removeLastOrNull()
     }
 
-    val current = backStack.lastOrNull() ?: AppDestination.initial
+    val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
     Column(modifier = modifier.fillMaxSize()) {
-        if (current !is AppDestination.Player) {
+        if (current !is AppDestination.Player && current != AppDestination.AddSource) {
             NavigationRow(current = current.topLevelDestination(), onOpen = ::open)
         }
         NavDisplay(
             modifier = Modifier.fillMaxWidth().weight(1f),
             backStack = backStack,
             onBack = ::goBack,
-            entryProvider = { destination ->
-                NavEntry(destination) {
+            entryProvider = { key ->
+                val destination = key as AppDestination
+                NavEntry(key) {
                     when (destination) {
                         AppDestination.Home -> HomeRoute(
                             onOpenChannels = { open(AppDestination.Channels) },
@@ -74,6 +77,13 @@ fun AppNavigation(
                         AppDestination.Sources -> SourcesRoute(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,
+                            onAddSource = { open(AppDestination.AddSource) },
+                        )
+
+                        AppDestination.AddSource -> AddSourceRoute(
+                            onboarding = sourceEntryOnboarding,
+                            onCompleted = ::goBack,
+                            onBack = ::goBack,
                         )
 
                         is AppDestination.Player -> PlayerRoute(
@@ -106,6 +116,7 @@ private fun NavigationRow(
                 AppDestination.Guide -> "Программа"
                 AppDestination.Search -> "Поиск"
                 AppDestination.Sources -> "Источники"
+                AppDestination.AddSource -> error("AddSource is not a top-level destination.")
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             MuxTvActionButton(
@@ -141,6 +152,7 @@ private fun PlaceholderRoute(
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
+    AppDestination.AddSource -> AppDestination.Sources
     is AppDestination.Player -> AppDestination.Channels
     else -> this
 }
