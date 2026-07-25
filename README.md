@@ -1,6 +1,6 @@
 # MuxTV
 
-MuxTV — бесплатное open-source приложение для Android TV, Google TV и Fire TV, которое превращает пользовательские IPTV-источники в единый локальный каталог каналов.
+MuxTV — приложение, разрабатываемое для Android TV, Google TV и Fire TV, которое превращает пользовательские IPTV-источники в единый локальный каталог каналов. Код лицензирован по BSD 3-Clause; текущий репозиторий и сборки пока не являются публичным релизом.
 
 Приложение не предоставляет телеканалы и не продаёт IPTV-подписки: пользователь подключает только источники, на использование которых у него есть права.
 
@@ -76,7 +76,7 @@ Harness самостоятельно выбирает доступные Android
 - playlist locators, credentials и sensitive headers не попадают в navigation, Room projections, logs или screenshots;
 - immutable revisions и атомарная активация вместо частичного обновления live-каталога;
 - один process-owned `ExoPlayer` и `MediaSession`;
-- Android TV first; Fire TV и другие платформы подтверждаются отдельной evidence-матрицей;
+- Android TV first; Google TV и Fire TV подтверждаются отдельной evidence-матрицей;
 - Media3 остаётся основным engine; Rust, libmpv и второй player engine требуют измеримого bottleneck и отдельного ADR.
 
 ## Лицензия
