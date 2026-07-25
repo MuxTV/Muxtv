@@ -30,6 +30,11 @@ class CatalogRevisionImporterBatchingTest {
         )
 
         val batchSizes = store.batches.map(List<StagedCatalogEntry>::size)
+        System.err.println(
+            "MUXTV_BATCH_DIAGNOSTIC result=$result batchSizes=$batchSizes " +
+                "first=${store.batches.firstOrNull()?.firstOrNull()?.rawName} " +
+                "last=${store.batches.lastOrNull()?.lastOrNull()?.rawName}",
+        )
         check(result is CatalogImportResult.Imported) {
             "Expected Imported, actual=$result, batchSizes=$batchSizes"
         }
