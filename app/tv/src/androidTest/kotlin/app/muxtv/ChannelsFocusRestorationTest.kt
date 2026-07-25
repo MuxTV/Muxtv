@@ -1,15 +1,20 @@
 package app.muxtv
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
@@ -57,10 +62,17 @@ class ChannelsFocusRestorationTest {
             val stateHolder = rememberSaveableStateHolder()
             MuxTvTheme {
                 if (playerOpen.value) {
+                    val backFocusRequester = remember { FocusRequester() }
+                    LaunchedEffect(backFocusRequester) {
+                        withFrameNanos { }
+                        backFocusRequester.requestFocus()
+                    }
                     MuxTvActionButton(
                         text = "Назад к каналам",
                         onClick = { playerOpen.value = false },
-                        modifier = Modifier.testTag("test-player-back"),
+                        modifier = Modifier
+                            .testTag("test-player-back")
+                            .focusRequester(backFocusRequester),
                     )
                 } else {
                     stateHolder.SaveableStateProvider("channels") {
@@ -76,8 +88,20 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         moveFocusToSecondChannel()
-        composeRule.onNodeWithTag("channel-row-1").performClick()
-        composeRule.onNodeWithTag("test-player-back").performClick()
+        composeRule.onNodeWithTag("channel-row-1").pressEnter()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("test-player-back")
+                .fetchSemanticsNodes()
+                .size == 1
+        }
+        composeRule.onNodeWithTag("test-player-back")
+            .assertIsFocused()
+            .pressEnter()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-1")
+                .fetchSemanticsNodes()
+                .size == 1
+        }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
@@ -91,6 +115,11 @@ class ChannelsFocusRestorationTest {
         }
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
     }
+}
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = performKeyInput {
+    keyDown(Key.Enter)
+    keyUp(Key.Enter)
 }
 
 private object StaticPlaybackCatalog : PlaybackCatalog {
