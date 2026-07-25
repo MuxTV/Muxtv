@@ -7,7 +7,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -38,17 +44,30 @@ fun AppNavigation(
     modifier: Modifier = Modifier,
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
+    val initialNavigationFocusRequester = remember { FocusRequester() }
+
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
     }
+
     fun goBack() {
         if (backStack.size > 1) backStack.removeLastOrNull()
     }
 
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        initialNavigationFocusRequester.requestFocus()
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         if (current !is AppDestination.Player && current != AppDestination.AddSource) {
-            NavigationRow(current = current.topLevelDestination(), onOpen = ::open)
+            NavigationRow(
+                current = current.topLevelDestination(),
+                initialFocusRequester = initialNavigationFocusRequester,
+                onOpen = ::open,
+            )
         }
         NavDisplay(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -103,6 +122,7 @@ fun AppNavigation(
 @Composable
 private fun NavigationRow(
     current: AppDestination,
+    initialFocusRequester: FocusRequester,
     onOpen: (AppDestination) -> Unit,
 ) {
     Row(
@@ -119,9 +139,17 @@ private fun NavigationRow(
                 AppDestination.AddSource -> error("AddSource is not a top-level destination.")
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
+            val focusModifier = if (destination == current) {
+                Modifier.focusRequester(initialFocusRequester)
+            } else {
+                Modifier
+            }
             MuxTvActionButton(
                 text = if (destination == current) "• $label" else label,
                 onClick = { onOpen(destination) },
+                modifier = Modifier
+                    .testTag(destination.navigationTestTag())
+                    .then(focusModifier),
             )
         }
         Text(
@@ -149,6 +177,16 @@ private fun PlaceholderRoute(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+private fun AppDestination.navigationTestTag(): String = when (this) {
+    AppDestination.Home -> "nav-home"
+    AppDestination.Channels -> "nav-channels"
+    AppDestination.Guide -> "nav-guide"
+    AppDestination.Search -> "nav-search"
+    AppDestination.Sources -> "nav-sources"
+    AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
