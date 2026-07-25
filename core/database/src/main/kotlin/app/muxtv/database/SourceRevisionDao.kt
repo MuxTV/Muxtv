@@ -112,6 +112,17 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertStreamVariants(variants: List<StreamVariantEntity>)
 
+    @Transaction
+    open suspend fun stageCatalogBatch(
+        canonicalChannels: List<CanonicalChannelEntity>,
+        providerChannels: List<ProviderChannelEntity>,
+        streamVariants: List<StreamVariantEntity>,
+    ) {
+        upsertCanonicalChannels(canonicalChannels)
+        insertProviderChannels(providerChannels)
+        insertStreamVariants(streamVariants)
+    }
+
     @Query(
         """
         SELECT COUNT(*)

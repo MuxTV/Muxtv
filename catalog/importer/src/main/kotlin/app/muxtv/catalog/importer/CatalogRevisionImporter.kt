@@ -1,5 +1,6 @@
 package app.muxtv.catalog.importer
 
+import androidx.tracing.Trace
 import app.muxtv.catalog.ingest.M3uEncodingException
 import app.muxtv.catalog.ingest.M3uEntry
 import app.muxtv.catalog.ingest.M3uLimitExceededException
@@ -15,9 +16,7 @@ import app.muxtv.database.SourceRevisionStatistics
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.database.StagedCatalogEntry
 import java.io.InputStream
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 
 data class CatalogImportRequest(
@@ -90,17 +89,20 @@ class CatalogRevisionImporter(
                 sourceId = request.sourceId,
                 revisionNumber = revision,
                 revisionStore = revisionStore,
+                identityFactory = CatalogEntryIdentityFactory(),
             )
-            val report = parser.parse(
-                input = input,
-                sink = sink,
-                limits = request.parseLimits,
-                options = request.parseOptions,
-            )
+            val report = traceAsyncSection(TRACE_PARSE) {
+                parser.parse(
+                    input = input,
+                    sink = sink,
+                    limits = request.parseLimits,
+                    options = request.parseOptions,
+                )
+            }
             sink.flush()
 
-            when (
-                val activation = revisionStore.activate(
+            val activation = traceAsyncSection(TRACE_ACTIVATE) {
+                revisionStore.activate(
                     sourceId = request.sourceId,
                     revisionNumber = revision,
                     activatedAtEpochMillis = nowEpochMillis(),
@@ -110,7 +112,8 @@ class CatalogRevisionImporter(
                         warningCount = report.warningCount,
                     ),
                 )
-            ) {
+            }
+            when (activation) {
                 is SourceRevisionActivationResult.Activated -> CatalogImportResult.Imported(
                     revisionNumber = activation.revisionNumber,
                     previousRevisionNumber = activation.previousRevisionNumber,
@@ -145,8 +148,13 @@ class CatalogRevisionImporter(
         sourceId: String,
         revisionNumber: Long?,
     ) {
-        if (revisionNumber != null) {
-            runCatching { revisionStore.discard(sourceId, revisionNumber) }
+        if (revisionNumber == null) return
+        try {
+            revisionStore.discard(sourceId, revisionNumber)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Preserve the original typed import failure when best-effort discard also fails.
         }
     }
 }
@@ -155,8 +163,9 @@ private class RevisionStagingSink(
     private val sourceId: String,
     private val revisionNumber: Long,
     private val revisionStore: SourceRevisionStore,
+    private val identityFactory: CatalogEntryIdentityFactory,
 ) : M3uParseSink {
-    private val batch = ArrayList<StagedCatalogEntry>(BATCH_SIZE)
+    private var batch = ArrayList<StagedCatalogEntry>(BATCH_SIZE)
     private var entryOrdinal = 0L
 
     override suspend fun onHeader(header: M3uPlaylistHeader) = Unit
@@ -169,18 +178,21 @@ private class RevisionStagingSink(
             sourceId = sourceId,
             revisionNumber = revisionNumber,
             ordinal = entryOrdinal,
+            identityFactory = identityFactory,
         )
         if (batch.size >= BATCH_SIZE) flush()
     }
 
     suspend fun flush() {
         if (batch.isEmpty()) return
+
+        val pending = batch
+        batch = ArrayList(BATCH_SIZE)
         revisionStore.stageBatch(
             sourceId = sourceId,
             revisionNumber = revisionNumber,
-            entries = batch.toList(),
+            entries = pending,
         )
-        batch.clear()
     }
 
     private companion object {
@@ -192,24 +204,22 @@ private fun M3uEntry.toStagedEntry(
     sourceId: String,
     revisionNumber: Long,
     ordinal: Long,
+    identityFactory: CatalogEntryIdentityFactory,
 ): StagedCatalogEntry {
-    val providerKey = providerKey()
-    val canonicalScope = if (!tvgId.isNullOrBlank()) {
-        "global|$providerKey"
-    } else {
-        "source|$sourceId|$providerKey"
-    }
-    val providerChannelId = stableId("provider|$sourceId|$revisionNumber|$ordinal")
-    val canonicalChannelId = stableId("canonical|$canonicalScope")
-    val streamVariantId = stableId("stream|$sourceId|$revisionNumber|$ordinal")
+    val identity = identityFactory.create(
+        entry = this,
+        sourceId = sourceId,
+        revisionNumber = revisionNumber,
+        ordinal = ordinal,
+    )
 
     return StagedCatalogEntry(
-        providerChannelId = providerChannelId,
-        providerKey = providerKey,
+        providerChannelId = identity.providerChannelId,
+        providerKey = identity.providerKey,
         rawName = displayName,
-        canonicalChannelId = canonicalChannelId,
+        canonicalChannelId = identity.canonicalChannelId,
         canonicalDisplayName = tvgName?.takeIf(String::isNotBlank) ?: displayName,
-        streamVariantId = streamVariantId,
+        streamVariantId = identity.streamVariantId,
         locator = locator,
         tvgId = tvgId,
         tvgName = tvgName,
@@ -225,29 +235,21 @@ private fun M3uEntry.toStagedEntry(
     )
 }
 
-private fun M3uEntry.providerKey(): String {
-    val stableTvgId = tvgId?.normalizeIdentityPart()
-    if (!stableTvgId.isNullOrEmpty()) return "tvg:$stableTvgId"
+private suspend inline fun <T> traceAsyncSection(
+    sectionName: String,
+    block: () -> T,
+): T {
+    if (!Trace.isEnabled()) return block()
 
-    return buildString {
-        append("name:")
-        append((tvgName ?: displayName).normalizeIdentityPart())
-        append("|group:")
-        append(groupTitle.orEmpty().normalizeIdentityPart())
-        append("|number:")
-        append(channelNumber.orEmpty().normalizeIdentityPart())
+    val cookie = TRACE_COOKIE.incrementAndGet()
+    Trace.beginAsyncSection(sectionName, cookie)
+    return try {
+        block()
+    } finally {
+        Trace.endAsyncSection(sectionName, cookie)
     }
 }
 
-private fun String.normalizeIdentityPart(): String =
-    trim()
-        .lowercase(Locale.ROOT)
-        .replace(WHITESPACE, " ")
-
-private fun stableId(value: String): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(StandardCharsets.UTF_8))
-    return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
-}
-
-private val WHITESPACE = Regex("\\s+")
+private const val TRACE_PARSE = "MuxTV.catalog.parse"
+private const val TRACE_ACTIVATE = "MuxTV.catalog.activate"
+private val TRACE_COOKIE = AtomicInteger()
