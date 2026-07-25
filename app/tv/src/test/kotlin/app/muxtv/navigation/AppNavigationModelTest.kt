@@ -5,11 +5,17 @@ import org.junit.Test
 
 class AppNavigationModelTest {
     @Test
-    fun `single profile startup opens home without profile picker destination`() {
+    fun `single profile startup opens home with bounded top level destinations`() {
         assertThat(AppDestination.initial).isEqualTo(AppDestination.Home)
-        assertThat(AppDestination.entries.map { it.name }).doesNotContain("Profiles")
-        assertThat(AppDestination.entries.map { it.name })
-            .containsExactly("Home", "Channels", "Guide", "Search")
+        assertThat(AppDestination.topLevel)
+            .containsExactly(
+                AppDestination.Home,
+                AppDestination.Channels,
+                AppDestination.Guide,
+                AppDestination.Search,
+            )
             .inOrder()
+        assertThat(AppDestination.topLevel)
+            .doesNotContain(AppDestination.Player(channelId = "channel-test"))
     }
 }

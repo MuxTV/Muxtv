@@ -25,8 +25,8 @@ abstract class InitializationDao {
         if (countPrimaryProfiles() == 0) {
             insertProfile(
                 ProfileEntity(
-                    id = PRIMARY_PROFILE_ID,
-                    name = PRIMARY_PROFILE_NAME,
+                    id = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                    name = DatabaseDefaults.PRIMARY_PROFILE_NAME,
                     isPrimary = true,
                 ),
             )
@@ -34,16 +34,10 @@ abstract class InitializationDao {
         if (countInstallations() == 0) {
             insertInstallation(
                 InstallationEntity(
-                    id = LOCAL_INSTALLATION_ID,
-                    primaryProfileId = PRIMARY_PROFILE_ID,
+                    id = DatabaseDefaults.LOCAL_INSTALLATION_ID,
+                    primaryProfileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                 ),
             )
         }
-    }
-
-    companion object {
-        const val LOCAL_INSTALLATION_ID = "installation-local"
-        const val PRIMARY_PROFILE_ID = "profile-primary"
-        const val PRIMARY_PROFILE_NAME = "Основной"
     }
 }
