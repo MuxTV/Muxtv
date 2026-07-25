@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceCurrent `
+            -Mode DeviceMatrix `
             -SourceBranch "${{ github.head_ref }}" `
             -SourceCommit "${{ github.event.pull_request.head.sha }}" `
             -NoDaemon
