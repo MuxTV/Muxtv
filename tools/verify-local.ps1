@@ -155,6 +155,7 @@ Add-Step -Name "pure-kotlin-tests" -Arguments @(
 Add-Step -Name "android-unit-tests" -Arguments @(
     ":app:tv:testDebugUnitTest",
     ":catalog:importer:testDebugUnitTest",
+    ":catalog:onboarding:testDebugUnitTest",
     ":catalog:refresh:testDebugUnitTest",
     ":catalog:sync:testDebugUnitTest",
     ":core:credentials:testDebugUnitTest",
@@ -162,8 +163,11 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":core:designsystem:testDebugUnitTest",
     ":core:network:testDebugUnitTest",
     ":core:ui:testDebugUnitTest",
-    ":player:media3:testDebugUnitTest",
-    ":feature:home:testDebugUnitTest"
+    ":feature:channels:testDebugUnitTest",
+    ":feature:home:testDebugUnitTest",
+    ":feature:player:testDebugUnitTest",
+    ":feature:sources:testDebugUnitTest",
+    ":player:media3:testDebugUnitTest"
 )
 Add-Step -Name "android-instrumentation-compile" -Arguments @(
     ":core:credentials:assembleDebugAndroidTest",
@@ -179,6 +183,7 @@ if ($Mode -in @("Full", "Device")) {
     Add-Step -Name "android-lint" -Arguments @(
         ":app:tv:lintDebug",
         ":catalog:importer:lintDebug",
+        ":catalog:onboarding:lintDebug",
         ":catalog:refresh:lintDebug",
         ":catalog:sync:lintDebug",
         ":core:credentials:lintDebug",
@@ -186,8 +191,11 @@ if ($Mode -in @("Full", "Device")) {
         ":core:designsystem:lintDebug",
         ":core:network:lintDebug",
         ":core:ui:lintDebug",
-        ":player:media3:lintDebug",
-        ":feature:home:lintDebug"
+        ":feature:channels:lintDebug",
+        ":feature:home:lintDebug",
+        ":feature:player:lintDebug",
+        ":feature:sources:lintDebug",
+        ":player:media3:lintDebug"
     )
     Add-Step -Name "release-assembly" -Arguments @(
         ":app:tv:assembleRelease"
@@ -261,6 +269,15 @@ try {
         if ($exitCode -ne 0) {
             throw "Verification step '$($step.Name)' failed with exit code $exitCode. See $logPath"
         }
+    }
+
+    $roomSchemaPath = Join-Path $repositoryRoot `
+        "core\database\schemas\app.muxtv.database.MuxTvDatabase\4.json"
+    if (Test-Path $roomSchemaPath -PathType Leaf) {
+        Copy-Item `
+            -Path $roomSchemaPath `
+            -Destination (Join-Path $evidenceDirectory "room-schema-4.json") `
+            -Force
     }
 
     if ($Mode -eq "Device") {
