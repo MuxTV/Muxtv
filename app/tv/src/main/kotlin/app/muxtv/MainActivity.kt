@@ -7,6 +7,7 @@ import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.MuxTvTheme
+import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,6 +27,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sourceRefreshScheduler: SourceRefreshScheduler
 
+    @Inject
+    lateinit var sourceEntryOnboarding: SourceEntryOnboarding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -35,6 +39,7 @@ class MainActivity : ComponentActivity() {
                     controllerConnector = controllerConnector,
                     sourceRefreshStore = sourceRefreshStore,
                     sourceRefreshScheduler = sourceRefreshScheduler,
+                    sourceEntryOnboarding = sourceEntryOnboarding,
                 )
             }
         }

@@ -16,7 +16,13 @@ class AppNavigationModelTest {
                 AppDestination.Sources,
             )
             .inOrder()
+        assertThat(AppDestination.topLevel).doesNotContain(AppDestination.AddSource)
         assertThat(AppDestination.topLevel)
             .doesNotContain(AppDestination.Player(channelId = "channel-test"))
+    }
+
+    @Test
+    fun `add source route carries no locator or preparation token`() {
+        assertThat(AppDestination.AddSource.toString()).isEqualTo("AddSource")
     }
 }
