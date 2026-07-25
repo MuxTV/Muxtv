@@ -31,6 +31,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +71,8 @@ fun AddSourceRoute(
     val locatorState = remember { TextFieldState() }
     var revealLocator by remember { mutableStateOf(false) }
     val sourceNameFocusRequester = remember { FocusRequester() }
+    val sourceLocatorFocusRequester = remember { FocusRequester() }
+    val revealLocatorFocusRequester = remember { FocusRequester() }
     val httpCancelFocusRequester = remember { FocusRequester() }
     val confirmFocusRequester = remember { FocusRequester() }
     val editAgainFocusRequester = remember { FocusRequester() }
@@ -139,6 +146,7 @@ fun AddSourceRoute(
                     label = "Название",
                     value = sourceName,
                     onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                    onNavigateDown = sourceLocatorFocusRequester::requestFocus,
                     modifier = Modifier
                         .testTag(SOURCE_NAME_TEST_TAG)
                         .focusRequester(sourceNameFocusRequester),
@@ -147,11 +155,15 @@ fun AddSourceRoute(
                     label = "Ссылка M3U",
                     state = locatorState,
                     revealed = revealLocator,
+                    focusRequester = sourceLocatorFocusRequester,
+                    onNavigateUp = sourceNameFocusRequester::requestFocus,
+                    onNavigateDown = revealLocatorFocusRequester::requestFocus,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                     MuxTvActionButton(
                         text = if (revealLocator) "Скрыть ссылку" else "Показать временно",
                         onClick = { revealLocator = !revealLocator },
+                        modifier = Modifier.focusRequester(revealLocatorFocusRequester),
                     )
                     MuxTvActionButton(
                         text = "Проверить",
@@ -197,6 +209,9 @@ fun AddSourceRoute(
                     label = "Название источника",
                     value = sourceName,
                     onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                    onNavigateDown = {
+                        if (sourceName.isNotBlank()) confirmFocusRequester.requestFocus()
+                    },
                     modifier = Modifier
                         .testTag(SOURCE_NAME_TEST_TAG)
                         .focusRequester(sourceNameFocusRequester),
@@ -247,6 +262,8 @@ private fun TvTextInput(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateUp: (() -> Unit)? = null,
+    onNavigateDown: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
@@ -257,6 +274,10 @@ private fun TvTextInput(
             modifier = modifier
                 .fillMaxWidth()
                 .onFocusChanged { focused = it.isFocused }
+                .onPreviewDpadVertical(
+                    onNavigateUp = onNavigateUp,
+                    onNavigateDown = onNavigateDown,
+                )
                 .background(
                     if (focused) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -279,9 +300,11 @@ private fun TvSecureTextInput(
     label: String,
     state: TextFieldState,
     revealed: Boolean,
+    focusRequester: FocusRequester,
+    onNavigateUp: (() -> Unit)? = null,
+    onNavigateDown: (() -> Unit)? = null,
 ) {
     var hasFocus by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
     val maskedText = if (state.text.isEmpty()) {
         AnnotatedString("")
     } else {
@@ -297,6 +320,10 @@ private fun TvSecureTextInput(
                 .testTag(SOURCE_LOCATOR_TEST_TAG)
                 .focusRequester(focusRequester)
                 .onFocusChanged { hasFocus = it.isFocused }
+                .onPreviewDpadVertical(
+                    onNavigateUp = onNavigateUp,
+                    onNavigateDown = onNavigateDown,
+                )
                 .background(
                     if (hasFocus) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -340,6 +367,27 @@ private fun TvSecureTextInput(
             },
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         )
+    }
+}
+
+private fun Modifier.onPreviewDpadVertical(
+    onNavigateUp: (() -> Unit)?,
+    onNavigateDown: (() -> Unit)?,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+    when (event.key) {
+        Key.DirectionUp -> onNavigateUp?.let {
+            it()
+            true
+        } ?: false
+
+        Key.DirectionDown -> onNavigateDown?.let {
+            it()
+            true
+        } ?: false
+
+        else -> false
     }
 }
 
