@@ -1,7 +1,10 @@
 package app.muxtv.player.media3
 
 import android.content.Context
+import android.net.Uri
 import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -28,4 +31,17 @@ internal class PlaybackMediaSourceFactory(
         request: PlaybackSessionRequest,
     ): OkHttpDataSource.Factory = OkHttpDataSource.Factory(callFactory)
         .setDefaultRequestProperties(request.requestHeaders.toMap())
+}
+
+private fun PlaybackSessionRequest.toMediaItem(): MediaItem {
+    val metadata = MediaMetadata.Builder().apply {
+        displayName?.let(::setTitle)
+        artworkUri?.let { setArtworkUri(Uri.parse(it)) }
+    }.build()
+
+    return MediaItem.Builder()
+        .setMediaId(mediaId)
+        .setUri(Uri.parse(locator))
+        .setMediaMetadata(metadata)
+        .build()
 }
