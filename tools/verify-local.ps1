@@ -205,6 +205,7 @@ if ($Mode -in @("Full", "Device")) {
 $deviceTestModules = @(
     [ordered]@{ ModulePath = "core\credentials"; DisplayName = "Credential instrumentation" },
     [ordered]@{ ModulePath = "core\database"; DisplayName = "Database instrumentation" },
+    [ordered]@{ ModulePath = "player\media3"; DisplayName = "Media3 instrumentation" },
     [ordered]@{ ModulePath = "app\tv"; DisplayName = "Application instrumentation" }
 )
 
@@ -219,6 +220,9 @@ if ($Mode -eq "Device") {
     )
     Add-Step -Name "database-device-tests" -Arguments @(
         ":core:database:connectedDebugAndroidTest"
+    )
+    Add-Step -Name "media3-device-tests" -Arguments @(
+        ":player:media3:connectedDebugAndroidTest"
     )
     Add-Step -Name "app-device-tests" -Arguments @(
         ":app:tv:connectedDebugAndroidTest"
@@ -260,34 +264,27 @@ try {
             arguments = $arguments
             startedAtUtc = $startedAt.ToString("o")
             completedAtUtc = $completedAt.ToString("o")
-            durationSeconds = [Math]::Round(($completedAt - $startedAt).TotalSeconds, 3)
             exitCode = $exitCode
-            log = (Resolve-Path -Relative $logPath)
+            log = $logPath
         }
         $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
 
         if ($exitCode -ne 0) {
-            throw "Verification step '$($step.Name)' failed with exit code $exitCode. See $logPath"
+            throw "Validation step '$($step.Name)' failed with exit code $exitCode."
         }
-    }
-
-    $roomSchemaPath = Join-Path $repositoryRoot `
-        "core\database\schemas\app.muxtv.database.MuxTvDatabase\4.json"
-    if (Test-Path $roomSchemaPath -PathType Leaf) {
-        Copy-Item `
-            -Path $roomSchemaPath `
-            -Destination (Join-Path $evidenceDirectory "room-schema-4.json") `
-            -Force
     }
 
     if ($Mode -eq "Device") {
+        $instrumentationCounts = @()
         foreach ($module in $deviceTestModules) {
-            $manifest.instrumentationTests += Assert-AndroidTestCount `
+            $instrumentationCounts += Assert-AndroidTestCount `
                 -ModulePath $module.ModulePath `
                 -DisplayName $module.DisplayName
         }
-        $countPath = Join-Path $evidenceDirectory "instrumentation-test-counts.json"
-        $manifest.instrumentationTests | ConvertTo-Json -Depth 5 | Set-Content -Path $countPath -Encoding utf8
+        $manifest.instrumentationTests = $instrumentationCounts
+        $instrumentationCounts |
+            ConvertTo-Json -Depth 5 |
+            Set-Content -Path (Join-Path $evidenceDirectory "instrumentation-test-counts.json") -Encoding utf8
     }
 
     $manifest.status = "passed"
@@ -295,10 +292,11 @@ try {
 catch {
     $manifest.status = "failed"
     $manifest.failure = $_.Exception.Message
+    $manifest.failureType = $_.Exception.GetType().FullName
+    $manifest.failureTrace = $_.ScriptStackTrace
     throw
 }
 finally {
     $manifest.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
-    Write-Host "`nEvidence: $evidenceDirectory"
 }
