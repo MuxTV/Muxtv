@@ -129,7 +129,11 @@ class CatalogRevisionImporter(
             }
         } catch (error: CancellationException) {
             revisionNumber?.let { revision ->
-                runCatching { revisionStore.discard(request.sourceId, revision) }
+                try {
+                    revisionStore.discard(request.sourceId, revision)
+                } catch (_: Exception) {
+                    // Preserve the original cancellation without swallowing VM/linkage errors.
+                }
             }
             throw error
         } catch (error: M3uEncodingException) {
@@ -165,7 +169,7 @@ private class RevisionStagingSink(
     private val revisionStore: SourceRevisionStore,
     private val identityFactory: CatalogEntryIdentityFactory,
 ) : M3uParseSink {
-    private var batch = ArrayList<StagedCatalogEntry>(BATCH_SIZE)
+    private val batch = ArrayList<StagedCatalogEntry>(BATCH_SIZE)
     private var entryOrdinal = 0L
 
     override suspend fun onHeader(header: M3uPlaylistHeader) = Unit
@@ -185,14 +189,12 @@ private class RevisionStagingSink(
 
     suspend fun flush() {
         if (batch.isEmpty()) return
-
-        val pending = batch
-        batch = ArrayList(BATCH_SIZE)
         revisionStore.stageBatch(
             sourceId = sourceId,
             revisionNumber = revisionNumber,
-            entries = pending,
+            entries = batch.toList(),
         )
+        batch.clear()
     }
 
     private companion object {
