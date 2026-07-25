@@ -9,6 +9,7 @@ import app.muxtv.database.SourceRevisionStore
 import app.muxtv.database.StagedCatalogEntry
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayInputStream
+import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -28,6 +29,19 @@ class CatalogRevisionImporterBatchingTest {
                 sourceName = "Batching",
             ),
             input = ByteArrayInputStream(playlist(entryCount = 251).toByteArray()),
+        )
+
+        val diagnostic = File(".work/evidence/catalog-batch-diagnostic.txt")
+        diagnostic.parentFile.mkdirs()
+        diagnostic.writeText(
+            buildString {
+                appendLine("result=$result")
+                appendLine("batchSizes=${store.batches.map { it.size }}")
+                appendLine("batchCount=${store.batches.size}")
+                appendLine("first=${store.batches.firstOrNull()?.firstOrNull()?.rawName}")
+                appendLine("firstTail=${store.batches.firstOrNull()?.lastOrNull()?.rawName}")
+                appendLine("last=${store.batches.lastOrNull()?.lastOrNull()?.rawName}")
+            },
         )
 
         assertThat(result).isInstanceOf(CatalogImportResult.Imported::class.java)
