@@ -1,10 +1,13 @@
 package app.muxtv.player.media3
 
 import android.os.Bundle
+import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 
+@AndroidXOptIn(UnstableApi::class)
 object MuxTvPlaybackSessionContract {
     const val ACTION_SET_PLAYBACK_REQUEST =
         "app.muxtv.player.media3.action.SET_PLAYBACK_REQUEST"
