@@ -1,70 +1,119 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-25
 architecture_version: 2
-documentation_baseline_source_commit: 58648c3043a2dd46aaadfcd7ead33d13e8f916bf
+implementation_source_commit: 4959e9ef65f2141fdacb588b15111fa607d9b20d
 ---
 
 # Текущее состояние
 
-## Факты
+## Классификация проекта
 
-- Репозиторий: `MuxTV/Muxtv`.
-- Видимость: private.
-- Default branch: `main`.
+MuxTV находится в стадии **functional pre-alpha**: основной Android TV код и сквозной M3U → catalog → Channels → Player путь существуют и исполняются, но продукт ещё не готов к публичным compatibility/release обещаниям.
+
+Проект фактически выполняет часть Phase 01, при этом отдельные quality/release exit criteria Phase 00 — benchmark baseline, подписанный release pipeline и physical-device evidence — ещё открыты.
+
+## Проверенные факты
+
+- Репозиторий: `MuxTV/Muxtv`, private, default branch `main`.
 - Лицензия: BSD 3-Clause.
-- Код приложения, Gradle wrapper, CI, tests, APK и releases пока отсутствуют.
-- В репозитории существует принятая `.work`-система архитектуры, спецификаций, ADR, quality/security/release documents и машинно-читаемых метаданных.
-- Документация описывает целевое поведение; она не является доказательством реализованной функции.
-- Следующий этап — Phase 00 implementation, а не дальнейшее бесконтрольное расширение feature scope.
+- Android application: `app.muxtv.tv`, версия `0.0.1`.
+- `minSdk = 26`; текущая автоматическая TV-матрица покрывает API 26 и API 36.
+- В `settings.gradle.kts` подключены 23 Gradle-проекта плюс included build `build-logic`.
+- База данных использует Room schema v4 и содержит исполняемые миграционные/transactional contracts.
+- CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent и DeviceMatrix через repository-owned PowerShell harness.
+- PR #34 объединён squash commit `4959e9ef65f2141fdacb588b15111fa607d9b20d`.
+- Финальный Full перед merge: run `30171221399`.
+- Последняя acceptance-матрица: run `30170573346`.
 
-## Принятые решения
+## Реализованный рабочий путь
 
-- Android TV, Google TV и Fire TV — первая линия платформ.
-- Kotlin + native Compose for TV — UI baseline.
-- Media3 — primary playback engine behind `PlaybackEngine`.
-- Room/SQLite — Android-first storage behind repository ports; full KMP database deferred by ADR-0003.
-- Pure Kotlin modules remain KMP-compatible, actual KMP conversion requires a real second target.
-- Rust/UniFFI and libmpv are optional paths after benchmark/security ADR.
-- Source/EPG updates use immutable revisions, staging and atomic commit.
-- Provider data, canonical channels and profile overlays are separated.
-- Clean installation creates one undeletable but renamable `Основной` profile.
-- Additional profiles are created/named only by user; no built-in `Дети/Родители/Гости` types.
-- PIN/restrictions are policies applicable to any profile.
-- Smart Channel auto-merge remains disabled until labeled corpus proves precision gate.
-- Automatic catalog/Doctor mutations require explanation, preview and undo.
-- Remote playlists/XML/images/provider endpoints are untrusted and governed by scoped network/resource policies.
-- GitHub Releases update trust is rooted in Android package signing identity and PackageInstaller confirmation.
-- All internal project documentation/metadata lives in `.work`.
+### Источники и каталог
 
-## Specification coverage
+- URL policy отклоняет unsupported schemes, embedded credentials, fragments и encoded control separators до persistence.
+- Remote source access хранится через Android Keystore-backed credential store вне Room projections.
+- Source-entry поддерживает HTTPS и отдельное явное подтверждение HTTP.
+- Полный locator остаётся только в ordinary in-memory state и удаляется после подготовки/disposal.
+- Подтверждение показывает только sanitized `scheme://host`.
+- Незавершённая подготовка восстанавливается через opaque durable metadata без locator.
+- M3U обрабатывается bounded streaming parser.
+- Source revisions immutable; импорт идёт через staging с атомарной activation/rollback границей.
+- Source refresh поддерживает manual/periodic scheduling и typed status/attempt history.
+- Sources UI показывает активные источники и управляет refresh policy.
 
-Accepted baseline covers:
+### Каналы и Player
 
-1. profile and installation data scope;
-2. catalog identity, merge/split and tombstones;
-3. atomic source refresh;
-4. M3U/XMLTV ingestion;
-5. playback runtime, errors and recovery;
-6. Smart Channels and TV Doctor;
-7. D-pad/focus and premium TV design system;
-8. threat/network/local-control security;
-9. Fire TV compatibility;
-10. GitHub self-update/signing;
-11. benchmark/device/fault methodology;
-12. critical review of popular reference repositories.
+- PlaybackCatalog строит active channel/variant projections из Room.
+- Channels использует stable channel identity, bounded viewport state и явные `FocusRequester`.
+- После Player → Back восстанавливается тот же канал, если он существует.
+- После reorder сохраняется stable identity; после удаления используется документированный nearest-previous fallback.
+- Player подключается к process-owned MediaSessionService и одному ExoPlayer.
+- Ready/loading/error states имеют детерминированный безопасный focus.
+- `MediaController.release()` выполняется на application/main looper.
+
+### TV interaction и security
+
+- Home, Channels, Sources и Add Source проходят с D-pad/Enter без touch input.
+- Text fields явно маршрутизируют D-pad Up/Down и не запирают focus внутри редактора.
+- Secure locator field не публикует raw locator в merged/unmerged Compose semantics.
+- Stable test/focus tags не содержат provider/source/channel secret values.
+- Известные locator/query/token fixtures отсутствуют в проверенных reports, logcat, manifests и screenshots.
+
+## Последняя TV-матрица
+
+| Профиль | System image | RAM / CPU | Credentials | Database | App |
+|---|---|---:|---:|---:|---:|
+| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 19 | 10 |
+| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 19 | 10 |
+
+На обоих профилях: zero failures, zero errors, zero skips. API 26 был доступен напрямую; fallback image не использовался.
+
+Матрица доказывает Android API/lifecycle/Room/Keystore/focus contracts. Она не доказывает vendor MediaCodec, HDR, passthrough, слабый ARM SoC или Fire OS behavior.
+
+## Что ещё не реализовано до публичной alpha
+
+### Ближайший production blocker
+
+Issue #26:
+
+- Media3 всё ещё использует отдельный mutable `DefaultHttpDataSource.Factory`;
+- per-request headers необходимо сделать immutable/request-scoped;
+- playback redirects должны использовать общий downgrade/cross-origin credential policy;
+- failed/cancelled controller future должен быть retryable;
+- Player setup должен получить coroutine-native cancellation и late-result handling.
+
+### Следующие продуктовые блоки
+
+- детерминированный M3U/HLS/XMLTV corpus и performance budgets;
+- streaming XMLTV parser и immutable EPG revisions;
+- now/next, Guide и search;
+- законченные Favorites и Recent flows;
+- bounded stream fallback и TV Doctor Lite;
+- R8/resource shrinking и Baseline Profile;
+- signed artifacts, SBOM, changelog и release checklist;
+- physical Android/Google TV, constrained-device и Fire TV evidence.
+
+## Сохраняемые архитектурные решения
+
+- Kotlin + native Compose остаются Android TV baseline.
+- Room/SQLite остаётся Android-first storage boundary; full KMP database требует отдельного клиента и ADR.
+- Media3 остаётся primary playback engine behind stable contracts.
+- Source/EPG updates используют immutable revisions, staging и atomic commit.
+- Provider data, canonical channels и profile overlays разделены.
+- Remote playlists/XML/images/provider endpoints считаются untrusted.
+- Rust/UniFFI, libmpv, bundled SQLite, Paging и второй player engine допускаются только после corpus-backed benchmark/security ADR.
+- Физические Android/Google TV/Fire TV проверки дополняют, но не заменяют автоматическую API-матрицу.
 
 ## Следующий проверяемый результат
 
-Phase 00 должна закончиться minimal but real APK, который:
+Следующий production PR должен закрыть issue #26 без добавления fallback/Doctor/UI redesign:
 
-1. reproducibly builds with pinned toolchain;
-2. launches on Android TV emulator and physical reference device;
-3. shows TV-first shell with deterministic D-pad focus;
-4. contains schema v1 with installation/profile scope and exactly one primary profile;
-5. exposes tested Media3-independent playback contracts;
-6. passes unit, lint, architecture, migration and screenshot checks;
-7. produces first baseline benchmark report;
-8. publishes a debug APK artifact from GitHub Actions.
+1. request-scoped Media3 OkHttp datasource;
+2. executable header isolation;
+3. redirect downgrade/cross-origin credential policy;
+4. retry после failed/cancelled controller connection;
+5. cancellation-aware Player setup без late install;
+6. сохранение одного process-owned player/session;
+7. Full + old/current TV evidence и secret review.
 
-До выполнения exit criteria проект остаётся на стадии specification/foundation.
+После этого проект переходит к corpus/benchmarks, затем XMLTV/EPG и пользовательским Guide/Search/Favorites/Recent flows.
