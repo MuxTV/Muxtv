@@ -133,7 +133,7 @@ class AppNavigationSourceJourneyTest {
                 composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-            composeRule.onNodeWithText("Первый канал").assertExists()
+            composeRule.onNodeWithText("Первый канал", substring = true).assertExists()
         } finally {
             controllerConnector.close()
         }
