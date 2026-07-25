@@ -1,6 +1,6 @@
 schema_version: 1
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-25
 
 roots:
   project: .work/PROJECT.md
@@ -64,7 +64,8 @@ normative:
     - .work/research/technology-evaluation.md
 
 plans:
-  phase_00: .work/plans/2026-07-19-phase-00-foundation.md
+  phase_00_baseline: .work/plans/2026-07-19-phase-00-foundation.md
+  current_execution: docs/superpowers/plans/2026-07-25-next-execution.md
 
 machine_metadata:
   - .work/meta/project.yaml
@@ -83,6 +84,7 @@ consistency_rules:
   - accepted_markdown_requires_status_and_last_reviewed_frontmatter_except_indexes_and_plans
   - machine_metadata_requires_schema_version_and_status_or_state
   - current_state_and_status_yaml_must_not_claim_unverified_implementation
+  - actual_modules_and_planned_modules_must_be_distinguished
   - architecture_version_must_match_between_architecture_md_status_and_architecture_yaml
   - profile_invariants_must_match_product_profiles_adr_and_meta
   - phase_00_plan_must_not_include_deferred_features
