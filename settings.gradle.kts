@@ -37,4 +37,5 @@ include(
     ":player:fake",
     ":feature:home",
     ":feature:channels",
+    ":feature:player",
 )

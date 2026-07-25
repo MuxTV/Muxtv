@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
@@ -20,23 +21,32 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.home.HomeRoute
+import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.player.media3.MuxTvMediaControllerConnector
 
 @Composable
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
+    controllerConnector: MuxTvMediaControllerConnector,
     modifier: Modifier = Modifier,
 ) {
     val backStack = remember { mutableStateListOf(AppDestination.initial) }
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
     }
+    fun goBack() {
+        if (backStack.size > 1) backStack.removeLastOrNull()
+    }
 
     val current = backStack.lastOrNull() ?: AppDestination.initial
     Column(modifier = modifier.fillMaxSize()) {
-        NavigationRow(current = current.topLevelDestination(), onOpen = ::open)
+        if (current !is AppDestination.Player) {
+            NavigationRow(current = current.topLevelDestination(), onOpen = ::open)
+        }
         NavDisplay(
+            modifier = Modifier.fillMaxWidth().weight(1f),
             backStack = backStack,
-            onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+            onBack = ::goBack,
             entryProvider = { destination ->
                 NavEntry(destination) {
                     when (destination) {
@@ -56,10 +66,12 @@ fun AppNavigation(
 
                         AppDestination.Guide -> PlaceholderRoute("Телепрограмма")
                         AppDestination.Search -> PlaceholderRoute("Поиск")
-                        is AppDestination.Player -> PlaceholderRoute(
-                            title = "Воспроизведение",
-                            message = "Канал ${destination.channelId} выбран. " +
-                                "MediaController-backed экран подключается следующим срезом.",
+                        is AppDestination.Player -> PlayerRoute(
+                            playbackCatalog = playbackCatalog,
+                            controllerConnector = controllerConnector,
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                            channelId = destination.channelId,
+                            onBack = ::goBack,
                         )
                     }
                 }
