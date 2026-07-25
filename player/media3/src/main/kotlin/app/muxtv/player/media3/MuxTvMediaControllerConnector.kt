@@ -72,7 +72,15 @@ class MuxTvMediaControllerConnector(
             pending = null
         }
         pendingToCancel?.cancel(true)
-        controllerToRelease?.release()
+        controllerToRelease?.let(::release)
+    }
+
+    private fun release(controller: MediaController) {
+        if (Looper.myLooper() == mainHandler.looper) {
+            controller.release()
+        } else {
+            mainHandler.post(controller::release)
+        }
     }
 }
 

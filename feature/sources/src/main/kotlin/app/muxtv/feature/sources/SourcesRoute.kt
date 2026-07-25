@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,7 +18,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -40,6 +45,13 @@ private sealed interface SourcesUiState {
     data class Content(val sources: List<SourceRefreshOverview>) : SourcesUiState
 }
 
+private enum class SourcesFocusState {
+    Loading,
+    Empty,
+    Failed,
+    Content,
+}
+
 @Composable
 fun SourcesRoute(
     refreshStore: SourceRefreshStore,
@@ -49,6 +61,7 @@ fun SourcesRoute(
 ) {
     val scope = rememberCoroutineScope()
     val busySources = remember { mutableStateMapOf<String, Boolean>() }
+    val addSourceFocusRequester = remember { FocusRequester() }
     var mutationError by remember { mutableStateOf<String?>(null) }
     val state by produceState<SourcesUiState>(
         initialValue = SourcesUiState.Loading,
@@ -63,6 +76,17 @@ fun SourcesRoute(
                     SourcesUiState.Content(overviews)
                 }
             }
+    }
+    val focusState = when (state) {
+        SourcesUiState.Loading -> SourcesFocusState.Loading
+        SourcesUiState.Empty -> SourcesFocusState.Empty
+        SourcesUiState.Failed -> SourcesFocusState.Failed
+        is SourcesUiState.Content -> SourcesFocusState.Content
+    }
+
+    LaunchedEffect(focusState) {
+        withFrameNanos { }
+        addSourceFocusRequester.requestFocus()
     }
 
     fun mutate(sourceId: String, operation: suspend () -> Unit) {
@@ -85,18 +109,21 @@ fun SourcesRoute(
     when (val current = state) {
         SourcesUiState.Loading -> MessageRoute(
             message = "Загрузка источников…",
+            addSourceFocusRequester = addSourceFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
 
         SourcesUiState.Empty -> MessageRoute(
             message = "Импортированных источников пока нет.",
+            addSourceFocusRequester = addSourceFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
 
         SourcesUiState.Failed -> MessageRoute(
             message = "Не удалось прочитать список источников.",
+            addSourceFocusRequester = addSourceFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -105,6 +132,7 @@ fun SourcesRoute(
             sources = current.sources,
             busySources = busySources,
             mutationError = mutationError,
+            addSourceFocusRequester = addSourceFocusRequester,
             onAddSource = onAddSource,
             onRefreshNow = refreshScheduler::refreshNow,
             onUpdatePolicy = { policy ->
@@ -123,6 +151,7 @@ private fun SourcesContent(
     sources: List<SourceRefreshOverview>,
     busySources: Map<String, Boolean>,
     mutationError: String?,
+    addSourceFocusRequester: FocusRequester,
     onAddSource: () -> Unit,
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
@@ -133,7 +162,10 @@ private fun SourcesContent(
         modifier = modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
-        SourcesHeader(onAddSource)
+        SourcesHeader(
+            addSourceFocusRequester = addSourceFocusRequester,
+            onAddSource = onAddSource,
+        )
         mutationError?.let { message ->
             Text(
                 message,
@@ -162,13 +194,22 @@ private fun SourcesContent(
 }
 
 @Composable
-private fun SourcesHeader(onAddSource: () -> Unit) {
+private fun SourcesHeader(
+    addSourceFocusRequester: FocusRequester,
+    onAddSource: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text("Источники", style = MaterialTheme.typography.displaySmall)
-        MuxTvActionButton(text = "Добавить источник", onClick = onAddSource)
+        MuxTvActionButton(
+            text = "Добавить источник",
+            onClick = onAddSource,
+            modifier = Modifier
+                .testTag(SOURCES_ADD_TEST_TAG)
+                .focusRequester(addSourceFocusRequester),
+        )
     }
 }
 
@@ -275,6 +316,7 @@ private fun SourceCard(
 @Composable
 private fun MessageRoute(
     message: String,
+    addSourceFocusRequester: FocusRequester,
     onAddSource: () -> Unit,
     modifier: Modifier,
 ) {
@@ -282,7 +324,10 @@ private fun MessageRoute(
         modifier = modifier.fillMaxSize().padding(56.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
-        SourcesHeader(onAddSource)
+        SourcesHeader(
+            addSourceFocusRequester = addSourceFocusRequester,
+            onAddSource = onAddSource,
+        )
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,
@@ -336,4 +381,5 @@ private fun Long.intervalLabel(): String = when (this) {
     else -> "$this мин"
 }
 
+private const val SOURCES_ADD_TEST_TAG = "sources-add"
 private const val DEFAULT_INTERVAL_MINUTES = 60L

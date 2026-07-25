@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,10 +25,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.inputText
+import androidx.compose.ui.semantics.isEditable
+import androidx.compose.ui.semantics.isSensitiveData
+import androidx.compose.ui.semantics.maxTextLength
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.password
+import androidx.compose.ui.semantics.requestFocus
+import androidx.compose.ui.semantics.setText
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -48,6 +70,13 @@ fun AddSourceRoute(
     var sourceName by remember { mutableStateOf("") }
     val locatorState = remember { TextFieldState() }
     var revealLocator by remember { mutableStateOf(false) }
+    val sourceNameFocusRequester = remember { FocusRequester() }
+    val sourceLocatorFocusRequester = remember { FocusRequester() }
+    val revealLocatorFocusRequester = remember { FocusRequester() }
+    val httpCancelFocusRequester = remember { FocusRequester() }
+    val confirmFocusRequester = remember { FocusRequester() }
+    val editAgainFocusRequester = remember { FocusRequester() }
+    val cleanupRetryFocusRequester = remember { FocusRequester() }
 
     fun cancelAndLeave() {
         scope.launch {
@@ -61,11 +90,42 @@ fun AddSourceRoute(
         session.restore()
     }
     LaunchedEffect(state) {
-        if (state is SourceEntryUiState.Confirming) {
+        val current = state
+        if (current is SourceEntryUiState.Confirming) {
             locatorState.clearText()
             revealLocator = false
         }
-        if (state is SourceEntryUiState.Completed) onCompleted()
+        if (current is SourceEntryUiState.Completed) {
+            onCompleted()
+            return@LaunchedEffect
+        }
+
+        withFrameNanos { }
+        when (current) {
+            SourceEntryUiState.Editing -> sourceNameFocusRequester.requestFocus()
+            SourceEntryUiState.HttpApprovalRequired -> httpCancelFocusRequester.requestFocus()
+            is SourceEntryUiState.Confirming -> {
+                if (sourceName.isBlank()) {
+                    sourceNameFocusRequester.requestFocus()
+                } else {
+                    confirmFocusRequester.requestFocus()
+                }
+            }
+
+            is SourceEntryUiState.Failed -> {
+                if (current.cleanupPending) {
+                    cleanupRetryFocusRequester.requestFocus()
+                } else {
+                    editAgainFocusRequester.requestFocus()
+                }
+            }
+
+            SourceEntryUiState.Restoring,
+            SourceEntryUiState.Preparing,
+            SourceEntryUiState.Activating,
+            SourceEntryUiState.Completed,
+            -> Unit
+        }
     }
     DisposableEffect(session) {
         onDispose {
@@ -86,16 +146,24 @@ fun AddSourceRoute(
                     label = "Название",
                     value = sourceName,
                     onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                    onNavigateDown = sourceLocatorFocusRequester::requestFocus,
+                    modifier = Modifier
+                        .testTag(SOURCE_NAME_TEST_TAG)
+                        .focusRequester(sourceNameFocusRequester),
                 )
                 TvSecureTextInput(
                     label = "Ссылка M3U",
                     state = locatorState,
                     revealed = revealLocator,
+                    focusRequester = sourceLocatorFocusRequester,
+                    onNavigateUp = sourceNameFocusRequester::requestFocus,
+                    onNavigateDown = revealLocatorFocusRequester::requestFocus,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                     MuxTvActionButton(
                         text = if (revealLocator) "Скрыть ссылку" else "Показать временно",
                         onClick = { revealLocator = !revealLocator },
+                        modifier = Modifier.focusRequester(revealLocatorFocusRequester),
                     )
                     MuxTvActionButton(
                         text = "Проверить",
@@ -122,7 +190,13 @@ fun AddSourceRoute(
                         text = "Разрешить HTTP",
                         onClick = { scope.launch { session.approveInsecureHttp() } },
                     )
-                    MuxTvActionButton(text = "Отмена", onClick = ::cancelAndLeave)
+                    MuxTvActionButton(
+                        text = "Отмена",
+                        onClick = ::cancelAndLeave,
+                        modifier = Modifier
+                            .testTag(SOURCE_HTTP_CANCEL_TEST_TAG)
+                            .focusRequester(httpCancelFocusRequester),
+                    )
                 }
             }
 
@@ -135,12 +209,21 @@ fun AddSourceRoute(
                     label = "Название источника",
                     value = sourceName,
                     onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                    onNavigateDown = {
+                        if (sourceName.isNotBlank()) confirmFocusRequester.requestFocus()
+                    },
+                    modifier = Modifier
+                        .testTag(SOURCE_NAME_TEST_TAG)
+                        .focusRequester(sourceNameFocusRequester),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                     MuxTvActionButton(
                         text = "Добавить",
                         onClick = { scope.launch { session.activate(sourceName) } },
                         enabled = sourceName.isNotBlank(),
+                        modifier = Modifier
+                            .testTag(SOURCE_CONFIRM_TEST_TAG)
+                            .focusRequester(confirmFocusRequester),
                     )
                     MuxTvActionButton(text = "Отмена", onClick = ::cancelAndLeave)
                 }
@@ -153,9 +236,18 @@ fun AddSourceRoute(
                         MuxTvActionButton(
                             text = "Повторить очистку",
                             onClick = { scope.launch { session.cancel() } },
+                            modifier = Modifier
+                                .testTag(SOURCE_CLEANUP_RETRY_TEST_TAG)
+                                .focusRequester(cleanupRetryFocusRequester),
                         )
                     } else {
-                        MuxTvActionButton(text = "Изменить данные", onClick = session::editAgain)
+                        MuxTvActionButton(
+                            text = "Изменить данные",
+                            onClick = session::editAgain,
+                            modifier = Modifier
+                                .testTag(SOURCE_EDIT_AGAIN_TEST_TAG)
+                                .focusRequester(editAgainFocusRequester),
+                        )
                     }
                     MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
                 }
@@ -169,6 +261,9 @@ private fun TvTextInput(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onNavigateUp: (() -> Unit)? = null,
+    onNavigateDown: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
@@ -176,9 +271,13 @@ private fun TvTextInput(
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .onFocusChanged { focused = it.isFocused }
+                .onPreviewDpadVertical(
+                    onNavigateUp = onNavigateUp,
+                    onNavigateDown = onNavigateDown,
+                )
                 .background(
                     if (focused) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -201,8 +300,17 @@ private fun TvSecureTextInput(
     label: String,
     state: TextFieldState,
     revealed: Boolean,
+    focusRequester: FocusRequester,
+    onNavigateUp: (() -> Unit)? = null,
+    onNavigateDown: (() -> Unit)? = null,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(false) }
+    val maskedText = if (state.text.isEmpty()) {
+        AnnotatedString("")
+    } else {
+        AnnotatedString("Скрыто")
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
         Text(label, style = MaterialTheme.typography.titleMedium)
         BasicSecureTextField(
@@ -210,15 +318,44 @@ private fun TvSecureTextInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(SOURCE_LOCATOR_TEST_TAG)
-                .onFocusChanged { focused = it.isFocused }
+                .focusRequester(focusRequester)
+                .onFocusChanged { hasFocus = it.isFocused }
+                .onPreviewDpadVertical(
+                    onNavigateUp = onNavigateUp,
+                    onNavigateDown = onNavigateDown,
+                )
                 .background(
-                    if (focused) {
+                    if (hasFocus) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
                 )
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .clearAndSetSemantics {
+                    contentDescription = "Ссылка M3U, значение скрыто"
+                    password()
+                    focused = hasFocus
+                    isEditable = true
+                    isSensitiveData = true
+                    maxTextLength = MAX_LOCATOR_CHARACTERS
+                    editableText = maskedText
+                    inputText = AnnotatedString("")
+                    onClick {
+                        focusRequester.requestFocus()
+                        true
+                    }
+                    requestFocus {
+                        focusRequester.requestFocus()
+                        true
+                    }
+                    setText { replacement ->
+                        state.setTextAndPlaceCursorAtEnd(
+                            replacement.text.take(MAX_LOCATOR_CHARACTERS),
+                        )
+                        true
+                    }
+                },
             inputTransformation = InputTransformation.maxLength(MAX_LOCATOR_CHARACTERS),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface,
@@ -230,6 +367,27 @@ private fun TvSecureTextInput(
             },
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         )
+    }
+}
+
+private fun Modifier.onPreviewDpadVertical(
+    onNavigateUp: (() -> Unit)?,
+    onNavigateDown: (() -> Unit)?,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+
+    when (event.key) {
+        Key.DirectionUp -> onNavigateUp?.let {
+            it()
+            true
+        } ?: false
+
+        Key.DirectionDown -> onNavigateDown?.let {
+            it()
+            true
+        } ?: false
+
+        else -> false
     }
 }
 
@@ -257,6 +415,11 @@ private fun SourceEntryFailure.userMessage(): String = when (this) {
     SourceEntryFailure.Unexpected -> "Не удалось добавить источник."
 }
 
+private const val SOURCE_NAME_TEST_TAG = "source-name"
 private const val SOURCE_LOCATOR_TEST_TAG = "source-locator"
+private const val SOURCE_HTTP_CANCEL_TEST_TAG = "source-http-cancel"
+private const val SOURCE_CONFIRM_TEST_TAG = "source-confirm"
+private const val SOURCE_EDIT_AGAIN_TEST_TAG = "source-edit-again"
+private const val SOURCE_CLEANUP_RETRY_TEST_TAG = "source-cleanup-retry"
 private const val MAX_SOURCE_NAME_CHARACTERS = 200
 private const val MAX_LOCATOR_CHARACTERS = 4_096
