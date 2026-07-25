@@ -241,14 +241,30 @@ private suspend inline fun <T> traceAsyncSection(
     sectionName: String,
     block: () -> T,
 ): T {
-    if (!Trace.isEnabled()) return block()
+    val traceCookie = try {
+        if (!Trace.isEnabled()) {
+            null
+        } else {
+            TRACE_COOKIE.incrementAndGet().also { cookie ->
+                Trace.beginAsyncSection(sectionName, cookie)
+            }
+        }
+    } catch (_: RuntimeException) {
+        // Android framework stubs used by local JVM tests do not implement android.os.Trace.
+        // Tracing is diagnostic-only and must never change importer behavior.
+        null
+    }
 
-    val cookie = TRACE_COOKIE.incrementAndGet()
-    Trace.beginAsyncSection(sectionName, cookie)
     return try {
         block()
     } finally {
-        Trace.endAsyncSection(sectionName, cookie)
+        if (traceCookie != null) {
+            try {
+                Trace.endAsyncSection(sectionName, traceCookie)
+            } catch (_: RuntimeException) {
+                // A tracing backend failure must not replace the parser/storage result.
+            }
+        }
     }
 }
 
