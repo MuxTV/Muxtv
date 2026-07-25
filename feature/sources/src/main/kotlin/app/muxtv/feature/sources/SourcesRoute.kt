@@ -44,6 +44,7 @@ private sealed interface SourcesUiState {
 fun SourcesRoute(
     refreshStore: SourceRefreshStore,
     refreshScheduler: SourceRefreshScheduler,
+    onAddSource: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -83,20 +84,20 @@ fun SourcesRoute(
 
     when (val current = state) {
         SourcesUiState.Loading -> MessageRoute(
-            title = "Источники",
             message = "Загрузка источников…",
+            onAddSource = onAddSource,
             modifier = modifier,
         )
 
         SourcesUiState.Empty -> MessageRoute(
-            title = "Источники",
             message = "Импортированных источников пока нет.",
+            onAddSource = onAddSource,
             modifier = modifier,
         )
 
         SourcesUiState.Failed -> MessageRoute(
-            title = "Источники",
             message = "Не удалось прочитать список источников.",
+            onAddSource = onAddSource,
             modifier = modifier,
         )
 
@@ -104,6 +105,7 @@ fun SourcesRoute(
             sources = current.sources,
             busySources = busySources,
             mutationError = mutationError,
+            onAddSource = onAddSource,
             onRefreshNow = refreshScheduler::refreshNow,
             onUpdatePolicy = { policy ->
                 mutate(policy.sourceId) { refreshScheduler.updatePolicy(policy) }
@@ -121,6 +123,7 @@ private fun SourcesContent(
     sources: List<SourceRefreshOverview>,
     busySources: Map<String, Boolean>,
     mutationError: String?,
+    onAddSource: () -> Unit,
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
     onRemovePolicy: (String) -> Unit,
@@ -130,7 +133,7 @@ private fun SourcesContent(
         modifier = modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
-        Text("Источники", style = MaterialTheme.typography.displaySmall)
+        SourcesHeader(onAddSource)
         mutationError?.let { message ->
             Text(
                 message,
@@ -155,6 +158,17 @@ private fun SourcesContent(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SourcesHeader(onAddSource: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text("Источники", style = MaterialTheme.typography.displaySmall)
+        MuxTvActionButton(text = "Добавить источник", onClick = onAddSource)
     }
 }
 
@@ -260,15 +274,15 @@ private fun SourceCard(
 
 @Composable
 private fun MessageRoute(
-    title: String,
     message: String,
+    onAddSource: () -> Unit,
     modifier: Modifier,
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(56.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
-        Text(title, style = MaterialTheme.typography.displaySmall)
+        SourcesHeader(onAddSource)
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,
