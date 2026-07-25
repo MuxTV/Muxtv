@@ -31,6 +31,7 @@ class MuxTvHttpClients(
         .build()
 
     val playback: OkHttpClient = resources.baseClient.newBuilder()
+        .addInterceptor(SecureRedirectInterceptor.forPlayback())
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
