@@ -1,108 +1,123 @@
 schema_version: 2
-modules:
+state: implementation_current
+last_reviewed: 2026-07-25
+actual_modules:
   app-tv:
+    gradle_path: :app:tv
     type: android_application
-    owns: [composition_root, tv_navigation, app_lifecycle, package_update_entrypoints, platform_capabilities]
-    depends_on: [feature_modules, player_media3, catalog_adapters, epg_adapters, local_control_server, core_modules]
+    owns: [composition_root, navigation3_routes, tv_activity, hilt_wiring, android_manifest]
   core-common:
+    gradle_path: :core:common
     type: pure_kotlin_library
-    kmp_compatible: true
-    owns: [result, errors, typed_ids, clock_contract, correlation_ids]
-    android_dependencies: forbidden
+    owns: [result_contracts, common_errors, typed_ids]
   core-model:
+    gradle_path: :core:model
     type: pure_kotlin_library
-    kmp_compatible: true
-    owns: [domain_models, profile_models, catalog_models, contract_dto]
-    android_dependencies: forbidden
+    owns: [shared_domain_models]
   core-database:
+    gradle_path: :core:database
     type: android_library
-    owns: [room_database, schema_export, dao, migrations, staging_transactions, revision_commit]
-    direct_feature_access: forbidden
-    future_kmp_requires_adr: true
-  core-network:
-    type: android_library
-    owns: [okhttp_clients, source_network_policy, credential_application, downloads, redirect_validation, redaction]
+    owns: [room_schema_v4, migrations, dao, revisions, staging, activation, playback_catalog, source_refresh_store]
   core-designsystem:
-    type: android_library
-    owns: [semantic_tokens, focus_components, tv_theme, accessibility_variants, component_catalog]
+    gradle_path: :core:designsystem
+    type: android_compose_library
+    owns: [tv_theme, tokens, focus_surfaces, action_components]
   core-ui:
-    type: android_library
-    owns: [generic_tv_layout_primitives, focus_bookmark_support, common_state_views]
+    gradle_path: :core:ui
+    type: android_compose_library
+    owns: [shared_tv_ui_primitives]
   core-testing:
-    type: kotlin_android_test_support
-    owns: [fakes, fixtures, corpus_generators, architecture_test_dsl, redaction_canaries]
+    gradle_path: :core:testing
+    type: test_support_library
+    owns: [shared_test_support]
+  core-network:
+    gradle_path: :core:network
+    type: android_library
+    owns: [okhttp_resources, source_url_policy, redirects, sensitive_header_policy, response_limits, redaction]
+  core-credentials:
+    gradle_path: :core:credentials
+    type: android_library
+    owns: [android_keystore_keys, encrypted_credential_store, credential_envelopes]
   catalog-api:
+    gradle_path: :catalog:api
     type: pure_kotlin_library
-    kmp_compatible: true
-    owns: [source_ports, catalog_ports, revision_contracts, mutation_contracts]
-  catalog-m3u:
+    owns: [catalog_ports, playback_catalog_contracts]
+  catalog-ingest:
+    gradle_path: :catalog:ingest
     type: pure_kotlin_library
-    kmp_candidate: true
-    owns: [m3u_parser, directive_ast, parser_warnings, source_adapter]
-  catalog-normalization:
+    owns: [bounded_streaming_m3u_parser, parser_models, warnings]
+  catalog-importer:
+    gradle_path: :catalog:importer
     type: pure_kotlin_library
-    kmp_candidate: true
-    owns: [aliases, normalized_features, blocking, duplicate_candidates]
-  catalog-matching:
-    type: pure_kotlin_library
-    kmp_candidate: true
-    owns: [smart_channel_scoring, conflict_rules, proposals, calibration_contracts]
-  epg-api:
-    type: pure_kotlin_library
-    kmp_compatible: true
-    owns: [epg_ports, epg_models, binding_contracts]
-  epg-xmltv:
-    type: pure_kotlin_library
-    kmp_candidate: true
-    owns: [secure_streaming_xmltv_parser, time_normalization, warnings]
-  epg-matching:
-    type: pure_kotlin_library
-    kmp_candidate: true
-    owns: [epg_candidate_generation, match_scoring, binding_proposals]
+    owns: [revision_import_pipeline, staging_batches]
+  catalog-refresh:
+    gradle_path: :catalog:refresh
+    type: android_library
+    owns: [remote_source_access, secure_fetch, prepare_activate_cancel, refresh_results]
+  catalog-sync:
+    gradle_path: :catalog:sync
+    type: android_library
+    owns: [workmanager_refresh, refresh_scheduler, leases]
+  catalog-onboarding:
+    gradle_path: :catalog:onboarding
+    type: android_library
+    owns: [durable_pending_preparation_registry, startup_cleanup]
   player-api:
+    gradle_path: :player:api
     type: pure_kotlin_library
-    owns: [playback_contracts, stable_errors, recovery_contracts, diagnostic_models]
+    owns: [playback_requests, stable_playback_models, engine_contracts]
     media3_dependency: forbidden
   player-media3:
+    gradle_path: :player:media3
     type: android_library
-    owns: [media3_adapter, media_session, audio_focus, surface_lifecycle, device_capabilities, engine_error_mapping]
+    owns: [media3_engine_adapter, playback_service, media_session, controller_connector, session_request_boundary]
   player-fake:
-    type: kotlin_test_library
-    owns: [deterministic_engine, fault_injection, playback_clock]
-  doctor-api:
-    type: pure_kotlin_library
-    owns: [probe_models, findings, scoring_contracts, mutation_preview]
-  doctor-runtime:
-    type: android_library
-    owns: [probe_scheduler, media3_sample_probe, network_probe, observed_health_aggregation]
-  local-control-server:
-    type: android_library
-    owns: [embedded_ktor_server, pairing, sessions, capability_middleware, local_api]
-  local-control-web:
-    type: bundled_static_web_assets
-    owns: [phone_setup_ui]
-    external_runtime_dependencies: forbidden
-  feature-modules:
-    type: android_feature_group
-    children: [onboarding, home, live, guide, search, sources, doctor, profiles, settings]
-    access_rules: [use_application_ports, no_dao, no_media3, no_raw_okhttp]
-  benchmark:
-    type: android_test
-    owns: [macrobenchmarks, performance_corpus, report_generation]
-  baseline-profile:
-    type: android_test
-    owns: [critical_user_journeys, baseline_profile_generation]
+    gradle_path: :player:fake
+    type: test_library
+    owns: [deterministic_playback_fake]
+  feature-home:
+    gradle_path: :feature:home
+    type: android_compose_library
+    owns: [home_tv_route]
+  feature-channels:
+    gradle_path: :feature:channels
+    type: android_compose_library
+    owns: [channel_browser, focus_anchor_policy, list_focus_restoration]
+  feature-player:
+    gradle_path: :feature:player
+    type: android_compose_library
+    owns: [player_route, surface, controls, player_state_ui]
+  feature-sources:
+    gradle_path: :feature:sources
+    type: android_compose_library
+    owns: [sources_management, source_entry_wizard, source_entry_state_machine]
   build-logic:
+    path: build-logic
     type: gradle_included_build
-    owns: [convention_plugins, dependency_rules, quality_task_wiring]
+    owns: [convention_plugins, module_defaults, quality_wiring]
+planned_not_created:
+  - epg_api
+  - epg_xmltv
+  - epg_matching
+  - doctor_api
+  - doctor_runtime
+  - local_control_server
+  - local_control_web
+  - feature_guide
+  - feature_search
+  - feature_doctor
+  - feature_profiles
+  - feature_settings
+  - benchmark
+  - baseline_profile
 rules:
-  - domain_and_pure_kotlin_modules_must_not_depend_on_android
-  - features_must_not_access_dao_or_network_clients_directly
-  - features_and_player_api_must_not_import_media3
+  - pure_kotlin_modules_must_not_depend_on_android
+  - features_must_not_access_room_dao_or_raw_network_clients
+  - feature_and_player_api_modules_must_not_import_media3
   - adapters_depend_on_ports_not_other_adapter_implementations
   - database_is_android_first_until_new_adr
   - actual_kmp_conversion_requires_real_second_target
   - cyclic_dependencies_forbidden
   - new_module_requires_independent_boundary_or_measured_build_dependency_value
   - no_arbitrary_extension_code_in_main_process
-last_reviewed: 2026-07-19
+  - planned_modules_must_not_be_reported_as_implemented
