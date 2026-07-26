@@ -7,9 +7,12 @@ import android.os.Looper
 import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 
 @AndroidXOptIn(UnstableApi::class)
 class MuxTvMediaControllerConnector(
@@ -51,13 +54,43 @@ class MuxTvMediaControllerConnector(
         future
     }
 
+    suspend fun awaitController(timeoutMillis: Long): MediaController = try {
+        connect().awaitCancellable(
+            timeoutMillis = timeoutMillis,
+            cancelFutureOnCancellation = false,
+        )
+    } catch (timeout: TimeoutCancellationException) {
+        throw MediaControllerOperationException(connectionFailureFor(timeout))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        throw MediaControllerOperationException(connectionFailureFor(error))
+    }
+
     fun sendPlaybackRequest(
         controller: MediaController,
         request: PlaybackSessionRequest,
-    ) = controller.sendCustomCommand(
+    ): ListenableFuture<SessionResult> = controller.sendCustomCommand(
         MuxTvPlaybackSessionContract.setPlaybackRequestCommand,
         request.toBundle(),
     )
+
+    suspend fun awaitPlaybackRequest(
+        controller: MediaController,
+        request: PlaybackSessionRequest,
+        timeoutMillis: Long,
+    ): SessionResult = try {
+        sendPlaybackRequest(controller, request).awaitCancellable(
+            timeoutMillis = timeoutMillis,
+            cancelFutureOnCancellation = true,
+        )
+    } catch (timeout: TimeoutCancellationException) {
+        throw MediaControllerOperationException(commandFailureFor(timeout))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        throw MediaControllerOperationException(commandFailureFor(error))
+    }
 
     override fun close() {
         connections.close()
