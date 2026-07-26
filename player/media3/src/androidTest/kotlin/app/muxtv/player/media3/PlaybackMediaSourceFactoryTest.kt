@@ -95,5 +95,6 @@ class PlaybackMediaSourceFactoryTest {
         variantId = "variant-$mediaId",
         locator = locator,
         requestHeaders = headers,
+        insecureHttpApproved = true,
     )
 }
