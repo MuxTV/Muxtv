@@ -4,7 +4,11 @@ import com.google.common.truth.Truth.assertThat
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -36,32 +40,62 @@ class PlaybackRequestPolicyInterceptorTest {
     }
 
     @Test
-    fun `direct cross-origin media request strips sensitive headers`() {
+    fun `http approval does not authorize a direct subresource on another host`() {
         MockWebServer().use { rootServer ->
             MockWebServer().use { mediaServer ->
                 rootServer.start()
                 mediaServer.start()
-                mediaServer.enqueue(MockResponse(body = "segment"))
-
                 val rootUrl = rootServer.url("/master.m3u8")
-                MuxTvHttpClients().playbackFor(
-                    rootUrl = rootUrl,
-                    insecureHttpApproved = true,
-                ).newCall(
-                    playbackRequest(mediaServer.url("/segment.ts").toString()),
-                ).execute().use { response ->
-                    assertThat(response.code).isEqualTo(200)
-                    assertThat(response.body.string()).isEqualTo("segment")
+
+                val error = assertThrows(PlaybackRequestRejectedException::class.java) {
+                    MuxTvHttpClients().playbackFor(
+                        rootUrl = rootUrl,
+                        insecureHttpApproved = true,
+                    ).newCall(
+                        playbackRequest(mediaServer.url("/segment.ts").toString()),
+                    ).execute()
                 }
 
-                val recorded = mediaServer.takeRequest()
-                assertThat(recorded.headers["Authorization"]).isNull()
-                assertThat(recorded.headers["Cookie"]).isNull()
-                assertThat(recorded.headers["Referer"]).isNull()
-                assertThat(recorded.headers["X-Api-Key"]).isNull()
-                assertThat(recorded.headers["User-Agent"]).isEqualTo("MuxTV-Playback/1")
+                assertThat(error.reason)
+                    .isEqualTo(PlaybackRequestRejectionReason.InsecureTransportNotApproved)
+                assertThat(mediaServer.requestCount).isEqualTo(0)
             }
         }
+    }
+
+    @Test
+    fun `direct cross-origin https request strips sensitive headers`() {
+        var capturedRequest: Request? = null
+        val rootUrl = "https://provider.example/master.m3u8".toHttpUrl()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(
+                PlaybackRequestPolicyInterceptor(
+                    rootUrl = rootUrl,
+                    insecureHttpApproved = false,
+                ),
+            )
+            .addInterceptor { chain ->
+                capturedRequest = chain.request()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body("segment".toResponseBody())
+                    .build()
+            }
+            .build()
+
+        client.newCall(playbackRequest("https://cdn.example/segment.ts"))
+            .execute()
+            .close()
+
+        val captured = checkNotNull(capturedRequest)
+        assertThat(captured.headers["Authorization"]).isNull()
+        assertThat(captured.headers["Cookie"]).isNull()
+        assertThat(captured.headers["Referer"]).isNull()
+        assertThat(captured.headers["X-Api-Key"]).isNull()
+        assertThat(captured.headers["User-Agent"]).isEqualTo("MuxTV-Playback/1")
     }
 
     @Test
