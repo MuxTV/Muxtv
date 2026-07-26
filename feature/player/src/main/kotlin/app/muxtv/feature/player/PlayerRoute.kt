@@ -37,14 +37,13 @@ import androidx.tv.material3.Text
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.player.media3.MediaControllerOperationException
+import app.muxtv.player.media3.MediaControllerOperationFailure
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.media3.PlaybackSessionRequest
-import java.util.concurrent.Future
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 private sealed interface PlayerRouteState {
     data object Connecting : PlayerRouteState
@@ -78,17 +77,14 @@ fun PlayerRoute(
         channelId,
     ) {
         val controller = try {
-            awaitFuture(
-                future = controllerConnector.connect(),
-                timeoutMillis = CONTROLLER_TIMEOUT_MILLIS,
-            )
-        } catch (_: TimeoutCancellationException) {
-            value = PlayerRouteState.Failed("Служба воспроизведения не ответила вовремя.")
-            return@produceState
+            controllerConnector.awaitController(CONTROLLER_TIMEOUT_MILLIS)
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (error: MediaControllerOperationException) {
+            value = PlayerRouteState.Failed(connectionFailureMessage(error.failure))
+            return@produceState
         } catch (_: Exception) {
-            value = PlayerRouteState.Failed("Не удалось подключиться к службе воспроизведения.")
+            value = PlayerRouteState.Failed(CONNECTION_FAILED_MESSAGE)
             return@produceState
         }
 
@@ -125,24 +121,29 @@ fun PlayerRoute(
             value = PlayerRouteState.Failed("Данные выбранного потока недействительны.")
             return@produceState
         }
+
+        currentCoroutineContext().ensureActive()
         val setupResult = try {
-            val setupFuture = controllerConnector.sendPlaybackRequest(controller, sessionRequest)
-            awaitFuture(
-                future = setupFuture,
+            controllerConnector.awaitPlaybackRequest(
+                controller = controller,
+                request = sessionRequest,
                 timeoutMillis = COMMAND_TIMEOUT_MILLIS,
             )
-        } catch (_: TimeoutCancellationException) {
-            null
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (error: MediaControllerOperationException) {
+            value = PlayerRouteState.Failed(commandFailureMessage(error.failure))
+            return@produceState
         } catch (_: Exception) {
-            null
+            value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
+            return@produceState
         }
-        if (setupResult?.resultCode != SessionResult.RESULT_SUCCESS) {
-            value = PlayerRouteState.Failed("Не удалось подготовить выбранный поток.")
+        if (setupResult.resultCode != SessionResult.RESULT_SUCCESS) {
+            value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
             return@produceState
         }
 
+        currentCoroutineContext().ensureActive()
         value = PlayerRouteState.Ready(
             controller = controller,
             title = channel.summary.displayName,
@@ -281,11 +282,24 @@ private fun PlayerMessage(
     }
 }
 
-private suspend fun <T> awaitFuture(
-    future: Future<T>,
-    timeoutMillis: Long,
-): T = withTimeout(timeoutMillis) {
-    runInterruptible(Dispatchers.IO) { future.get() }
+private fun connectionFailureMessage(failure: MediaControllerOperationFailure): String = when (failure) {
+    MediaControllerOperationFailure.ConnectionTimedOut ->
+        "Служба воспроизведения не ответила вовремя."
+
+    MediaControllerOperationFailure.ConnectionCancelled ->
+        "Подключение к службе воспроизведения было прервано."
+
+    else -> CONNECTION_FAILED_MESSAGE
+}
+
+private fun commandFailureMessage(failure: MediaControllerOperationFailure): String = when (failure) {
+    MediaControllerOperationFailure.CommandTimedOut ->
+        "Служба воспроизведения не успела подготовить поток."
+
+    MediaControllerOperationFailure.CommandCancelled ->
+        "Подготовка потока была прервана."
+
+    else -> COMMAND_FAILED_MESSAGE
 }
 
 private fun playbackStatus(
@@ -299,6 +313,9 @@ private fun playbackStatus(
     else -> "Подготовка"
 }
 
+private const val CONNECTION_FAILED_MESSAGE =
+    "Не удалось подключиться к службе воспроизведения."
+private const val COMMAND_FAILED_MESSAGE = "Не удалось подготовить выбранный поток."
 private const val PLAYER_PRIMARY_ACTION_TEST_TAG = "player-primary-action"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
