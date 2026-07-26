@@ -16,40 +16,37 @@ class MuxTvMediaControllerConnector(
     context: Context,
 ) : AutoCloseable {
     private val applicationContext = context.applicationContext
-    private val lock = Any()
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val mainExecutor = Executor { command ->
-        mainHandler.post(command)
+    private val applicationHandler = Handler(Looper.getMainLooper())
+    private val applicationExecutor = Executor { command ->
+        applicationHandler.post(command)
     }
+    private val controllerListener = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            connections.disconnected(controller)
+        }
+    }
+    private val connections = ControllerConnectionRegistry<MediaController>(
+        releasePending = ::releasePending,
+        releaseConnected = ::releaseConnected,
+    )
 
-    @Volatile
-    private var controller: MediaController? = null
-
-    @Volatile
-    private var pending: ListenableFuture<MediaController>? = null
-
-    fun connect(): ListenableFuture<MediaController> = synchronized(lock) {
-        controller?.let { existing -> return@synchronized immediateFuture(existing) }
-        pending?.let { inFlight -> return@synchronized inFlight }
-
+    fun connect(): ListenableFuture<MediaController> = connections.acquire {
         val token = SessionToken(
             applicationContext,
             ComponentName(applicationContext, MuxTvPlaybackService::class.java),
         )
-        val future = MediaController.Builder(applicationContext, token).buildAsync()
-        pending = future
+        val future = MediaController.Builder(applicationContext, token)
+            .setApplicationLooper(applicationHandler.looper)
+            .setListener(controllerListener)
+            .buildAsync()
         future.addListener(
             {
-                synchronized(lock) {
-                    if (pending !== future) return@synchronized
-                    pending = null
-                    if (!future.isCancelled) {
-                        runCatching { future.get() }
-                            .onSuccess { connected -> controller = connected }
-                    }
-                }
+                connections.complete(
+                    future = future,
+                    result = runCatching { future.get() },
+                )
             },
-            mainExecutor,
+            applicationExecutor,
         )
         future
     }
@@ -63,26 +60,24 @@ class MuxTvMediaControllerConnector(
     )
 
     override fun close() {
-        val controllerToRelease: MediaController?
-        val pendingToCancel: ListenableFuture<MediaController>?
-        synchronized(lock) {
-            controllerToRelease = controller
-            pendingToCancel = pending
-            controller = null
-            pending = null
-        }
-        pendingToCancel?.cancel(true)
-        controllerToRelease?.let(::release)
+        connections.close()
     }
 
-    private fun release(controller: MediaController) {
-        if (Looper.myLooper() == mainHandler.looper) {
-            controller.release()
+    private fun releasePending(future: ListenableFuture<MediaController>) {
+        runOnApplicationLooper {
+            MediaController.releaseFuture(future)
+        }
+    }
+
+    private fun releaseConnected(controller: MediaController) {
+        runOnApplicationLooper(controller::release)
+    }
+
+    private fun runOnApplicationLooper(action: () -> Unit) {
+        if (Looper.myLooper() == applicationHandler.looper) {
+            action()
         } else {
-            mainHandler.post(controller::release)
+            applicationHandler.post(action)
         }
     }
 }
-
-private fun <T> immediateFuture(value: T): ListenableFuture<T> =
-    com.google.common.util.concurrent.Futures.immediateFuture(value)
