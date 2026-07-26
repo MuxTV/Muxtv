@@ -146,7 +146,7 @@ class ControllerConnectionRegistryTest {
     }
 
     @Test
-    fun `late success after close is released instead of cached`() {
+    fun `late success after close remains owned by pending releaser`() {
         val pendingReleases = AtomicInteger()
         val connectedReleases = AtomicInteger()
         val future = SettableFuture.create<ControllerRef>()
@@ -162,7 +162,7 @@ class ControllerConnectionRegistryTest {
         registry.complete(future, Result.success(late))
 
         assertThat(pendingReleases.get()).isEqualTo(1)
-        assertThat(connectedReleases.get()).isEqualTo(1)
+        assertThat(connectedReleases.get()).isEqualTo(0)
     }
 
     @Test
