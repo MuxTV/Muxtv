@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,13 +70,16 @@ fun PlayerRoute(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val connectionEpoch by controllerConnector.connectionEpoch.collectAsState()
     val routeState by produceState<PlayerRouteState>(
         initialValue = PlayerRouteState.Connecting,
         playbackCatalog,
         controllerConnector,
+        connectionEpoch,
         profileId,
         channelId,
     ) {
+        value = PlayerRouteState.Connecting
         val controller = try {
             controllerConnector.awaitController(CONTROLLER_TIMEOUT_MILLIS)
         } catch (cancelled: CancellationException) {
