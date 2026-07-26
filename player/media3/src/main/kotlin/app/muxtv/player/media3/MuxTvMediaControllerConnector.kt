@@ -21,6 +21,10 @@ import kotlinx.coroutines.flow.update
 @AndroidXOptIn(UnstableApi::class)
 class MuxTvMediaControllerConnector(
     context: Context,
+    private val serviceComponent: ComponentName = ComponentName(
+        context.applicationContext,
+        MuxTvPlaybackService::class.java,
+    ),
 ) : AutoCloseable {
     private val applicationContext = context.applicationContext
     private val applicationHandler = Handler(Looper.getMainLooper())
@@ -43,10 +47,7 @@ class MuxTvMediaControllerConnector(
     )
 
     fun connect(): ListenableFuture<MediaController> = connections.acquire {
-        val token = SessionToken(
-            applicationContext,
-            ComponentName(applicationContext, MuxTvPlaybackService::class.java),
-        )
+        val token = SessionToken(applicationContext, serviceComponent)
         val future = MediaController.Builder(applicationContext, token)
             .setApplicationLooper(applicationHandler.looper)
             .setListener(controllerListener)
