@@ -23,8 +23,8 @@ class PlaybackRequestRejectedException(
  *
  * HLS subresources may be absolute URLs and therefore do not necessarily pass through redirect
  * handling. Sensitive request headers are retained only for the root origin. A secure playback
- * root may never reference an insecure HTTP subresource, and cleartext requests require an
- * explicit short-lived playback policy decision.
+ * root may never reference an insecure HTTP subresource. Cleartext approval is scoped to the
+ * exact root origin and never authorizes another host.
  */
 class PlaybackRequestPolicyInterceptor(
     private val rootUrl: HttpUrl,
@@ -46,16 +46,17 @@ class PlaybackRequestPolicyInterceptor(
                 requestUrl = targetUrl.toString(),
             )
         }
-        if (!targetUrl.isHttps && !insecureHttpApproved) {
+
+        val sameOrigin = rootUrl.scheme == targetUrl.scheme &&
+            rootUrl.host == targetUrl.host &&
+            rootUrl.port == targetUrl.port
+        if (!targetUrl.isHttps && (!insecureHttpApproved || !sameOrigin)) {
             throw PlaybackRequestRejectedException(
                 reason = PlaybackRequestRejectionReason.InsecureTransportNotApproved,
                 requestUrl = targetUrl.toString(),
             )
         }
 
-        val sameOrigin = rootUrl.scheme == targetUrl.scheme &&
-            rootUrl.host == targetUrl.host &&
-            rootUrl.port == targetUrl.port
         val headers = SensitiveHeaderPolicy.apply(
             headers = request.headers,
             disposition = if (sameOrigin) {
