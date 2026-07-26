@@ -2,7 +2,9 @@ package app.muxtv.player.media3
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.SettableFuture
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -11,6 +13,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ListenableFutureAwaitTest {
     @Test
     fun `completed future resumes with value`() = runTest {
@@ -26,10 +29,9 @@ class ListenableFutureAwaitTest {
     }
 
     @Test
-    fun `failed future resumes with original cause`() = runTest {
+    fun `failed future resumes with unwrapped cause`() = runTest {
         val future = SettableFuture.create<String>()
-        val expected = IllegalStateException("synthetic failure")
-        future.setException(expected)
+        future.setException(IllegalStateException("synthetic failure"))
 
         val error = runCatching {
             future.awaitCancellable(
@@ -38,7 +40,9 @@ class ListenableFutureAwaitTest {
             )
         }.exceptionOrNull()
 
-        assertThat(error).isSameInstanceAs(expected)
+        assertThat(error).isInstanceOf(IllegalStateException::class.java)
+        assertThat(error).isNotInstanceOf(ExecutionException::class.java)
+        assertThat(error!!.message).isEqualTo("synthetic failure")
     }
 
     @Test
