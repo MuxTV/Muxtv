@@ -8,6 +8,7 @@ import okhttp3.Response
 enum class PlaybackRequestRejectionReason {
     EmbeddedCredentials,
     HttpsDowngrade,
+    InsecureTransportNotApproved,
 }
 
 class PlaybackRequestRejectedException(
@@ -22,10 +23,12 @@ class PlaybackRequestRejectedException(
  *
  * HLS subresources may be absolute URLs and therefore do not necessarily pass through redirect
  * handling. Sensitive request headers are retained only for the root origin. A secure playback
- * root may never reference an insecure HTTP subresource.
+ * root may never reference an insecure HTTP subresource, and cleartext requests require an
+ * explicit short-lived playback policy decision.
  */
 class PlaybackRequestPolicyInterceptor(
     private val rootUrl: HttpUrl,
+    private val insecureHttpApproved: Boolean,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -40,6 +43,12 @@ class PlaybackRequestPolicyInterceptor(
         if (rootUrl.isHttps && !targetUrl.isHttps) {
             throw PlaybackRequestRejectedException(
                 reason = PlaybackRequestRejectionReason.HttpsDowngrade,
+                requestUrl = targetUrl.toString(),
+            )
+        }
+        if (!targetUrl.isHttps && !insecureHttpApproved) {
+            throw PlaybackRequestRejectedException(
+                reason = PlaybackRequestRejectionReason.InsecureTransportNotApproved,
                 requestUrl = targetUrl.toString(),
             )
         }
