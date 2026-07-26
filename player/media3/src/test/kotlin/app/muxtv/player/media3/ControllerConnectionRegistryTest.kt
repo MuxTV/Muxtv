@@ -101,11 +101,12 @@ class ControllerConnectionRegistryTest {
         firstFuture.set(connected)
         registry.complete(firstFuture, Result.success(connected))
 
-        registry.disconnected(ControllerRef("other"))
+        assertThat(registry.disconnected(ControllerRef("other"))).isFalse()
         assertThat(registry.acquire { error("matching controller must remain cached") }.get())
             .isSameInstanceAs(connected)
 
-        registry.disconnected(connected)
+        assertThat(registry.disconnected(connected)).isTrue()
+        assertThat(registry.disconnected(connected)).isFalse()
         val afterDisconnect = registry.acquire {
             starts.incrementAndGet()
             secondFuture
