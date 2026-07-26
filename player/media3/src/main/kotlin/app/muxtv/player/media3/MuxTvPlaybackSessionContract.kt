@@ -55,6 +55,13 @@ object MuxTvPlaybackSessionContract {
 
     fun success(): SessionResult = SessionResult(SessionResult.RESULT_SUCCESS)
 
+    /*
+     * Media3 1.10.1 documents INFO_CANCELLED as a valid SessionResult code, but its
+     * API 26 Binder round-trip reconstructs positive non-success codes as SessionError
+     * and rejects the bundle. A cancelled setup is therefore represented by the stable
+     * negative ERROR_INVALID_STATE code; coroutine cancellation still propagates as
+     * CancellationException before this protocol boundary.
+     */
     fun cancelled(): SessionResult = SessionResult(SessionError.ERROR_INVALID_STATE)
 
     fun badValue(): SessionResult = SessionResult(SessionError.ERROR_BAD_VALUE)
