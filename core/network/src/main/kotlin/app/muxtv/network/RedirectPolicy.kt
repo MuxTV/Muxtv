@@ -62,13 +62,13 @@ object RedirectPolicy {
         if (currentUrl.isHttps && !targetUrl.isHttps) {
             return RedirectDecision.Rejected(RedirectRejectionReason.HttpsDowngrade)
         }
-        if (!targetUrl.isHttps && !insecureHttpApproved) {
-            return RedirectDecision.Rejected(RedirectRejectionReason.InsecureTransportNotApproved)
-        }
 
         val sameOrigin = currentUrl.scheme == targetUrl.scheme &&
             currentUrl.host == targetUrl.host &&
             currentUrl.port == targetUrl.port
+        if (!targetUrl.isHttps && (!insecureHttpApproved || !sameOrigin)) {
+            return RedirectDecision.Rejected(RedirectRejectionReason.InsecureTransportNotApproved)
+        }
 
         return RedirectDecision.Follow(
             targetUrl = targetUrl,
