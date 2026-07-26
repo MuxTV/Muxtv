@@ -4,7 +4,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
-import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
@@ -20,7 +20,7 @@ internal suspend fun <T> ListenableFuture<T>.awaitCancellable(
         addListener(
             {
                 if (isCancelled) {
-                    continuation.tryResumeWithException(ListenableFutureCancelledException())
+                    continuation.resumeExceptionIfActive(ListenableFutureCancelledException())
                     return@addListener
                 }
 
@@ -28,11 +28,11 @@ internal suspend fun <T> ListenableFuture<T>.awaitCancellable(
                     val value = get()
                     continuation.tryResume(value)?.let(continuation::completeResume)
                 } catch (_: CancellationException) {
-                    continuation.tryResumeWithException(ListenableFutureCancelledException())
+                    continuation.resumeExceptionIfActive(ListenableFutureCancelledException())
                 } catch (error: ExecutionException) {
-                    continuation.tryResumeWithException(error.cause ?: error)
+                    continuation.resumeExceptionIfActive(error.cause ?: error)
                 } catch (error: Throwable) {
-                    continuation.tryResumeWithException(error)
+                    continuation.resumeExceptionIfActive(error)
                 }
             },
             MoreExecutors.directExecutor(),
@@ -45,8 +45,6 @@ internal suspend fun <T> ListenableFuture<T>.awaitCancellable(
     }
 }
 
-private fun <T> kotlinx.coroutines.CancellableContinuation<T>.tryResumeWithException(
-    error: Throwable,
-) {
+private fun <T> CancellableContinuation<T>.resumeExceptionIfActive(error: Throwable) {
     tryResumeWithException(error)?.let(::completeResume)
 }
