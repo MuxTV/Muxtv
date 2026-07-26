@@ -1,5 +1,6 @@
 package app.muxtv
 
+import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import androidx.media3.session.MediaController
@@ -8,6 +9,7 @@ import androidx.media3.session.SessionResult
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.player.media3.DebugDisconnectableMediaSessionService
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.media3.MuxTvPlaybackSessionContract
 import app.muxtv.player.media3.PlaybackSessionRequest
@@ -23,48 +25,78 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MediaSessionServiceSmokeTest {
     @Test
-    fun releasedControllerReconnectsAndSetupCancellationRemainsOwned() {
+    fun remoteSessionDisconnectInvalidatesControllerAndReconnects() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val connector = MuxTvMediaControllerConnector(
+            context = context,
+            serviceComponent = ComponentName(
+                context,
+                DebugDisconnectableMediaSessionService::class.java,
+            ),
+        )
+
+        try {
+            val first = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            instrumentation.waitForIdleSync()
+            val epochBeforeRestart = connector.connectionEpoch.value
+
+            instrumentation.runOnMainSync {
+                DebugDisconnectableMediaSessionService.restartActiveSessionForTest()
+            }
+            awaitConnectionEpochChange(
+                connector = connector,
+                previousEpoch = epochBeforeRestart,
+            )
+
+            val second = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val secondConnected = AtomicBoolean(false)
+            instrumentation.runOnMainSync {
+                secondConnected.set(second.isConnected)
+            }
+
+            assertThat(second).isNotSameInstanceAs(first)
+            assertThat(secondConnected.get()).isTrue()
+        } finally {
+            connector.close()
+        }
+    }
+
+    @Test
+    fun setupCancellationRemainsOwnedByTheService() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val connector = MuxTvMediaControllerConnector(context)
 
         try {
-            val first = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            val epochBeforeRelease = connector.connectionEpoch.value
-            instrumentation.runOnMainSync(first::release)
-            awaitConnectionEpochChange(
-                connector = connector,
-                previousEpoch = epochBeforeRelease,
-            )
-
-            val second = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val controller = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            instrumentation.waitForIdleSync()
             val setupCommand = MuxTvPlaybackSessionContract.setPlaybackRequestCommand
             val cancelCommand = MuxTvPlaybackSessionContract.cancelPlaybackSetupCommand
             val setupAvailable = AtomicBoolean(false)
             val cancelAvailable = AtomicBoolean(false)
 
             instrumentation.runOnMainSync {
-                setupAvailable.set(second.isSessionCommandAvailable(setupCommand))
-                cancelAvailable.set(second.isSessionCommandAvailable(cancelCommand))
+                setupAvailable.set(controller.isSessionCommandAvailable(setupCommand))
+                cancelAvailable.set(controller.isSessionCommandAvailable(cancelCommand))
             }
 
-            assertThat(second).isNotSameInstanceAs(first)
             assertThat(setupAvailable.get()).isTrue()
             assertThat(cancelAvailable.get()).isTrue()
-            assertThat(send(second, setupCommand, Bundle()).resultCode)
+            assertThat(send(controller, setupCommand, Bundle()).resultCode)
                 .isEqualTo(SessionError.ERROR_BAD_VALUE)
 
             val cancelledBeforeInstall = setupId("20000000-0000-0000-0000-000000000001")
             assertThat(
                 send(
-                    second,
+                    controller,
                     cancelCommand,
                     MuxTvPlaybackSessionContract.cancelArgs(cancelledBeforeInstall),
                 ).resultCode,
             ).isEqualTo(SessionResult.RESULT_SUCCESS)
             assertThat(
                 send(
-                    second,
+                    controller,
                     setupCommand,
                     MuxTvPlaybackSessionContract.setupArgs(
                         cancelledBeforeInstall,
@@ -76,7 +108,7 @@ class MediaSessionServiceSmokeTest {
             val firstInstalled = setupId("20000000-0000-0000-0000-000000000002")
             assertThat(
                 send(
-                    second,
+                    controller,
                     setupCommand,
                     MuxTvPlaybackSessionContract.setupArgs(
                         firstInstalled,
@@ -86,7 +118,7 @@ class MediaSessionServiceSmokeTest {
             ).isEqualTo(SessionResult.RESULT_SUCCESS)
             assertThat(
                 send(
-                    second,
+                    controller,
                     cancelCommand,
                     MuxTvPlaybackSessionContract.cancelArgs(firstInstalled),
                 ).resultCode,
@@ -95,7 +127,7 @@ class MediaSessionServiceSmokeTest {
             val currentInstalled = setupId("20000000-0000-0000-0000-000000000003")
             assertThat(
                 send(
-                    second,
+                    controller,
                     setupCommand,
                     MuxTvPlaybackSessionContract.setupArgs(
                         currentInstalled,
@@ -103,16 +135,16 @@ class MediaSessionServiceSmokeTest {
                     ),
                 ).resultCode,
             ).isEqualTo(SessionResult.RESULT_SUCCESS)
-            awaitMediaId(second, "current-installed")
+            awaitMediaId(controller, "current-installed")
 
             assertThat(
                 send(
-                    second,
+                    controller,
                     cancelCommand,
                     MuxTvPlaybackSessionContract.cancelArgs(firstInstalled),
                 ).resultCode,
             ).isEqualTo(SessionResult.RESULT_SUCCESS)
-            awaitMediaId(second, "current-installed")
+            awaitMediaId(controller, "current-installed")
         } finally {
             connector.close()
         }
@@ -157,7 +189,7 @@ class MediaSessionServiceSmokeTest {
             if (connector.connectionEpoch.value > previousEpoch) return
             Thread.sleep(POLL_INTERVAL_MILLIS)
         }
-        throw AssertionError("Controller disconnect was not observed within the Media3 release bound.")
+        throw AssertionError("Remote MediaSession disconnect was not observed.")
     }
 
     private fun setupId(raw: String): PlaybackSetupId =
@@ -171,7 +203,7 @@ class MediaSessionServiceSmokeTest {
 
     private companion object {
         const val CONNECTION_TIMEOUT_SECONDS = 20L
-        const val DISCONNECT_TIMEOUT_SECONDS = 40L
+        const val DISCONNECT_TIMEOUT_SECONDS = 10L
         const val COMMAND_TIMEOUT_SECONDS = 10L
         const val POLL_INTERVAL_MILLIS = 50L
     }
