@@ -30,7 +30,7 @@ class PlaybackMediaSourceFactoryTest {
             val context = ApplicationProvider.getApplicationContext<Context>()
             val factory = PlaybackMediaSourceFactory(
                 context = context,
-                callFactory = MuxTvHttpClients().playback,
+                httpClients = MuxTvHttpClients(),
             )
             val mutableFirstHeaders = mutableMapOf(
                 "Authorization" to "Bearer first-secret",
