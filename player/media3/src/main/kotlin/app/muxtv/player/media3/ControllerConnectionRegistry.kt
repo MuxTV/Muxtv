@@ -3,6 +3,10 @@ package app.muxtv.player.media3
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
+internal class ControllerConnectionRegistryClosedException : IllegalStateException(
+    "Controller connection registry is closed.",
+)
+
 internal class ControllerConnectionRegistry<T : Any>(
     private val releasePending: (ListenableFuture<T>) -> Unit,
     private val releaseConnected: (T) -> Unit,
@@ -25,7 +29,7 @@ internal class ControllerConnectionRegistry<T : Any>(
             is State.Connecting -> current.future
             is State.Connected -> Futures.immediateFuture(current.controller)
             is State.Closed -> Futures.immediateFailedFuture(
-                IllegalStateException(CLOSED_MESSAGE),
+                ControllerConnectionRegistryClosedException(),
             )
         }
     }
@@ -108,9 +112,5 @@ internal class ControllerConnectionRegistry<T : Any>(
         data class Closed<T : Any>(
             val releasedPending: ListenableFuture<T>? = null,
         ) : State<T>
-    }
-
-    private companion object {
-        const val CLOSED_MESSAGE = "Controller connection registry is closed."
     }
 }
