@@ -89,10 +89,11 @@ class PlaybackSetupCommandCodecTest {
     }
 
     @Test
-    fun cancelledResultUsesStableInformationalCode() {
+    fun cancelledResultUsesBinderSafeInvalidStateCode() {
         val result = MuxTvPlaybackSessionContract.cancelled()
 
-        assertThat(result.resultCode).isEqualTo(androidx.media3.session.SessionError.INFO_CANCELLED)
+        assertThat(result.resultCode)
+            .isEqualTo(androidx.media3.session.SessionError.ERROR_INVALID_STATE)
     }
 
     private fun setupId(raw: String): PlaybackSetupId =
