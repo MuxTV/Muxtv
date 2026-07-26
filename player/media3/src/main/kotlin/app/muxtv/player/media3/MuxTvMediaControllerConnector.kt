@@ -13,8 +13,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -103,20 +101,18 @@ class MuxTvMediaControllerConnector(
     ): SessionResult {
         val setupId = PlaybackSetupId.create()
         return try {
-            currentCoroutineContext().ensureActive()
-            sendPlaybackRequest(
-                controller = controller,
-                setupId = setupId,
-                request = request,
-            ).awaitCancellable(
+            awaitPlaybackSetup(
+                future = sendPlaybackRequest(
+                    controller = controller,
+                    setupId = setupId,
+                    request = request,
+                ),
                 timeoutMillis = timeoutMillis,
-                cancelFutureOnCancellation = true,
+                cancelSetup = { postCancel(controller, setupId) },
             )
         } catch (timeout: TimeoutCancellationException) {
-            postCancel(controller, setupId)
             throw MediaControllerOperationException(commandFailureFor(timeout))
         } catch (cancelled: CancellationException) {
-            postCancel(controller, setupId)
             throw cancelled
         } catch (error: Throwable) {
             throw MediaControllerOperationException(commandFailureFor(error))
