@@ -21,27 +21,52 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MediaSessionServiceSmokeTest {
     @Test
-    fun ownAppControllerConnectsAndMalformedSetupIsRejected() {
+    fun releasedControllerIsInvalidatedAndNextConnectionCanUseTheSession() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val connector = MuxTvMediaControllerConnector(context)
 
         try {
-            val controller: MediaController = connector.connect().get(20, TimeUnit.SECONDS)
+            val first = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            instrumentation.runOnMainSync(first::release)
+
+            val second = awaitDifferentController(
+                connector = connector,
+                previous = first,
+            )
             val command = MuxTvPlaybackSessionContract.setPlaybackRequestCommand
             val commandAvailable = AtomicBoolean(false)
             val resultFuture = AtomicReference<Future<SessionResult>>()
 
             instrumentation.runOnMainSync {
-                commandAvailable.set(controller.isSessionCommandAvailable(command))
-                resultFuture.set(controller.sendCustomCommand(command, Bundle()))
+                commandAvailable.set(second.isSessionCommandAvailable(command))
+                resultFuture.set(second.sendCustomCommand(command, Bundle()))
             }
 
+            assertThat(second).isNotSameInstanceAs(first)
             assertThat(commandAvailable.get()).isTrue()
-            val result = resultFuture.get().get(10, TimeUnit.SECONDS)
+            val result = resultFuture.get().get(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             assertThat(result.resultCode).isEqualTo(SessionError.ERROR_BAD_VALUE)
         } finally {
             connector.close()
         }
+    }
+
+    private fun awaitDifferentController(
+        connector: MuxTvMediaControllerConnector,
+        previous: MediaController,
+    ): MediaController {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(CONNECTION_TIMEOUT_SECONDS)
+        while (System.nanoTime() < deadline) {
+            val candidate = connector.connect().get(5, TimeUnit.SECONDS)
+            if (candidate !== previous) return candidate
+            Thread.sleep(50)
+        }
+        throw AssertionError("Connector did not create a fresh MediaController after disconnect.")
+    }
+
+    private companion object {
+        const val CONNECTION_TIMEOUT_SECONDS = 20L
+        const val COMMAND_TIMEOUT_SECONDS = 10L
     }
 }
