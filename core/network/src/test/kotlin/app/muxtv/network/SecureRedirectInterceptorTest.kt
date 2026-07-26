@@ -1,7 +1,6 @@
 package app.muxtv.network
 
 import com.google.common.truth.Truth.assertThat
-import java.util.concurrent.TimeUnit
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
@@ -46,7 +45,7 @@ class SecureRedirectInterceptorTest {
     }
 
     @Test
-    fun `cross-origin redirect strips sensitive headers`() {
+    fun `cleartext approval does not authorize another redirect origin`() {
         MockWebServer().use { sourceServer ->
             MockWebServer().use { targetServer ->
                 sourceServer.start()
@@ -57,36 +56,25 @@ class SecureRedirectInterceptorTest {
                         headers = headersOf("Location", targetServer.url("/next.m3u").toString()),
                     ),
                 )
-                targetServer.enqueue(MockResponse(body = "playlist"))
 
-                client().newCall(
-                    Request.Builder()
-                        .url(sourceServer.url("/start.m3u"))
-                        .header("Authorization", "Bearer secret")
-                        .header("Cookie", "session=secret")
-                        .header("Referer", "http://provider.example/setup")
-                        .header("Origin", "http://provider.example")
-                        .header("X-Api-Key", "api-secret")
-                        .header("User-Agent", "MuxTV/1")
-                        .tag(
-                            SourceRequestContext::class,
-                            SourceRequestContext(insecureHttpApproved = true),
-                        )
-                        .build(),
-                ).execute().use { response ->
-                    assertThat(response.code).isEqualTo(200)
-                    assertThat(response.body.string()).isEqualTo("playlist")
+                val error = assertThrows(RedirectRejectedException::class.java) {
+                    client().newCall(
+                        Request.Builder()
+                            .url(sourceServer.url("/start.m3u"))
+                            .header("Authorization", "Bearer secret")
+                            .header("Cookie", "session=secret")
+                            .tag(
+                                SourceRequestContext::class,
+                                SourceRequestContext(insecureHttpApproved = true),
+                            )
+                            .build(),
+                    ).execute()
                 }
 
-                sourceServer.takeRequest()
-                val redirected = targetServer.takeRequest(5, TimeUnit.SECONDS)
-                assertThat(redirected).isNotNull()
-                assertThat(redirected!!.headers["Authorization"]).isNull()
-                assertThat(redirected.headers["Cookie"]).isNull()
-                assertThat(redirected.headers["Referer"]).isNull()
-                assertThat(redirected.headers["Origin"]).isNull()
-                assertThat(redirected.headers["X-Api-Key"]).isNull()
-                assertThat(redirected.headers["User-Agent"]).isEqualTo("MuxTV/1")
+                assertThat(error.reason)
+                    .isEqualTo(RedirectRejectionReason.InsecureTransportNotApproved)
+                assertThat(sourceServer.requestCount).isEqualTo(1)
+                assertThat(targetServer.requestCount).isEqualTo(0)
             }
         }
     }

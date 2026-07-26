@@ -3,6 +3,7 @@ package app.muxtv.network
 import java.util.concurrent.TimeUnit
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
+import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 
 class MuxTvHttpResources(
@@ -35,5 +36,18 @@ class MuxTvHttpClients(
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS)
+        .build()
+
+    fun playbackFor(
+        rootUrl: HttpUrl,
+        insecureHttpApproved: Boolean,
+    ): OkHttpClient = playback.newBuilder()
+        .addInterceptor(SecureRedirectInterceptor.forPlayback(insecureHttpApproved))
+        .addInterceptor(
+            PlaybackRequestPolicyInterceptor(
+                rootUrl = rootUrl,
+                insecureHttpApproved = insecureHttpApproved,
+            ),
+        )
         .build()
 }

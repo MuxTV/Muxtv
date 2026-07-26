@@ -13,6 +13,7 @@ data class PlaybackRequest(
     val displayName: String? = null,
     val artworkUri: String? = null,
     val requestHeaders: Map<String, String> = emptyMap(),
+    val insecureHttpApproved: Boolean = false,
 ) {
     init {
         require(locator.isNotBlank())
@@ -31,6 +32,7 @@ data class PlaybackRequest(
     override fun toString(): String =
         "PlaybackRequest(variantId=$variantId, mediaId=$mediaId, locator=<redacted>, " +
             "displayName=$displayName, artworkUri=${artworkUri != null}, " +
+            "insecureHttpApproved=$insecureHttpApproved, " +
             "requestHeaders=${requestHeaders.keys.sorted()})"
 
     private companion object {

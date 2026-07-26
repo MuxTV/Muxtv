@@ -205,6 +205,7 @@ if ($Mode -in @("Full", "Device")) {
 $deviceTestModules = @(
     [ordered]@{ ModulePath = "core\credentials"; DisplayName = "Credential instrumentation" },
     [ordered]@{ ModulePath = "core\database"; DisplayName = "Database instrumentation" },
+    [ordered]@{ ModulePath = "player\media3"; DisplayName = "Media3 instrumentation" },
     [ordered]@{ ModulePath = "app\tv"; DisplayName = "Application instrumentation" }
 )
 
@@ -219,6 +220,9 @@ if ($Mode -eq "Device") {
     )
     Add-Step -Name "database-device-tests" -Arguments @(
         ":core:database:connectedDebugAndroidTest"
+    )
+    Add-Step -Name "media3-device-tests" -Arguments @(
+        ":player:media3:connectedDebugAndroidTest"
     )
     Add-Step -Name "app-device-tests" -Arguments @(
         ":app:tv:connectedDebugAndroidTest"

@@ -3,6 +3,7 @@ package app.muxtv.network
 import java.io.IOException
 import java.net.ProtocolException
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
 
 data class SourceRequestContext(
@@ -17,10 +18,17 @@ class RedirectRejectedException(
     "Redirect rejected: $reason from ${RedactedUri.from(currentUrl)}",
 )
 
-class SecureRedirectInterceptor : Interceptor {
+class SecureRedirectInterceptor private constructor(
+    private val insecureHttpApproval: (Request) -> Boolean,
+) : Interceptor {
+    constructor() : this(
+        insecureHttpApproval = { request ->
+            request.tag(SourceRequestContext::class)?.insecureHttpApproved == true
+        },
+    )
+
     override fun intercept(chain: Interceptor.Chain): Response {
         var request = chain.request()
-        val requestContext = request.tag(SourceRequestContext::class) ?: SourceRequestContext()
         var completedRedirects = 0
 
         while (true) {
@@ -31,7 +39,7 @@ class SecureRedirectInterceptor : Interceptor {
 
             if (request.method != "GET" && request.method != "HEAD") {
                 response.close()
-                throw ProtocolException("Source redirects are supported only for GET and HEAD requests.")
+                throw ProtocolException("Redirects are supported only for GET and HEAD requests.")
             }
 
             when (
@@ -39,7 +47,7 @@ class SecureRedirectInterceptor : Interceptor {
                     currentUrl = request.url,
                     location = response.header("Location"),
                     completedRedirects = completedRedirects,
-                    insecureHttpApproved = requestContext.insecureHttpApproved,
+                    insecureHttpApproved = insecureHttpApproval(request),
                 )
             ) {
                 is RedirectDecision.Rejected -> {
@@ -66,7 +74,17 @@ class SecureRedirectInterceptor : Interceptor {
         }
     }
 
-    private companion object {
-        val REDIRECT_STATUS_CODES = setOf(300, 301, 302, 303, 307, 308)
+    companion object {
+        /**
+         * Playback cleartext redirects are allowed only when the resolved playback request carries
+         * an explicit short-lived approval. HTTPS downgrade remains rejected by [RedirectPolicy].
+         */
+        fun forPlayback(
+            insecureHttpApproved: Boolean,
+        ): SecureRedirectInterceptor = SecureRedirectInterceptor(
+            insecureHttpApproval = { insecureHttpApproved },
+        )
+
+        private val REDIRECT_STATUS_CODES = setOf(300, 301, 302, 303, 307, 308)
     }
 }

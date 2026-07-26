@@ -1,37 +1,37 @@
 package app.muxtv.player.media3
 
-import android.net.Uri
 import android.os.Bundle
 import androidx.annotation.OptIn as AndroidXOptIn
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import app.muxtv.network.MuxTvHttpClients
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 @AndroidXOptIn(UnstableApi::class)
 class MuxTvPlaybackService : MediaSessionService() {
-    private lateinit var httpDataSourceFactory: DefaultHttpDataSource.Factory
+    @Inject
+    lateinit var httpClients: MuxTvHttpClients
+
+    private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
 
     override fun onCreate() {
         super.onCreate()
 
-        httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(false)
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpDataSourceFactory)
-        player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .build()
+        mediaSourceFactory = PlaybackMediaSourceFactory(
+            context = this,
+            httpClients = httpClients,
+        )
+        player = ExoPlayer.Builder(this).build()
         mediaSession = MediaSession.Builder(this, player)
             .setId(SESSION_ID)
             .setCallback(SessionCallback())
@@ -55,19 +55,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private fun install(request: PlaybackSessionRequest) {
         player.stop()
         player.clearMediaItems()
-        httpDataSourceFactory.setDefaultRequestProperties(request.requestHeaders)
-
-        val metadata = MediaMetadata.Builder().apply {
-            request.displayName?.let(::setTitle)
-            request.artworkUri?.let { setArtworkUri(Uri.parse(it)) }
-        }.build()
-        val mediaItem = MediaItem.Builder()
-            .setMediaId(request.mediaId)
-            .setUri(Uri.parse(request.locator))
-            .setMediaMetadata(metadata)
-            .build()
-
-        player.setMediaItem(mediaItem)
+        player.setMediaSource(mediaSourceFactory.create(request))
         player.prepare()
         player.play()
     }

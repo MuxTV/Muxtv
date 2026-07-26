@@ -19,16 +19,32 @@ class PlaybackSessionRequestTest {
                 "User-Agent" to "Secret Agent",
                 "Referer" to "https://portal.example/private",
             ),
+            insecureHttpApproved = true,
         )
 
         val restored = PlaybackSessionRequest.fromBundle(original.toBundle())
 
         assertThat(restored).isEqualTo(original)
+        assertThat(restored!!.insecureHttpApproved).isTrue()
         val text = restored.toString()
         assertThat(text).contains("locator=<redacted>")
+        assertThat(text).contains("insecureHttpApproved=true")
         assertThat(text).doesNotContain("token=secret")
         assertThat(text).doesNotContain("Secret Agent")
         assertThat(text).doesNotContain("portal.example")
+    }
+
+    @Test
+    fun missingCleartextApprovalDefaultsToDenied() {
+        val original = PlaybackSessionRequest(
+            mediaId = "channel-1",
+            variantId = "variant-1",
+            locator = "https://stream.example/live.m3u8",
+        )
+
+        assertThat(original.insecureHttpApproved).isFalse()
+        assertThat(PlaybackSessionRequest.fromBundle(original.toBundle())!!.insecureHttpApproved)
+            .isFalse()
     }
 
     @Test
