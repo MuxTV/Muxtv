@@ -32,7 +32,12 @@ internal class PlaybackMediaSourceFactory(
         request: PlaybackSessionRequest,
     ): OkHttpDataSource.Factory {
         val rootUrl = request.locator.toHttpUrlOrNull()
-        val callFactory = rootUrl?.let(httpClients::playbackFor) ?: httpClients.playback
+        val callFactory = rootUrl?.let { url ->
+            httpClients.playbackFor(
+                rootUrl = url,
+                insecureHttpApproved = request.insecureHttpApproved,
+            )
+        } ?: httpClients.playback
         val headers = if (rootUrl == null) emptyMap() else request.requestHeaders.toMap()
         return OkHttpDataSource.Factory(callFactory)
             .setDefaultRequestProperties(headers)
