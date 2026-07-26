@@ -10,6 +10,7 @@ data class PlaybackSessionRequest(
     val displayName: String? = null,
     val artworkUri: String? = null,
     val requestHeaders: Map<String, String> = emptyMap(),
+    val insecureHttpApproved: Boolean = false,
 ) {
     init {
         require(mediaId.isValidField(MAX_ID_LENGTH))
@@ -30,6 +31,7 @@ data class PlaybackSessionRequest(
         putString(KEY_LOCATOR, locator)
         displayName?.let { putString(KEY_DISPLAY_NAME, it) }
         artworkUri?.let { putString(KEY_ARTWORK_URI, it) }
+        putBoolean(KEY_INSECURE_HTTP_APPROVED, insecureHttpApproved)
         putBundle(
             KEY_HEADERS,
             Bundle().apply {
@@ -41,6 +43,7 @@ data class PlaybackSessionRequest(
     override fun toString(): String =
         "PlaybackSessionRequest(mediaId=$mediaId, variantId=$variantId, locator=<redacted>, " +
             "displayName=$displayName, artworkUri=${artworkUri != null}, " +
+            "insecureHttpApproved=$insecureHttpApproved, " +
             "requestHeaders=${requestHeaders.keys.sorted()})"
 
     companion object {
@@ -50,6 +53,7 @@ data class PlaybackSessionRequest(
         private const val KEY_DISPLAY_NAME = "display_name"
         private const val KEY_ARTWORK_URI = "artwork_uri"
         private const val KEY_HEADERS = "headers"
+        private const val KEY_INSECURE_HTTP_APPROVED = "insecure_http_approved"
 
         private const val MAX_ID_LENGTH = 512
         private const val MAX_LOCATOR_LENGTH = 8_192
@@ -75,6 +79,7 @@ data class PlaybackSessionRequest(
                 displayName = bundle.getString(KEY_DISPLAY_NAME),
                 artworkUri = bundle.getString(KEY_ARTWORK_URI),
                 requestHeaders = headers,
+                insecureHttpApproved = bundle.getBoolean(KEY_INSECURE_HTTP_APPROVED, false),
             )
         }.getOrNull()
     }
@@ -87,6 +92,7 @@ fun PlaybackRequest.toPlaybackSessionRequest(): PlaybackSessionRequest = Playbac
     displayName = displayName,
     artworkUri = artworkUri,
     requestHeaders = requestHeaders,
+    insecureHttpApproved = insecureHttpApproved,
 )
 
 private fun String.isValidField(maxLength: Int): Boolean =
