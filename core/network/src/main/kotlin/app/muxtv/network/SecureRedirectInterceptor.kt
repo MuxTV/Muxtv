@@ -76,11 +76,13 @@ class SecureRedirectInterceptor private constructor(
 
     companion object {
         /**
-         * Playback may start from an explicit HTTP media locator, so same-scheme HTTP redirects are
-         * allowed. HTTPS downgrade remains rejected by [RedirectPolicy] even in this mode.
+         * Playback cleartext redirects are allowed only when the resolved playback request carries
+         * an explicit short-lived approval. HTTPS downgrade remains rejected by [RedirectPolicy].
          */
-        fun forPlayback(): SecureRedirectInterceptor = SecureRedirectInterceptor(
-            insecureHttpApproval = { request -> request.url.scheme == "http" },
+        fun forPlayback(
+            insecureHttpApproved: Boolean,
+        ): SecureRedirectInterceptor = SecureRedirectInterceptor(
+            insecureHttpApproval = { insecureHttpApproved },
         )
 
         private val REDIRECT_STATUS_CODES = setOf(300, 301, 302, 303, 307, 308)
