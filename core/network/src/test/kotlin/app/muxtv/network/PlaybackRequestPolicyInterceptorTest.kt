@@ -3,6 +3,7 @@ package app.muxtv.network
 import com.google.common.truth.Truth.assertThat
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.junit.Assert.assertThrows
 import org.junit.Test
