@@ -6,11 +6,32 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.Request
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class PlaybackRedirectPolicyTest {
     @Test
-    fun `direct http playback may follow same-origin redirect`() {
+    fun `unapproved http playback is rejected before first request`() {
+        MockWebServer().use { server ->
+            server.start()
+            val rootUrl = server.url("/master.m3u8")
+            val client = MuxTvHttpClients().playbackFor(
+                rootUrl = rootUrl,
+                insecureHttpApproved = false,
+            )
+
+            val error = assertThrows(PlaybackRequestRejectedException::class.java) {
+                client.newCall(Request.Builder().url(rootUrl).build()).execute()
+            }
+
+            assertThat(error.reason)
+                .isEqualTo(PlaybackRequestRejectionReason.InsecureTransportNotApproved)
+            assertThat(server.requestCount).isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun `approved http playback may follow same-origin redirect`() {
         MockWebServer().use { server ->
             server.start()
             server.enqueue(
@@ -20,10 +41,14 @@ class PlaybackRedirectPolicyTest {
                 ),
             )
             server.enqueue(MockResponse(body = "segment"))
+            val rootUrl = server.url("/master.m3u8")
 
-            MuxTvHttpClients().playback.newCall(
+            MuxTvHttpClients().playbackFor(
+                rootUrl = rootUrl,
+                insecureHttpApproved = true,
+            ).newCall(
                 Request.Builder()
-                    .url(server.url("/master.m3u8"))
+                    .url(rootUrl)
                     .header("Authorization", "Bearer playback-secret")
                     .build(),
             ).execute().use { response ->
@@ -56,10 +81,14 @@ class PlaybackRedirectPolicyTest {
                     ),
                 )
                 targetServer.enqueue(MockResponse(body = "segment"))
+                val rootUrl = sourceServer.url("/master.m3u8")
 
-                MuxTvHttpClients().playback.newCall(
+                MuxTvHttpClients().playbackFor(
+                    rootUrl = rootUrl,
+                    insecureHttpApproved = true,
+                ).newCall(
                     Request.Builder()
-                        .url(sourceServer.url("/master.m3u8"))
+                        .url(rootUrl)
                         .header("Authorization", "Bearer playback-secret")
                         .header("Cookie", "session=playback-secret")
                         .header("Referer", "http://provider.example/private")
