@@ -29,7 +29,7 @@ class MuxTvPlaybackService : MediaSessionService() {
 
         mediaSourceFactory = PlaybackMediaSourceFactory(
             context = this,
-            callFactory = httpClients.playback,
+            httpClients = httpClients,
         )
         player = ExoPlayer.Builder(this).build()
         mediaSession = MediaSession.Builder(this, player)
