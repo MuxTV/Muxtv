@@ -32,14 +32,22 @@ class MuxTvHttpClients(
         .build()
 
     val playback: OkHttpClient = resources.baseClient.newBuilder()
-        .addInterceptor(SecureRedirectInterceptor.forPlayback())
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
-    fun playbackFor(rootUrl: HttpUrl): OkHttpClient = playback.newBuilder()
-        .addInterceptor(PlaybackRequestPolicyInterceptor(rootUrl))
+    fun playbackFor(
+        rootUrl: HttpUrl,
+        insecureHttpApproved: Boolean,
+    ): OkHttpClient = playback.newBuilder()
+        .addInterceptor(SecureRedirectInterceptor.forPlayback(insecureHttpApproved))
+        .addInterceptor(
+            PlaybackRequestPolicyInterceptor(
+                rootUrl = rootUrl,
+                insecureHttpApproved = insecureHttpApproved,
+            ),
+        )
         .build()
 }
