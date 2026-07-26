@@ -103,7 +103,7 @@ class MediaSessionServiceSmokeTest {
                         request("cancelled-before-install"),
                     ),
                 ).resultCode,
-            ).isEqualTo(SessionError.INFO_CANCELLED)
+            ).isEqualTo(SessionError.ERROR_INVALID_STATE)
 
             val firstInstalled = setupId("20000000-0000-0000-0000-000000000002")
             assertThat(
