@@ -74,6 +74,7 @@ data class ResolvedPlaybackRequest(
     val variantId: String,
     val locator: String,
     val requestHeaders: Map<String, String>,
+    val insecureHttpApproved: Boolean = false,
 ) {
     init {
         require(channelId.isNotBlank())
@@ -84,7 +85,8 @@ data class ResolvedPlaybackRequest(
 
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
-            "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()})"
+            "locator=<redacted>, insecureHttpApproved=$insecureHttpApproved, " +
+            "requestHeaders=${requestHeaders.keys.sorted()})"
 }
 
 interface PlaybackCatalog {
