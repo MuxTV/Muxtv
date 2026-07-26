@@ -16,7 +16,10 @@ class PlaybackRequestPolicyInterceptorTest {
             server.enqueue(MockResponse(body = "segment"))
 
             val rootUrl = server.url("/master.m3u8")
-            MuxTvHttpClients().playbackFor(rootUrl).newCall(
+            MuxTvHttpClients().playbackFor(
+                rootUrl = rootUrl,
+                insecureHttpApproved = true,
+            ).newCall(
                 playbackRequest(server.url("/segment.ts").toString()),
             ).execute().use { response ->
                 assertThat(response.code).isEqualTo(200)
@@ -41,7 +44,10 @@ class PlaybackRequestPolicyInterceptorTest {
                 mediaServer.enqueue(MockResponse(body = "segment"))
 
                 val rootUrl = rootServer.url("/master.m3u8")
-                MuxTvHttpClients().playbackFor(rootUrl).newCall(
+                MuxTvHttpClients().playbackFor(
+                    rootUrl = rootUrl,
+                    insecureHttpApproved = true,
+                ).newCall(
                     playbackRequest(mediaServer.url("/segment.ts").toString()),
                 ).execute().use { response ->
                     assertThat(response.code).isEqualTo(200)
@@ -64,7 +70,8 @@ class PlaybackRequestPolicyInterceptorTest {
             mediaServer.start()
             val targetUrl = mediaServer.url("/segment.ts?token=direct-secret")
             val client = MuxTvHttpClients().playbackFor(
-                "https://provider.example/master.m3u8".toHttpUrl(),
+                rootUrl = "https://provider.example/master.m3u8".toHttpUrl(),
+                insecureHttpApproved = false,
             )
 
             val error = assertThrows(PlaybackRequestRejectedException::class.java) {
