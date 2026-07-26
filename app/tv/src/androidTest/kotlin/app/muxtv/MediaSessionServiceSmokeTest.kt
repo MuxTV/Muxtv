@@ -30,12 +30,14 @@ class MediaSessionServiceSmokeTest {
 
         try {
             val first = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val epochBeforeRelease = connector.connectionEpoch.value
             instrumentation.runOnMainSync(first::release)
-
-            val second = awaitDifferentController(
+            awaitConnectionEpochChange(
                 connector = connector,
-                previous = first,
+                previousEpoch = epochBeforeRelease,
             )
+
+            val second = connector.connect().get(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             val setupCommand = MuxTvPlaybackSessionContract.setPlaybackRequestCommand
             val cancelCommand = MuxTvPlaybackSessionContract.cancelPlaybackSetupCommand
             val setupAvailable = AtomicBoolean(false)
@@ -141,22 +143,21 @@ class MediaSessionServiceSmokeTest {
                 actual.set(controller.currentMediaItem?.mediaId)
             }
             if (actual.get() == expected) return
-            Thread.sleep(50)
+            Thread.sleep(POLL_INTERVAL_MILLIS)
         }
         throw AssertionError("Expected the current setup to remain installed.")
     }
 
-    private fun awaitDifferentController(
+    private fun awaitConnectionEpochChange(
         connector: MuxTvMediaControllerConnector,
-        previous: MediaController,
-    ): MediaController {
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(CONNECTION_TIMEOUT_SECONDS)
+        previousEpoch: Long,
+    ) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(DISCONNECT_TIMEOUT_SECONDS)
         while (System.nanoTime() < deadline) {
-            val candidate = connector.connect().get(5, TimeUnit.SECONDS)
-            if (candidate !== previous) return candidate
-            Thread.sleep(50)
+            if (connector.connectionEpoch.value > previousEpoch) return
+            Thread.sleep(POLL_INTERVAL_MILLIS)
         }
-        throw AssertionError("Connector did not create a fresh MediaController after disconnect.")
+        throw AssertionError("Controller disconnect was not observed within the Media3 release bound.")
     }
 
     private fun setupId(raw: String): PlaybackSetupId =
@@ -170,6 +171,8 @@ class MediaSessionServiceSmokeTest {
 
     private companion object {
         const val CONNECTION_TIMEOUT_SECONDS = 20L
+        const val DISCONNECT_TIMEOUT_SECONDS = 40L
         const val COMMAND_TIMEOUT_SECONDS = 10L
+        const val POLL_INTERVAL_MILLIS = 50L
     }
 }
