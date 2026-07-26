@@ -66,7 +66,7 @@ class PlaybackRedirectPolicyTest {
     }
 
     @Test
-    fun `cross-origin playback redirect strips sensitive headers`() {
+    fun `http approval does not authorize a different redirect host`() {
         MockWebServer().use { sourceServer ->
             MockWebServer().use { targetServer ->
                 sourceServer.start()
@@ -80,35 +80,24 @@ class PlaybackRedirectPolicyTest {
                         ),
                     ),
                 )
-                targetServer.enqueue(MockResponse(body = "segment"))
                 val rootUrl = sourceServer.url("/master.m3u8")
 
-                MuxTvHttpClients().playbackFor(
-                    rootUrl = rootUrl,
-                    insecureHttpApproved = true,
-                ).newCall(
-                    Request.Builder()
-                        .url(rootUrl)
-                        .header("Authorization", "Bearer playback-secret")
-                        .header("Cookie", "session=playback-secret")
-                        .header("Referer", "http://provider.example/private")
-                        .header("X-Api-Key", "playback-secret")
-                        .header("User-Agent", "MuxTV-Playback/1")
-                        .build(),
-                ).execute().use { response ->
-                    assertThat(response.code).isEqualTo(200)
-                    assertThat(response.body.string()).isEqualTo("segment")
+                val error = assertThrows(RedirectRejectedException::class.java) {
+                    MuxTvHttpClients().playbackFor(
+                        rootUrl = rootUrl,
+                        insecureHttpApproved = true,
+                    ).newCall(
+                        Request.Builder()
+                            .url(rootUrl)
+                            .header("Authorization", "Bearer playback-secret")
+                            .build(),
+                    ).execute()
                 }
 
-                sourceServer.takeRequest()
-                val redirected = targetServer.takeRequest(5, TimeUnit.SECONDS)
-                assertThat(redirected).isNotNull()
-                assertThat(redirected!!.headers["Authorization"]).isNull()
-                assertThat(redirected.headers["Cookie"]).isNull()
-                assertThat(redirected.headers["Referer"]).isNull()
-                assertThat(redirected.headers["X-Api-Key"]).isNull()
-                assertThat(redirected.headers["User-Agent"])
-                    .isEqualTo("MuxTV-Playback/1")
+                assertThat(error.reason)
+                    .isEqualTo(RedirectRejectionReason.InsecureTransportNotApproved)
+                assertThat(sourceServer.requestCount).isEqualTo(1)
+                assertThat(targetServer.requestCount).isEqualTo(0)
             }
         }
     }
