@@ -55,7 +55,7 @@ object MuxTvPlaybackSessionContract {
 
     fun success(): SessionResult = SessionResult(SessionResult.RESULT_SUCCESS)
 
-    fun cancelled(): SessionResult = SessionResult(SessionError.INFO_CANCELLED)
+    fun cancelled(): SessionResult = SessionResult(SessionError.ERROR_INVALID_STATE)
 
     fun badValue(): SessionResult = SessionResult(SessionError.ERROR_BAD_VALUE)
 
