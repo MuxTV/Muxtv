@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
@@ -19,21 +18,25 @@ internal suspend fun <T> ListenableFuture<T>.awaitCancellable(
     suspendCancellableCoroutine { continuation ->
         addListener(
             {
+                if (!continuation.isActive) return@addListener
+
                 if (isCancelled) {
-                    continuation.resumeExceptionIfActive(ListenableFutureCancelledException())
+                    continuation.resumeWith(
+                        Result.failure(ListenableFutureCancelledException()),
+                    )
                     return@addListener
                 }
 
-                try {
-                    val value = get()
-                    continuation.tryResume(value)?.let(continuation::completeResume)
+                val result = try {
+                    Result.success(get())
                 } catch (_: CancellationException) {
-                    continuation.resumeExceptionIfActive(ListenableFutureCancelledException())
+                    Result.failure(ListenableFutureCancelledException())
                 } catch (error: ExecutionException) {
-                    continuation.resumeExceptionIfActive(error.cause ?: error)
+                    Result.failure(error.cause ?: error)
                 } catch (error: Throwable) {
-                    continuation.resumeExceptionIfActive(error)
+                    Result.failure(error)
                 }
+                continuation.resumeWith(result)
             },
             MoreExecutors.directExecutor(),
         )
@@ -43,8 +46,4 @@ internal suspend fun <T> ListenableFuture<T>.awaitCancellable(
             }
         }
     }
-}
-
-private fun <T> CancellableContinuation<T>.resumeExceptionIfActive(error: Throwable) {
-    tryResumeWithException(error)?.let(::completeResume)
 }
