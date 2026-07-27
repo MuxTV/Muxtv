@@ -21,6 +21,7 @@ class RemoteSourceAccessCodecTest {
                 "x-api-key" to "private-api-key",
             ),
             approvedPlaybackOrigins = setOf(
+                origin("http://provider.example:8080"),
                 origin("http://cdn.example:80"),
                 origin("http://video.example:8080"),
             ),
@@ -51,11 +52,14 @@ class RemoteSourceAccessCodecTest {
     }
 
     @Test
-    fun `approved source origin and explicit origins use exact host and port`() {
+    fun `approved origins use exact host and port`() {
         val access = RemoteSourceAccess(
             url = "http://provider.example/list.m3u",
             insecureHttpApproved = true,
-            approvedPlaybackOrigins = setOf(origin("http://cdn.example:8080")),
+            approvedPlaybackOrigins = setOf(
+                origin("http://provider.example:80"),
+                origin("http://cdn.example:8080"),
+            ),
         )
 
         assertThat(access.approvesPlayback("http://provider.example/live")).isTrue()
@@ -66,8 +70,11 @@ class RemoteSourceAccessCodecTest {
     }
 
     @Test
-    fun `approval mutations are immutable idempotent and bounded`() {
-        val original = RemoteSourceAccess(url = "https://provider.example/list.m3u")
+    fun `approval mutations are immutable idempotent bounded and independent from refresh approval`() {
+        val original = RemoteSourceAccess(
+            url = "http://provider.example/list.m3u",
+            insecureHttpApproved = true,
+        )
         val first = origin("http://cdn-1.example:80")
         val approved = original.withApprovedPlaybackOrigin(first)
 
@@ -75,7 +82,9 @@ class RemoteSourceAccessCodecTest {
         assertThat(approved.approvedPlaybackOrigins).containsExactly(first)
         assertThat(approved.withApprovedPlaybackOrigin(first)).isSameInstanceAs(approved)
         assertThat(approved.withoutApprovedPlaybackOrigin(first).approvedPlaybackOrigins).isEmpty()
-        assertThat(approved.withoutPlaybackApprovals().approvedPlaybackOrigins).isEmpty()
+        val reset = approved.withoutPlaybackApprovals()
+        assertThat(reset.approvedPlaybackOrigins).isEmpty()
+        assertThat(reset.insecureHttpApproved).isTrue()
 
         val maximum = (1..RemoteSourceAccess.MAX_APPROVED_PLAYBACK_ORIGINS)
             .map { index -> origin("http://cdn-$index.example:80") }
@@ -95,7 +104,10 @@ class RemoteSourceAccessCodecTest {
         val original = RemoteSourceAccess(
             url = "http://old.example/list.m3u",
             insecureHttpApproved = true,
-            approvedPlaybackOrigins = setOf(origin("http://old-cdn.example:80")),
+            approvedPlaybackOrigins = setOf(
+                origin("http://old.example:80"),
+                origin("http://old-cdn.example:80"),
+            ),
         )
 
         val changed = original.withSourceUrl(
@@ -135,6 +147,21 @@ class RemoteSourceAccessCodecTest {
 
         assertThat(secure.approvedPlaybackOrigins).isEmpty()
         assertThat(denied.approvedPlaybackOrigins).isEmpty()
+    }
+
+    @Test
+    fun `v2 does not infer playback approval from source refresh approval`() {
+        val decoded = RemoteSourceAccessCodec.decode(
+            rawRecord(
+                version = 2,
+                url = "http://provider.example/list.m3u",
+                insecureHttpApproved = true,
+                origins = emptyList(),
+            ),
+        )
+
+        assertThat(decoded.insecureHttpApproved).isTrue()
+        assertThat(decoded.approvedPlaybackOrigins).isEmpty()
     }
 
     @Test
