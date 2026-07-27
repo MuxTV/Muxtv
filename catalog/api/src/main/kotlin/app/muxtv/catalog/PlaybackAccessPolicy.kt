@@ -10,6 +10,8 @@ sealed interface PlaybackAccessDecision {
         init {
             require(displayOrigin.isNotBlank())
         }
+
+        override fun toString(): String = "ApprovalRequired(displayOrigin=<redacted>)"
     }
 
     data object CredentialNotFound : PlaybackAccessDecision
