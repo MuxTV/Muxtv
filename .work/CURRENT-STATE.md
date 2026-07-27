@@ -1,126 +1,109 @@
 ---
 status: accepted
 last_reviewed: 2026-07-27
-architecture_version: 2
-implementation_source_commit: 8665f80d6e38bc90d10ead0d3a3618fbecd4e304
+architecture_version: 3
+implementation_source_commit: 764ec102808c4df57e826d05ce7b1334063bb520
 ---
 
 # Текущее состояние
 
 ## Классификация проекта
 
-MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется, но продукт ещё не готов к публичным compatibility/release обещаниям.
+MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust теперь переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
 
-Phase 01 уже содержит рабочий IPTV vertical slice и hardened playback ownership. Benchmark baseline, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
+Benchmark/corpus baseline, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
 
 ## Проверенные факты
 
 - Репозиторий: `MuxTV/Muxtv`, private, default branch `main`, BSD 3-Clause.
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
 - В `settings.gradle.kts` подключены 23 Gradle-проекта плюс included build `build-logic`.
-- База использует Room schema v4 с исполняемыми миграционными и transactional contracts.
+- Room schema v4; HTTP approval не потребовал отдельной Room security table или migration.
 - CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent и DeviceMatrix через repository-owned PowerShell harness.
-- PR #36 слит squash commit `f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e`.
-- PR #37 слит squash commit `66cf8dbaddafa87be7bfd619515452ceb3c46354`.
 - PR #38 слит squash commit `8665f80d6e38bc90d10ead0d3a3618fbecd4e304` и закрыл issue #26.
-- Финальный Full PR #38: run `30223482178` на cleaned head `f4c7731dff930200c5cefb77765d0fa37b13b02f`.
-- Последняя playback DeviceMatrix: run `30222900566`.
+- PR #42 слит squash commit `764ec102808c4df57e826d05ce7b1334063bb520` и закрыл issue #39.
+- Cleaned-tree Full для PR #42: run `30295592181`.
+- Последняя успешная API 26/API 36 HTTP-approval DeviceMatrix: run `30287803018`, без fallback/failures/errors/skips.
 
 ## Реализованный рабочий путь
 
-### Источники и каталог
+### Источники, trust и каталог
 
 - URL policy отклоняет unsupported schemes, embedded credentials, fragments и encoded control separators до persistence.
-- Remote source access хранится в Android Keystore-backed credential store вне Room projections.
+- Remote source access хранится в Android Keystore-backed credential store вне Room public projections.
+- Один singleton `RemoteSourceAccessManager` владеет encrypted save/read/update/remove для onboarding, refresh и playback approvals; read-modify-write mutations сериализованы.
 - Source-entry поддерживает HTTPS и отдельное явное подтверждение HTTP.
-- Locator остаётся только в bounded transient state и не попадает в Navigation, SavedState, Room projections или semantics.
-- Незавершённая подготовка восстанавливается через opaque durable metadata без locator.
+- `RemoteSourceAccess` codec v2 хранит bounded exact HTTP playback origins и читает legacy v1 records.
+- Source-level HTTP refresh approval отделён от playback origins: reset не ломает уже подтверждённый playlist refresh.
+- Locator остаётся только в bounded transient state и не попадает в Navigation, SavedState или stable semantics.
 - M3U обрабатывается bounded streaming parser.
 - Source revisions immutable; импорт идёт через staging с atomic activation/rollback.
-- Catalog staging использует immutable bounded batches и stable identity hashing.
 - Source refresh поддерживает manual/periodic WorkManager scheduling и typed attempt state.
-- Sources UI показывает активные источники и управляет refresh policy.
 
 ### Каналы и Player
 
 - PlaybackCatalog строит active channel/variant projections из Room.
+- Credential reference выбирается только во внутреннем DAO row и не добавляется в public channel/variant models.
+- `resolveVariant()` возвращает typed Ready / HTTP approval required / access unavailable.
+- Approval identity: `http + normalized host + effective port`; другой host/port не наследует trust.
+- Stale variant ID не падает назад на другой active stream и не может мутировать его credential.
+- Player показывает только canonical origin; до подтверждения SET в MediaSession не отправляется.
+- После approval Player заново разрешает current active variant и только затем создаёт `PlaybackSessionRequest`.
+- Revocation приводит к повторному warning на следующем входе в Player.
 - Channels использует stable channel identity, bounded viewport state и explicit FocusRequester ownership.
 - Player → Back восстанавливает канал по stable identity; после удаления применяется nearest-previous fallback.
-- Player подключается к одному process-owned MediaSessionService и одному ExoPlayer.
-- Каждый playback request создаёт request-scoped Media3 OkHttp datasource/media-source chain.
-- Per-request headers immutable и не переходят между последовательно установленными stream requests.
-- Redirect policy отклоняет HTTPS → HTTP downgrade и снимает sensitive headers при cross-origin переходе.
-- Failed/cancelled controller connection не отравляет process lifetime: следующий connect может создать новый future.
-- Remote MediaSession disconnect инвалидирует только matching cached controller и увеличивает connection epoch.
-- Видимый Player повторяет один bounded connect/resolve/setup после epoch change без сохранения locator/header state.
-- Setup protocol использует opaque `PlaybackSetupId` и отдельные SET/CANCEL команды.
-- Cancel-before-install блокирует поздний setup; stale cancel не останавливает более новый playback.
-- Parent coroutine cancellation и timeout отменяют waiting future и инициируют ровно один best-effort service cancel.
-- Один process-owned player/session invariant сохраняется при Activity recreation и remote-session reconnect.
+- Один process-owned MediaSessionService/ExoPlayer сохраняется при Activity recreation и reconnect.
+- Setup protocol использует opaque `PlaybackSetupId`, SET/CANCEL и защищён от late install/stale cancel.
 
-### TV interaction и security
+### Diagnostics и security
 
-- Home, Channels, Sources и Add Source проходят с D-pad/Enter без touch input.
-- Text fields явно маршрутизируют D-pad Up/Down и не запирают focus внутри редактора.
-- Secure locator field не публикует raw locator в merged/unmerged Compose semantics.
-- Stable test/focus tags не содержат provider/source/channel secret values.
-- Playback setup IDs, locators, query values, cookies, Authorization/Referer и sensitive headers редактируются на diagnostics boundary.
-- Известные secret fixtures отсутствуют в проверенных reports, logcat, manifests и screenshots.
+- `ChannelQuery`, channel summary, variant и approval outcomes имеют redacted diagnostic representation.
+- Search text, provider/source identity, locator, query, exact origin, cookies, Authorization/Referer и credential values не должны появляться в logs/errors/traces.
+- HTTPS → HTTP redirect остаётся запрещённым; cross-origin sensitive headers снимаются.
+- Production manifest не содержит process-wide cleartext opt-in или network-wide HTTP allow-list.
+- Request-scoped repository clients, а не platform default, являются HTTP security boundary на всех поддерживаемых API.
 
-## Последняя Android TV матрица
+## Android TV evidence
+
+Последняя успешная HTTP-approval матрица:
 
 | Профиль | System image | RAM / CPU | Credentials | Database | Media3 | App |
 |---|---|---:|---:|---:|---:|---:|
-| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 19 | 10 | 11 |
-| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 19 | 10 | 11 |
+| old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 21 | 10 | 12 |
+| current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 21 | 10 | 12 |
 
-Run `30222900566` прошёл на обоих профилях без fallback, failures, errors или skips. Matrix доказывает Android API/lifecycle/Room/Keystore/focus/MediaSession command ownership. Она не доказывает vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC или реальные zapping/performance характеристики.
+Run `30287803018` прошёл без fallback, failures, errors или skips. Последующие shared-manager, stale-variant, revocation и diagnostic-redaction изменения прошли cleaned-tree Full; revocation journey был скомпилирован, но отдельный повторный exact-head DeviceMatrix не использовался как merge gate из-за занятости единственного runner.
 
-## Ближайший production blocker
+Эмуляторная матрица доказывает Android API/lifecycle/Room/Keystore/focus/MediaSession contracts. Она не доказывает vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC или реальные zapping/performance характеристики.
 
-Issue #39: HTTP approval onboarding пока не доходит до playback request как exact-origin решение.
+## Ближайший production milestone
 
-Фактический разрыв:
+Issue #27: deterministic provider-neutral M3U/HLS/XMLTV corpus и воспроизводимые measurements.
 
-1. пользователь может явно подтвердить HTTP source в source-entry;
-2. encrypted source access сохраняет это решение для refresh/onboarding;
-3. `ResolvedPlaybackRequest` не несёт approval context;
-4. `PlayerRoute` создаёт `PlaybackSessionRequest` с `insecureHttpApproved = false`;
-5. HTTP playlist способен импортироваться, но его HTTP channel playback затем отклоняется transport policy.
+Первый пакет должен дать:
 
-Следующий runtime PR должен решить этот разрыв без process-wide cleartext opt-in и без доверия другому host/port.
+1. deterministic M3U profiles 1k/10k/50k с explicit seed;
+2. manifest с expected counts, byte size, generator version и SHA-256;
+3. controlled duplicates, malformed attributes, long metadata, relative URLs и header variants;
+4. byte-identical output для одинакового seed/profile;
+5. parser/importer tests против manifest expectations;
+6. descriptive measurements до назначения performance budgets.
 
-## Следующие продуктовые блоки
+## Последовательность после issue #27
 
-После issue #39:
-
-1. issue #27 — deterministic provider-neutral M3U/HLS/XMLTV corpus и performance baselines;
-2. issue #28 — bounded XMLTV ingest и immutable EPG revisions;
-3. issue #29 — now/next, Guide, Search, Favorites и Recent;
-4. issue #30 — bounded variant fallback и TV Doctor Lite;
-5. issue #33 — последовательная светлая TV-first visual modernization без новой state architecture;
-6. issue #31 — R8, Baseline Profile, signing, SBOM, release checklist и physical-device alpha gate.
+1. issue #28 — bounded XMLTV ingest и immutable EPG revisions;
+2. issue #29 — now/next, Guide, Search, Favorites и Recent;
+3. issue #30 — bounded variant fallback и TV Doctor Lite;
+4. issue #33 — светлая TV-first visual modernization без новой state architecture;
+5. issue #31 — R8, Baseline Profile, signing, SBOM, release checklist и physical-device alpha gate.
 
 ## Сохраняемые архитектурные решения
 
 - Kotlin + native Compose остаются Android TV baseline.
-- Room/SQLite остаётся Android-first storage boundary; full KMP database требует отдельного клиента и ADR.
+- Room/SQLite остаётся Android-first storage boundary.
 - Media3 остаётся primary playback engine behind stable contracts.
 - Source/EPG updates используют immutable revisions, staging и atomic commit.
 - Provider data, canonical channels и profile overlays разделены.
-- Remote playlists/XML/images/provider endpoints считаются untrusted.
-- Rust/UniFFI, libmpv, bundled SQLite, Paging и второй player engine допускаются только после corpus-backed benchmark/security ADR.
+- Remote playlists/XML/images/provider endpoints считаются untrusted и bounded.
+- Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine допускаются только после corpus-backed benchmark/security ADR.
 - Физические Android/Google TV/Fire TV проверки дополняют, но не заменяют автоматическую API-матрицу.
-
-## Следующий проверяемый результат
-
-Issue #39 закрыта отдельным schema/security/product PR, который доказывает:
-
-1. approval scoped к exact normalized HTTP origin, включая effective port;
-2. approved origin может импортироваться и воспроизводиться;
-3. другой host или port не наследует доверие;
-4. source deletion/revocation инвалидирует approval;
-5. HTTPS → HTTP redirect остаётся запрещённым;
-6. production manifest не получает глобальный cleartext opt-in;
-7. locator/query/header/credential values отсутствуют в Room approval rows, Navigation, state, logs, semantics и reports;
-8. Full и API 26/API 36 evidence проходят на exact head.
