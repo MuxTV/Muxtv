@@ -178,7 +178,7 @@ class EncryptedPlaybackAccessPolicyResolverTest {
     }
 
     @Test
-    fun `parent cancellation is never converted to an access result`() = runTest {
+    fun `parent cancellation is never converted to an access result`() {
         val store = RecordingCredentialStore().apply { cancelReads = true }
         val resolver = EncryptedPlaybackAccessPolicyResolver(store)
 
@@ -205,9 +205,8 @@ class EncryptedPlaybackAccessPolicyResolverTest {
     }
 
     private fun readAccess(store: RecordingCredentialStore): RemoteSourceAccess =
-        RemoteSourceAccessCodec.decode(
-            SecretBytes.copyOf(requireNotNull(store.rawRecords[CREDENTIAL_ID])),
-        )
+        SecretBytes.copyOf(requireNotNull(store.rawRecords[CREDENTIAL_ID]))
+            .use(RemoteSourceAccessCodec::decode)
 
     private fun origin(encoded: String): ExactHttpOrigin =
         requireNotNull(ExactHttpOrigin.parse(encoded))
