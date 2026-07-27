@@ -45,6 +45,11 @@ class StreamingM3uParserTest {
         assertThat(first.referrer).isEqualTo("https://portal.example/")
         assertThat(first.locator).contains("token=secret")
         assertThat(first.toString()).doesNotContain("token=secret")
+        assertThat(first.toString()).doesNotContain("News, World")
+        assertThat(first.toString()).doesNotContain("News")
+        assertThat(first.toString()).doesNotContain("news.world")
+        assertThat(first.toString()).doesNotContain("MuxTV Test Agent")
+        assertThat(first.toString()).doesNotContain("portal.example")
 
         val second = sink.entries[1]
         assertThat(second.displayName).isEqualTo("@239.0.0.1:1234")
