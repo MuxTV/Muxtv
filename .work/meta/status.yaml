@@ -1,6 +1,6 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-07-25
+updated_at: 2026-07-27
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
@@ -8,7 +8,7 @@ repository_state:
   ci: present_self_hosted_full_and_device_matrix
   tests: present_unit_android_and_instrumentation
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: implementation_current
+  documentation: synchronized_after_media3_hardening
   architecture_version: 2
 active_branch_after_merge: main
 implemented:
@@ -27,6 +27,12 @@ implemented:
   - source_management_ui
   - channels_browser
   - media3_session_and_basic_player
+  - media3_request_scoped_okhttp_transport
+  - playback_header_isolation
+  - playback_redirect_downgrade_and_cross_origin_policy
+  - retryable_media_controller_lifecycle
+  - remote_session_reconnect_epoch
+  - cancellable_playback_setup_protocol
   - api_26_api_36_tv_device_harness
 accepted_specifications:
   - profiles
@@ -48,38 +54,49 @@ accepted_specifications:
   - fire_tv
   - reference_repository_review
 verified_evidence:
-  final_focus_source_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
-  final_full_run: 30171221399
-  device_matrix_run: 30170573346
+  source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
+  media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
+  controller_lifecycle_merge: 66cf8dbaddafa87be7bfd619515452ceb3c46354
+  setup_reconnect_merge: 8665f80d6e38bc90d10ead0d3a3618fbecd4e304
+  final_media3_full_run: 30223482178
+  media3_device_matrix_run: 30222900566
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
       fallback_used: false
+      ram_mb: 1536
+      cpu_cores: 2
     - api: 36
       image: system-images;android-36;android-tv;x86_64
       fallback_used: false
+      ram_mb: 2048
+      cpu_cores: 2
   instrumentation_per_profile:
     credentials: 4
     database: 19
-    application: 10
+    media3: 10
+    application: 11
 next_milestone:
-  id: phase-01-media3-transport-reconnect
-  issue: 26
-  plan: docs/superpowers/plans/2026-07-25-next-execution.md
+  id: phase-01-exact-origin-http-playback-approval
+  issue: 39
+  plan: docs/superpowers/plans/2026-07-27-next-execution.md
   exit_criteria:
-    - playback_uses_request_scoped_okhttp_datasource
-    - stream_headers_do_not_leak_between_playback_requests
-    - redirect_downgrade_and_cross_origin_policy_is_executable
-    - failed_or_cancelled_controller_connection_can_retry
-    - cancelled_player_setup_cannot_install_late_request
-    - single_process_owned_player_and_session_remain_true
-    - no_locator_or_header_value_in_ui_or_diagnostics
+    - explicit_http_source_approval_reaches_playback_request
+    - approval_is_scoped_to_exact_normalized_origin_and_effective_port
+    - unrelated_host_or_port_is_not_trusted
+    - source_deletion_or_revocation_invalidates_approval
+    - https_to_http_redirect_remains_denied
+    - no_process_wide_cleartext_opt_in
+    - no_locator_query_header_or_credential_in_durable_approval_or_diagnostics
+    - full_and_api_26_api_36_evidence_pass
 known_gaps:
+  - exact_origin_http_playback_approval
+  - deterministic_media_corpus_and_benchmarks
   - xmltv_epg_revisions
   - guide_search_favorites_recent_product_flows
   - playback_variant_fallback
   - tv_doctor_lite
-  - deterministic_media_corpus_and_benchmarks
+  - light_tv_first_visual_modernization
   - r8_and_baseline_profile
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
