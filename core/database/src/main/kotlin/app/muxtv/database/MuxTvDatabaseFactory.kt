@@ -3,7 +3,9 @@ package app.muxtv.database
 import android.content.Context
 import androidx.room3.Room
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
 
 class MuxTvDatabaseComponents internal constructor(
     val initializer: DatabaseInitializer,
@@ -15,7 +17,11 @@ class MuxTvDatabaseComponents internal constructor(
 )
 
 object MuxTvDatabaseFactory {
-    fun create(context: Context): MuxTvDatabaseComponents {
+    fun create(
+        context: Context,
+        playbackAccessPolicyResolver: PlaybackAccessPolicyResolver =
+            RejectAllPlaybackAccessPolicyResolver,
+    ): MuxTvDatabaseComponents {
         val database = Room.databaseBuilder(
             context = context.applicationContext,
             klass = MuxTvDatabase::class.java,
@@ -31,7 +37,10 @@ object MuxTvDatabaseFactory {
                 database.pendingSourcePreparationDao(),
             ),
             catalogRepository = RoomCatalogRepository(database.catalogDao()),
-            playbackCatalog = RoomPlaybackCatalog(database.playbackCatalogDao()),
+            playbackCatalog = RoomPlaybackCatalog(
+                dao = database.playbackCatalogDao(),
+                accessPolicyResolver = playbackAccessPolicyResolver,
+            ),
         )
     }
 
