@@ -31,6 +31,7 @@ import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.player.PlayerRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
+import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 
@@ -41,6 +42,8 @@ fun AppNavigation(
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
     sourceEntryOnboarding: SourceEntryOnboarding,
+    sourcePlaybackApprovalActions: SourcePlaybackApprovalActions =
+        SourcePlaybackApprovalActions.Unavailable,
     modifier: Modifier = Modifier,
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
@@ -96,6 +99,7 @@ fun AppNavigation(
                         AppDestination.Sources -> SourcesRoute(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,
+                            playbackApprovalActions = sourcePlaybackApprovalActions,
                             onAddSource = { open(AppDestination.AddSource) },
                         )
 
@@ -140,7 +144,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
+                Modifier.focusRequester(initialNavigationFocusRequester)
             } else {
                 Modifier
             }
