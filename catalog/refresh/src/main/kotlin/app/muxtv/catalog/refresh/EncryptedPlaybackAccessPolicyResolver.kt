@@ -4,12 +4,16 @@ import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.credentials.CredentialId
+import app.muxtv.credentials.CredentialStore
 import app.muxtv.network.ExactHttpOrigin
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class EncryptedPlaybackAccessPolicyResolver(
     private val accessManager: RemoteSourceAccessManager,
 ) : PlaybackAccessPolicyResolver {
+    internal constructor(credentialStore: CredentialStore) :
+        this(RemoteSourceAccessManager(credentialStore))
+
     override suspend fun resolve(
         credentialRef: String,
         playbackLocator: String,
