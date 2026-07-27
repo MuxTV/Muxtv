@@ -18,6 +18,7 @@ internal data class ActiveVariantRow(
     val variantId: String,
     val sourceId: String,
     val sourceName: String,
+    val credentialRef: String?,
     val locator: String,
     val userAgent: String?,
     val referrer: String?,
@@ -111,6 +112,7 @@ internal interface PlaybackCatalogDao {
         SELECT stream_variants.id AS variantId,
                sources.id AS sourceId,
                sources.name AS sourceName,
+               sources.credentialRef AS credentialRef,
                stream_variants.locator AS locator,
                stream_variants.userAgent AS userAgent,
                stream_variants.referrer AS referrer
