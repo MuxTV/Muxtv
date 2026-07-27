@@ -66,12 +66,13 @@ internal class ControllerConnectionRegistry<T : Any>(
         staleController?.let(releaseConnected)
     }
 
-    fun disconnected(controller: T) {
-        synchronized(lock) {
-            val current = state
-            if (current is State.Connected && current.controller === controller) {
-                state = State.Idle()
-            }
+    fun disconnected(controller: T): Boolean = synchronized(lock) {
+        val current = state
+        if (current is State.Connected && current.controller === controller) {
+            state = State.Idle()
+            true
+        } else {
+            false
         }
     }
 

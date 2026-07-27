@@ -23,6 +23,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
+    private lateinit var setupCoordinator: PlaybackSetupCoordinator<PlaybackSessionRequest>
 
     override fun onCreate() {
         super.onCreate()
@@ -32,6 +33,10 @@ class MuxTvPlaybackService : MediaSessionService() {
             httpClients = httpClients,
         )
         player = ExoPlayer.Builder(this).build()
+        setupCoordinator = PlaybackSetupCoordinator(
+            install = ::install,
+            clearInstalled = ::clearInstalled,
+        )
         mediaSession = MediaSession.Builder(this, player)
             .setId(SESSION_ID)
             .setCallback(SessionCallback())
@@ -60,6 +65,11 @@ class MuxTvPlaybackService : MediaSessionService() {
         player.play()
     }
 
+    private fun clearInstalled() {
+        player.stop()
+        player.clearMediaItems()
+    }
+
     private inner class SessionCallback : MediaSession.Callback {
         override fun onConnect(
             session: MediaSession,
@@ -72,6 +82,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                 baseResult.availableSessionCommands
                     .buildUpon()
                     .add(MuxTvPlaybackSessionContract.setPlaybackRequestCommand)
+                    .add(MuxTvPlaybackSessionContract.cancelPlaybackSetupCommand)
                     .build(),
                 baseResult.availablePlayerCommands,
             )
@@ -83,19 +94,33 @@ class MuxTvPlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction !=
-                MuxTvPlaybackSessionContract.ACTION_SET_PLAYBACK_REQUEST
-            ) {
-                return Futures.immediateFuture(MuxTvPlaybackSessionContract.notSupported())
-            }
             if (controller.packageName != packageName) {
                 return Futures.immediateFuture(MuxTvPlaybackSessionContract.permissionDenied())
             }
 
-            val request = PlaybackSessionRequest.fromBundle(args)
-                ?: return Futures.immediateFuture(MuxTvPlaybackSessionContract.badValue())
-            install(request)
-            return Futures.immediateFuture(MuxTvPlaybackSessionContract.success())
+            val result = when (customCommand.customAction) {
+                MuxTvPlaybackSessionContract.ACTION_SET_PLAYBACK_REQUEST -> handleSetup(args)
+                MuxTvPlaybackSessionContract.ACTION_CANCEL_PLAYBACK_SETUP -> handleCancel(args)
+                else -> MuxTvPlaybackSessionContract.notSupported()
+            }
+            return Futures.immediateFuture(result)
+        }
+
+        private fun handleSetup(args: Bundle): SessionResult {
+            val command = MuxTvPlaybackSessionContract.parseSetupArgs(args)
+                ?: return MuxTvPlaybackSessionContract.badValue()
+
+            return when (setupCoordinator.install(command.id, command.request)) {
+                PlaybackSetupInstallResult.Installed -> MuxTvPlaybackSessionContract.success()
+                PlaybackSetupInstallResult.Cancelled -> MuxTvPlaybackSessionContract.cancelled()
+            }
+        }
+
+        private fun handleCancel(args: Bundle): SessionResult {
+            val setupId = MuxTvPlaybackSessionContract.parseCancelArgs(args)
+                ?: return MuxTvPlaybackSessionContract.badValue()
+            setupCoordinator.cancel(setupId)
+            return MuxTvPlaybackSessionContract.success()
         }
     }
 
