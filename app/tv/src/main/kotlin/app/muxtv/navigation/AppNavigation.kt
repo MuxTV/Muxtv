@@ -144,7 +144,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialNavigationFocusRequester)
+                Modifier.focusRequester(initialFocusRequester)
             } else {
                 Modifier
             }
