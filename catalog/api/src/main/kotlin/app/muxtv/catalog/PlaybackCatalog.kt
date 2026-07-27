@@ -17,6 +17,10 @@ data class ChannelQuery(
         ?.trim()
         ?.takeIf(String::isNotEmpty)
 
+    override fun toString(): String =
+        "ChannelQuery(profileId=<redacted>, hasSearch=${normalizedSearchText != null}, " +
+            "favoritesOnly=$favoritesOnly, limit=$limit)"
+
     companion object {
         const val DEFAULT_CHANNEL_LIMIT = 200
         const val MAX_CHANNEL_LIMIT = 500
@@ -37,6 +41,12 @@ data class PlayableChannelSummary(
         require(displayName.isNotBlank())
         require(variantCount > 0)
     }
+
+    override fun toString(): String =
+        "PlayableChannelSummary(channelId=$channelId, displayName=<redacted>, " +
+            "hasLogo=${logoUrl != null}, hasGroup=${groupTitle != null}, " +
+            "hasChannelNumber=${channelNumber != null}, isFavorite=$isFavorite, " +
+            "variantCount=$variantCount)"
 }
 
 data class PlayableVariant(
@@ -55,8 +65,8 @@ data class PlayableVariant(
     }
 
     override fun toString(): String =
-        "PlayableVariant(variantId=$variantId, sourceId=$sourceId, sourceName=$sourceName, " +
-            "locator=<redacted>, userAgent=${userAgent != null}, referrer=${referrer != null})"
+        "PlayableVariant(variantId=<redacted>, sourceId=<redacted>, sourceName=<redacted>, " +
+            "locator=<redacted>, hasUserAgent=${userAgent != null}, hasReferrer=${referrer != null})"
 }
 
 data class PlayableChannel(
@@ -111,6 +121,10 @@ sealed interface PlaybackVariantResolution {
             require(variantId.isNotBlank())
             require(displayOrigin.isNotBlank())
         }
+
+        override fun toString(): String =
+            "InsecureTransportApprovalRequired(channelId=<redacted>, " +
+                "variantId=<redacted>, displayOrigin=<redacted>)"
     }
 
     data class AccessUnavailable(
