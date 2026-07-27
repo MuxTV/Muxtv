@@ -16,17 +16,37 @@ class PlaybackApprovalCapacityExceededException : IllegalArgumentException(
     "Playback approval capacity is exceeded.",
 )
 
-class RemoteSourceAccess(
+class RemoteSourceAccess private constructor(
     val url: String,
-    val insecureHttpApproved: Boolean = false,
-    val userAgent: String? = null,
-    val referrer: String? = null,
-    sensitiveHeaders: Map<String, String> = emptyMap(),
-    approvedPlaybackOrigins: Set<ExactHttpOrigin> = emptySet(),
+    val insecureHttpApproved: Boolean,
+    val userAgent: String?,
+    val referrer: String?,
+    sensitiveHeaders: Map<String, String>,
+    approvedPlaybackOrigins: Set<ExactHttpOrigin>,
+    seedSourcePlaybackOrigin: Boolean,
 ) {
+    constructor(
+        url: String,
+        insecureHttpApproved: Boolean = false,
+        userAgent: String? = null,
+        referrer: String? = null,
+        sensitiveHeaders: Map<String, String> = emptyMap(),
+        approvedPlaybackOrigins: Set<ExactHttpOrigin> = emptySet(),
+    ) : this(
+        url = url,
+        insecureHttpApproved = insecureHttpApproved,
+        userAgent = userAgent,
+        referrer = referrer,
+        sensitiveHeaders = sensitiveHeaders,
+        approvedPlaybackOrigins = approvedPlaybackOrigins,
+        seedSourcePlaybackOrigin = insecureHttpApproved,
+    )
+
     val sensitiveHeaders: Map<String, String> = normalizeSensitiveHeaders(sensitiveHeaders)
     val approvedPlaybackOrigins: Set<ExactHttpOrigin> = normalizeApprovedPlaybackOrigins(
-        approvedPlaybackOrigins,
+        sourceUrl = url,
+        seedSourcePlaybackOrigin = seedSourcePlaybackOrigin,
+        origins = approvedPlaybackOrigins,
     )
 
     init {
@@ -64,11 +84,8 @@ class RemoteSourceAccess(
         userAgent = userAgent,
         referrer = referrer,
         sensitiveHeaders = sensitiveHeaders,
-        approvedPlaybackOrigins = if (insecureHttpApproved) {
-            ExactHttpOrigin.fromUrl(url)?.let(::setOf).orEmpty()
-        } else {
-            emptySet()
-        },
+        approvedPlaybackOrigins = emptySet(),
+        seedSourcePlaybackOrigin = insecureHttpApproved,
     )
 
     override fun toString(): String =
@@ -86,6 +103,7 @@ class RemoteSourceAccess(
         referrer = referrer,
         sensitiveHeaders = sensitiveHeaders,
         approvedPlaybackOrigins = approvedPlaybackOrigins,
+        seedSourcePlaybackOrigin = false,
     )
 
     companion object {
@@ -94,6 +112,23 @@ class RemoteSourceAccess(
         internal const val MAX_SENSITIVE_HEADERS = 5
         internal const val MAX_APPROVED_PLAYBACK_ORIGINS = 16
         internal const val MAX_APPROVED_ORIGIN_CHARACTERS = 512
+
+        internal fun decoded(
+            url: String,
+            insecureHttpApproved: Boolean,
+            userAgent: String?,
+            referrer: String?,
+            sensitiveHeaders: Map<String, String>,
+            approvedPlaybackOrigins: Set<ExactHttpOrigin>,
+        ): RemoteSourceAccess = RemoteSourceAccess(
+            url = url,
+            insecureHttpApproved = insecureHttpApproved,
+            userAgent = userAgent,
+            referrer = referrer,
+            sensitiveHeaders = sensitiveHeaders,
+            approvedPlaybackOrigins = approvedPlaybackOrigins,
+            seedSourcePlaybackOrigin = false,
+        )
     }
 }
 
@@ -190,7 +225,7 @@ object RemoteSourceAccessCodec {
                 throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.TrailingData)
             }
 
-            return RemoteSourceAccess(
+            return RemoteSourceAccess.decoded(
                 url = url,
                 insecureHttpApproved = insecureHttpApproved,
                 userAgent = userAgent,
@@ -311,9 +346,14 @@ private fun normalizeSensitiveHeaders(headers: Map<String, String>): Map<String,
 }
 
 private fun normalizeApprovedPlaybackOrigins(
+    sourceUrl: String,
+    seedSourcePlaybackOrigin: Boolean,
     origins: Set<ExactHttpOrigin>,
 ): Set<ExactHttpOrigin> {
     val normalized = LinkedHashSet<ExactHttpOrigin>()
+    if (seedSourcePlaybackOrigin) {
+        ExactHttpOrigin.fromUrl(sourceUrl)?.let(normalized::add)
+    }
     origins.sortedBy(ExactHttpOrigin::encoded).forEach(normalized::add)
     if (normalized.size > RemoteSourceAccess.MAX_APPROVED_PLAYBACK_ORIGINS) {
         throw PlaybackApprovalCapacityExceededException()
