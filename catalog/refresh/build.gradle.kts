@@ -5,6 +5,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":catalog:api"))
     implementation(project(":catalog:importer"))
     implementation(project(":catalog:ingest"))
     implementation(project(":core:credentials"))
