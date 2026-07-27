@@ -17,6 +17,15 @@ enum class M3uCorpusProfile(
     val expectedDuplicateIdentities: Int
         get() = max(1, entryCount / DUPLICATE_INTERVAL)
 
+    internal fun identityIndex(entryIndex: Int): Int {
+        require(entryIndex in 0 until entryCount)
+        return if (entryIndex % DUPLICATE_INTERVAL == DUPLICATE_INTERVAL - 1) {
+            entryIndex - 1
+        } else {
+            entryIndex
+        }
+    }
+
     private companion object {
         const val DUPLICATE_INTERVAL = 100
     }
@@ -25,10 +34,16 @@ enum class M3uCorpusProfile(
 data class M3uCorpusSpec(
     val profile: M3uCorpusProfile,
     val seed: Long,
-    val sourceCommit: String = "unspecified",
+    val sourceCommit: String,
 ) {
     init {
         require(sourceCommit.isNotBlank())
+        require(sourceCommit.length <= MAX_SOURCE_COMMIT_CHARACTERS)
+        require(sourceCommit.none(Char::isWhitespace))
+    }
+
+    private companion object {
+        const val MAX_SOURCE_COMMIT_CHARACTERS = 128
     }
 }
 
@@ -95,11 +110,7 @@ object DeterministicM3uCorpusGenerator {
         writeLine("#EXTVLCOPT:http-user-agent=ignored-corpus-preamble")
 
         repeat(spec.profile.entryCount) { index ->
-            val identityIndex = if (index % DUPLICATE_INTERVAL == DUPLICATE_INTERVAL - 1) {
-                index - 1
-            } else {
-                index
-            }
+            val identityIndex = spec.profile.identityIndex(index)
             val randomSuffix = random.nextInt(RANDOM_SUFFIX_BOUND)
             val identity = "corpus-${spec.seed.toString(16)}-$identityIndex"
             val group = "Group ${index % GROUP_COUNT}"
@@ -165,7 +176,6 @@ object DeterministicM3uCorpusGenerator {
         String.format(Locale.ROOT, "%02x", byte.toInt() and 0xff)
     }
 
-    private const val DUPLICATE_INTERVAL = 100
     private const val MIXED_LINE_ENDING_INTERVAL = 11L
     private const val LONG_METADATA_INTERVAL = 257
     private const val LONG_METADATA_CHARACTERS = 1_024
