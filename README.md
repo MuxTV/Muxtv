@@ -6,17 +6,19 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Android TV приложение, модульный Gradle-проект, Room, защищённое хранилище, bounded M3U ingestion, управление источниками, Channels и process-owned Media3 Player уже существуют и проходят автоматические API 26/API 36 проверки.
+Проект находится в стадии **functional pre-alpha**. Android TV приложение, модульный Gradle-проект, Room, защищённое хранилище, bounded M3U ingestion, управление источниками, Channels и process-owned Media3 Player существуют и проходят автоматические API 26/API 36 проверки.
 
 Рабочий пользовательский путь:
 
 1. открыть «Источники» с пульта;
 2. добавить HTTPS M3U-ссылку или отдельно подтвердить HTTP-источник;
-3. сохранить source access в Android Keystore-backed credential store вне Room;
+3. сохранить source access и exact-origin playback approvals в Android Keystore-backed credential store вне Room;
 4. потоково импортировать плейлист в staging-каталог и атомарно активировать immutable revision;
 5. открыть Channels;
-6. выбрать канал и установить request в одну process-owned MediaSession/ExoPlayer;
-7. после Player → Back восстановить ранее сфокусированный канал.
+6. выбрать канал;
+7. для нового HTTP host/port подтвердить только canonical exact origin, после чего Player заново разрешает активный variant;
+8. установить request в одну process-owned MediaSession/ExoPlayer;
+9. после Player → Back восстановить ранее сфокусированный канал.
 
 Реализованы:
 
@@ -25,26 +27,29 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - Room schema v4 с миграциями, staging/activation и rollback-контрактами;
 - bounded streaming M3U parser, stable identities и immutable source revisions;
 - Android Keystore credential storage, durable onboarding registry и secret-safe source entry;
+- один singleton `RemoteSourceAccessManager` для encrypted source access и playback approvals;
+- exact-origin HTTP approval (`scheme + normalized host + effective port`), warning, re-resolution и revocation/reset;
 - manual/periodic source refresh, WorkManager scheduling и Sources UI;
 - bounded Channels browser и детерминированный D-pad focus/save-restore;
 - один process-owned `ExoPlayer` и `MediaSessionService`;
 - request-scoped Media3 OkHttp transport, immutable per-playback headers, redirect/downgrade и cross-origin credential policy;
 - retryable MediaController ownership, remote-session reconnect epoch и setup SET/CANCEL protocol без late install;
+- redacted catalog/playback diagnostics без locator, exact origin, query, provider/source identity и credential values;
 - repository-owned Windows PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
 
-Последний завершённый playback пакет:
+Последние завершённые playback/security пакеты:
 
 - PR #36 — request-scoped Media3 OkHttp transport и header isolation;
 - PR #37 — retryable/disconnect-aware MediaController lifecycle;
 - PR #38 — deterministic setup cancellation и remote-session reconnect;
-- issue #26 закрыта squash commit `8665f80d6e38bc90d10ead0d3a3618fbecd4e304`.
+- PR #42 — encrypted exact-origin HTTP playback approval, warning/re-resolution, revocation и shared access ownership;
+- issues #26 и #39 закрыты.
 
-Ближайший подтверждённый runtime-разрыв — issue #39: явное HTTP approval onboarding ещё не переносится в playback request как exact-origin решение. После него запланированы deterministic corpus/benchmarks, XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
+Ближайший подтверждённый пакет — issue #27: deterministic provider-neutral M3U/HLS/XMLTV corpus и воспроизводимые measurements. После него запланированы XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
 
 До первой публичной alpha ещё не завершены:
 
-- exact-origin HTTP playback approval, warning/revocation flow;
-- воспроизводимый M3U/HLS/XMLTV corpus и performance budgets;
+- воспроизводимый M3U/HLS/XMLTV corpus и evidence-backed performance budgets;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -75,12 +80,13 @@ pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
   -NoDaemon
 ```
 
-Harness самостоятельно выбирает доступные Android TV system images, создаёт headless AVD, выполняет non-zero instrumentation suites, сохраняет evidence и гарантированно останавливает emulator.
+Harness самостоятельно выбирает доступные Android TV system images, создаёт headless AVD, выполняет non-zero instrumentation suites, сохраняет evidence и гарантированно останавливает emulator. Эмуляторная матрица проверяет Android API/lifecycle/Room/Keystore/focus/MediaSession contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS или производительность слабого ARM SoC.
 
 ## Документация
 
 - архитектура, спецификации, ADR и machine-readable metadata: [`.work`](.work/README.md);
-- текущий последовательный план: [`docs/superpowers/plans/2026-07-27-next-execution.md`](docs/superpowers/plans/2026-07-27-next-execution.md);
+- активный последовательный план: [`docs/superpowers/plans/2026-07-27-post-http-approval-execution.md`](docs/superpowers/plans/2026-07-27-post-http-approval-execution.md);
+- HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
 - открытые функциональные пакеты ведутся через GitHub Issues и отдельные PR.
 
@@ -88,11 +94,11 @@ Harness самостоятельно выбирает доступные Android
 
 - TV-first интерфейс с полноценным D-pad/remote управлением;
 - local-first и privacy-first данные;
-- playlist locators, query values, cookies, credentials и sensitive headers не попадают в Navigation, Room projections, logs, traces, screenshots или exception text;
+- playlist locators, query values, cookies, credentials, provider identities и sensitive headers не попадают в Navigation, Room public projections, logs, traces, screenshots или exception text;
 - immutable revisions и atomic activation вместо частично обновлённого live state;
 - один process-owned `ExoPlayer` и `MediaSession`;
-- функциональные, schema/security и визуальные изменения выполняются отдельными reviewable PR;
-- emulator matrix подтверждает Android API/lifecycle contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS или слабый ARM SoC;
+- один in-process owner encrypted source access; никакого второго approval/security store;
+- функциональные, schema/security, infrastructure и визуальные изменения выполняются отдельными reviewable PR;
 - Kotlin/Compose/Room/Media3 остаются baseline; Rust, libmpv, bundled SQLite и второй engine требуют измеримого bottleneck, corpus и отдельного ADR.
 
 ## Лицензия
