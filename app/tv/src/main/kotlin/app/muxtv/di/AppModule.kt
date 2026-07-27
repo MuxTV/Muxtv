@@ -49,9 +49,15 @@ import javax.inject.Singleton
 object AppModule {
     @Provides
     @Singleton
-    fun providePlaybackAccessPolicyResolver(
+    fun provideRemoteSourceAccessManager(
         credentialStore: CredentialStore,
-    ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(credentialStore)
+    ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun providePlaybackAccessPolicyResolver(
+        accessManager: RemoteSourceAccessManager,
+    ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(accessManager)
 
     @Provides
     @Singleton
@@ -131,18 +137,12 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRemoteSourceAccessManager(
-        credentialStore: CredentialStore,
-    ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
-
-    @Provides
-    @Singleton
     fun provideRemoteSourceRefresher(
-        credentialStore: CredentialStore,
+        accessManager: RemoteSourceAccessManager,
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
     ): RemoteSourceRefresher = RemoteSourceRefresher(
-        credentialStore = credentialStore,
+        accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
     )
