@@ -2,11 +2,13 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
+import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -44,9 +46,19 @@ import javax.inject.Singleton
 object AppModule {
     @Provides
     @Singleton
+    fun providePlaybackAccessPolicyResolver(
+        credentialStore: CredentialStore,
+    ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(credentialStore)
+
+    @Provides
+    @Singleton
     fun provideDatabaseComponents(
         @ApplicationContext context: Context,
-    ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(context)
+        playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
+    ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(
+        context = context,
+        playbackAccessPolicyResolver = playbackAccessPolicyResolver,
+    )
 
     @Provides
     fun provideDatabaseInitializer(
