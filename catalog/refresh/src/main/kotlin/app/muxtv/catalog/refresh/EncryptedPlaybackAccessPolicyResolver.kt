@@ -20,22 +20,24 @@ class EncryptedPlaybackAccessPolicyResolver(
     override suspend fun resolve(
         credentialRef: String,
         playbackLocator: String,
-    ): PlaybackAccessDecision = when (val target = parseTarget(playbackLocator)) {
-        PlaybackTarget.Secure -> PlaybackAccessDecision.SecureTransport
-        PlaybackTarget.Invalid -> PlaybackAccessDecision.InvalidLocator
-        is PlaybackTarget.Insecure -> {
-            val credentialId = parseCredentialId(credentialRef)
-                ?: return PlaybackAccessDecision.CredentialNotFound
-            when (val read = readAccess(credentialId)) {
-                is AccessRead.Found -> if (target.origin in read.access.approvedPlaybackOrigins) {
-                    PlaybackAccessDecision.Approved
-                } else {
-                    PlaybackAccessDecision.ApprovalRequired(target.origin.displayValue())
-                }
+    ): PlaybackAccessDecision {
+        return when (val target = parseTarget(playbackLocator)) {
+            PlaybackTarget.Secure -> PlaybackAccessDecision.SecureTransport
+            PlaybackTarget.Invalid -> PlaybackAccessDecision.InvalidLocator
+            is PlaybackTarget.Insecure -> {
+                val credentialId = parseCredentialId(credentialRef)
+                    ?: return PlaybackAccessDecision.CredentialNotFound
+                when (val read = readAccess(credentialId)) {
+                    is AccessRead.Found -> if (target.origin in read.access.approvedPlaybackOrigins) {
+                        PlaybackAccessDecision.Approved
+                    } else {
+                        PlaybackAccessDecision.ApprovalRequired(target.origin.displayValue())
+                    }
 
-                AccessRead.NotFound -> PlaybackAccessDecision.CredentialNotFound
-                AccessRead.Corrupted -> PlaybackAccessDecision.CredentialCorrupted
-                AccessRead.Unavailable -> PlaybackAccessDecision.CredentialUnavailable
+                    AccessRead.NotFound -> PlaybackAccessDecision.CredentialNotFound
+                    AccessRead.Corrupted -> PlaybackAccessDecision.CredentialCorrupted
+                    AccessRead.Unavailable -> PlaybackAccessDecision.CredentialUnavailable
+                }
             }
         }
     }
