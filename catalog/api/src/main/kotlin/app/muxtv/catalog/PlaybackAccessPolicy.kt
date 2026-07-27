@@ -46,3 +46,27 @@ interface PlaybackAccessPolicyResolver {
 
     suspend fun revokeAll(credentialRef: String): PlaybackAccessMutationResult
 }
+
+/**
+ * Safe fallback used only when database initialization is needed without the application security graph.
+ * Production playback wiring must provide the encrypted resolver explicitly.
+ */
+object RejectAllPlaybackAccessPolicyResolver : PlaybackAccessPolicyResolver {
+    override suspend fun resolve(
+        credentialRef: String,
+        playbackLocator: String,
+    ): PlaybackAccessDecision = PlaybackAccessDecision.CredentialUnavailable
+
+    override suspend fun approve(
+        credentialRef: String,
+        playbackLocator: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.Unavailable
+
+    override suspend fun revoke(
+        credentialRef: String,
+        playbackLocator: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.Unavailable
+
+    override suspend fun revokeAll(credentialRef: String): PlaybackAccessMutationResult =
+        PlaybackAccessMutationResult.Unavailable
+}
