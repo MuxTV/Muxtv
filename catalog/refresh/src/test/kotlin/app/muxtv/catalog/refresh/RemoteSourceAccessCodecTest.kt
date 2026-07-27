@@ -241,7 +241,7 @@ class RemoteSourceAccessCodecTest {
             data.writeByte(0)
             if (version == 2) {
                 data.writeByte(origins.size)
-                origins.forEach(data::writeString)
+                origins.forEach { origin -> data.writeString(origin) }
             }
         }
         output.toByteArray()
