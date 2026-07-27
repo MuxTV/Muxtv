@@ -332,7 +332,7 @@ private fun SourceCard(
             text = "Сбросить HTTP-разрешения",
             onClick = { onResetPlaybackApprovals(source.sourceId) },
             enabled = operationalControlsEnabled,
-            modifier = Modifier.testTag("source-http-reset-${source.sourceId}"),
+            modifier = Modifier.testTag(SOURCE_HTTP_RESET_TEST_TAG),
         )
     }
 }
@@ -406,4 +406,5 @@ private fun Long.intervalLabel(): String = when (this) {
 }
 
 private const val SOURCES_ADD_TEST_TAG = "sources-add"
+private const val SOURCE_HTTP_RESET_TEST_TAG = "source-http-reset"
 private const val DEFAULT_INTERVAL_MINUTES = 60L
