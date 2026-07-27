@@ -2,6 +2,8 @@ package app.muxtv
 
 import android.content.Context
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
