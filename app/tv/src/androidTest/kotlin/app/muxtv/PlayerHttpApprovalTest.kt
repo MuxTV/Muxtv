@@ -1,6 +1,8 @@
 package app.muxtv
 
 import android.content.Context
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
@@ -23,6 +25,7 @@ import app.muxtv.feature.player.PlayerRoute
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 
@@ -81,10 +84,64 @@ class PlayerHttpApprovalTest {
         }
     }
 
-    private class ApprovalJourneyCatalog : PlaybackCatalog {
+    @Test
+    fun revokedOriginRequiresFreshConfirmationOnTheNextPlayerEntry() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val catalog = ApprovalJourneyCatalog(initiallyApproved = true)
+        val connector = MuxTvMediaControllerConnector(context)
+        val playerEntry = mutableIntStateOf(0)
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    key(playerEntry.intValue) {
+                        PlayerRoute(
+                            playbackCatalog = catalog,
+                            controllerConnector = connector,
+                            profileId = PROFILE_ID,
+                            channelId = CHANNEL_ID,
+                            onBack = {},
+                        )
+                    }
+                }
+            }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-primary-action")
+                    .fetchSemanticsNodes().size == 1
+            }
+            check(catalog.readyResolutionCalls >= 1)
+
+            val revocation = runBlocking {
+                catalog.revokeInsecurePlayback(
+                    profileId = PROFILE_ID,
+                    channelId = CHANNEL_ID,
+                    variantId = VARIANT_ID,
+                )
+            }
+            check(revocation == PlaybackAccessMutationResult.Applied)
+            composeRule.runOnIdle { playerEntry.intValue += 1 }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-http-approve")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-http-approve")
+                .assertIsFocused()
+                .assertTextContains("Разрешить для этого адреса")
+            check(catalog.revocationCalls == 1)
+        } finally {
+            connector.close()
+        }
+    }
+
+    private class ApprovalJourneyCatalog(
+        initiallyApproved: Boolean = false,
+    ) : PlaybackCatalog {
         var approvalCalls: Int = 0
+        var revocationCalls: Int = 0
         var readyResolutionCalls: Int = 0
-        private var approved: Boolean = false
+        private var approved: Boolean = initiallyApproved
 
         override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
             flowOf(listOf(summary()))
@@ -145,7 +202,11 @@ class PlayerHttpApprovalTest {
             profileId: String,
             channelId: String,
             variantId: String,
-        ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.Unchanged
+        ): PlaybackAccessMutationResult {
+            revocationCalls += 1
+            approved = false
+            return PlaybackAccessMutationResult.Applied
+        }
 
         private fun summary() = PlayableChannelSummary(
             channelId = CHANNEL_ID,
