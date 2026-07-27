@@ -74,6 +74,7 @@ data class ResolvedPlaybackRequest(
     val variantId: String,
     val locator: String,
     val requestHeaders: Map<String, String>,
+    val insecureHttpApproved: Boolean,
 ) {
     init {
         require(channelId.isNotBlank())
@@ -84,7 +85,37 @@ data class ResolvedPlaybackRequest(
 
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
-            "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()})"
+            "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()}, " +
+            "insecureHttpApproved=$insecureHttpApproved)"
+}
+
+enum class PlaybackAccessUnavailableReason {
+    InvalidLocator,
+    CredentialNotFound,
+    CredentialCorrupted,
+    CredentialUnavailable,
+}
+
+sealed interface PlaybackVariantResolution {
+    data class Ready(
+        val request: ResolvedPlaybackRequest,
+    ) : PlaybackVariantResolution
+
+    data class InsecureTransportApprovalRequired(
+        val channelId: String,
+        val variantId: String,
+        val displayOrigin: String,
+    ) : PlaybackVariantResolution {
+        init {
+            require(channelId.isNotBlank())
+            require(variantId.isNotBlank())
+            require(displayOrigin.isNotBlank())
+        }
+    }
+
+    data class AccessUnavailable(
+        val reason: PlaybackAccessUnavailableReason,
+    ) : PlaybackVariantResolution
 }
 
 interface PlaybackCatalog {
@@ -99,5 +130,17 @@ interface PlaybackCatalog {
         profileId: String,
         channelId: String,
         preferredVariantId: String? = null,
-    ): ResolvedPlaybackRequest?
+    ): PlaybackVariantResolution?
+
+    suspend fun approveInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult
+
+    suspend fun revokeInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult
 }
