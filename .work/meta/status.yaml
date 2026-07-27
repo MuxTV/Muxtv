@@ -8,8 +8,8 @@ repository_state:
   ci: present_self_hosted_full_and_device_matrix
   tests: present_unit_android_and_instrumentation
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_media3_hardening
-  architecture_version: 2
+  documentation: synchronized_after_exact_origin_http_approval
+  architecture_version: 3
 active_branch_after_merge: main
 implemented:
   - android_tv_application_shell
@@ -33,6 +33,12 @@ implemented:
   - retryable_media_controller_lifecycle
   - remote_session_reconnect_epoch
   - cancellable_playback_setup_protocol
+  - exact_origin_http_playback_approval
+  - encrypted_remote_source_access_v2
+  - singleton_remote_source_access_owner
+  - typed_playback_catalog_resolution
+  - player_http_warning_reresolution_and_revocation
+  - redacted_catalog_and_approval_diagnostics
   - api_26_api_36_tv_device_harness
 accepted_specifications:
   - profiles
@@ -53,13 +59,15 @@ accepted_specifications:
   - benchmark_methodology
   - fire_tv
   - reference_repository_review
+  - exact_origin_http_playback_approval
 verified_evidence:
   source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
   media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
   controller_lifecycle_merge: 66cf8dbaddafa87be7bfd619515452ceb3c46354
   setup_reconnect_merge: 8665f80d6e38bc90d10ead0d3a3618fbecd4e304
-  final_media3_full_run: 30223482178
-  media3_device_matrix_run: 30222900566
+  exact_origin_http_approval_merge: 764ec102808c4df57e826d05ce7b1334063bb520
+  final_exact_origin_full_run: 30295592181
+  http_approval_device_matrix_run: 30287803018
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
@@ -73,24 +81,22 @@ verified_evidence:
       cpu_cores: 2
   instrumentation_per_profile:
     credentials: 4
-    database: 19
+    database: 21
     media3: 10
-    application: 11
+    application: 12
 next_milestone:
-  id: phase-01-exact-origin-http-playback-approval
-  issue: 39
-  plan: docs/superpowers/plans/2026-07-27-next-execution.md
+  id: phase-01-deterministic-iptv-corpus
+  issue: 27
+  plan: docs/superpowers/plans/2026-07-27-post-http-approval-execution.md
   exit_criteria:
-    - explicit_http_source_approval_reaches_playback_request
-    - approval_is_scoped_to_exact_normalized_origin_and_effective_port
-    - unrelated_host_or_port_is_not_trusted
-    - source_deletion_or_revocation_invalidates_approval
-    - https_to_http_redirect_remains_denied
-    - no_process_wide_cleartext_opt_in
-    - no_locator_query_header_or_credential_in_durable_approval_or_diagnostics
-    - full_and_api_26_api_36_evidence_pass
+    - provider_neutral_m3u_profiles_1k_10k_50k
+    - explicit_seed_and_generator_schema_version
+    - expected_counts_byte_size_and_sha256_manifest
+    - deterministic_byte_identical_output
+    - duplicate_malformed_long_metadata_relative_url_and_header_variants
+    - parser_and_importer_assert_manifest_expectations
+    - descriptive_measurements_before_performance_budgets
 known_gaps:
-  - exact_origin_http_playback_approval
   - deterministic_media_corpus_and_benchmarks
   - xmltv_epg_revisions
   - guide_search_favorites_recent_product_flows
@@ -100,6 +106,7 @@ known_gaps:
   - r8_and_baseline_profile
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
+  - windows_runner_long_path_cleanup_verified_twice
 blocked: []
 deferred:
   - xtream
