@@ -7,11 +7,8 @@ import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.ingest.M3uParseLimits
 import app.muxtv.catalog.ingest.M3uParseOptions
 import app.muxtv.credentials.CredentialId
-import app.muxtv.credentials.CredentialReadResult
-import app.muxtv.credentials.CredentialRemoveResult
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.credentials.CredentialUnavailableReason
-import app.muxtv.credentials.CredentialWriteResult
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.RedirectRejectedException
 import app.muxtv.network.RedirectRejectionReason
@@ -35,21 +32,6 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-
-class RemoteSourceAccessManager(
-    private val credentialStore: CredentialStore,
-) {
-    suspend fun save(
-        id: CredentialId,
-        access: RemoteSourceAccess,
-    ): CredentialWriteResult {
-        val secret = RemoteSourceAccessCodec.encode(access)
-        return secret.use { credentialStore.put(id, it) }
-    }
-
-    suspend fun remove(id: CredentialId): CredentialRemoveResult =
-        credentialStore.remove(id)
-}
 
 data class RemoteSourceRefreshRequest(
     val sourceId: String,
@@ -119,25 +101,21 @@ enum class RemoteSourceNetworkFailureReason {
 }
 
 class RemoteSourceRefresher(
-    private val credentialStore: CredentialStore,
+    private val accessManager: RemoteSourceAccessManager,
     private val importer: CatalogRevisionImporter,
     private val sourceClient: OkHttpClient,
 ) {
     suspend fun refresh(request: RemoteSourceRefreshRequest): RemoteSourceRefreshResult {
-        val access = when (val credential = credentialStore.read(request.accessCredentialId)) {
-            is CredentialReadResult.Found -> credential.secret.use { secret ->
-                try {
-                    RemoteSourceAccessCodec.decode(secret)
-                } catch (_: RemoteSourceAccessFormatException) {
-                    return RemoteSourceRefreshResult.AccessCredentialCorrupted
-                }
-            }
-
-            CredentialReadResult.NotFound ->
+        val access = when (val accessResult = accessManager.read(request.accessCredentialId)) {
+            is RemoteSourceAccessReadResult.Found -> accessResult.access
+            RemoteSourceAccessReadResult.NotFound ->
                 return RemoteSourceRefreshResult.AccessCredentialNotFound
 
-            is CredentialReadResult.Unavailable ->
-                return RemoteSourceRefreshResult.AccessCredentialUnavailable(credential.reason)
+            RemoteSourceAccessReadResult.Corrupted ->
+                return RemoteSourceRefreshResult.AccessCredentialCorrupted
+
+            is RemoteSourceAccessReadResult.Unavailable ->
+                return RemoteSourceRefreshResult.AccessCredentialUnavailable(accessResult.reason)
         }
 
         val normalizedUrl = when (val decision = SourceUrlPolicy.evaluate(access.url)) {
@@ -237,11 +215,14 @@ object RemoteSourceRefreshFactory {
     fun create(
         credentialStore: CredentialStore,
         importer: CatalogRevisionImporter,
-    ): RemoteSourceRefresher = RemoteSourceRefresher(
-        credentialStore = credentialStore,
-        importer = importer,
-        sourceClient = MuxTvHttpClients().source,
-    )
+    ): RemoteSourceRefresher {
+        val accessManager = RemoteSourceAccessManager(credentialStore)
+        return RemoteSourceRefresher(
+            accessManager = accessManager,
+            importer = importer,
+            sourceClient = MuxTvHttpClients().source,
+        )
+    }
 
     fun createAccessManager(credentialStore: CredentialStore): RemoteSourceAccessManager =
         RemoteSourceAccessManager(credentialStore)
