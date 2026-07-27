@@ -125,10 +125,11 @@ internal class RoomPlaybackCatalog(
         val summary = dao.findActiveChannel(profileId, channelId) ?: return null
         val variants = dao.getActiveVariants(channelId)
         if (variants.isEmpty()) return null
-        val variant = preferredVariantId
-            ?.let { id -> variants.firstOrNull { it.variantId == id } }
-            ?: variants.firstOrNull()
-            ?: return null
+        val variant = if (preferredVariantId == null) {
+            variants.firstOrNull()
+        } else {
+            variants.firstOrNull { it.variantId == preferredVariantId }
+        } ?: return null
         return VariantSelection(
             channelId = summary.channelId,
             variant = variant,
