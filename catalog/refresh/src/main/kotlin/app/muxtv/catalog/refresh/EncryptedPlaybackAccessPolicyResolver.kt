@@ -4,19 +4,12 @@ import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.credentials.CredentialId
-import app.muxtv.credentials.CredentialReadResult
-import app.muxtv.credentials.CredentialStore
-import app.muxtv.credentials.CredentialWriteResult
 import app.muxtv.network.ExactHttpOrigin
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class EncryptedPlaybackAccessPolicyResolver(
-    private val credentialStore: CredentialStore,
+    private val accessManager: RemoteSourceAccessManager,
 ) : PlaybackAccessPolicyResolver {
-    private val mutationMutex = Mutex()
-
     override suspend fun resolve(
         credentialRef: String,
         playbackLocator: String,
@@ -27,16 +20,22 @@ class EncryptedPlaybackAccessPolicyResolver(
             is PlaybackTarget.Insecure -> {
                 val credentialId = parseCredentialId(credentialRef)
                     ?: return PlaybackAccessDecision.CredentialNotFound
-                when (val read = readAccess(credentialId)) {
-                    is AccessRead.Found -> if (target.origin in read.access.approvedPlaybackOrigins) {
-                        PlaybackAccessDecision.Approved
-                    } else {
-                        PlaybackAccessDecision.ApprovalRequired(target.origin.displayValue())
-                    }
+                when (val read = accessManager.read(credentialId)) {
+                    is RemoteSourceAccessReadResult.Found ->
+                        if (target.origin in read.access.approvedPlaybackOrigins) {
+                            PlaybackAccessDecision.Approved
+                        } else {
+                            PlaybackAccessDecision.ApprovalRequired(target.origin.displayValue())
+                        }
 
-                    AccessRead.NotFound -> PlaybackAccessDecision.CredentialNotFound
-                    AccessRead.Corrupted -> PlaybackAccessDecision.CredentialCorrupted
-                    AccessRead.Unavailable -> PlaybackAccessDecision.CredentialUnavailable
+                    RemoteSourceAccessReadResult.NotFound ->
+                        PlaybackAccessDecision.CredentialNotFound
+
+                    RemoteSourceAccessReadResult.Corrupted ->
+                        PlaybackAccessDecision.CredentialCorrupted
+
+                    is RemoteSourceAccessReadResult.Unavailable ->
+                        PlaybackAccessDecision.CredentialUnavailable
                 }
             }
         }
@@ -70,50 +69,26 @@ class EncryptedPlaybackAccessPolicyResolver(
     private suspend fun mutate(
         credentialRef: String,
         transform: (RemoteSourceAccess) -> RemoteSourceAccess,
-    ): PlaybackAccessMutationResult = mutationMutex.withLock {
+    ): PlaybackAccessMutationResult {
         val credentialId = parseCredentialId(credentialRef)
-            ?: return@withLock PlaybackAccessMutationResult.NotFound
-        when (val read = readAccess(credentialId)) {
-            is AccessRead.Found -> {
-                val updated = try {
-                    transform(read.access)
-                } catch (_: PlaybackApprovalCapacityExceededException) {
-                    return@withLock PlaybackAccessMutationResult.CapacityExceeded
-                }
-                if (updated === read.access) {
-                    return@withLock PlaybackAccessMutationResult.Unchanged
-                }
-                RemoteSourceAccessCodec.encode(updated).use { encoded ->
-                    when (credentialStore.put(credentialId, encoded)) {
-                        CredentialWriteResult.Stored -> PlaybackAccessMutationResult.Applied
-                        is CredentialWriteResult.RejectedTooLarge ->
-                            PlaybackAccessMutationResult.CapacityExceeded
+            ?: return PlaybackAccessMutationResult.NotFound
+        val updated = try {
+            accessManager.update(credentialId, transform)
+        } catch (_: PlaybackApprovalCapacityExceededException) {
+            return PlaybackAccessMutationResult.CapacityExceeded
+        }
+        return when (updated) {
+            RemoteSourceAccessUpdateResult.Updated -> PlaybackAccessMutationResult.Applied
+            RemoteSourceAccessUpdateResult.Unchanged -> PlaybackAccessMutationResult.Unchanged
+            RemoteSourceAccessUpdateResult.NotFound -> PlaybackAccessMutationResult.NotFound
+            RemoteSourceAccessUpdateResult.Corrupted -> PlaybackAccessMutationResult.Corrupted
+            is RemoteSourceAccessUpdateResult.RejectedTooLarge ->
+                PlaybackAccessMutationResult.CapacityExceeded
 
-                        is CredentialWriteResult.Unavailable ->
-                            PlaybackAccessMutationResult.Unavailable
-                    }
-                }
-            }
-
-            AccessRead.NotFound -> PlaybackAccessMutationResult.NotFound
-            AccessRead.Corrupted -> PlaybackAccessMutationResult.Corrupted
-            AccessRead.Unavailable -> PlaybackAccessMutationResult.Unavailable
+            is RemoteSourceAccessUpdateResult.Unavailable ->
+                PlaybackAccessMutationResult.Unavailable
         }
     }
-
-    private suspend fun readAccess(credentialId: CredentialId): AccessRead =
-        when (val credential = credentialStore.read(credentialId)) {
-            is CredentialReadResult.Found -> credential.secret.use { secret ->
-                try {
-                    AccessRead.Found(RemoteSourceAccessCodec.decode(secret))
-                } catch (_: RemoteSourceAccessFormatException) {
-                    AccessRead.Corrupted
-                }
-            }
-
-            CredentialReadResult.NotFound -> AccessRead.NotFound
-            is CredentialReadResult.Unavailable -> AccessRead.Unavailable
-        }
 
     private fun parseTarget(playbackLocator: String): PlaybackTarget {
         val parsed = playbackLocator.toHttpUrlOrNull() ?: return PlaybackTarget.Invalid
@@ -137,13 +112,6 @@ class EncryptedPlaybackAccessPolicyResolver(
         data object Secure : PlaybackTarget
         data object Invalid : PlaybackTarget
         data class Insecure(val origin: ExactHttpOrigin) : PlaybackTarget
-    }
-
-    private sealed interface AccessRead {
-        data class Found(val access: RemoteSourceAccess) : AccessRead
-        data object NotFound : AccessRead
-        data object Corrupted : AccessRead
-        data object Unavailable : AccessRead
     }
 
     private companion object {
