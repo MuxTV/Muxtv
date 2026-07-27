@@ -2,6 +2,7 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
@@ -29,6 +30,8 @@ import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.feature.sources.SourceEntryOnboarding
+import app.muxtv.feature.sources.SourcePlaybackApprovalActions
+import app.muxtv.feature.sources.SourcePlaybackApprovalResetResult
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.PlaybackEngine
@@ -89,6 +92,26 @@ object AppModule {
     fun providePlaybackCatalog(
         components: MuxTvDatabaseComponents,
     ): PlaybackCatalog = components.playbackCatalog
+
+    @Provides
+    @Singleton
+    fun provideSourcePlaybackApprovalActions(
+        sourceRefreshStore: SourceRefreshStore,
+        playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
+    ): SourcePlaybackApprovalActions = SourcePlaybackApprovalActions { sourceId ->
+        val credentialRef = sourceRefreshStore.getTarget(sourceId)?.credentialRef
+            ?: return@SourcePlaybackApprovalActions SourcePlaybackApprovalResetResult.SourceNotFound
+        when (playbackAccessPolicyResolver.revokeAll(credentialRef)) {
+            PlaybackAccessMutationResult.Applied -> SourcePlaybackApprovalResetResult.Reset
+            PlaybackAccessMutationResult.Unchanged -> SourcePlaybackApprovalResetResult.Unchanged
+            PlaybackAccessMutationResult.NotFound -> SourcePlaybackApprovalResetResult.SourceNotFound
+            PlaybackAccessMutationResult.Corrupted,
+            PlaybackAccessMutationResult.Unavailable,
+            PlaybackAccessMutationResult.InvalidLocator,
+            PlaybackAccessMutationResult.CapacityExceeded,
+            -> SourcePlaybackApprovalResetResult.AccessUnavailable
+        }
+    }
 
     @Provides
     @Singleton
