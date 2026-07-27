@@ -26,9 +26,7 @@ class RemoteSourceAccess(
 ) {
     val sensitiveHeaders: Map<String, String> = normalizeSensitiveHeaders(sensitiveHeaders)
     val approvedPlaybackOrigins: Set<ExactHttpOrigin> = normalizeApprovedPlaybackOrigins(
-        sourceUrl = url,
-        sourceHttpApproved = insecureHttpApproved,
-        origins = approvedPlaybackOrigins,
+        approvedPlaybackOrigins,
     )
 
     init {
@@ -54,19 +52,8 @@ class RemoteSourceAccess(
         return copyWith(approvedPlaybackOrigins = approvedPlaybackOrigins - origin)
     }
 
-    fun withoutPlaybackApprovals(): RemoteSourceAccess {
-        val sourceOrigin = if (insecureHttpApproved) ExactHttpOrigin.fromUrl(url) else null
-        if (approvedPlaybackOrigins.isEmpty() || approvedPlaybackOrigins == setOfNotNull(sourceOrigin)) {
-            return if (approvedPlaybackOrigins.isEmpty()) this else copyWith(
-                insecureHttpApproved = false,
-                approvedPlaybackOrigins = emptySet(),
-            )
-        }
-        return copyWith(
-            insecureHttpApproved = false,
-            approvedPlaybackOrigins = emptySet(),
-        )
-    }
+    fun withoutPlaybackApprovals(): RemoteSourceAccess =
+        if (approvedPlaybackOrigins.isEmpty()) this else copyWith(approvedPlaybackOrigins = emptySet())
 
     fun withSourceUrl(
         url: String,
@@ -77,7 +64,11 @@ class RemoteSourceAccess(
         userAgent = userAgent,
         referrer = referrer,
         sensitiveHeaders = sensitiveHeaders,
-        approvedPlaybackOrigins = emptySet(),
+        approvedPlaybackOrigins = if (insecureHttpApproved) {
+            ExactHttpOrigin.fromUrl(url)?.let(::setOf).orEmpty()
+        } else {
+            emptySet()
+        },
     )
 
     override fun toString(): String =
@@ -87,7 +78,6 @@ class RemoteSourceAccess(
             "approvedPlaybackOriginCount=${approvedPlaybackOrigins.size})"
 
     private fun copyWith(
-        insecureHttpApproved: Boolean = this.insecureHttpApproved,
         approvedPlaybackOrigins: Set<ExactHttpOrigin> = this.approvedPlaybackOrigins,
     ): RemoteSourceAccess = RemoteSourceAccess(
         url = url,
@@ -191,6 +181,8 @@ object RemoteSourceAccessCodec {
 
             val approvedOrigins = if (version == CURRENT_VERSION) {
                 data.readApprovedOrigins()
+            } else if (insecureHttpApproved) {
+                ExactHttpOrigin.fromUrl(url)?.let(::setOf).orEmpty()
             } else {
                 emptySet()
             }
@@ -319,14 +311,9 @@ private fun normalizeSensitiveHeaders(headers: Map<String, String>): Map<String,
 }
 
 private fun normalizeApprovedPlaybackOrigins(
-    sourceUrl: String,
-    sourceHttpApproved: Boolean,
     origins: Set<ExactHttpOrigin>,
 ): Set<ExactHttpOrigin> {
     val normalized = LinkedHashSet<ExactHttpOrigin>()
-    if (sourceHttpApproved) {
-        ExactHttpOrigin.fromUrl(sourceUrl)?.let(normalized::add)
-    }
     origins.sortedBy(ExactHttpOrigin::encoded).forEach(normalized::add)
     if (normalized.size > RemoteSourceAccess.MAX_APPROVED_PLAYBACK_ORIGINS) {
         throw PlaybackApprovalCapacityExceededException()
