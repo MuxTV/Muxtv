@@ -105,6 +105,16 @@ class RemoteSourceRefresher(
     private val importer: CatalogRevisionImporter,
     private val sourceClient: OkHttpClient,
 ) {
+    internal constructor(
+        credentialStore: CredentialStore,
+        importer: CatalogRevisionImporter,
+        sourceClient: OkHttpClient,
+    ) : this(
+        accessManager = RemoteSourceAccessManager(credentialStore),
+        importer = importer,
+        sourceClient = sourceClient,
+    )
+
     suspend fun refresh(request: RemoteSourceRefreshRequest): RemoteSourceRefreshResult {
         val access = when (val accessResult = accessManager.read(request.accessCredentialId)) {
             is RemoteSourceAccessReadResult.Found -> accessResult.access
