@@ -71,6 +71,7 @@ class RemoteSourceAccessCodecTest {
 
     @Test
     fun `approval mutations are immutable idempotent bounded and independent from refresh approval`() {
+        val sourceOrigin = origin("http://provider.example:80")
         val original = RemoteSourceAccess(
             url = "http://provider.example/list.m3u",
             insecureHttpApproved = true,
@@ -78,10 +79,11 @@ class RemoteSourceAccessCodecTest {
         val first = origin("http://cdn-1.example:80")
         val approved = original.withApprovedPlaybackOrigin(first)
 
-        assertThat(original.approvedPlaybackOrigins).isEmpty()
-        assertThat(approved.approvedPlaybackOrigins).containsExactly(first)
+        assertThat(original.approvedPlaybackOrigins).containsExactly(sourceOrigin)
+        assertThat(approved.approvedPlaybackOrigins).containsExactly(sourceOrigin, first)
         assertThat(approved.withApprovedPlaybackOrigin(first)).isSameInstanceAs(approved)
-        assertThat(approved.withoutApprovedPlaybackOrigin(first).approvedPlaybackOrigins).isEmpty()
+        assertThat(approved.withoutApprovedPlaybackOrigin(first).approvedPlaybackOrigins)
+            .containsExactly(sourceOrigin)
         val reset = approved.withoutPlaybackApprovals()
         assertThat(reset.approvedPlaybackOrigins).isEmpty()
         assertThat(reset.insecureHttpApproved).isTrue()
