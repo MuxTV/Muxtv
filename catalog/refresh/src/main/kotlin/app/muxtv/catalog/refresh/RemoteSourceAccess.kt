@@ -1,22 +1,53 @@
 package app.muxtv.catalog.refresh
 
 import app.muxtv.credentials.SecretBytes
+import app.muxtv.network.ExactHttpOrigin
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.Collections
+import java.util.LinkedHashSet
 import java.util.Locale
 
-class RemoteSourceAccess(
+class PlaybackApprovalCapacityExceededException : IllegalArgumentException(
+    "Playback approval capacity is exceeded.",
+)
+
+class RemoteSourceAccess private constructor(
     val url: String,
-    val insecureHttpApproved: Boolean = false,
-    val userAgent: String? = null,
-    val referrer: String? = null,
-    sensitiveHeaders: Map<String, String> = emptyMap(),
+    val insecureHttpApproved: Boolean,
+    val userAgent: String?,
+    val referrer: String?,
+    sensitiveHeaders: Map<String, String>,
+    approvedPlaybackOrigins: Set<ExactHttpOrigin>,
+    seedSourcePlaybackOrigin: Boolean,
 ) {
+    constructor(
+        url: String,
+        insecureHttpApproved: Boolean = false,
+        userAgent: String? = null,
+        referrer: String? = null,
+        sensitiveHeaders: Map<String, String> = emptyMap(),
+        approvedPlaybackOrigins: Set<ExactHttpOrigin> = emptySet(),
+    ) : this(
+        url = url,
+        insecureHttpApproved = insecureHttpApproved,
+        userAgent = userAgent,
+        referrer = referrer,
+        sensitiveHeaders = sensitiveHeaders,
+        approvedPlaybackOrigins = approvedPlaybackOrigins,
+        seedSourcePlaybackOrigin = insecureHttpApproved,
+    )
+
     val sensitiveHeaders: Map<String, String> = normalizeSensitiveHeaders(sensitiveHeaders)
+    val approvedPlaybackOrigins: Set<ExactHttpOrigin> = normalizeApprovedPlaybackOrigins(
+        sourceUrl = url,
+        seedSourcePlaybackOrigin = seedSourcePlaybackOrigin,
+        origins = approvedPlaybackOrigins,
+    )
 
     init {
         require(url.isNotBlank()) { "Remote source URL must not be blank." }
@@ -25,15 +56,79 @@ class RemoteSourceAccess(
         validateOptionalHeaderValue("Referer", referrer)
     }
 
+    fun approvesPlayback(playbackUrl: String): Boolean =
+        ExactHttpOrigin.fromUrl(playbackUrl)?.let(approvedPlaybackOrigins::contains) == true
+
+    fun withApprovedPlaybackOrigin(origin: ExactHttpOrigin): RemoteSourceAccess {
+        if (origin in approvedPlaybackOrigins) return this
+        if (approvedPlaybackOrigins.size >= MAX_APPROVED_PLAYBACK_ORIGINS) {
+            throw PlaybackApprovalCapacityExceededException()
+        }
+        return copyWith(approvedPlaybackOrigins = approvedPlaybackOrigins + origin)
+    }
+
+    fun withoutApprovedPlaybackOrigin(origin: ExactHttpOrigin): RemoteSourceAccess {
+        if (origin !in approvedPlaybackOrigins) return this
+        return copyWith(approvedPlaybackOrigins = approvedPlaybackOrigins - origin)
+    }
+
+    fun withoutPlaybackApprovals(): RemoteSourceAccess =
+        if (approvedPlaybackOrigins.isEmpty()) this else copyWith(approvedPlaybackOrigins = emptySet())
+
+    fun withSourceUrl(
+        url: String,
+        insecureHttpApproved: Boolean,
+    ): RemoteSourceAccess = RemoteSourceAccess(
+        url = url,
+        insecureHttpApproved = insecureHttpApproved,
+        userAgent = userAgent,
+        referrer = referrer,
+        sensitiveHeaders = sensitiveHeaders,
+        approvedPlaybackOrigins = emptySet(),
+        seedSourcePlaybackOrigin = insecureHttpApproved,
+    )
+
     override fun toString(): String =
         "RemoteSourceAccess(url=<redacted>, insecureHttpApproved=$insecureHttpApproved, " +
             "hasUserAgent=${userAgent != null}, hasReferrer=${referrer != null}, " +
-            "sensitiveHeaderNames=${sensitiveHeaders.keys})"
+            "sensitiveHeaderNames=${sensitiveHeaders.keys}, " +
+            "approvedPlaybackOriginCount=${approvedPlaybackOrigins.size})"
+
+    private fun copyWith(
+        approvedPlaybackOrigins: Set<ExactHttpOrigin> = this.approvedPlaybackOrigins,
+    ): RemoteSourceAccess = RemoteSourceAccess(
+        url = url,
+        insecureHttpApproved = insecureHttpApproved,
+        userAgent = userAgent,
+        referrer = referrer,
+        sensitiveHeaders = sensitiveHeaders,
+        approvedPlaybackOrigins = approvedPlaybackOrigins,
+        seedSourcePlaybackOrigin = false,
+    )
 
     companion object {
         internal const val MAX_URL_CHARACTERS = 8 * 1024
         internal const val MAX_HEADER_VALUE_CHARACTERS = 8 * 1024
         internal const val MAX_SENSITIVE_HEADERS = 5
+        internal const val MAX_APPROVED_PLAYBACK_ORIGINS = 16
+        internal const val MAX_APPROVED_ORIGIN_CHARACTERS = 512
+
+        internal fun decoded(
+            url: String,
+            insecureHttpApproved: Boolean,
+            userAgent: String?,
+            referrer: String?,
+            sensitiveHeaders: Map<String, String>,
+            approvedPlaybackOrigins: Set<ExactHttpOrigin>,
+        ): RemoteSourceAccess = RemoteSourceAccess(
+            url = url,
+            insecureHttpApproved = insecureHttpApproved,
+            userAgent = userAgent,
+            referrer = referrer,
+            sensitiveHeaders = sensitiveHeaders,
+            approvedPlaybackOrigins = approvedPlaybackOrigins,
+            seedSourcePlaybackOrigin = false,
+        )
     }
 }
 
@@ -45,6 +140,8 @@ enum class RemoteSourceAccessFormatReason {
     InvalidField,
     TooManyHeaders,
     InvalidHeader,
+    TooManyOrigins,
+    InvalidOrigin,
 }
 
 class RemoteSourceAccessFormatException(
@@ -57,7 +154,7 @@ object RemoteSourceAccessCodec {
         val output = ByteArrayOutputStream()
         DataOutputStream(output).use { data ->
             data.write(MAGIC)
-            data.writeByte(VERSION)
+            data.writeByte(CURRENT_VERSION)
             data.writeBoolean(access.insecureHttpApproved)
             data.writeString(access.url)
             data.writeNullableString(access.userAgent)
@@ -66,6 +163,10 @@ object RemoteSourceAccessCodec {
             access.sensitiveHeaders.forEach { (name, value) ->
                 data.writeString(name)
                 data.writeString(value)
+            }
+            data.writeByte(access.approvedPlaybackOrigins.size)
+            access.approvedPlaybackOrigins.forEach { origin ->
+                data.writeString(origin.encoded())
             }
         }
 
@@ -90,7 +191,8 @@ object RemoteSourceAccessCodec {
             if (!magic.contentEquals(MAGIC)) {
                 throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.InvalidMagic)
             }
-            if (data.readUnsignedByte() != VERSION) {
+            val version = data.readUnsignedByte()
+            if (version != LEGACY_VERSION && version != CURRENT_VERSION) {
                 throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.UnsupportedVersion)
             }
 
@@ -107,24 +209,54 @@ object RemoteSourceAccessCodec {
             repeat(headerCount) {
                 val name = data.readBoundedString(MAX_HEADER_NAME_CHARACTERS)
                 val value = data.readBoundedString(RemoteSourceAccess.MAX_HEADER_VALUE_CHARACTERS)
-                headers[name] = value
+                if (headers.put(name, value) != null) {
+                    throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.InvalidHeader)
+                }
+            }
+
+            val approvedOrigins = if (version == CURRENT_VERSION) {
+                data.readApprovedOrigins()
+            } else if (insecureHttpApproved) {
+                ExactHttpOrigin.fromUrl(url)?.let(::setOf).orEmpty()
+            } else {
+                emptySet()
             }
             if (input.available() != 0) {
                 throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.TrailingData)
             }
 
-            return RemoteSourceAccess(
+            return RemoteSourceAccess.decoded(
                 url = url,
                 insecureHttpApproved = insecureHttpApproved,
                 userAgent = userAgent,
                 referrer = referrer,
                 sensitiveHeaders = headers,
+                approvedPlaybackOrigins = approvedOrigins,
             )
         } catch (error: RemoteSourceAccessFormatException) {
             throw error
+        } catch (error: PlaybackApprovalCapacityExceededException) {
+            throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.TooManyOrigins, error)
         } catch (error: Exception) {
             throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.Truncated, error)
         }
+    }
+
+    private fun DataInputStream.readApprovedOrigins(): Set<ExactHttpOrigin> {
+        val count = readUnsignedByte()
+        if (count > RemoteSourceAccess.MAX_APPROVED_PLAYBACK_ORIGINS) {
+            throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.TooManyOrigins)
+        }
+        val origins = linkedSetOf<ExactHttpOrigin>()
+        repeat(count) {
+            val encoded = readBoundedString(RemoteSourceAccess.MAX_APPROVED_ORIGIN_CHARACTERS)
+            val origin = ExactHttpOrigin.parse(encoded)
+                ?: throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.InvalidOrigin)
+            if (!origins.add(origin)) {
+                throw RemoteSourceAccessFormatException(RemoteSourceAccessFormatReason.InvalidOrigin)
+            }
+        }
+        return origins
     }
 
     private fun DataOutputStream.writeString(value: String) {
@@ -191,7 +323,8 @@ object RemoteSourceAccessCodec {
     }
 
     private val MAGIC = byteArrayOf('M'.code.toByte(), 'X'.code.toByte(), 'S'.code.toByte(), 'A'.code.toByte())
-    private const val VERSION = 1
+    private const val LEGACY_VERSION = 1
+    private const val CURRENT_VERSION = 2
     private const val MAX_ENCODED_FIELD_BYTES = 32 * 1024
     private const val MAX_HEADER_NAME_CHARACTERS = 64
 }
@@ -210,6 +343,22 @@ private fun normalizeSensitiveHeaders(headers: Map<String, String>): Map<String,
             put(canonicalName, value)
         }
     }
+}
+
+private fun normalizeApprovedPlaybackOrigins(
+    sourceUrl: String,
+    seedSourcePlaybackOrigin: Boolean,
+    origins: Set<ExactHttpOrigin>,
+): Set<ExactHttpOrigin> {
+    val normalized = LinkedHashSet<ExactHttpOrigin>()
+    if (seedSourcePlaybackOrigin) {
+        ExactHttpOrigin.fromUrl(sourceUrl)?.let(normalized::add)
+    }
+    origins.sortedBy(ExactHttpOrigin::encoded).forEach(normalized::add)
+    if (normalized.size > RemoteSourceAccess.MAX_APPROVED_PLAYBACK_ORIGINS) {
+        throw PlaybackApprovalCapacityExceededException()
+    }
+    return Collections.unmodifiableSet(normalized)
 }
 
 private fun validateOptionalHeaderValue(

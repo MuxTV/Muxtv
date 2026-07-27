@@ -20,8 +20,9 @@ import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlayableVariant
+import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.catalog.ResolvedPlaybackRequest
+import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
@@ -281,7 +282,19 @@ private class JourneyPlaybackCatalog : PlaybackCatalog {
         profileId: String,
         channelId: String,
         preferredVariantId: String?,
-    ): ResolvedPlaybackRequest? = null
+    ): PlaybackVariantResolution? = null
+
+    override suspend fun approveInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
+
+    override suspend fun revokeInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 
     private fun channelSummary() = PlayableChannelSummary(
         channelId = JOURNEY_CHANNEL_ID,

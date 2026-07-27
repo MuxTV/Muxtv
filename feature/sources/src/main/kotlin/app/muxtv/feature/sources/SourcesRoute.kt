@@ -57,6 +57,8 @@ fun SourcesRoute(
     refreshStore: SourceRefreshStore,
     refreshScheduler: SourceRefreshScheduler,
     onAddSource: () -> Unit,
+    playbackApprovalActions: SourcePlaybackApprovalActions =
+        SourcePlaybackApprovalActions.Unavailable,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -141,6 +143,19 @@ fun SourcesRoute(
             onRemovePolicy = { sourceId ->
                 mutate(sourceId) { refreshScheduler.removePolicy(sourceId) }
             },
+            onResetPlaybackApprovals = { sourceId ->
+                mutate(sourceId) {
+                    when (playbackApprovalActions.revokeAll(sourceId)) {
+                        SourcePlaybackApprovalResetResult.Reset,
+                        SourcePlaybackApprovalResetResult.Unchanged,
+                        -> Unit
+
+                        SourcePlaybackApprovalResetResult.SourceNotFound,
+                        SourcePlaybackApprovalResetResult.AccessUnavailable,
+                        -> mutationError = "Не удалось сбросить HTTP-разрешения источника."
+                    }
+                }
+            },
             modifier = modifier,
         )
     }
@@ -156,6 +171,7 @@ private fun SourcesContent(
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
     onRemovePolicy: (String) -> Unit,
+    onResetPlaybackApprovals: (String) -> Unit,
     modifier: Modifier,
 ) {
     Column(
@@ -187,6 +203,7 @@ private fun SourcesContent(
                     onRefreshNow = onRefreshNow,
                     onUpdatePolicy = onUpdatePolicy,
                     onRemovePolicy = onRemovePolicy,
+                    onResetPlaybackApprovals = onResetPlaybackApprovals,
                 )
             }
         }
@@ -220,6 +237,7 @@ private fun SourceCard(
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
     onRemovePolicy: (String) -> Unit,
+    onResetPlaybackApprovals: (String) -> Unit,
 ) {
     val policy = source.policy ?: defaultPolicy(source.sourceId)
     val running = source.status?.state == SourceRefreshRunState.RUNNING
@@ -310,6 +328,12 @@ private fun SourceCard(
                 enabled = !mutationInFlight && source.policy != null,
             )
         }
+        MuxTvActionButton(
+            text = "Сбросить HTTP-разрешения",
+            onClick = { onResetPlaybackApprovals(source.sourceId) },
+            enabled = operationalControlsEnabled,
+            modifier = Modifier.testTag(SOURCE_HTTP_RESET_TEST_TAG),
+        )
     }
 }
 
@@ -382,4 +406,5 @@ private fun Long.intervalLabel(): String = when (this) {
 }
 
 private const val SOURCES_ADD_TEST_TAG = "sources-add"
+private const val SOURCE_HTTP_RESET_TEST_TAG = "source-http-reset"
 private const val DEFAULT_INTERVAL_MINUTES = 60L

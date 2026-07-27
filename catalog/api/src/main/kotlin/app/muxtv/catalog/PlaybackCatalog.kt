@@ -17,6 +17,10 @@ data class ChannelQuery(
         ?.trim()
         ?.takeIf(String::isNotEmpty)
 
+    override fun toString(): String =
+        "ChannelQuery(profileId=<redacted>, hasSearch=${normalizedSearchText != null}, " +
+            "favoritesOnly=$favoritesOnly, limit=$limit)"
+
     companion object {
         const val DEFAULT_CHANNEL_LIMIT = 200
         const val MAX_CHANNEL_LIMIT = 500
@@ -37,6 +41,12 @@ data class PlayableChannelSummary(
         require(displayName.isNotBlank())
         require(variantCount > 0)
     }
+
+    override fun toString(): String =
+        "PlayableChannelSummary(channelId=$channelId, displayName=<redacted>, " +
+            "hasLogo=${logoUrl != null}, hasGroup=${groupTitle != null}, " +
+            "hasChannelNumber=${channelNumber != null}, isFavorite=$isFavorite, " +
+            "variantCount=$variantCount)"
 }
 
 data class PlayableVariant(
@@ -55,8 +65,8 @@ data class PlayableVariant(
     }
 
     override fun toString(): String =
-        "PlayableVariant(variantId=$variantId, sourceId=$sourceId, sourceName=$sourceName, " +
-            "locator=<redacted>, userAgent=${userAgent != null}, referrer=${referrer != null})"
+        "PlayableVariant(variantId=<redacted>, sourceId=<redacted>, sourceName=<redacted>, " +
+            "locator=<redacted>, hasUserAgent=${userAgent != null}, hasReferrer=${referrer != null})"
 }
 
 data class PlayableChannel(
@@ -74,6 +84,7 @@ data class ResolvedPlaybackRequest(
     val variantId: String,
     val locator: String,
     val requestHeaders: Map<String, String>,
+    val insecureHttpApproved: Boolean,
 ) {
     init {
         require(channelId.isNotBlank())
@@ -84,7 +95,41 @@ data class ResolvedPlaybackRequest(
 
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
-            "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()})"
+            "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()}, " +
+            "insecureHttpApproved=$insecureHttpApproved)"
+}
+
+enum class PlaybackAccessUnavailableReason {
+    InvalidLocator,
+    CredentialNotFound,
+    CredentialCorrupted,
+    CredentialUnavailable,
+}
+
+sealed interface PlaybackVariantResolution {
+    data class Ready(
+        val request: ResolvedPlaybackRequest,
+    ) : PlaybackVariantResolution
+
+    data class InsecureTransportApprovalRequired(
+        val channelId: String,
+        val variantId: String,
+        val displayOrigin: String,
+    ) : PlaybackVariantResolution {
+        init {
+            require(channelId.isNotBlank())
+            require(variantId.isNotBlank())
+            require(displayOrigin.isNotBlank())
+        }
+
+        override fun toString(): String =
+            "InsecureTransportApprovalRequired(channelId=<redacted>, " +
+                "variantId=<redacted>, displayOrigin=<redacted>)"
+    }
+
+    data class AccessUnavailable(
+        val reason: PlaybackAccessUnavailableReason,
+    ) : PlaybackVariantResolution
 }
 
 interface PlaybackCatalog {
@@ -99,5 +144,17 @@ interface PlaybackCatalog {
         profileId: String,
         channelId: String,
         preferredVariantId: String? = null,
-    ): ResolvedPlaybackRequest?
+    ): PlaybackVariantResolution?
+
+    suspend fun approveInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult
+
+    suspend fun revokeInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult
 }

@@ -4,6 +4,10 @@ import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelQuery
+import app.muxtv.catalog.PlaybackAccessDecision
+import app.muxtv.catalog.PlaybackAccessMutationResult
+import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackVariantResolution
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -16,6 +20,7 @@ import org.junit.runner.RunWith
 class PlaybackCatalogTest {
     private lateinit var database: MuxTvDatabase
     private lateinit var revisionStore: SourceRevisionStore
+    private lateinit var accessResolver: RecordingAccessResolver
     private lateinit var playbackCatalog: RoomPlaybackCatalog
 
     @Before
@@ -25,7 +30,11 @@ class PlaybackCatalogTest {
             MuxTvDatabase::class.java,
         ).build()
         revisionStore = RoomSourceRevisionStore(database.sourceRevisionDao())
-        playbackCatalog = RoomPlaybackCatalog(database.playbackCatalogDao())
+        accessResolver = RecordingAccessResolver()
+        playbackCatalog = RoomPlaybackCatalog(
+            dao = database.playbackCatalogDao(),
+            accessPolicyResolver = accessResolver,
+        )
     }
 
     @After
@@ -87,7 +96,7 @@ class PlaybackCatalogTest {
     }
 
     @Test
-    fun preferredVariantResolvesHeadersWithoutLeakingSecretsInToString() = runTest {
+    fun preferredSecureVariantUsesItsSourceCredentialAndReturnsSecretSafeReadyRequest() = runTest {
         insertProfile()
         activateSource(
             sourceId = "source-a",
@@ -106,21 +115,88 @@ class PlaybackCatalogTest {
             referrer = "https://portal.example/private",
         )
 
-        val request = playbackCatalog.resolveVariant(
+        val resolution = playbackCatalog.resolveVariant(
             profileId = PROFILE_ID,
             channelId = CHANNEL_ID,
             preferredVariantId = "variant-b",
         )
+        val request = (resolution as PlaybackVariantResolution.Ready).request
 
-        assertThat(request?.variantId).isEqualTo("variant-b")
-        assertThat(request?.requestHeaders).containsExactly(
+        assertThat(accessResolver.lastCredentialRef).isEqualTo("credential-source-b")
+        assertThat(request.variantId).isEqualTo("variant-b")
+        assertThat(request.insecureHttpApproved).isFalse()
+        assertThat(request.requestHeaders).containsExactly(
             "User-Agent", "Secret Agent",
             "Referer", "https://portal.example/private",
         )
         assertThat(request.toString()).doesNotContain("secret-b")
         assertThat(request.toString()).doesNotContain("Secret Agent")
         assertThat(request.toString()).doesNotContain("portal.example")
+        assertThat(request.toString()).doesNotContain("credential-source-b")
         assertThat(request.toString()).contains("locator=<redacted>")
+    }
+
+    @Test
+    fun unapprovedHTTPVariantReturnsOnlySanitizedOriginAndApprovalRequeriesActiveVariant() = runTest {
+        insertProfile()
+        activateSource(
+            sourceId = "source-http",
+            sourceName = "HTTP Provider",
+            providerChannelId = "provider-http",
+            variantId = "variant-http",
+            locator = "http://cdn.example:8080/live.m3u8?token=private-query",
+        )
+        accessResolver.nextDecision = PlaybackAccessDecision.ApprovalRequired(
+            "http://cdn.example:8080",
+        )
+
+        val resolution = playbackCatalog.resolveVariant(
+            profileId = PROFILE_ID,
+            channelId = CHANNEL_ID,
+        )
+
+        assertThat(resolution).isEqualTo(
+            PlaybackVariantResolution.InsecureTransportApprovalRequired(
+                channelId = CHANNEL_ID,
+                variantId = "variant-http",
+                displayOrigin = "http://cdn.example:8080",
+            ),
+        )
+        assertThat(resolution.toString()).doesNotContain("private-query")
+        assertThat(resolution.toString()).doesNotContain("credential-source-http")
+
+        accessResolver.nextMutation = PlaybackAccessMutationResult.Applied
+        val mutation = playbackCatalog.approveInsecurePlayback(
+            profileId = PROFILE_ID,
+            channelId = CHANNEL_ID,
+            variantId = "variant-http",
+        )
+
+        assertThat(mutation).isEqualTo(PlaybackAccessMutationResult.Applied)
+        assertThat(accessResolver.lastCredentialRef).isEqualTo("credential-source-http")
+        assertThat(accessResolver.lastLocator).contains("private-query")
+    }
+
+    @Test
+    fun approvedHTTPVariantCarriesOnlyTheApprovalBitIntoReadyRequest() = runTest {
+        insertProfile()
+        activateSource(
+            sourceId = "source-http",
+            sourceName = "HTTP Provider",
+            providerChannelId = "provider-http",
+            variantId = "variant-http",
+            locator = "http://provider.example/live.m3u8?token=private-query",
+        )
+        accessResolver.nextDecision = PlaybackAccessDecision.Approved
+
+        val resolution = playbackCatalog.resolveVariant(
+            profileId = PROFILE_ID,
+            channelId = CHANNEL_ID,
+        ) as PlaybackVariantResolution.Ready
+
+        assertThat(resolution.request.insecureHttpApproved).isTrue()
+        assertThat(resolution.request.toString()).doesNotContain("private-query")
+        assertThat(resolution.request.toString()).doesNotContain("credential-source-http")
     }
 
     private suspend fun insertProfile() {
@@ -142,7 +218,13 @@ class PlaybackCatalogTest {
         userAgent: String? = null,
         referrer: String? = null,
     ) {
-        revisionStore.upsertSource(SourceDefinition(id = sourceId, name = sourceName))
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = sourceId,
+                name = sourceName,
+                credentialRef = "credential-$sourceId",
+            ),
+        )
         revisionStore.beginRevision(sourceId, revisionNumber = 1, startedAtEpochMillis = 1_000)
         revisionStore.stageBatch(
             sourceId = sourceId,
@@ -199,6 +281,45 @@ class PlaybackCatalogTest {
                 ),
             ),
         )
+    }
+
+    private class RecordingAccessResolver : PlaybackAccessPolicyResolver {
+        var nextDecision: PlaybackAccessDecision = PlaybackAccessDecision.SecureTransport
+        var nextMutation: PlaybackAccessMutationResult = PlaybackAccessMutationResult.Applied
+        var lastCredentialRef: String? = null
+        var lastLocator: String? = null
+
+        override suspend fun resolve(
+            credentialRef: String,
+            playbackLocator: String,
+        ): PlaybackAccessDecision {
+            lastCredentialRef = credentialRef
+            lastLocator = playbackLocator
+            return nextDecision
+        }
+
+        override suspend fun approve(
+            credentialRef: String,
+            playbackLocator: String,
+        ): PlaybackAccessMutationResult {
+            lastCredentialRef = credentialRef
+            lastLocator = playbackLocator
+            return nextMutation
+        }
+
+        override suspend fun revoke(
+            credentialRef: String,
+            playbackLocator: String,
+        ): PlaybackAccessMutationResult {
+            lastCredentialRef = credentialRef
+            lastLocator = playbackLocator
+            return nextMutation
+        }
+
+        override suspend fun revokeAll(credentialRef: String): PlaybackAccessMutationResult {
+            lastCredentialRef = credentialRef
+            return nextMutation
+        }
     }
 
     private companion object {

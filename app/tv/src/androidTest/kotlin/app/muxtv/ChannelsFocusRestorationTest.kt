@@ -19,8 +19,9 @@ import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
+import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.catalog.ResolvedPlaybackRequest
+import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
@@ -187,7 +188,19 @@ private object StaticPlaybackCatalog : PlaybackCatalog {
         profileId: String,
         channelId: String,
         preferredVariantId: String?,
-    ): ResolvedPlaybackRequest? = null
+    ): PlaybackVariantResolution? = null
+
+    override suspend fun approveInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
+
+    override suspend fun revokeInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
 
 private class MutablePlaybackCatalog : PlaybackCatalog {
@@ -208,7 +221,19 @@ private class MutablePlaybackCatalog : PlaybackCatalog {
         profileId: String,
         channelId: String,
         preferredVariantId: String?,
-    ): ResolvedPlaybackRequest? = null
+    ): PlaybackVariantResolution? = null
+
+    override suspend fun approveInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
+
+    override suspend fun revokeInsecurePlayback(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
 
 private fun testChannel(

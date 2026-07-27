@@ -2,11 +2,14 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.PlaybackAccessMutationResult
+import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
+import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -27,6 +30,8 @@ import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.feature.sources.SourceEntryOnboarding
+import app.muxtv.feature.sources.SourcePlaybackApprovalActions
+import app.muxtv.feature.sources.SourcePlaybackApprovalResetResult
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.PlaybackEngine
@@ -44,9 +49,25 @@ import javax.inject.Singleton
 object AppModule {
     @Provides
     @Singleton
+    fun provideRemoteSourceAccessManager(
+        credentialStore: CredentialStore,
+    ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun providePlaybackAccessPolicyResolver(
+        accessManager: RemoteSourceAccessManager,
+    ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(accessManager)
+
+    @Provides
+    @Singleton
     fun provideDatabaseComponents(
         @ApplicationContext context: Context,
-    ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(context)
+        playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
+    ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(
+        context = context,
+        playbackAccessPolicyResolver = playbackAccessPolicyResolver,
+    )
 
     @Provides
     fun provideDatabaseInitializer(
@@ -80,6 +101,26 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideSourcePlaybackApprovalActions(
+        sourceRefreshStore: SourceRefreshStore,
+        playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
+    ): SourcePlaybackApprovalActions = SourcePlaybackApprovalActions { sourceId ->
+        val credentialRef = sourceRefreshStore.getTarget(sourceId)?.credentialRef
+            ?: return@SourcePlaybackApprovalActions SourcePlaybackApprovalResetResult.SourceNotFound
+        when (playbackAccessPolicyResolver.revokeAll(credentialRef)) {
+            PlaybackAccessMutationResult.Applied -> SourcePlaybackApprovalResetResult.Reset
+            PlaybackAccessMutationResult.Unchanged -> SourcePlaybackApprovalResetResult.Unchanged
+            PlaybackAccessMutationResult.NotFound -> SourcePlaybackApprovalResetResult.SourceNotFound
+            PlaybackAccessMutationResult.Corrupted,
+            PlaybackAccessMutationResult.Unavailable,
+            PlaybackAccessMutationResult.InvalidLocator,
+            PlaybackAccessMutationResult.CapacityExceeded,
+            -> SourcePlaybackApprovalResetResult.AccessUnavailable
+        }
+    }
+
+    @Provides
+    @Singleton
     fun provideCatalogRevisionImporter(
         revisionStore: SourceRevisionStore,
     ): CatalogRevisionImporter = CatalogRevisionImporterFactory.create(revisionStore)
@@ -96,18 +137,12 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRemoteSourceAccessManager(
-        credentialStore: CredentialStore,
-    ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
-
-    @Provides
-    @Singleton
     fun provideRemoteSourceRefresher(
-        credentialStore: CredentialStore,
+        accessManager: RemoteSourceAccessManager,
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
     ): RemoteSourceRefresher = RemoteSourceRefresher(
-        credentialStore = credentialStore,
+        accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
     )
