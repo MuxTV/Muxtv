@@ -1,35 +1,40 @@
 # Exact-Origin HTTP Playback Approval Design
 
-**Status:** accepted for implementation under issue #39.
+**Status:** implemented in PR #42; awaiting final reviewed-head verification and merge.
 
 **Base:** `main` at `d542e83ab7c1e997e4be95c82bffa63db90e8e83`.
 
 ## Objective
 
-Carry explicit HTTP trust from source onboarding into playback without process-wide cleartext, implicit host trust, a duplicate Room allow-list or exposure of credential references to UI/navigation.
+Carry explicit HTTP trust from source onboarding into playback without process-wide cleartext opt-in, implicit host trust, a duplicate Room allow-list or exposure of credential references to UI/navigation.
 
 ## Verified gap
 
-- encrypted `RemoteSourceAccess` already stores source URL and source-level `insecureHttpApproved`;
-- source refresh can therefore import an explicitly confirmed HTTP playlist;
-- active variants retain their source and locator, but playback resolution does not read the encrypted trust decision;
-- `ResolvedPlaybackRequest` contains no approval state;
-- `PlayerRoute` constructs `PlaybackSessionRequest` with the default `insecureHttpApproved = false`;
-- the request-scoped Media3 interceptor correctly requires an exact root-origin approval, but the bit never reaches it.
+Before PR #42:
 
-Result: an HTTP playlist may import successfully while a same-origin HTTP channel is rejected during playback.
+- encrypted `RemoteSourceAccess` stored source URL and source-level `insecureHttpApproved`;
+- source refresh could therefore import an explicitly confirmed HTTP playlist;
+- active variants retained their source and locator, but playback resolution did not read the encrypted trust decision;
+- `ResolvedPlaybackRequest` contained no approval state;
+- `PlayerRoute` constructed `PlaybackSessionRequest` with the default `insecureHttpApproved = false`;
+- the request-scoped Media3 interceptor required an exact root-origin approval, but the bit never reached it.
+
+Result: an HTTP playlist could import successfully while a same-origin HTTP channel was rejected during playback.
 
 ## Selected architecture
 
-### Single encrypted source of truth
+### Single encrypted source of truth and owner
 
 Keep approvals inside the existing encrypted source credential record. Do not add a Room approval table in this package.
+
+`RemoteSourceAccessManager` is the single in-process read/write owner for encrypted source access. Onboarding, refresh and playback-approval resolution share the same singleton instance in the production Hilt graph. Reads, saves, removes and read-modify-write updates cross one serialized boundary, preventing an approval mutation from overwriting a concurrent source-access change with a stale record.
 
 Benefits:
 
 - no duplicated trust state or cross-store cleanup race;
 - no Room migration for security-sensitive topology;
 - credential removal/reset removes all approvals;
+- no independent resolver/refresher write mutexes;
 - existing Android Keystore/DataStore boundaries remain authoritative.
 
 ### Exact HTTP origin
@@ -61,6 +66,8 @@ Backward decode:
 - v1 HTTP with approval false → no origin.
 
 A new HTTP source confirmation seeds only the exact source URL origin. A stream on another host or port requires a fresh Player confirmation.
+
+Source-refresh approval and playback-origin approval are separate. Revoking all playback origins does not disable an already confirmed HTTP playlist refresh.
 
 ### Catalog resolver
 
@@ -96,7 +103,7 @@ sealed interface PlaybackVariantResolution {
 
 A Ready request carries only the safe boolean `insecureHttpApproved` required by Media3.
 
-Approval/revocation methods identify the current variant by profile/channel/variant ID and re-query the active catalog before mutating encrypted trust. A stale warning cannot approve an inactive locator.
+Approval/revocation methods identify the current variant by profile/channel/variant ID and re-query the active catalog before mutating encrypted trust. A supplied stale variant ID returns `NotFound`; it never falls back to another active stream.
 
 ### Player flow
 
@@ -124,23 +131,25 @@ There is no complete active-source deletion product yet. The executable security
 - approvals exist only inside the credential record;
 - credential removal/reset leaves no independent trust state;
 - missing credential always resolves as unavailable, never approved;
-- a future source-edit operation must clear old approvals when origin changes.
+- changing a source URL through a future edit operation must clear old origins before seeding a newly confirmed source origin.
 
-## Redirect and header behavior
+## Redirect, manifest and header behavior
 
 This package does not weaken PR #36:
 
 - HTTPS root → HTTP target remains rejected;
 - HTTP approval authorizes only the exact approved root origin;
 - cross-origin sensitive headers remain stripped;
-- Android manifest/network-security config remains globally cleartext-denied.
+- the production manifest adds no process-wide cleartext opt-in or global allow-list;
+- repository-owned source and Media3 clients remain responsible for request-scoped HTTP policy, including on older API levels where platform defaults alone are not the security boundary.
 
 ## Concurrency and cancellation
 
-- encrypted record mutations are serialized by `RemoteSourceAccessManager`;
-- parent cancellation propagates;
-- cancellation before write leaves the old record unchanged;
-- Player approval is serialized and re-resolves current catalog state;
+- all encrypted source-access reads and mutations cross one shared `RemoteSourceAccessManager`;
+- read-modify-write mutations are serialized with the singleton manager mutex;
+- parent cancellation propagates through manager, resolver, refresher and Player operations;
+- cancellation before a credential write leaves the old record unchanged;
+- Player approval re-queries the current active variant before setup;
 - merged PR #38 SET/CANCEL ownership still prevents a cancelled route from installing a late request.
 
 ## Testing
@@ -150,8 +159,10 @@ This package does not weaken PR #36:
 - exact origin canonicalization/redaction;
 - encrypted v1/v2 codec compatibility and bounds;
 - safe read/update/revoke results;
+- concurrent updates preserve both approvals and unrelated access fields;
 - exact host/port resolver decisions;
 - catalog internal credential lookup without public leakage;
+- stale variant cannot approve another active stream;
 - Player approval/re-resolution/cancellation sequencing;
 - Sources reset action mapping.
 
@@ -159,19 +170,19 @@ This package does not weaken PR #36:
 
 API 26 and API 36:
 
-- approved HTTP source → same-origin channel setup;
-- different host and different port warnings;
-- approval → re-resolution → Media3 SET;
-- revoke/reset → warning returns;
-- credential removal → no surviving trust;
-- HTTPS → HTTP downgrade still rejected;
+- unapproved HTTP renders only canonical origin before SET;
+- approval triggers a fresh catalog resolution before real MediaSession setup;
+- exact-host/port, missing credential and revocation contracts are exercised by the same reviewed build and focused suites;
+- HTTPS → HTTP downgrade remains rejected;
 - production manifest contains no global cleartext opt-in;
 - reports/logcat/screenshots/semantics contain no locator/query/header/credential fixtures.
+
+The emulator matrix validates Android API, lifecycle, Room, Keystore, focus and MediaSession contracts. It does not certify vendor decoders, HDR, passthrough, Fire OS or constrained ARM hardware.
 
 ## Non-goals
 
 - global HTTP switch;
-- automatic trust inferred from a successful request;
+- automatic trust inferred from a successful import or request;
 - provider-specific exceptions;
 - active-source deletion redesign;
 - full Sources visual redesign;
@@ -183,7 +194,7 @@ API 26 and API 36:
 1. Explicitly approved HTTP source can play same-origin variants.
 2. Another host or effective port requires fresh confirmation.
 3. Trust is persisted only in encrypted source access.
-4. Revocation/reset removes trust deterministically.
+4. Revocation/reset removes playback trust deterministically without breaking source refresh approval.
 5. Missing/corrupt credential never implies approval.
 6. New source/origin does not inherit old trust.
 7. HTTPS downgrade remains rejected.
