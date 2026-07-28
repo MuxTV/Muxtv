@@ -5,13 +5,15 @@ import org.gradle.api.tasks.SourceSetContainer
 plugins { id("muxtv.kotlin.library") }
 
 dependencies {
-    testImplementation(project(":catalog:ingest"))
+    implementation(project(":catalog:ingest"))
+    implementation(libs.coroutines.core)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
 
 val mainSourceSet = extensions.getByType<SourceSetContainer>().getByName("main")
+
 val corpusProfile = providers.gradleProperty("corpusProfile").orElse("small-1k")
 val corpusSeed = providers.gradleProperty("corpusSeed").orElse("20260728")
 val corpusSourceCommit = providers.gradleProperty("corpusSourceCommit")
@@ -43,6 +45,42 @@ tasks.register<JavaExec>("generateM3uCorpus") {
     mainClass.set("app.muxtv.testing.iptv.M3uCorpusCommandKt")
     classpath = mainSourceSet.runtimeClasspath
     args = corpusCommandArguments
+}
+
+val measurementProfile = providers.gradleProperty("measurementProfile").orElse("small-1k")
+val measurementSeed = providers.gradleProperty("measurementSeed").orElse("20260728")
+val measurementSourceCommit = providers.gradleProperty("measurementSourceCommit")
+    .orElse(providers.environmentVariable("GITHUB_SHA"))
+val measurementWarmups = providers.gradleProperty("measurementWarmups").orElse("2")
+val measurementIterations = providers.gradleProperty("measurementIterations").orElse("5")
+val measurementRunnerLabel = providers.gradleProperty("measurementRunnerLabel").orElse("local")
+val measurementOutput = providers.gradleProperty("measurementOutput")
+    .orElse(layout.buildDirectory.file("measurements/m3u-parse-report.json").map { it.asFile.absolutePath })
+
+val measurementCommandArguments = mutableListOf(
+    "--profile",
+    measurementProfile.get(),
+    "--seed",
+    measurementSeed.get(),
+    "--warmups",
+    measurementWarmups.get(),
+    "--iterations",
+    measurementIterations.get(),
+    "--runner-label",
+    measurementRunnerLabel.get(),
+    "--output",
+    measurementOutput.get(),
+)
+measurementSourceCommit.orNull?.let { sourceCommit ->
+    measurementCommandArguments += listOf("--source-commit", sourceCommit)
+}
+
+tasks.register<JavaExec>("measureM3uParse") {
+    group = "verification"
+    description = "Produces descriptive M3U parser timing/allocation evidence without thresholds."
+    mainClass.set("app.muxtv.testing.iptv.M3uParseMeasurementMain")
+    classpath = mainSourceSet.runtimeClasspath
+    args = measurementCommandArguments
 }
 
 tasks.test { useJUnit() }

@@ -169,6 +169,38 @@ jobs:
             throw "Synthetic corpus generation failed with exit code $exitCode."
           }
 
+      - name: Measure small synthetic M3U parse
+        if: success() && steps.validation.outputs.mode == 'Full'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $evidenceDirectory = ".work\evidence\m3u-parse-measurement"
+          $logPath = Join-Path $evidenceDirectory "m3u-parse-measurement.log"
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
+          $output = & .\gradlew.bat `
+            :core:testing:measureM3uParse `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            "-PmeasurementProfile=small-1k" `
+            "-PmeasurementSeed=20260728" `
+            "-PmeasurementSourceCommit=$commit" `
+            "-PmeasurementWarmups=2" `
+            "-PmeasurementIterations=5" `
+            "-PmeasurementRunnerLabel=self-hosted-windows-x64" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
+
+          if ($exitCode -ne 0) {
+            throw "Descriptive M3U parse measurement failed with exit code $exitCode."
+          }
+
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -181,6 +213,7 @@ jobs:
             .work/evidence/**/*.png
             core/testing/build/corpus/*.m3u8
             core/testing/build/corpus/*.manifest.json
+            core/testing/build/measurements/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn
