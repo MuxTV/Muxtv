@@ -6,18 +6,20 @@ This report records the first reproducible Android Room baseline for issue #27. 
 
 ## Evidence identity
 
-- Source commit: `93a117c054bab09bd240284328ce0ca9731c38b3`
-- Full validation run: `30393595286` — success
-- Dedicated measurement run: `30393595299` — success
-- Artifact: `pr-catalog-database-measurement-30393595299-1`
-- Artifact digest: `sha256:d4e495b2275dfab244b8847b3b726cc11517d3b8e230759600ae0f292f8ed1a1`
+- Source commit: `7f9ae926d84a7fc89bcde9455a3ec28a5bfcfc4f`
+- Full validation run: `30400010584` — success
+- Dedicated measurement run: `30400010579` — success
+- Artifact: `pr-catalog-database-measurement-30400010579-1`
+- Artifact digest: `sha256:c9128043877e635318b96f94e9be21a53c4759e93728ebc73536a06723202731`
 - Report schema: `1`
 - Method version: `1`
 - Build mode: `debug-instrumentation`
 - Threshold applied: `false`
 - Failure count: `0`
 
-The dedicated run completed one instrumentation test with no failure, error or skip. The host command decoded the report from the instrumentation result bundle and independently validated the source commit, schema, fixture identity, operation order, result counts, raw sample counts and threshold-free contract.
+The dedicated run completed one instrumentation test with no failure, error or skip. The host command decoded the report from the instrumentation result bundle and independently validated the source commit, schema, build mode, complete fixture identity, operation order, result counts, raw sample counts and threshold-free contract.
+
+The final review added a length-prefixed fixture digest over every `StagedCatalogEntry` field, including nullable headers and locators. It also replaced exception text and PowerShell stack traces in the device manifest with bounded failure code/type/command/line metadata. The exact-head evidence above was regenerated after those changes.
 
 ## Environment
 
@@ -25,13 +27,17 @@ The dedicated run completed one instrumentation test with no failure, error or s
 |---|---|
 | Runner label | `self-hosted-android-tv-api36-x86_64` |
 | Android API | 36 |
+| System image | `system-images;android-36;android-tv;x86_64` |
 | Manufacturer | Google |
 | Model | `sdk_google_atv64_x86_64` |
 | Build fingerprint | `google/sdk_google_atv64_x86_64/emu64xa:16/BT2A.260319.001/15058170:user/dev-keys` |
 | Supported ABIs | `x86_64`, `arm64-v8a` |
+| Requested AVD RAM | 2,048 MB |
+| Requested AVD CPU cores | 2 |
 | Low-RAM device | `false` |
 | Android memory class | 192 MB |
 | Available processors | 2 |
+| Image fallback | `false` |
 | Cache state | `fresh-file-per-sample` |
 
 This is an Android TV emulator on a Windows self-hosted runner. The result is not representative of a weak ARM SoC, physical flash storage, vendor firmware or a production release build.
@@ -46,9 +52,9 @@ This is an Android TV emulator on a Windows self-hosted runner. The result is no
 | Source overview rows | 32 |
 | Warmup iterations | 1 |
 | Retained measured iterations | 5 |
-| Fixture SHA-256 | `97810d12d88527ceb6ca1aee059531328752c266256ce1d6d3bfc08ea3d8737b` |
+| Fixture SHA-256 | `550426cde45c459c3b60e6fc54c41a8e4a6bab5b7b1724851d903f97fba8a647` |
 
-The synthetic `StagedCatalogEntry` fixture is prepared before measurement. Every retained sample uses a fresh file-backed Room database with WAL. Database creation, prerequisite staging and prerequisite activation are outside the measured interval for operations that do not own those steps.
+The fixture digest is length-prefixed, distinguishes null from empty values, includes entry count and covers all staged fields. The synthetic entries are prepared before measurement. Every retained sample uses a fresh file-backed Room database with WAL. Database creation, prerequisite staging and prerequisite activation are outside the measured interval for operations that do not own those steps.
 
 ## Wall-time distributions
 
@@ -56,21 +62,21 @@ Times are milliseconds. Percentiles use nearest-rank statistics and all raw samp
 
 | Operation | Min | p50 | p90 | p95 | Max |
 |---|---:|---:|---:|---:|---:|
-| `stage-batch-250` | 142.007 | 215.523 | 924.192 | 924.192 | 924.192 |
-| `stage-total-10k` | 2,571.270 | 3,041.258 | 4,993.001 | 4,993.001 | 4,993.001 |
-| `activate-10k` | 5.082 | 6.797 | 7.923 | 7.923 | 7.923 |
-| `active-channel-first-page` | 39.272 | 45.697 | 47.739 | 47.739 | 47.739 |
-| `source-overview-32` | 5.836 | 7.066 | 7.529 | 7.529 | 7.529 |
+| `stage-batch-250` | 58.981 | 65.347 | 150.073 | 150.073 | 150.073 |
+| `stage-total-10k` | 2,660.176 | 2,798.138 | 3,079.724 | 3,079.724 | 3,079.724 |
+| `activate-10k` | 2.864 | 5.411 | 6.386 | 6.386 | 6.386 |
+| `active-channel-first-page` | 25.409 | 35.102 | 39.144 | 39.144 | 39.144 |
+| `source-overview-32` | 4.524 | 5.888 | 7.648 | 7.648 | 7.648 |
 
 ### Raw wall-time samples
 
 | Operation | Samples, ms |
 |---|---|
-| `stage-batch-250` | 924.192, 524.233, 201.001, 215.523, 142.007 |
-| `stage-total-10k` | 4,993.001, 3,041.258, 2,761.925, 2,571.270, 3,083.463 |
-| `activate-10k` | 7.923, 6.930, 6.797, 5.141, 5.082 |
-| `active-channel-first-page` | 45.729, 41.922, 47.739, 45.697, 39.272 |
-| `source-overview-32` | 5.836, 6.724, 7.353, 7.529, 7.066 |
+| `stage-batch-250` | 150.073, 130.538, 65.347, 61.219, 58.981 |
+| `stage-total-10k` | 2,881.027, 2,660.176, 2,797.564, 2,798.138, 3,079.724 |
+| `activate-10k` | 5.411, 6.232, 5.359, 6.386, 2.864 |
+| `active-channel-first-page` | 35.102, 39.144, 38.877, 25.409, 28.558 |
+| `source-overview-32` | 7.648, 5.888, 6.085, 4.524, 4.937 |
 
 ## Storage footprint after each measured boundary
 
@@ -86,7 +92,7 @@ The values below were stable across the five retained samples for each operation
 
 ## Interpretation
 
-The measured staging path is materially more expensive than activation and the two read queries in this exact debug-emulator environment. The first two staging samples are also substantially slower than the later samples. Five retained samples are insufficient to distinguish host warmup, emulator scheduling, JIT, SQLite/WAL behaviour and stable application cost.
+The measured staging path is materially more expensive than activation and the two read queries in this exact debug-emulator environment. The 250-entry staging samples also show a pronounced first-sample/warmup tail despite one discarded warmup. Five retained samples are insufficient to distinguish host warmup, emulator scheduling, JIT, SQLite/WAL behaviour and stable application cost.
 
 No production optimization is selected from this run. In particular, this report does not justify:
 
@@ -106,7 +112,7 @@ Before any Room structural change:
 2. run comparable current and old-edge Android TV profiles;
 3. add a low-RAM virtual profile without treating it as weak-ARM proof;
 4. calculate cross-series median, range and coefficient of variation;
-5. split staging into mapping, canonical/provider/variant writes and transaction/WAL commit only if the repeated result still identifies staging as the dominant boundary;
+5. split staging into mapping, canonical/provider/variant writes and transaction/WAL commit only if repeated evidence still identifies staging as the dominant boundary;
 6. measure a proposed change before and after under the same method version and environment class.
 
 Issue #27 remains open for repeated variance evidence, Player request installation/reconnect proxy measurements and the later decision whether a dedicated threshold gate is warranted.
