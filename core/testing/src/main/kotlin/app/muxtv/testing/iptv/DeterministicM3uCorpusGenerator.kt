@@ -147,8 +147,8 @@ object DeterministicM3uCorpusGenerator {
             writeLine(locator)
         }
 
-        // Deliberate malformed record: contributes one skipped entry and one warning, no locator.
-        writeLine("#EXTINF malformed-corpus-record-without-comma")
+        // Deliberate malformed EXTINF: contributes one skipped entry and one warning, no locator.
+        writeLine("#EXTINF:-1 malformed-corpus-record-without-comma")
         output.flush()
 
         val duplicateCount = spec.profile.expectedDuplicateIdentities
