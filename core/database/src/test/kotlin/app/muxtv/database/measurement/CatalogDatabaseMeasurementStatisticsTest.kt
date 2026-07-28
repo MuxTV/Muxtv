@@ -21,15 +21,21 @@ class CatalogDatabaseMeasurementStatisticsTest {
 
     @Test
     fun `report snapshots mutable operation and sample inputs`() {
-        val mutableSamples = mutableListOf(sample(iteration = 1, wallTimeNanos = 10L))
+        val mutableSamples = mutableListOf(
+            sample(iteration = 1, wallTimeNanos = 10L),
+            sample(iteration = 2, wallTimeNanos = 20L),
+            sample(iteration = 3, wallTimeNanos = 30L),
+            sample(iteration = 4, wallTimeNanos = 40L),
+            sample(iteration = 5, wallTimeNanos = 50L),
+        )
         val mutableOperations = mutableListOf(operation("stage-batch-250", mutableSamples))
         val report = report(mutableOperations)
 
-        mutableSamples += sample(iteration = 2, wallTimeNanos = 20L)
+        mutableSamples.clear()
         mutableOperations.clear()
 
         assertThat(report.operations).hasSize(1)
-        assertThat(report.operations.single().samples).hasSize(1)
+        assertThat(report.operations.single().samples).hasSize(5)
     }
 
     @Test
@@ -59,6 +65,8 @@ class CatalogDatabaseMeasurementStatisticsTest {
         assertThat(json).contains("\"thresholdApplied\": false")
         assertThat(json).contains("\"rawSamples\": [")
         assertThat(json).contains("\"cacheState\": \"fresh-file-per-sample\"")
+        assertThat(json).contains("\"fixture\": {")
+        assertThat(json).contains("\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\"")
         assertThat(json).doesNotContain("stream.example")
         assertThat(json).doesNotContain("Synthetic Channel")
         assertThat(json).doesNotContain("locator")
