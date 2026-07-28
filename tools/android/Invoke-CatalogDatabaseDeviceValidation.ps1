@@ -55,6 +55,54 @@ function Get-FreeEmulatorPort {
     throw "No free Android Emulator console/ADB port pair was found."
 }
 
+function Wait-CatalogAndroidSystemReady {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory)][string]$EvidenceDirectory,
+        [int]$TimeoutSeconds = 360
+    )
+
+    $logPath = Join-Path $EvidenceDirectory "android-readiness.log"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $bootCompleted = ""
+    do {
+        if ($Process.HasExited) {
+            throw "Android TV emulator exited before system readiness."
+        }
+        $candidate = (& $Tools.Adb -s $Serial shell getprop sys.boot_completed 2>$null | Select-Object -First 1)
+        $bootCompleted = if ($null -eq $candidate) { "" } else { ([string]$candidate).Trim() }
+        "boot=$bootCompleted" | Add-Content -Path $logPath -Encoding utf8
+        if ($bootCompleted -eq "1") { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    if ($bootCompleted -ne "1") {
+        throw "Android TV emulator did not complete boot within the configured timeout."
+    }
+
+    $packageDeadline = (Get-Date).AddSeconds(90)
+    $androidPackage = ""
+    do {
+        if ($Process.HasExited) {
+            throw "Android TV emulator exited before package-manager readiness."
+        }
+        $candidate = (& $Tools.Adb -s $Serial shell pm path android 2>$null | Select-Object -First 1)
+        $androidPackage = if ($null -eq $candidate) { "" } else { ([string]$candidate).Trim() }
+        "packageManager=$androidPackage" | Add-Content -Path $logPath -Encoding utf8
+        if ($androidPackage.StartsWith("package:", [System.StringComparison]::Ordinal)) { break }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $packageDeadline)
+    if (-not $androidPackage.StartsWith("package:", [System.StringComparison]::Ordinal)) {
+        throw "Android package manager did not become ready within the configured timeout."
+    }
+
+    & $Tools.Adb -s $Serial shell input keyevent 82 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global window_animation_scale 0 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global transition_animation_scale 0 | Out-Null
+    & $Tools.Adb -s $Serial shell settings put global animator_duration_scale 0 | Out-Null
+}
+
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $measurementScript = Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"
 if (-not (Test-Path $measurementScript -PathType Leaf)) {
@@ -124,7 +172,12 @@ try {
         -AvdName $avdName `
         -Port $port `
         -EvidenceDirectory $evidenceDirectory
-    Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
+    Wait-CatalogAndroidSystemReady `
+        -Tools $tools `
+        -Serial $serial `
+        -Process $process `
+        -EvidenceDirectory $evidenceDirectory `
+        -TimeoutSeconds 360
     $env:ANDROID_SERIAL = $serial
     Collect-AndroidEvidence -Tools $tools -Serial $serial -OutputDirectory $evidenceDirectory
 
