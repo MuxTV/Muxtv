@@ -174,9 +174,10 @@ class M3uCorpusArtifactPublisher(
             manifestTemp = null
             manifestPublished = true
 
-            playlistBackup?.let(fileOps::deleteIfExists)
+            // The new pair is committed. Backup cleanup cannot invalidate that successful outcome.
+            playlistBackup?.let(::deleteQuietly)
             playlistBackup = null
-            manifestBackup?.let(fileOps::deleteIfExists)
+            manifestBackup?.let(::deleteQuietly)
             manifestBackup = null
 
             return M3uCorpusArtifactPair(
@@ -184,8 +185,6 @@ class M3uCorpusArtifactPublisher(
                 manifestPath = manifestPath,
                 manifest = manifest,
             )
-        } catch (_: M3uCorpusArtifactException) {
-            throw
         } catch (_: Throwable) {
             val rollbackSucceeded = rollback(
                 playlistPath = playlistPath,
@@ -209,10 +208,7 @@ class M3uCorpusArtifactPublisher(
         } finally {
             playlistTemp?.let(::deleteQuietly)
             manifestTemp?.let(::deleteQuietly)
-            // Backups are removed only after successful publication or successful restoration.
-            if (playlistBackup == null && manifestBackup == null) {
-                Unit
-            }
+            // On rollback failure, backup files intentionally remain for manual recovery.
         }
     }
 
@@ -281,7 +277,7 @@ class M3uCorpusArtifactPublisher(
         try {
             fileOps.deleteIfExists(path)
         } catch (_: Throwable) {
-            // Temp cleanup is best effort; publication/rollback outcome remains authoritative.
+            // Best effort only: committed pairs or rollback evidence remain authoritative.
         }
     }
 
