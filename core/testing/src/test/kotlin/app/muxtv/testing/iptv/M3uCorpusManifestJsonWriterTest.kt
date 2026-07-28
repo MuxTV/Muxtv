@@ -32,9 +32,10 @@ class M3uCorpusManifestJsonWriterTest {
               "playlistSha256": "${manifest.sha256}"
             }
         """.trimIndent() + "\n"
+        val actual = first.toString(Charsets.UTF_8)
 
-        assertThat(first.toString(Charsets.UTF_8)).isEqualTo(expected)
-        assertThat(first.toByteArray()).doesNotContain('\r'.code.toByte())
+        assertThat(actual).isEqualTo(expected)
+        assertThat(actual).doesNotContain("\r")
     }
 
     @Test
