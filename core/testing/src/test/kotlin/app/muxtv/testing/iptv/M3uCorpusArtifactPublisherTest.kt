@@ -144,6 +144,31 @@ class M3uCorpusArtifactPublisherTest {
     }
 
     @Test
+    fun `rollback failure keeps the old playlist backup for manual recovery`() {
+        val normalPublisher = M3uCorpusArtifactPublisher()
+        val request = M3uCorpusArtifactRequest(spec = spec(seed = 15L), outputDirectory = root)
+        val existing = normalPublisher.publish(request)
+        val oldManifest = "recoverable-old-manifest".toByteArray()
+        Files.writeString(existing.playlistPath, "recoverable-old-playlist")
+        Files.write(existing.manifestPath, oldManifest)
+
+        val failingPublisher = M3uCorpusArtifactPublisher.forTesting(
+            moveFile = FailManifestPublishAndPlaylistRestoreMove(),
+        )
+        val error = assertThrows(M3uCorpusArtifactException::class.java) {
+            failingPublisher.publish(request.copy(overwrite = true))
+        }
+
+        assertThat(error.reason).isEqualTo(M3uCorpusArtifactFailureReason.RollbackFailed)
+        assertThat(error.message).doesNotContain(root.toString())
+        assertThat(Files.exists(existing.playlistPath)).isFalse()
+        assertThat(Files.readAllBytes(existing.manifestPath)).isEqualTo(oldManifest)
+        assertThat(Files.list(root).use { paths ->
+            paths.anyMatch { it.fileName.toString().endsWith(".m3u8.bak") }
+        }).isTrue()
+    }
+
+    @Test
     fun `request and result diagnostics redact filesystem paths`() {
         val request = M3uCorpusArtifactRequest(spec = spec(seed = 17L), outputDirectory = root)
         val result = M3uCorpusArtifactPublisher().publish(request)
@@ -172,6 +197,23 @@ class M3uCorpusArtifactPublisherTest {
             if (!failed && target.fileName.toString().endsWith(".manifest.json")) {
                 failed = true
                 throw IllegalStateException("synthetic manifest publish failure")
+            }
+            Files.move(source, target)
+        }
+    }
+
+    private class FailManifestPublishAndPlaylistRestoreMove : (Path, Path) -> Unit {
+        private var publishFailed = false
+
+        override fun invoke(source: Path, target: Path) {
+            val sourceName = source.fileName.toString()
+            val targetName = target.fileName.toString()
+            if (!publishFailed && sourceName.endsWith(".manifest.json.tmp") && targetName.endsWith(".manifest.json")) {
+                publishFailed = true
+                throw IllegalStateException("synthetic manifest publish failure")
+            }
+            if (publishFailed && sourceName.endsWith(".m3u8.bak") && targetName.endsWith(".m3u8")) {
+                throw IllegalStateException("synthetic playlist restore failure")
             }
             Files.move(source, target)
         }
