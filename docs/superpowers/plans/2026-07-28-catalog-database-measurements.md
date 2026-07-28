@@ -48,6 +48,7 @@
 - [x] Measured `source-overview-32`.
 - [x] Captured Android environment and DB/WAL/SHM sizes.
 - [x] Correctness mismatches fail with fixed secret-free messages and do not publish a successful report.
+- [x] Final review replaced the partial fixture fingerprint with a length-prefixed SHA-256 over every staged field, including nullable values and entry boundaries.
 
 ## Task 4 — dedicated instrumentation boundary
 
@@ -63,21 +64,24 @@
 - [x] Added `Invoke-CatalogDatabaseMeasurement.ps1`.
 - [x] Added `Invoke-CatalogDatabaseDeviceValidation.ps1` using the repository-owned AVD lifecycle.
 - [x] Added manual `CatalogMeasurement` workflow mode without changing ordinary PR Full behaviour.
-- [x] Host validation requires exact commit, supported schema/method, fixture SHA, five ordered operations, five raw samples, correct result counts, zero failures and `thresholdApplied=false`.
+- [x] Host validation requires exact commit, supported schema/method/build mode, complete fixture SHA, five ordered operations, five raw samples, correct result counts, zero failures and `thresholdApplied=false`.
 - [x] Stale Android test-results are removed before execution.
-- [x] Child output, failure type and stack location are retained in evidence.
+- [x] Child output and bounded failure code/type/command/line metadata are retained in evidence.
+- [x] Exception messages, PowerShell stack traces and full host paths are excluded from the device manifest.
 - [x] Fixed null-unsafe cold-boot/package-manager readiness handling exposed by API 36.
 - [x] Fixed strict-mode native exit-code handling exposed by the focused harness.
 
 ## Task 6 — evidence, review and merge preparation
 
-- [x] Full run `30393595286` succeeded on source head `93a117c054bab09bd240284328ce0ca9731c38b3`.
-- [x] Dedicated measurement run `30393595299` succeeded on the same source head.
-- [x] Artifact `pr-catalog-database-measurement-30393595299-1` is bound to that head.
+- [x] Final reviewed Full run `30400010584` succeeded on source head `7f9ae926d84a7fc89bcde9455a3ec28a5bfcfc4f`.
+- [x] Final reviewed dedicated measurement run `30400010579` succeeded on the same source head.
+- [x] Artifact `pr-catalog-database-measurement-30400010579-1` is bound to that head with digest `sha256:c9128043877e635318b96f94e9be21a53c4759e93728ebc73536a06723202731`.
+- [x] Complete fixture SHA-256 is `550426cde45c459c3b60e6fc54c41a8e4a6bab5b7b1724851d903f97fba8a647`.
 - [x] Canonical report states API 36, x86_64, two processors, 192 MB memory class, debug instrumentation build and zero failures.
 - [x] Raw distributions and storage footprint are recorded in `docs/performance/2026-07-28-catalog-database-baseline.md`.
 - [x] Interpretation explicitly declines a production Room optimization from one five-sample series.
-- [x] Temporary PR-only measurement workflow removed from the final tree.
+- [x] Review found and fixed complete-fixture identity and failure-manifest redaction gaps through a new RED/GREEN contract.
+- [ ] Remove the temporary PR-only measurement workflow from the final tree.
 - [ ] Run final cleaned-tree Full after documentation/workflow cleanup.
 - [ ] Review final diff and unresolved threads.
 - [ ] Mark PR ready and squash merge.
