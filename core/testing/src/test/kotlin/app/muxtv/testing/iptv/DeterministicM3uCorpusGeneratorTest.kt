@@ -110,6 +110,24 @@ class DeterministicM3uCorpusGeneratorTest {
         }
     }
 
+    @Test
+    fun `generator flushes but does not close caller owned stream`() {
+        val output = TrackingOutputStream()
+
+        DeterministicM3uCorpusGenerator.generate(
+            spec = M3uCorpusSpec(
+                profile = M3uCorpusProfile.SMALL_1K,
+                seed = 123L,
+                sourceCommit = TEST_SOURCE_COMMIT,
+            ),
+            output = output,
+        )
+
+        assertThat(output.flushCount).isGreaterThan(0)
+        assertThat(output.closed).isFalse()
+        output.write(0)
+    }
+
     private fun generate(seed: Long): GeneratedCorpus {
         val output = ByteArrayOutputStream()
         val manifest = DeterministicM3uCorpusGenerator.generate(
@@ -127,6 +145,23 @@ class DeterministicM3uCorpusGeneratorTest {
         val bytes: ByteArray,
         val manifest: M3uCorpusManifest,
     )
+
+    private class TrackingOutputStream : ByteArrayOutputStream() {
+        var closed: Boolean = false
+            private set
+        var flushCount: Int = 0
+            private set
+
+        override fun flush() {
+            flushCount += 1
+            super.flush()
+        }
+
+        override fun close() {
+            closed = true
+            super.close()
+        }
+    }
 
     private companion object {
         const val TEST_SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
