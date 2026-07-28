@@ -1,12 +1,30 @@
+import org.gradle.api.GradleException
+
 plugins {
     id("muxtv.android.library")
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
 
+val playerProxyMeasurementsEnabled = providers.gradleProperty("playerProxyMeasurements")
+    .orElse("false")
+    .map { rawValue ->
+        when (rawValue.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> throw GradleException("playerProxyMeasurements must be true or false.")
+        }
+    }
+
 android {
     namespace = "app.muxtv.player.media3"
-    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (!playerProxyMeasurementsEnabled.get()) {
+            testInstrumentationRunnerArguments["notAnnotation"] =
+                "app.muxtv.player.media3.PlayerProxyMeasurement"
+        }
+    }
 }
 
 dependencies {
