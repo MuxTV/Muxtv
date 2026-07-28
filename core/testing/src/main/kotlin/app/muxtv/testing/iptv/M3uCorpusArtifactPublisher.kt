@@ -11,13 +11,19 @@ data class M3uCorpusArtifactRequest(
     val spec: M3uCorpusSpec,
     val outputDirectory: Path,
     val overwrite: Boolean = false,
-)
+) {
+    override fun toString(): String =
+        "M3uCorpusArtifactRequest(spec=$spec, outputDirectory=<redacted>, overwrite=$overwrite)"
+}
 
 data class M3uCorpusArtifactPair(
     val playlistPath: Path,
     val manifestPath: Path,
     val manifest: M3uCorpusManifest,
-)
+) {
+    override fun toString(): String =
+        "M3uCorpusArtifactPair(playlistPath=<redacted>, manifestPath=<redacted>, manifest=$manifest)"
+}
 
 enum class M3uCorpusArtifactFailureReason {
     TargetExists,
