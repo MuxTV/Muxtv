@@ -6,6 +6,8 @@ private val SOURCE_COMMIT_PATTERN = Regex("[0-9a-f]{40}")
 private val RUNNER_LABEL_PATTERN = Regex("[a-z0-9][a-z0-9._-]{0,63}")
 private val OPERATION_ID_PATTERN = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
 private val SHA_256_PATTERN = Regex("[0-9a-f]{64}")
+private const val ZERO_SHA_256 =
+    "0000000000000000000000000000000000000000000000000000000000000000"
 
 internal data class CatalogDatabaseMeasurementSummary(
     val sampleCount: Int,
@@ -149,6 +151,16 @@ internal class CatalogDatabaseOperationReport(
             "sampleCount=${samples.size})"
 }
 
+internal data class CatalogDatabaseFixtureIdentity(
+    val entryCount: Int,
+    val sha256: String,
+) {
+    init {
+        require(entryCount > 0)
+        require(sha256.matches(SHA_256_PATTERN))
+    }
+}
+
 internal class CatalogDatabaseMeasurementReport(
     val schemaVersion: Int,
     val methodVersion: Int,
@@ -161,6 +173,10 @@ internal class CatalogDatabaseMeasurementReport(
     operations: List<CatalogDatabaseOperationReport>,
     val failureCount: Int,
     limitations: List<String>,
+    val fixture: CatalogDatabaseFixtureIdentity = CatalogDatabaseFixtureIdentity(
+        entryCount = workload.entryCount,
+        sha256 = ZERO_SHA_256,
+    ),
 ) {
     val operations: List<CatalogDatabaseOperationReport> = operations.toList()
     val limitations: List<String> = limitations.toList()
@@ -172,6 +188,7 @@ internal class CatalogDatabaseMeasurementReport(
         require(sourceCommit.matches(SOURCE_COMMIT_PATTERN))
         require(runnerLabel.matches(RUNNER_LABEL_PATTERN))
         require(cacheState == "fresh-file-per-sample")
+        require(fixture.entryCount == workload.entryCount)
         require(this.operations.isNotEmpty())
         require(this.operations.map(CatalogDatabaseOperationReport::operationId).distinct().size == this.operations.size)
         require(this.operations.all { it.samples.size == workload.measuredIterations })
@@ -185,15 +202,6 @@ internal class CatalogDatabaseMeasurementReport(
             "schemaVersion=$schemaVersion, methodVersion=$methodVersion, " +
             "thresholdApplied=$thresholdApplied, sourceCommit=$sourceCommit, " +
             "runnerLabel=$runnerLabel, cacheState=$cacheState, " +
-            "operationCount=${operations.size}, failureCount=$failureCount)"
-}
-
-internal data class CatalogDatabaseFixtureIdentity(
-    val entryCount: Int,
-    val sha256: String,
-) {
-    init {
-        require(entryCount > 0)
-        require(sha256.matches(SHA_256_PATTERN))
-    }
+            "fixtureEntryCount=${fixture.entryCount}, operationCount=${operations.size}, " +
+            "failureCount=$failureCount)"
 }
