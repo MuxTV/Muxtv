@@ -2,7 +2,7 @@
 status: accepted
 last_reviewed: 2026-07-28
 architecture_version: 3
-implementation_source_commit: 3e24cccb188b53652285929a11e3b50697aad5f7
+implementation_source_commit: d7bc58a398c065018d9131c176e8e1c131766c88
 ---
 
 # Текущее состояние
@@ -11,7 +11,7 @@ implementation_source_commit: 3e24cccb188b53652285929a11e3b50697aad5f7
 
 MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
 
-Первый deterministic corpus package уже реализован: M3U profiles 1k/10k/50k генерируются потоково по explicit seed/source commit и возвращают expected counts, byte size и SHA-256. Serialized artifacts, HLS/XMLTV fixtures, measurements, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
+Deterministic M3U corpus packages теперь создают профили 1k/10k/50k, canonical JSON manifest и безопасно публикуют согласованную пару `.m3u8 + .manifest.json`. Repository CLI/task, HLS/XMLTV fixtures, measurements, XMLTV/EPG, daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
 
 ## Проверенные факты
 
@@ -22,11 +22,14 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 - CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent и DeviceMatrix через repository-owned PowerShell harness.
 - PR #38 слит squash commit `8665f80d6e38bc90d10ead0d3a3618fbecd4e304` и закрыл issue #26.
 - PR #42 слит squash commit `764ec102808c4df57e826d05ce7b1334063bb520` и закрыл issue #39.
-- PR #43 слит squash commit `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; два последовательных Full attempts подтвердили clean workspace с repository-local `core.longpaths`.
-- PR #45 слит squash commit `dc6e6b2357de12de65932857ca637ff9631782f1` и закрыл M3U diagnostic leak.
-- PR #44 слит squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`; это Package A issue #27, а не закрытие всего milestone.
-- Cleaned-tree Full для PR #42: run `30295592181`.
-- Corpus foundation Full: run `30365096484`; `:core:testing:test` исполняется в permanent gate.
+- PR #43 слит squash commit `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; два Full attempts подтвердили clean workspace с repository-local `core.longpaths`.
+- PR #44 слит squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`; deterministic M3U foundation и permanent `core:testing` gate.
+- PR #45 слит squash commit `dc6e6b2357de12de65932857ca637ff9631782f1`; M3U diagnostics redacted.
+- PR #47 слит squash commit `f992e8269cd402d679905efb57a2af633a99772c`; canonical manifest JSON.
+- PR #48 слит squash commit `d7bc58a398c065018d9131c176e8e1c131766c88`; deterministic pair publisher с explicit overwrite/rollback.
+- Corpus foundation Full: run `30365096484`.
+- Canonical manifest Full: run `30367547682`.
+- Artifact pair publisher Full: run `30370708253`.
 - Последняя успешная API 26/API 36 HTTP-approval DeviceMatrix: run `30287803018`, без fallback/failures/errors/skips.
 
 ## Реализованный рабочий путь
@@ -38,7 +41,7 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 - Один singleton `RemoteSourceAccessManager` владеет encrypted save/read/update/remove для onboarding, refresh и playback approvals; read-modify-write mutations сериализованы.
 - Source-entry поддерживает HTTPS и отдельное явное подтверждение HTTP.
 - `RemoteSourceAccess` codec v2 хранит bounded exact HTTP playback origins и читает legacy v1 records.
-- Source-level HTTP refresh approval отделён от playback origins: reset не ломает уже подтверждённый playlist refresh.
+- Source-level HTTP refresh approval отделён от playback origins: reset не ломает подтверждённый playlist refresh.
 - Locator остаётся только в bounded transient state и не попадает в Navigation, SavedState или stable semantics.
 - M3U обрабатывается bounded streaming parser.
 - Source revisions immutable; импорт идёт через staging с atomic activation/rollback.
@@ -61,22 +64,25 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 
 ### Diagnostics и security
 
-- `ChannelQuery`, channel summary, variant и approval outcomes имеют redacted diagnostic representation.
-- `M3uPlaylistHeader` и `M3uEntry` diagnostics публикуют только counts/presence flags, но не untrusted keys или values.
-- Search text, provider/source identity, locator, query, exact origin, cookies, Authorization/Referer и credential values не должны появляться в logs/errors/traces.
+- Catalog/channel/variant/approval и M3U diagnostics публикуют только redacted markers, counts и presence flags.
+- Search text, provider/source identity, locator, query, exact origin, cookies, Authorization/Referer, credential values и local corpus output paths не появляются в diagnostic strings.
 - HTTPS → HTTP redirect остаётся запрещённым; cross-origin sensitive headers снимаются.
 - Production manifest не содержит process-wide cleartext opt-in или network-wide HTTP allow-list.
 - Request-scoped repository clients, а не platform default, являются HTTP security boundary на всех поддерживаемых API.
 
-### Deterministic corpus foundation
+### Deterministic corpus artifacts
 
-- `core:testing` владеет provider-neutral M3U generator, а production ingest не зависит от testing module.
+- `core:testing` владеет provider-neutral generator; production ingest не зависит от testing module.
 - Profiles: 1k, 10k и 50k entries.
 - Equal profile + seed + source commit дают byte-identical UTF-8 output и SHA-256.
-- Generator пишет в caller-owned `OutputStream`, flushes, но не closes его.
+- Generator и canonical JSON writer flush, но не close caller-owned output.
+- Manifest имеет explicit manifest/generator schema versions, fixed field order, LF и одну trailing newline.
+- Source commit валидируется как full lowercase 40-character Git SHA; playlist digest — lowercase SHA-256.
 - Corpus использует только reserved `.example` hosts и synthetic identities.
-- Controlled duplicates, long metadata, mixed line endings, relative locators, optional User-Agent/referrer directives и parser-recognized malformed fixture имеют manifest expectations.
-- `StreamingM3uParser` проверяет parsed/skipped/warning/duplicate expectations в реальном test contract.
+- Controlled duplicates, long metadata, mixed line endings, relative locators, optional User-Agent/referrer directives и malformed fixture имеют executable expectations.
+- Artifact publisher создаёт deterministic filenames, пишет оба temp-файла до публикации и публикует manifest последним как commit marker.
+- Implicit overwrite запрещён; explicit overwrite использует backup/restore без `REPLACE_EXISTING`.
+- Publish/rollback failures имеют typed safe reasons; staging cleanup входит в rollback result, а невосстановленный backup сохраняется для recovery.
 - `:core:testing:test` включён в permanent Fast/Full gate; прежний false-positive validation gap закрыт.
 
 ## Android TV evidence
@@ -88,9 +94,7 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 | old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 21 | 10 | 12 |
 | current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 21 | 10 | 12 |
 
-Run `30287803018` прошёл без fallback, failures, errors или skips. Последующие shared-manager, stale-variant, revocation и diagnostic-redaction изменения прошли cleaned-tree Full; revocation journey был скомпилирован, но отдельный повторный exact-head DeviceMatrix не использовался как merge gate из-за занятости единственного runner.
-
-Эмуляторная матрица доказывает Android API/lifecycle/Room/Keystore/focus/MediaSession contracts. Она не доказывает vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC или реальные zapping/performance характеристики.
+Run `30287803018` прошёл без fallback, failures, errors или skips. Эмуляторная матрица доказывает Android API/lifecycle/Room/Keystore/focus/MediaSession contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC или реальные zapping/performance характеристики.
 
 ## Ближайший production milestone
 
@@ -99,18 +103,20 @@ Issue #27 остаётся активной.
 Завершено:
 
 1. deterministic M3U profiles 1k/10k/50k;
-2. explicit seed/source commit и generator schema version;
-3. in-memory manifest с expected counts, byte size и SHA-256;
-4. byte-identical repeated output;
-5. parser agreement и permanent testing gate.
+2. explicit seed/source commit и generator schema;
+3. expected counts, byte size и SHA-256;
+4. canonical serialized manifest artifact;
+5. deterministic `.m3u8 + .manifest.json` pair publisher;
+6. explicit overwrite, backup/restore, partial cleanup и typed rollback;
+7. parser agreement и permanent testing gate.
 
 Следующий package:
 
-1. canonical serialized manifest artifact;
-2. repository-owned corpus generation entry point;
-3. stable artifact naming и explicit overwrite/cleanup policy;
-4. starter HLS/XMLTV fixtures;
-5. descriptive parse/stage/activate/query/Player measurements до назначения budgets.
+1. repository CLI/Gradle task для publisher;
+2. starter HLS/XMLTV fixtures;
+3. importer assertions против generated manifests;
+4. descriptive parse/stage/activate/query/Player measurements;
+5. repeated variance evidence до назначения budgets.
 
 ## Последовательность после issue #27
 
