@@ -35,27 +35,28 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - request-scoped Media3 OkHttp transport, immutable per-playback headers, redirect/downgrade и cross-origin credential policy;
 - retryable MediaController ownership, remote-session reconnect epoch и setup SET/CANCEL protocol без late install;
 - redacted catalog/playback/M3U diagnostics без locator, exact origin, query, provider/source identity и credential values;
-- deterministic provider-neutral M3U corpus foundation с профилями 1k/10k/50k, explicit seed/source commit, expected counts, byte size и SHA-256;
+- deterministic provider-neutral M3U corpus с профилями 1k/10k/50k, explicit seed/source commit, expected counts, byte size и SHA-256;
+- canonical fixed-order UTF-8 JSON manifest с отдельной schema version;
+- безопасная публикация детерминированной пары `.m3u8 + .manifest.json`: manifest-last commit marker, explicit overwrite, backup/restore, partial cleanup и typed rollback failure;
 - permanent `core:testing` contracts в Fast/Full validation;
 - repository-owned Windows cleanup с `core.longpaths`, explicit reset/clean и clean-workspace evidence;
 - repository-owned PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
 
 Последние завершённые packages:
 
-- PR #36 — request-scoped Media3 OkHttp transport и header isolation;
-- PR #37 — retryable/disconnect-aware MediaController lifecycle;
-- PR #38 — deterministic setup cancellation и remote-session reconnect;
 - PR #42 — encrypted exact-origin HTTP playback approval, warning/re-resolution, revocation и shared access ownership;
 - PR #43 — repository truth и deterministic Windows self-hosted cleanup;
+- PR #44 — deterministic M3U corpus foundation;
 - PR #45 — redacted untrusted M3U diagnostics;
-- PR #44 — первый package issue #27: deterministic M3U corpus foundation;
-- issues #26 и #39 закрыты; issue #27 остаётся активной до manifest artifacts, starter fixtures и measurements.
+- PR #47 — canonical corpus manifest JSON;
+- PR #48 — deterministic artifact pair publisher с overwrite/rollback;
+- issues #26 и #39 закрыты; issue #27 остаётся активной до repository CLI/task, starter HLS/XMLTV fixtures и measurements.
 
-Следующий package issue #27 — canonical serialized corpus manifest и repository-owned generation entry point. После него: bounded HLS/XMLTV starter fixtures, descriptive measurements, затем XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
+Следующий package issue #27 — repository CLI/Gradle entry point для corpus publisher. После него: bounded HLS/XMLTV starter fixtures, descriptive measurements, затем XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
 
 До первой публичной alpha ещё не завершены:
 
-- serialized corpus artifacts, bounded HLS/XMLTV fixtures и evidence-backed performance budgets;
+- repository corpus CLI/task, bounded HLS/XMLTV fixtures и evidence-backed performance budgets;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
