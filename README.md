@@ -34,22 +34,28 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - один process-owned `ExoPlayer` и `MediaSessionService`;
 - request-scoped Media3 OkHttp transport, immutable per-playback headers, redirect/downgrade и cross-origin credential policy;
 - retryable MediaController ownership, remote-session reconnect epoch и setup SET/CANCEL protocol без late install;
-- redacted catalog/playback diagnostics без locator, exact origin, query, provider/source identity и credential values;
-- repository-owned Windows PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
+- redacted catalog/playback/M3U diagnostics без locator, exact origin, query, provider/source identity и credential values;
+- deterministic provider-neutral M3U corpus foundation с профилями 1k/10k/50k, explicit seed/source commit, expected counts, byte size и SHA-256;
+- permanent `core:testing` contracts в Fast/Full validation;
+- repository-owned Windows cleanup с `core.longpaths`, explicit reset/clean и clean-workspace evidence;
+- repository-owned PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
 
-Последние завершённые playback/security пакеты:
+Последние завершённые packages:
 
 - PR #36 — request-scoped Media3 OkHttp transport и header isolation;
 - PR #37 — retryable/disconnect-aware MediaController lifecycle;
 - PR #38 — deterministic setup cancellation и remote-session reconnect;
 - PR #42 — encrypted exact-origin HTTP playback approval, warning/re-resolution, revocation и shared access ownership;
-- issues #26 и #39 закрыты.
+- PR #43 — repository truth и deterministic Windows self-hosted cleanup;
+- PR #45 — redacted untrusted M3U diagnostics;
+- PR #44 — первый package issue #27: deterministic M3U corpus foundation;
+- issues #26 и #39 закрыты; issue #27 остаётся активной до manifest artifacts, starter fixtures и measurements.
 
-Ближайший подтверждённый пакет — issue #27: deterministic provider-neutral M3U/HLS/XMLTV corpus и воспроизводимые measurements. После него запланированы XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
+Следующий package issue #27 — canonical serialized corpus manifest и repository-owned generation entry point. После него: bounded HLS/XMLTV starter fixtures, descriptive measurements, затем XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
 
 До первой публичной alpha ещё не завершены:
 
-- воспроизводимый M3U/HLS/XMLTV corpus и evidence-backed performance budgets;
+- serialized corpus artifacts, bounded HLS/XMLTV fixtures и evidence-backed performance budgets;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -88,7 +94,7 @@ Harness самостоятельно выбирает доступные Android
 - активный последовательный план: [`docs/superpowers/plans/2026-07-27-post-http-approval-execution.md`](docs/superpowers/plans/2026-07-27-post-http-approval-execution.md);
 - HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
-- открытые функциональные пакеты ведутся через GitHub Issues и отдельные PR.
+- открытые функциональные packages ведутся через GitHub Issues и отдельные PR.
 
 ## Основные принципы
 
@@ -98,7 +104,7 @@ Harness самостоятельно выбирает доступные Android
 - immutable revisions и atomic activation вместо частично обновлённого live state;
 - один process-owned `ExoPlayer` и `MediaSession`;
 - один in-process owner encrypted source access; никакого второго approval/security store;
-- функциональные, schema/security, infrastructure и визуальные изменения выполняются отдельными reviewable PR;
+- функциональные, schema/security, corpus/measurement, infrastructure и визуальные изменения выполняются отдельными reviewable PR;
 - Kotlin/Compose/Room/Media3 остаются baseline; Rust, libmpv, bundled SQLite и второй engine требуют измеримого bottleneck, corpus и отдельного ADR.
 
 ## Лицензия
