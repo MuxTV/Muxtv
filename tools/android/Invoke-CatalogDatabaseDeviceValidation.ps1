@@ -85,6 +85,8 @@ $manifest = [ordered]@{
     ramMb = $RamMb
     cpuCores = $CpuCores
     failure = $null
+    failureType = $null
+    failureTrace = $null
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
 
@@ -150,6 +152,10 @@ try {
 } catch {
     $manifest.status = "failed"
     $manifest.failure = $_.Exception.Message
+    $manifest.failureType = $_.Exception.GetType().FullName
+    $manifest.failureTrace = $_.ScriptStackTrace
+    Write-Host "Catalog measurement failure type: $($manifest.failureType)"
+    Write-Host "Catalog measurement failure trace: $($manifest.failureTrace)"
     throw
 } finally {
     $manifest.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
