@@ -16,8 +16,7 @@ class M3uCorpusManifestJsonWriterTest {
         M3uCorpusManifestJsonWriter.write(manifest, second)
 
         assertThat(second.toByteArray()).isEqualTo(first.toByteArray())
-        assertThat(first.toString(Charsets.UTF_8)).isEqualTo(
-            """
+        val expected = """
             {
               "manifestSchemaVersion": 1,
               "generatorSchemaVersion": ${manifest.schemaVersion},
@@ -32,9 +31,9 @@ class M3uCorpusManifestJsonWriterTest {
               "playlistUtf8ByteCount": ${manifest.utf8ByteCount},
               "playlistSha256": "${manifest.sha256}"
             }
+        """.trimIndent() + "\n"
 
-            """.trimIndent(),
-        )
+        assertThat(first.toString(Charsets.UTF_8)).isEqualTo(expected)
         assertThat(first.toByteArray()).doesNotContain('\r'.code.toByte())
     }
 
