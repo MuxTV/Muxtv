@@ -41,7 +41,7 @@ class M3uPlaylistHeader(
     val epgUrls: List<String> = epgUrls.toList()
 
     override fun toString(): String =
-        "M3uPlaylistHeader(attributeKeys=${attributes.keys}, epgUrlCount=${epgUrls.size})"
+        "M3uPlaylistHeader(attributeCount=${attributes.size}, epgUrlCount=${epgUrls.size})"
 }
 
 class M3uEntry(
@@ -68,15 +68,11 @@ class M3uEntry(
         require(locator.isNotBlank())
     }
 
-    override fun toString(): String = buildString {
-        append("M3uEntry(displayName=")
-        append(displayName)
-        append(", locator=<redacted>, groupTitle=")
-        append(groupTitle)
-        append(", attributeKeys=")
-        append(attributes.keys)
-        append(')')
-    }
+    override fun toString(): String =
+        "M3uEntry(displayName=<redacted>, locator=<redacted>, " +
+            "tvgId=${tvgId != null}, tvgLogo=${tvgLogo != null}, " +
+            "groupTitle=${groupTitle != null}, userAgent=${userAgent != null}, " +
+            "referrer=${referrer != null}, attributeCount=${attributes.size})"
 }
 
 enum class M3uWarningKind {

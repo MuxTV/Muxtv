@@ -29,10 +29,15 @@ class StreamingM3uParserTest {
         assertThat(report.parsedEntries).isEqualTo(2)
         assertThat(report.skippedEntries).isEqualTo(0)
         assertThat(report.warningCount).isEqualTo(1)
-        assertThat(sink.headers.single().epgUrls).containsExactly(
+
+        val header = sink.headers.single()
+        assertThat(header.epgUrls).containsExactly(
             "https://epg.example/guide.xml",
             "https://backup.example/guide.xml",
         ).inOrder()
+        assertThat(header.toString()).doesNotContain("url-tvg")
+        assertThat(header.toString()).doesNotContain("refresh")
+        assertThat(header.toString()).doesNotContain("epg.example")
 
         val first = sink.entries[0]
         assertThat(first.displayName).isEqualTo("News, World")
@@ -45,6 +50,13 @@ class StreamingM3uParserTest {
         assertThat(first.referrer).isEqualTo("https://portal.example/")
         assertThat(first.locator).contains("token=secret")
         assertThat(first.toString()).doesNotContain("token=secret")
+        assertThat(first.toString()).doesNotContain("News, World")
+        assertThat(first.toString()).doesNotContain("News")
+        assertThat(first.toString()).doesNotContain("news.world")
+        assertThat(first.toString()).doesNotContain("MuxTV Test Agent")
+        assertThat(first.toString()).doesNotContain("portal.example")
+        assertThat(first.toString()).doesNotContain("tvg-id")
+        assertThat(first.toString()).doesNotContain("group-title")
 
         val second = sink.entries[1]
         assertThat(second.displayName).isEqualTo("@239.0.0.1:1234")
