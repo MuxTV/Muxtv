@@ -79,6 +79,10 @@ internal class CatalogDatabaseMeasurementRunner(
                 cacheState = CACHE_STATE,
                 workload = spec.workload,
                 environment = captureEnvironment(),
+                fixture = CatalogDatabaseFixtureIdentity(
+                    entryCount = fixture.workload.entryCount,
+                    sha256 = fixture.sha256,
+                ),
                 operations = operations,
                 failureCount = 0,
                 limitations = LIMITATIONS,
@@ -288,7 +292,7 @@ internal class CatalogDatabaseMeasurementRunner(
             model = Build.MODEL.safeEnvironmentValue(),
             fingerprint = Build.FINGERPRINT.safeEnvironmentValue(MAX_FINGERPRINT_LENGTH),
             apiLevel = Build.VERSION.SDK_INT,
-            supportedAbis = Build.SUPPORTED_ABIS.map(String::safeEnvironmentValue),
+            supportedAbis = Build.SUPPORTED_ABIS.map { abi -> abi.safeEnvironmentValue() },
             lowRamDevice = activityManager.isLowRamDevice,
             memoryClassMb = activityManager.memoryClass,
             availableProcessors = Runtime.getRuntime().availableProcessors(),
@@ -339,7 +343,6 @@ internal class CatalogDatabaseMeasurementRunner(
 
     private class PreparedCatalogFixture private constructor(
         val workload: CatalogDatabaseMeasurementWorkload,
-        val entries: List<StagedCatalogEntry>,
         val batches: List<List<StagedCatalogEntry>>,
         val sha256: String,
     ) {
@@ -373,21 +376,19 @@ internal class CatalogDatabaseMeasurementRunner(
                         },
                     )
                     digest.update(entry.providerChannelId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0)
+                    digest.update(0.toByte())
                     digest.update(entry.canonicalChannelId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0)
+                    digest.update(0.toByte())
                     digest.update(entry.streamVariantId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0)
+                    digest.update(0.toByte())
                     entry
                 }
-                val immutableEntries = entries.toList()
-                val immutableBatches = immutableEntries.chunked(workload.batchSize).map(List<StagedCatalogEntry>::toList)
+                val immutableBatches = entries.chunked(workload.batchSize).map { batch -> batch.toList() }
                 check(immutableBatches.size == workload.entryCount / workload.batchSize) {
                     "Catalog database fixture batch agreement failed."
                 }
                 return PreparedCatalogFixture(
                     workload = workload,
-                    entries = immutableEntries,
                     batches = immutableBatches,
                     sha256 = digest.digest().toHex(),
                 )
