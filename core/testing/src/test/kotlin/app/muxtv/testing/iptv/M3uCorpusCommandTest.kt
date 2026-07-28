@@ -132,16 +132,21 @@ class M3uCorpusCommandTest {
     }
 
     @Test
-    fun `all named profiles are accepted through stable artifact ids`() {
+    fun `all named profiles are accepted through stable artifact ids without regenerating large corpora`() {
+        val observedProfiles = mutableListOf<M3uCorpusProfile>()
+        val command = M3uCorpusCommand.forTesting { request ->
+            observedProfiles += request.spec.profile
+            fakePair(request)
+        }
+
         M3uCorpusProfile.entries.forEachIndexed { index, profile ->
-            val profileRoot = root.resolve(profile.artifactId)
             val stdout = StringBuilder()
 
-            val exitCode = M3uCorpusCommand().run(
+            val exitCode = command.run(
                 args = validArgs(
                     profile = profile.artifactId,
                     seed = index.toLong(),
-                    outputDirectory = profileRoot,
+                    outputDirectory = root.resolve(profile.artifactId),
                 ),
                 stdout = stdout,
                 stderr = StringBuilder(),
@@ -149,8 +154,33 @@ class M3uCorpusCommandTest {
 
             assertThat(exitCode).isEqualTo(M3uCorpusCommand.EXIT_SUCCESS)
             assertThat(stdout.toString()).contains("profile=${profile.artifactId}")
-            assertThat(Files.list(profileRoot).use { it.count() }).isEqualTo(2L)
         }
+
+        assertThat(observedProfiles).containsExactlyElementsIn(M3uCorpusProfile.entries).inOrder()
+        assertThat(Files.list(root).use { it.count() }).isEqualTo(0L)
+    }
+
+    private fun fakePair(request: M3uCorpusArtifactRequest): M3uCorpusArtifactPair {
+        val profile = request.spec.profile
+        val duplicates = profile.expectedDuplicateIdentities
+        val manifest = M3uCorpusManifest(
+            schemaVersion = DeterministicM3uCorpusGenerator.SCHEMA_VERSION,
+            profile = profile,
+            seed = request.spec.seed,
+            sourceCommit = request.spec.sourceCommit,
+            expectedParsedEntries = profile.entryCount,
+            expectedSkippedEntries = 1,
+            expectedWarningCount = 2,
+            expectedDuplicateIdentities = duplicates,
+            expectedUniqueIdentities = profile.entryCount - duplicates,
+            utf8ByteCount = 1,
+            sha256 = "0".repeat(64),
+        )
+        return M3uCorpusArtifactPair(
+            playlistPath = request.outputDirectory.resolve("fixture-${profile.artifactId}.m3u8"),
+            manifestPath = request.outputDirectory.resolve("fixture-${profile.artifactId}.manifest.json"),
+            manifest = manifest,
+        )
     }
 
     private fun validArgs(
