@@ -132,9 +132,10 @@ $manifest = [ordered]@{
     serial = $null
     ramMb = $RamMb
     cpuCores = $CpuCores
-    failure = $null
+    failureCode = $null
     failureType = $null
-    failureTrace = $null
+    failureCommand = $null
+    failureLine = $null
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -Path $manifestPath -Encoding utf8
 
@@ -209,13 +210,17 @@ try {
 
     $manifest.status = "passed"
 } catch {
+    $commandName = [string]$_.InvocationInfo.MyCommand.Name
+    if ([string]::IsNullOrWhiteSpace($commandName)) {
+        $commandName = "unknown"
+    }
     $manifest.status = "failed"
-    $manifest.failure = $_.Exception.Message
+    $manifest.failureCode = "catalog-measurement-device-validation-failed"
     $manifest.failureType = $_.Exception.GetType().FullName
-    $manifest.failureTrace = $_.ScriptStackTrace
-    Write-Host "Catalog measurement failure type: $($manifest.failureType)"
-    Write-Host "Catalog measurement failure trace: $($manifest.failureTrace)"
-    throw
+    $manifest.failureCommand = [System.IO.Path]::GetFileName($commandName)
+    $manifest.failureLine = [int]$_.InvocationInfo.ScriptLineNumber
+    Write-Host "Catalog measurement device validation failed. See evidence."
+    throw "Catalog measurement device validation failed. See evidence."
 } finally {
     $manifest.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     if ($null -ne $tools -and $null -ne $serial) {
