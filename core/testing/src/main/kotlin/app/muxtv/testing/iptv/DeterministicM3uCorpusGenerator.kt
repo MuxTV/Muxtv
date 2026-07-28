@@ -6,12 +6,17 @@ import java.util.Locale
 import java.util.Random
 
 enum class M3uCorpusProfile(
+    val artifactId: String,
     val entryCount: Int,
 ) {
-    SMALL_1K(1_000),
-    MEDIUM_10K(10_000),
-    LARGE_50K(50_000),
+    SMALL_1K("small-1k", 1_000),
+    MEDIUM_10K("medium-10k", 10_000),
+    LARGE_50K("large-50k", 50_000),
     ;
+
+    init {
+        require(artifactId.matches(ARTIFACT_ID_PATTERN))
+    }
 
     val expectedDuplicateIdentities: Int
         get() = entryCount / DUPLICATE_INTERVAL
@@ -26,6 +31,7 @@ enum class M3uCorpusProfile(
     }
 
     private companion object {
+        val ARTIFACT_ID_PATTERN = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
         const val DUPLICATE_INTERVAL = 100
     }
 }
@@ -36,13 +42,7 @@ data class M3uCorpusSpec(
     val sourceCommit: String,
 ) {
     init {
-        require(sourceCommit.isNotBlank())
-        require(sourceCommit.length <= MAX_SOURCE_COMMIT_CHARACTERS)
-        require(sourceCommit.none(Char::isWhitespace))
-    }
-
-    private companion object {
-        const val MAX_SOURCE_COMMIT_CHARACTERS = 128
+        requireFullLowercaseGitSha(sourceCommit)
     }
 }
 
@@ -61,14 +61,14 @@ data class M3uCorpusManifest(
 ) {
     init {
         require(schemaVersion > 0)
-        require(sourceCommit.isNotBlank())
+        requireFullLowercaseGitSha(sourceCommit)
         require(expectedParsedEntries > 0)
         require(expectedSkippedEntries >= 0)
         require(expectedWarningCount >= 0)
         require(expectedDuplicateIdentities in 0 until expectedParsedEntries)
         require(expectedUniqueIdentities == expectedParsedEntries - expectedDuplicateIdentities)
         require(utf8ByteCount > 0)
-        require(sha256.matches(Regex("[0-9a-f]{64}")))
+        require(sha256.matches(SHA_256_PATTERN))
     }
 }
 
@@ -187,4 +187,11 @@ object DeterministicM3uCorpusGenerator {
     private const val RANDOM_SUFFIX_BOUND = 1_000_000
     private const val EXPECTED_SKIPPED_ENTRIES = 1
     private const val EXPECTED_WARNING_COUNT = 2
+}
+
+private val FULL_LOWERCASE_GIT_SHA_PATTERN = Regex("[0-9a-f]{40}")
+private val SHA_256_PATTERN = Regex("[0-9a-f]{64}")
+
+private fun requireFullLowercaseGitSha(value: String) {
+    require(value.matches(FULL_LOWERCASE_GIT_SHA_PATTERN))
 }
