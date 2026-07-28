@@ -17,32 +17,33 @@ Add a debug-only Android instrumentation measurement boundary in `player:media3`
 ### Operations
 
 1. `request-construct`
-   - construct a validated `PlaybackSessionRequest` from fixed synthetic fields and bounded headers;
-   - include immutable header snapshot/validation performed by the production constructor;
-   - exclude fixture string/header preparation.
+   - construct a validated `PlaybackSessionRequest` from deterministic synthetic fields and bounded headers;
+   - include production constructor validation and object allocation;
+   - exclude fixture string/header preparation;
+   - cycle through 32 deterministic media/variant ID pairs.
 
 2. `setup-envelope-roundtrip`
    - encode a pre-created request and pre-created `PlaybackSetupId` through `MuxTvPlaybackSessionContract.setupArgs`;
    - decode through `parseSetupArgs`;
-   - verify exact typed agreement outside the timer batch result;
-   - includes Android `Bundle` request codec and SET envelope codec, but no Binder or `MediaController.sendCustomCommand`.
+   - verify exact typed agreement;
+   - include Android `Bundle` request codec and SET envelope codec, but no Binder or `MediaController.sendCustomCommand`.
 
 3. `coordinator-install-active-clear`
    - use production `PlaybackSetupCoordinator` with synthetic install/clear callbacks;
    - for each pre-created ID, install a request and cancel the same active ID;
    - require `Installed` followed by `ActiveCleared`;
-   - no ExoPlayer or MediaSource operation is executed.
+   - execute no ExoPlayer or MediaSource operation.
 
 4. `coordinator-cancel-before-install`
    - cancel a pre-created ID before installation;
    - require `PendingCancelled` followed by `Cancelled` on install;
-   - validates and measures the late-install prevention path.
+   - validate and measure the late-install prevention path.
 
 5. `registry-disconnect-reacquire`
    - use production `ControllerConnectionRegistry` with synthetic controller identities and immediate futures;
-   - acquire, complete, disconnect, reacquire and complete;
+   - acquire, complete, disconnect, reacquire, complete and disconnect;
    - require the disconnected controller to invalidate the active connection and the next acquire to produce a new controller;
-   - no real `MediaController`, Binder or remote service is involved.
+   - involve no real `MediaController`, Binder or remote service.
 
 ## Workload
 
@@ -51,7 +52,7 @@ Default workload:
 - 2 warmup samples;
 - 10 retained measured samples;
 - 1,000 operation iterations per sample;
-- one deterministic synthetic request profile;
+- one deterministic 32-variant synthetic request profile;
 - setup IDs/controllers/futures prepared outside timed sections where identity creation is not the operation under measurement.
 
 Each retained sample stores:
@@ -74,7 +75,7 @@ Every report includes:
 - runner label;
 - API level, manufacturer, model, fingerprint, ABIs, low-RAM flag, Android memory class and processor count;
 - warmup/measured sample counts and operations per sample;
-- deterministic request-profile SHA-256 over every constructor field and header name/value boundary;
+- deterministic length-prefixed SHA-256 over the ordered 32-request profile, every constructor field, nullable boundary and sorted header name/value pair;
 - `thresholdApplied=false`;
 - `failureCount=0` for a publishable report;
 - limitations.
