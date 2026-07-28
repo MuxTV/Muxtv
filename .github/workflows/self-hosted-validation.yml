@@ -139,6 +139,25 @@ jobs:
               -NoDaemon
           }
 
+      - name: Generate small synthetic corpus evidence
+        if: success() && steps.validation.outputs.mode == 'Full'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          & .\gradlew.bat `
+            :core:testing:generateM3uCorpus `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            "-PcorpusProfile=small-1k" `
+            "-PcorpusSeed=20260728" `
+            "-PcorpusSourceCommit=$commit" `
+            "-PcorpusOverwrite=true"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Synthetic corpus generation failed with exit code $LASTEXITCODE."
+          }
+
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -149,6 +168,8 @@ jobs:
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             .work/evidence/**/*.png
+            core/testing/build/corpus/*.m3u8
+            core/testing/build/corpus/*.manifest.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn
