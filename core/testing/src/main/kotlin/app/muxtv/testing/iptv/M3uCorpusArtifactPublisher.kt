@@ -180,12 +180,16 @@ class M3uCorpusArtifactPublisher private constructor(
             val rollbackSucceeded = rollback(
                 playlistPath = playlistPath,
                 manifestPath = manifestPath,
+                playlistTemp = playlistTemp,
+                manifestTemp = manifestTemp,
                 playlistPublishAttempted = playlistPublishAttempted,
                 manifestPublishAttempted = manifestPublishAttempted,
                 playlistBackup = playlistBackup,
                 manifestBackup = manifestBackup,
             )
             if (rollbackSucceeded) {
+                playlistTemp = null
+                manifestTemp = null
                 playlistBackup = null
                 manifestBackup = null
             }
@@ -197,6 +201,7 @@ class M3uCorpusArtifactPublisher private constructor(
                 },
             )
         } finally {
+            // Fatal JVM errors still receive a best-effort cleanup attempt.
             playlistTemp?.let(::deleteQuietly)
             manifestTemp?.let(::deleteQuietly)
             // On rollback failure, backup files intentionally remain for manual recovery.
@@ -220,6 +225,8 @@ class M3uCorpusArtifactPublisher private constructor(
     private fun rollback(
         playlistPath: Path,
         manifestPath: Path,
+        playlistTemp: Path?,
+        manifestTemp: Path?,
         playlistPublishAttempted: Boolean,
         manifestPublishAttempted: Boolean,
         playlistBackup: Path?,
@@ -239,6 +246,13 @@ class M3uCorpusArtifactPublisher private constructor(
         }
         if (manifestBackup != null) {
             succeeded = restoreBackup(manifestBackup, manifestPath) && succeeded
+        }
+
+        if (playlistTemp != null) {
+            succeeded = deleteForRollback(playlistTemp) && succeeded
+        }
+        if (manifestTemp != null) {
+            succeeded = deleteForRollback(manifestTemp) && succeeded
         }
 
         return succeeded
