@@ -196,9 +196,15 @@ try {
         $measurementArguments += "-NoDaemon"
     }
 
-    & pwsh @measurementArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "Catalog database device measurement failed with exit code $LASTEXITCODE."
+    $childLogPath = Join-Path $evidenceDirectory "catalog-measurement-child.log"
+    $childOutput = & pwsh @measurementArguments 2>&1
+    $childExitCode = $LASTEXITCODE
+    $childOutput |
+        Tee-Object -FilePath $childLogPath |
+        ForEach-Object { Write-Host $_ }
+    "exit_code=$childExitCode" | Add-Content -Path $childLogPath -Encoding utf8
+    if ($childExitCode -ne 0) {
+        throw "Catalog database device measurement failed with exit code $childExitCode."
     }
 
     $manifest.status = "passed"
