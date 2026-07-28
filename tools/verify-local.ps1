@@ -147,6 +147,7 @@ Add-Step -Name "configuration-cache-reuse" -Arguments @("help", "--configuration
 Add-Step -Name "pure-kotlin-tests" -Arguments @(
     ":core:common:test",
     ":core:model:test",
+    ":core:testing:test",
     ":catalog:api:test",
     ":catalog:ingest:test",
     ":player:api:test",
