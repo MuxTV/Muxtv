@@ -1,6 +1,6 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-07-27
+updated_at: 2026-07-28
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
@@ -8,7 +8,7 @@ repository_state:
   ci: present_self_hosted_full_and_device_matrix
   tests: present_unit_android_and_instrumentation
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_exact_origin_http_approval
+  documentation: synchronized_after_deterministic_m3u_foundation
   architecture_version: 3
 active_branch_after_merge: main
 implemented:
@@ -39,6 +39,11 @@ implemented:
   - typed_playback_catalog_resolution
   - player_http_warning_reresolution_and_revocation
   - redacted_catalog_and_approval_diagnostics
+  - redacted_m3u_diagnostics
+  - deterministic_m3u_corpus_profiles_1k_10k_50k
+  - deterministic_m3u_in_memory_manifest
+  - permanent_core_testing_validation_gate
+  - windows_long_path_clean_workspace_gate
   - api_26_api_36_tv_device_harness
 accepted_specifications:
   - profiles
@@ -66,8 +71,13 @@ verified_evidence:
   controller_lifecycle_merge: 66cf8dbaddafa87be7bfd619515452ceb3c46354
   setup_reconnect_merge: 8665f80d6e38bc90d10ead0d3a3618fbecd4e304
   exact_origin_http_approval_merge: 764ec102808c4df57e826d05ce7b1334063bb520
+  repository_truth_runner_hygiene_merge: 80dff5132f624ffedacfdbab0d7bdfe67d85f2a8
+  m3u_diagnostic_redaction_merge: dc6e6b2357de12de65932857ca637ff9631782f1
+  deterministic_m3u_foundation_merge: 3e24cccb188b53652285929a11e3b50697aad5f7
   final_exact_origin_full_run: 30295592181
   http_approval_device_matrix_run: 30287803018
+  repository_cleanup_full_run: 30297044258
+  deterministic_m3u_foundation_full_run: 30365096484
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
@@ -88,16 +98,24 @@ next_milestone:
   id: phase-01-deterministic-iptv-corpus
   issue: 27
   plan: docs/superpowers/plans/2026-07-27-post-http-approval-execution.md
-  exit_criteria:
-    - provider_neutral_m3u_profiles_1k_10k_50k
-    - explicit_seed_and_generator_schema_version
-    - expected_counts_byte_size_and_sha256_manifest
+  completed_packages:
+    - deterministic_provider_neutral_m3u_profiles_1k_10k_50k
+    - explicit_seed_source_commit_and_generator_schema
+    - expected_counts_byte_size_and_sha256_in_memory_manifest
     - deterministic_byte_identical_output
     - duplicate_malformed_long_metadata_relative_url_and_header_variants
-    - parser_and_importer_assert_manifest_expectations
+    - real_parser_contract_and_permanent_testing_gate
+  remaining_exit_criteria:
+    - canonical_serialized_manifest_artifact
+    - repository_owned_corpus_generation_entry_point
+    - deterministic_hls_and_xmltv_starter_fixtures
+    - importer_asserts_manifest_expectations
     - descriptive_measurements_before_performance_budgets
+    - variance_evidence_before_dedicated_threshold_gate
 known_gaps:
-  - deterministic_media_corpus_and_benchmarks
+  - serialized_corpus_artifacts_and_generation_entry_point
+  - deterministic_hls_xmltv_starter_fixtures
+  - descriptive_corpus_measurements_and_benchmarks
   - xmltv_epg_revisions
   - guide_search_favorites_recent_product_flows
   - playback_variant_fallback
@@ -106,7 +124,6 @@ known_gaps:
   - r8_and_baseline_profile
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
-  - windows_runner_long_path_cleanup_verified_twice
 blocked: []
 deferred:
   - xtream

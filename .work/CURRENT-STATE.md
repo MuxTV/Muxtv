@@ -1,17 +1,17 @@
 ---
 status: accepted
-last_reviewed: 2026-07-27
+last_reviewed: 2026-07-28
 architecture_version: 3
-implementation_source_commit: 764ec102808c4df57e826d05ce7b1334063bb520
+implementation_source_commit: 3e24cccb188b53652285929a11e3b50697aad5f7
 ---
 
 # Текущее состояние
 
 ## Классификация проекта
 
-MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust теперь переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
+MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
 
-Benchmark/corpus baseline, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
+Первый deterministic corpus package уже реализован: M3U profiles 1k/10k/50k генерируются потоково по explicit seed/source commit и возвращают expected counts, byte size и SHA-256. Serialized artifacts, HLS/XMLTV fixtures, measurements, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
 
 ## Проверенные факты
 
@@ -22,7 +22,11 @@ Benchmark/corpus baseline, XMLTV/EPG, законченные daily-use разд�
 - CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent и DeviceMatrix через repository-owned PowerShell harness.
 - PR #38 слит squash commit `8665f80d6e38bc90d10ead0d3a3618fbecd4e304` и закрыл issue #26.
 - PR #42 слит squash commit `764ec102808c4df57e826d05ce7b1334063bb520` и закрыл issue #39.
+- PR #43 слит squash commit `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; два последовательных Full attempts подтвердили clean workspace с repository-local `core.longpaths`.
+- PR #45 слит squash commit `dc6e6b2357de12de65932857ca637ff9631782f1` и закрыл M3U diagnostic leak.
+- PR #44 слит squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`; это Package A issue #27, а не закрытие всего milestone.
 - Cleaned-tree Full для PR #42: run `30295592181`.
+- Corpus foundation Full: run `30365096484`; `:core:testing:test` исполняется в permanent gate.
 - Последняя успешная API 26/API 36 HTTP-approval DeviceMatrix: run `30287803018`, без fallback/failures/errors/skips.
 
 ## Реализованный рабочий путь
@@ -58,10 +62,22 @@ Benchmark/corpus baseline, XMLTV/EPG, законченные daily-use разд�
 ### Diagnostics и security
 
 - `ChannelQuery`, channel summary, variant и approval outcomes имеют redacted diagnostic representation.
+- `M3uPlaylistHeader` и `M3uEntry` diagnostics публикуют только counts/presence flags, но не untrusted keys или values.
 - Search text, provider/source identity, locator, query, exact origin, cookies, Authorization/Referer и credential values не должны появляться в logs/errors/traces.
 - HTTPS → HTTP redirect остаётся запрещённым; cross-origin sensitive headers снимаются.
 - Production manifest не содержит process-wide cleartext opt-in или network-wide HTTP allow-list.
 - Request-scoped repository clients, а не platform default, являются HTTP security boundary на всех поддерживаемых API.
+
+### Deterministic corpus foundation
+
+- `core:testing` владеет provider-neutral M3U generator, а production ingest не зависит от testing module.
+- Profiles: 1k, 10k и 50k entries.
+- Equal profile + seed + source commit дают byte-identical UTF-8 output и SHA-256.
+- Generator пишет в caller-owned `OutputStream`, flushes, но не closes его.
+- Corpus использует только reserved `.example` hosts и synthetic identities.
+- Controlled duplicates, long metadata, mixed line endings, relative locators, optional User-Agent/referrer directives и parser-recognized malformed fixture имеют manifest expectations.
+- `StreamingM3uParser` проверяет parsed/skipped/warning/duplicate expectations в реальном test contract.
+- `:core:testing:test` включён в permanent Fast/Full gate; прежний false-positive validation gap закрыт.
 
 ## Android TV evidence
 
@@ -78,16 +94,23 @@ Run `30287803018` прошёл без fallback, failures, errors или skips. �
 
 ## Ближайший production milestone
 
-Issue #27: deterministic provider-neutral M3U/HLS/XMLTV corpus и воспроизводимые measurements.
+Issue #27 остаётся активной.
 
-Первый пакет должен дать:
+Завершено:
 
-1. deterministic M3U profiles 1k/10k/50k с explicit seed;
-2. manifest с expected counts, byte size, generator version и SHA-256;
-3. controlled duplicates, malformed attributes, long metadata, relative URLs и header variants;
-4. byte-identical output для одинакового seed/profile;
-5. parser/importer tests против manifest expectations;
-6. descriptive measurements до назначения performance budgets.
+1. deterministic M3U profiles 1k/10k/50k;
+2. explicit seed/source commit и generator schema version;
+3. in-memory manifest с expected counts, byte size и SHA-256;
+4. byte-identical repeated output;
+5. parser agreement и permanent testing gate.
+
+Следующий package:
+
+1. canonical serialized manifest artifact;
+2. repository-owned corpus generation entry point;
+3. stable artifact naming и explicit overwrite/cleanup policy;
+4. starter HLS/XMLTV fixtures;
+5. descriptive parse/stage/activate/query/Player measurements до назначения budgets.
 
 ## Последовательность после issue #27
 
@@ -105,5 +128,6 @@ Issue #27: deterministic provider-neutral M3U/HLS/XMLTV corpus и воспрои
 - Source/EPG updates используют immutable revisions, staging и atomic commit.
 - Provider data, canonical channels и profile overlays разделены.
 - Remote playlists/XML/images/provider endpoints считаются untrusted и bounded.
+- Testing/corpus utilities не становятся production runtime dependencies.
 - Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine допускаются только после corpus-backed benchmark/security ADR.
 - Физические Android/Google TV/Fire TV проверки дополняют, но не заменяют автоматическую API-матрицу.
