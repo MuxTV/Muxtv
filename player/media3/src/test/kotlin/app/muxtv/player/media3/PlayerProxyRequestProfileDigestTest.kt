@@ -45,6 +45,19 @@ class PlayerProxyRequestProfileDigestTest {
     }
 
     @Test
+    fun `ordered request profile contributes to digest`() {
+        val first = request(mediaId = "channel-1", variantId = "variant-1")
+        val second = request(mediaId = "channel-2", variantId = "variant-2")
+        val changed = request(mediaId = "channel-3", variantId = "variant-3")
+        val baselineDigest = PlayerProxyRequestProfileDigest.sha256(listOf(first, second))
+
+        assertThat(PlayerProxyRequestProfileDigest.sha256(listOf(first, changed)))
+            .isNotEqualTo(baselineDigest)
+        assertThat(PlayerProxyRequestProfileDigest.sha256(listOf(second, first)))
+            .isNotEqualTo(baselineDigest)
+    }
+
+    @Test
     fun `request diagnostics do not expose typed identity display name or header names`() {
         val request = request(
             mediaId = "channel-secret",
