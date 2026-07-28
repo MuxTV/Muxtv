@@ -84,6 +84,7 @@ class M3uCorpusArtifactPublisherTest {
         }
 
         assertThat(error.reason).isEqualTo(M3uCorpusArtifactFailureReason.TargetExists)
+        assertThat(error.message).doesNotContain(root.toString())
         assertThat(Files.readAllBytes(existing.playlistPath)).isEqualTo(oldPlaylist)
         assertThat(Files.readAllBytes(existing.manifestPath)).isEqualTo(oldManifest)
         assertThat(Files.list(root).use { it.count() }).isEqualTo(2L)
@@ -116,6 +117,7 @@ class M3uCorpusArtifactPublisherTest {
         }
 
         assertThat(error.reason).isEqualTo(M3uCorpusArtifactFailureReason.PublishFailed)
+        assertThat(error.message).doesNotContain(root.toString())
         assertThat(Files.list(root).use { it.count() }).isEqualTo(0L)
     }
 
@@ -140,6 +142,18 @@ class M3uCorpusArtifactPublisherTest {
         assertThat(Files.readAllBytes(existing.playlistPath)).isEqualTo(oldPlaylist)
         assertThat(Files.readAllBytes(existing.manifestPath)).isEqualTo(oldManifest)
         assertThat(Files.list(root).use { it.count() }).isEqualTo(2L)
+    }
+
+    @Test
+    fun `request and result diagnostics redact filesystem paths`() {
+        val request = M3uCorpusArtifactRequest(spec = spec(seed = 17L), outputDirectory = root)
+        val result = M3uCorpusArtifactPublisher().publish(request)
+
+        assertThat(request.toString()).doesNotContain(root.toString())
+        assertThat(request.toString()).contains("outputDirectory=<redacted>")
+        assertThat(result.toString()).doesNotContain(root.toString())
+        assertThat(result.toString()).contains("playlistPath=<redacted>")
+        assertThat(result.toString()).contains("manifestPath=<redacted>")
     }
 
     private fun spec(seed: Long) = M3uCorpusSpec(
