@@ -18,6 +18,7 @@ class DeterministicM3uCorpusGeneratorTest {
         val spec = M3uCorpusSpec(
             profile = M3uCorpusProfile.SMALL_1K,
             seed = 42L,
+            sourceCommit = TEST_SOURCE_COMMIT,
         )
 
         val first = DeterministicM3uCorpusGenerator.generate(spec, firstOutput)
@@ -27,6 +28,7 @@ class DeterministicM3uCorpusGeneratorTest {
         assertThat(second).isEqualTo(first)
         assertThat(first.profile).isEqualTo(M3uCorpusProfile.SMALL_1K)
         assertThat(first.seed).isEqualTo(42L)
+        assertThat(first.sourceCommit).isEqualTo(TEST_SOURCE_COMMIT)
         assertThat(first.expectedParsedEntries).isEqualTo(1_000)
         assertThat(first.expectedSkippedEntries).isEqualTo(1)
         assertThat(first.expectedWarningCount).isEqualTo(2)
@@ -114,6 +116,7 @@ class DeterministicM3uCorpusGeneratorTest {
             spec = M3uCorpusSpec(
                 profile = M3uCorpusProfile.SMALL_1K,
                 seed = seed,
+                sourceCommit = TEST_SOURCE_COMMIT,
             ),
             output = output,
         )
@@ -124,4 +127,8 @@ class DeterministicM3uCorpusGeneratorTest {
         val bytes: ByteArray,
         val manifest: M3uCorpusManifest,
     )
+
+    private companion object {
+        const val TEST_SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+    }
 }
