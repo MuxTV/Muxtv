@@ -1,6 +1,5 @@
 package app.muxtv.testing.iptv
 
-import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -43,60 +42,13 @@ class M3uCorpusArtifactException(
     },
 )
 
-/** Minimal internal seam for deterministic failure/rollback contracts. */
-internal interface M3uCorpusArtifactFileOps {
-    fun createDirectories(directory: Path)
-
-    fun exists(path: Path): Boolean
-
-    fun createTempFile(
-        directory: Path,
-        prefix: String,
-        suffix: String,
-    ): Path
-
-    fun newOutputStream(path: Path): OutputStream
-
-    fun move(
-        source: Path,
-        target: Path,
-    )
-
-    fun deleteIfExists(path: Path)
-}
-
-internal object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
-    override fun createDirectories(directory: Path) {
-        Files.createDirectories(directory)
-    }
-
-    override fun exists(path: Path): Boolean = Files.exists(path)
-
-    override fun createTempFile(
-        directory: Path,
-        prefix: String,
-        suffix: String,
-    ): Path = Files.createTempFile(directory, prefix, suffix)
-
-    override fun newOutputStream(path: Path): OutputStream = Files.newOutputStream(path)
-
-    override fun move(
-        source: Path,
-        target: Path,
-    ) {
-        // Deliberately no REPLACE_EXISTING: overwrite is implemented through explicit backup/restore.
-        Files.move(source, target)
-    }
-
-    override fun deleteIfExists(path: Path) {
-        Files.deleteIfExists(path)
-    }
-}
-
 class M3uCorpusArtifactPublisher private constructor(
-    private val fileOps: M3uCorpusArtifactFileOps,
+    private val moveFile: (source: Path, target: Path) -> Unit,
 ) {
-    constructor() : this(NioM3uCorpusArtifactFileOps)
+    constructor() : this({ source, target ->
+        // Deliberately no REPLACE_EXISTING: overwrite uses explicit backup/restore.
+        Files.move(source, target)
+    })
 
     fun publish(request: M3uCorpusArtifactRequest): M3uCorpusArtifactPair {
         val baseName = buildBaseName(request.spec)
@@ -111,59 +63,59 @@ class M3uCorpusArtifactPublisher private constructor(
         var manifestPublishAttempted = false
 
         try {
-            fileOps.createDirectories(request.outputDirectory)
+            Files.createDirectories(request.outputDirectory)
 
-            if (!request.overwrite && (fileOps.exists(playlistPath) || fileOps.exists(manifestPath))) {
+            if (!request.overwrite && (Files.exists(playlistPath) || Files.exists(manifestPath))) {
                 throw M3uCorpusArtifactException(M3uCorpusArtifactFailureReason.TargetExists)
             }
 
-            playlistTemp = fileOps.createTempFile(
+            playlistTemp = Files.createTempFile(
                 request.outputDirectory,
                 ".$baseName-",
                 ".m3u8.tmp",
             )
-            val manifest = fileOps.newOutputStream(playlistTemp).use { output ->
+            val manifest = Files.newOutputStream(playlistTemp).use { output ->
                 DeterministicM3uCorpusGenerator.generate(request.spec, output)
             }
 
-            manifestTemp = fileOps.createTempFile(
+            manifestTemp = Files.createTempFile(
                 request.outputDirectory,
                 ".$baseName-",
                 ".manifest.json.tmp",
             )
-            fileOps.newOutputStream(manifestTemp).use { output ->
+            Files.newOutputStream(manifestTemp).use { output ->
                 M3uCorpusManifestJsonWriter.write(manifest, output)
             }
 
             if (request.overwrite) {
-                if (fileOps.exists(playlistPath)) {
+                if (Files.exists(playlistPath)) {
                     playlistBackup = reserveBackupPath(
                         outputDirectory = request.outputDirectory,
                         baseName = baseName,
                         suffix = ".m3u8.bak",
                     )
-                    fileOps.move(playlistPath, playlistBackup)
+                    moveFile(playlistPath, playlistBackup)
                 }
-                if (fileOps.exists(manifestPath)) {
+                if (Files.exists(manifestPath)) {
                     manifestBackup = reserveBackupPath(
                         outputDirectory = request.outputDirectory,
                         baseName = baseName,
                         suffix = ".manifest.json.bak",
                     )
-                    fileOps.move(manifestPath, manifestBackup)
+                    moveFile(manifestPath, manifestBackup)
                 }
             }
 
             playlistPublishAttempted = true
-            fileOps.move(playlistTemp, playlistPath)
+            moveFile(playlistTemp, playlistPath)
             playlistTemp = null
 
             // Manifest is the commit marker and is intentionally published last.
             manifestPublishAttempted = true
-            fileOps.move(manifestTemp, manifestPath)
+            moveFile(manifestTemp, manifestPath)
             manifestTemp = null
 
-            // The new pair is committed. Backup cleanup cannot invalidate that successful outcome.
+            // The new pair is committed. Backup cleanup cannot invalidate that outcome.
             playlistBackup?.let(::deleteQuietly)
             playlistBackup = null
             manifestBackup?.let(::deleteQuietly)
@@ -201,10 +153,10 @@ class M3uCorpusArtifactPublisher private constructor(
                 },
             )
         } finally {
-            // Fatal JVM errors still receive a best-effort cleanup attempt.
+            // Fatal JVM errors still receive a best-effort staging cleanup attempt.
             playlistTemp?.let(::deleteQuietly)
             manifestTemp?.let(::deleteQuietly)
-            // On rollback failure, backup files intentionally remain for manual recovery.
+            // On rollback failure, backup files intentionally remain for recovery.
         }
     }
 
@@ -213,12 +165,12 @@ class M3uCorpusArtifactPublisher private constructor(
         baseName: String,
         suffix: String,
     ): Path {
-        val backup = fileOps.createTempFile(
+        val backup = Files.createTempFile(
             outputDirectory,
             ".$baseName-",
             suffix,
         )
-        fileOps.deleteIfExists(backup)
+        Files.deleteIfExists(backup)
         return backup
     }
 
@@ -259,7 +211,7 @@ class M3uCorpusArtifactPublisher private constructor(
     }
 
     private fun deleteForRollback(path: Path): Boolean = try {
-        fileOps.deleteIfExists(path)
+        Files.deleteIfExists(path)
         true
     } catch (_: Exception) {
         false
@@ -270,11 +222,11 @@ class M3uCorpusArtifactPublisher private constructor(
         target: Path,
     ): Boolean {
         return try {
-            if (!fileOps.exists(backup)) {
-                fileOps.exists(target)
+            if (!Files.exists(backup)) {
+                Files.exists(target)
             } else {
-                fileOps.deleteIfExists(target)
-                fileOps.move(backup, target)
+                Files.deleteIfExists(target)
+                moveFile(backup, target)
                 true
             }
         } catch (_: Exception) {
@@ -284,7 +236,7 @@ class M3uCorpusArtifactPublisher private constructor(
 
     private fun deleteQuietly(path: Path) {
         try {
-            fileOps.deleteIfExists(path)
+            Files.deleteIfExists(path)
         } catch (_: Exception) {
             // Best effort only: committed pairs or rollback evidence remain authoritative.
         }
@@ -303,7 +255,8 @@ class M3uCorpusArtifactPublisher private constructor(
     }
 
     internal companion object {
-        fun forTesting(fileOps: M3uCorpusArtifactFileOps): M3uCorpusArtifactPublisher =
-            M3uCorpusArtifactPublisher(fileOps)
+        fun forTesting(
+            moveFile: (source: Path, target: Path) -> Unit,
+        ): M3uCorpusArtifactPublisher = M3uCorpusArtifactPublisher(moveFile)
     }
 }
