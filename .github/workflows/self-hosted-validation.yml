@@ -13,6 +13,7 @@ on:
           - Full
           - DeviceCurrent
           - DeviceMatrix
+          - CatalogMeasurement
   pull_request:
     branches:
       - main
@@ -125,7 +126,12 @@ jobs:
           $branch = "${{ github.head_ref || github.ref_name }}"
           $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
 
-          if ($mode -in @("DeviceCurrent", "DeviceMatrix")) {
+          if ($mode -eq "CatalogMeasurement") {
+            pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `
+              -SourceBranch $branch `
+              -SourceCommit $commit `
+              -NoDaemon
+          } elseif ($mode -in @("DeviceCurrent", "DeviceMatrix")) {
             pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
               -Mode $mode `
               -SourceBranch $branch `
