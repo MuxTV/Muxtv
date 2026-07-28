@@ -65,14 +65,8 @@ $logPath = Join-Path $resolvedEvidenceDirectory "catalog-database-measurement.lo
 $reportPath = Join-Path $resolvedEvidenceDirectory $OutputName
 Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
 
-$remoteDirectory = "/sdcard/Android/data/app.muxtv.database.test/files/measurements"
-$remoteReport = "$remoteDirectory/$OutputName"
-$clearOutput = @(& $tools.Adb -s $serial shell rm -rf $remoteDirectory 2>&1)
-$clearExitCode = $LASTEXITCODE
-$clearOutput | Add-Content -Path $logPath -Encoding utf8
-if ($clearExitCode -ne 0) {
-    throw "Unable to clear previous catalog measurement output."
-}
+$resultRoot = Join-Path $repositoryRoot "core\database\build\outputs\androidTest-results\connected\debug"
+Remove-Item -Path $resultRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 $arguments = @(
     ":core:database:connectedDebugAndroidTest",
@@ -99,13 +93,27 @@ if ($gradleExitCode -ne 0) {
     throw "Catalog database measurement instrumentation failed with exit code $gradleExitCode."
 }
 
-$pullOutput = @(& $tools.Adb -s $serial pull $remoteReport $reportPath 2>&1)
-$pullExitCode = $LASTEXITCODE
-$pullOutput |
-    Tee-Object -FilePath $logPath -Append |
-    ForEach-Object { Write-Host $_ }
-if ($pullExitCode -ne 0 -or -not (Test-Path $reportPath -PathType Leaf)) {
-    throw "Catalog database measurement report was not produced."
+$testLogs = @(
+    Get-ChildItem -Path $resultRoot -Filter "test-results.log" -File -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object -Property LastWriteTimeUtc -Descending
+)
+if ($testLogs.Count -ne 1) {
+    throw "Catalog database measurement produced an unexpected test-result log count."
+}
+$testLogContent = Get-Content -Path $testLogs[0].FullName -Raw -Encoding utf8
+$resultPattern = '(?m)^INSTRUMENTATION_RESULT: catalogDatabaseMeasurementReportBase64=(?<value>[A-Za-z0-9+/=]+)\s*$'
+$resultMatch = [regex]::Match($testLogContent, $resultPattern)
+if (-not $resultMatch.Success) {
+    throw "Catalog database measurement result payload was not reported by instrumentation."
+}
+try {
+    $reportBytes = [Convert]::FromBase64String($resultMatch.Groups["value"].Value)
+    [System.IO.File]::WriteAllBytes($reportPath, $reportBytes)
+} catch {
+    throw "Catalog database measurement result payload could not be decoded."
+}
+if (-not (Test-Path $reportPath -PathType Leaf) -or (Get-Item $reportPath).Length -le 0) {
+    throw "Catalog database measurement report was not materialized."
 }
 
 try {
