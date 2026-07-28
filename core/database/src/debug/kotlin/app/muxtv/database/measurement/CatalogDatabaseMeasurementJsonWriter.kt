@@ -11,6 +11,7 @@ internal object CatalogDatabaseMeasurementJsonWriter {
             append("{\n")
             append("  \"schemaVersion\": ${report.schemaVersion},\n")
             append("  \"methodVersion\": ${report.methodVersion},\n")
+            append("  \"buildMode\": \"debug-instrumentation\",\n")
             append("  \"thresholdApplied\": ${report.thresholdApplied},\n")
             append("  \"sourceCommit\": ").appendJsonString(report.sourceCommit).append(",\n")
             append("  \"runnerLabel\": ").appendJsonString(report.runnerLabel).append(",\n")
