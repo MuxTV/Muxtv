@@ -4,20 +4,26 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 internal object PlayerProxyRequestProfileDigest {
-    fun sha256(request: PlaybackSessionRequest): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        digest.updateField(request.mediaId)
-        digest.updateField(request.variantId)
-        digest.updateField(request.locator)
-        digest.updateField(request.displayName)
-        digest.updateField(request.artworkUri)
-        digest.update(if (request.insecureHttpApproved) TRUE_MARKER else FALSE_MARKER)
+    fun sha256(request: PlaybackSessionRequest): String = sha256(listOf(request))
 
-        val headers = request.requestHeaders.entries.sortedBy(Map.Entry<String, String>::key)
-        digest.updateInt(headers.size)
-        headers.forEach { (name, value) ->
-            digest.updateField(name)
-            digest.updateField(value)
+    fun sha256(requests: List<PlaybackSessionRequest>): String {
+        require(requests.isNotEmpty())
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.updateInt(requests.size)
+        requests.forEach { request ->
+            digest.updateField(request.mediaId)
+            digest.updateField(request.variantId)
+            digest.updateField(request.locator)
+            digest.updateField(request.displayName)
+            digest.updateField(request.artworkUri)
+            digest.update(if (request.insecureHttpApproved) TRUE_MARKER else FALSE_MARKER)
+
+            val headers = request.requestHeaders.entries.sortedBy(Map.Entry<String, String>::key)
+            digest.updateInt(headers.size)
+            headers.forEach { (name, value) ->
+                digest.updateField(name)
+                digest.updateField(value)
+            }
         }
         return digest.digest().toHex()
     }
