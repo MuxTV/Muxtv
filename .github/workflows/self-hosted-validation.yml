@@ -139,6 +139,36 @@ jobs:
               -NoDaemon
           }
 
+      - name: Generate small synthetic corpus evidence
+        if: success() && steps.validation.outputs.mode == 'Full'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $evidenceDirectory = ".work\evidence\corpus-generation"
+          $logPath = Join-Path $evidenceDirectory "corpus-generation.log"
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
+          $output = & .\gradlew.bat `
+            :core:testing:generateM3uCorpus `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            "-PcorpusProfile=small-1k" `
+            "-PcorpusSeed=20260728" `
+            "-PcorpusSourceCommit=$commit" `
+            "-PcorpusOverwrite=true" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
+
+          if ($exitCode -ne 0) {
+            throw "Synthetic corpus generation failed with exit code $exitCode."
+          }
+
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -149,6 +179,8 @@ jobs:
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             .work/evidence/**/*.png
+            core/testing/build/corpus/*.m3u8
+            core/testing/build/corpus/*.manifest.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn
