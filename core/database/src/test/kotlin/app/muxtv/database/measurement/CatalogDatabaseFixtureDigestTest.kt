@@ -35,7 +35,7 @@ class CatalogDatabaseFixtureDigestTest {
         )
 
         assertThat(variants.map { CatalogDatabaseFixtureDigest.sha256(listOf(it)) })
-            .containsNoneOf(baselineDigest)
+            .doesNotContain(baselineDigest)
     }
 
     @Test
