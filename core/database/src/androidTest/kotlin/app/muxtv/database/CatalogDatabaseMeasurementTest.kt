@@ -1,11 +1,15 @@
 package app.muxtv.database
 
+import android.os.Bundle
+import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementArguments
+import app.muxtv.database.measurement.CatalogDatabaseMeasurementJsonWriter
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementReportPublisher
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementRunner
 import com.google.common.truth.Truth.assertThat
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,5 +53,18 @@ class CatalogDatabaseMeasurementTest {
         )
         assertThat(published.isFile).isTrue()
         assertThat(published.name).isEqualTo(arguments.outputName)
+
+        val output = ByteArrayOutputStream()
+        CatalogDatabaseMeasurementJsonWriter.write(report, output)
+        val encodedReport = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+        instrumentation.addResults(
+            Bundle().apply {
+                putString(RESULT_REPORT_BASE64, encodedReport)
+            },
+        )
+    }
+
+    private companion object {
+        const val RESULT_REPORT_BASE64 = "catalogDatabaseMeasurementReportBase64"
     }
 }
