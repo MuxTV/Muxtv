@@ -20,33 +20,29 @@ val corpusOutputDirectory = providers.gradleProperty("corpusOutputDirectory")
     .orElse(layout.buildDirectory.dir("corpus").map { it.asFile.absolutePath })
 val corpusOverwrite = providers.gradleProperty("corpusOverwrite").orElse("false")
 
+val corpusCommandArguments = mutableListOf(
+    "--profile",
+    corpusProfile.get(),
+    "--seed",
+    corpusSeed.get(),
+    "--output",
+    corpusOutputDirectory.get(),
+)
+corpusSourceCommit.orNull?.let { sourceCommit ->
+    corpusCommandArguments += listOf("--source-commit", sourceCommit)
+}
+when (corpusOverwrite.get().lowercase()) {
+    "false" -> Unit
+    "true" -> corpusCommandArguments += "--overwrite"
+    else -> throw GradleException("corpusOverwrite must be true or false.")
+}
+
 tasks.register<JavaExec>("generateM3uCorpus") {
     group = "verification"
     description = "Generates a deterministic M3U corpus and canonical manifest artifact pair."
     mainClass.set("app.muxtv.testing.iptv.M3uCorpusCommandKt")
     classpath = mainSourceSet.runtimeClasspath
-
-    doFirst {
-        val commandArguments = mutableListOf(
-            "--profile",
-            corpusProfile.get(),
-            "--seed",
-            corpusSeed.get(),
-            "--output",
-            corpusOutputDirectory.get(),
-        )
-        corpusSourceCommit.orNull?.let { sourceCommit ->
-            commandArguments += listOf("--source-commit", sourceCommit)
-        }
-
-        when (corpusOverwrite.get().lowercase()) {
-            "false" -> Unit
-            "true" -> commandArguments += "--overwrite"
-            else -> throw GradleException("corpusOverwrite must be true or false.")
-        }
-
-        setArgs(commandArguments)
-    }
+    args = corpusCommandArguments
 }
 
 tasks.test { useJUnit() }
