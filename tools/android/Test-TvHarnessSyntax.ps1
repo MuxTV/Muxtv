@@ -10,11 +10,18 @@ $diagnosticPath = Join-Path $evidenceDirectory "harness-syntax.log"
 
 $files = @(
     (Join-Path $PSScriptRoot "AndroidSdk.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1")
+    (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"),
+    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"),
+    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1")
 )
 
 $messages = @()
 foreach ($file in $files) {
+    if (-not (Test-Path $file -PathType Leaf)) {
+        $messages += "Missing Android harness script: " + $file
+        continue
+    }
+
     $tokens = $null
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
