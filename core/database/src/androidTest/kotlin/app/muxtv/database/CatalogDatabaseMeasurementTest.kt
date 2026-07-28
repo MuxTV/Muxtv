@@ -16,7 +16,7 @@ class CatalogDatabaseMeasurementTest {
     @Test
     fun producesThresholdFreeRoomStageActivateAndQueryEvidence() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val arguments = CatalogDatabaseMeasurementArguments.parse(instrumentation.arguments)
+        val arguments = CatalogDatabaseMeasurementArguments.parse(InstrumentationRegistry.getArguments())
         val report = CatalogDatabaseMeasurementRunner(
             context = instrumentation.targetContext,
         ).run(arguments.spec)
