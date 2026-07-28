@@ -38,6 +38,8 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - deterministic provider-neutral M3U corpus с профилями 1k/10k/50k, explicit seed/source commit, expected counts, byte size и SHA-256;
 - canonical fixed-order UTF-8 manifest JSON со stable schema/profile IDs и exact source commit;
 - согласованная публикация `.m3u8 + .manifest.json` через staging, explicit overwrite, backup/restore и typed rollback failures;
+- repository-owned безопасный CLI и Gradle task для генерации corpus artifact pair;
+- bounded typed HLS/XMLTV starter fixtures с synthetic `.example` resources и expected outcomes;
 - permanent `core:testing` contracts в Fast/Full validation;
 - repository-owned Windows cleanup с `core.longpaths`, explicit reset/clean и clean-workspace evidence;
 - repository-owned PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
@@ -53,13 +55,15 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - PR #44 — deterministic M3U corpus foundation;
 - PR #47 — canonical corpus manifest JSON;
 - PR #48 — deterministic corpus artifact pair publisher;
-- issues #26 и #39 закрыты; issue #27 остаётся активной до repository entry point, starter HLS/XMLTV fixtures и measurements.
+- PR #50 — repository corpus generation command и configuration-cache-safe Gradle task;
+- PR #51 — bounded typed HLS/XMLTV starter fixtures;
+- issues #26 и #39 закрыты; issue #27 остаётся активной до descriptive measurements и repeated variance evidence.
 
-Следующий package issue #27 — repository-owned Gradle/CLI entry point поверх уже готового publisher. После него: bounded HLS/XMLTV starter fixtures, descriptive measurements, затем XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
+Следующий package issue #27 — descriptive M3U parse measurements с точными environment metadata и распределениями. Затем: stage/activate/query/Player proxy measurements, XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
 
 До первой публичной alpha ещё не завершены:
 
-- executable corpus generation entry point, bounded HLS/XMLTV fixtures и evidence-backed performance budgets;
+- reproducible parse/stage/activate/query/Player measurements и evidence-backed performance budgets;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -80,6 +84,17 @@ Debug APK:
 pwsh -NoProfile -File .\tools\verify-local.ps1 -Mode Full -NoDaemon
 ```
 
+Генерация малого deterministic M3U corpus и canonical manifest:
+
+```powershell
+.\gradlew.bat :core:testing:generateM3uCorpus `
+  -PcorpusProfile=small-1k `
+  -PcorpusSeed=20260728 `
+  -PcorpusSourceCommit=<полный-lowercase-40-character-git-sha>
+```
+
+По умолчанию artifacts создаются в `core/testing/build/corpus`. Повторная запись требует явного `-PcorpusOverwrite=true`. Доступные профили: `small-1k`, `medium-10k`, `large-50k`.
+
 Последовательная Android TV матрица старого и текущего API:
 
 ```powershell
@@ -96,6 +111,7 @@ Harness самостоятельно выбирает доступные Android
 
 - архитектура, спецификации, ADR и machine-readable metadata: [`.work`](.work/README.md);
 - активный последовательный план: [`docs/superpowers/plans/2026-07-27-post-http-approval-execution.md`](docs/superpowers/plans/2026-07-27-post-http-approval-execution.md);
+- benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md);
 - HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
 - открытые функциональные packages ведутся через GitHub Issues и отдельные PR.

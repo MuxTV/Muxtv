@@ -2,7 +2,7 @@
 status: accepted
 last_reviewed: 2026-07-28
 architecture_version: 3
-implementation_source_commit: d7bc58a398c065018d9131c176e8e1c131766c88
+implementation_source_commit: a26fd4ba492948c413b317c168db5678db4ed00e
 ---
 
 # Текущее состояние
@@ -11,7 +11,7 @@ implementation_source_commit: d7bc58a398c065018d9131c176e8e1c131766c88
 
 MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
 
-Deterministic M3U corpus foundation и canonical artifact publication уже реализованы. Profiles 1k/10k/50k генерируются потоково по explicit seed/source commit; manifest имеет stable schema/profile IDs, exact counts, byte size и SHA-256; `.m3u8 + .manifest.json` публикуются согласованной парой через staging и explicit backup/restore. Repository entry point, HLS/XMLTV fixtures, measurements, XMLTV/EPG, законченные daily-use разделы, release pipeline и physical-device evidence остаются открытыми.
+Deterministic IPTV evidence foundation теперь включает M3U profiles 1k/10k/50k, canonical manifest JSON, безопасную публикацию `.m3u8 + .manifest.json`, repository-owned CLI/Gradle entry point и bounded typed HLS/XMLTV starter fixtures. Следующий незавершённый package issue #27 — descriptive parse/stage/activate/query/Player measurements и repeated variance evidence. XMLTV/EPG, daily-use discovery, release pipeline и physical-device evidence остаются открытыми.
 
 ## Проверенные факты
 
@@ -22,15 +22,19 @@ Deterministic M3U corpus foundation и canonical artifact publication уже р�
 - CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent и DeviceMatrix через repository-owned PowerShell harness.
 - PR #38 слит squash commit `8665f80d6e38bc90d10ead0d3a3618fbecd4e304` и закрыл issue #26.
 - PR #42 слит squash commit `764ec102808c4df57e826d05ce7b1334063bb520` и закрыл issue #39.
-- PR #43 слит squash commit `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; два последовательных Full attempts подтвердили clean workspace с repository-local `core.longpaths`.
+- PR #43 слит squash commit `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; persistent Windows workspace очищается с repository-local `core.longpaths`.
 - PR #45 слит squash commit `dc6e6b2357de12de65932857ca637ff9631782f1` и закрыл M3U diagnostic leak.
-- PR #44 слит squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`; это Package A issue #27, а не закрытие всего milestone.
-- PR #47 слит squash commit `f992e8269cd402d679905efb57a2af633a99772c`; canonical manifest JSON и strict source-commit contract завершены.
+- PR #44 слит squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`; deterministic M3U generator foundation завершён.
+- PR #47 слит squash commit `f992e8269cd402d679905efb57a2af633a99772c`; canonical manifest JSON завершён.
 - PR #48 слит squash commit `d7bc58a398c065018d9131c176e8e1c131766c88`; deterministic artifact pair publication и rollback semantics завершены.
+- PR #50 слит squash commit `7134a4aaf2968ae0b7d62cf01bab254eb97e6b9f`; corpus command и configuration-cache-safe Gradle task завершены.
+- PR #51 слит squash commit `a26fd4ba492948c413b317c168db5678db4ed00e`; bounded typed HLS/XMLTV starter fixtures завершены.
 - Cleaned-tree Full для PR #42: run `30295592181`.
 - Corpus foundation Full: run `30365096484`; `:core:testing:test` исполняется в permanent gate.
 - Canonical manifest Full: run `30367547682`.
 - Artifact pair publisher Full: run `30370708253`.
+- Corpus entry point Full + real generation: run `30377371429`.
+- Typed starter fixtures Full: run `30378845744`.
 - Последняя успешная API 26/API 36 HTTP-approval DeviceMatrix: run `30287803018`, без fallback/failures/errors/skips.
 
 ## Реализованный рабочий путь
@@ -72,9 +76,9 @@ Deterministic M3U corpus foundation и canonical artifact publication уже р�
 - Production manifest не содержит process-wide cleartext opt-in или network-wide HTTP allow-list.
 - Request-scoped repository clients, а не platform default, являются HTTP security boundary на всех поддерживаемых API.
 
-### Deterministic corpus и artifacts
+### Deterministic corpus, artifacts и fixtures
 
-- `core:testing` владеет provider-neutral M3U generator, canonical manifest writer и artifact publisher; production ingest/runtime не зависят от testing module.
+- `core:testing` владеет provider-neutral M3U generator, canonical manifest writer, artifact publisher, command и starter fixture catalog; production ingest/runtime не зависят от testing module.
 - Profiles: 1k, 10k и 50k entries.
 - Equal profile + seed + source commit дают byte-identical UTF-8 output и SHA-256.
 - Generator пишет в caller-owned `OutputStream`, flushes, но не closes его.
@@ -87,8 +91,14 @@ Deterministic M3U corpus foundation и canonical artifact publication уже р�
 - Manifest публикуется последним как commit marker.
 - Implicit overwrite запрещён; explicit overwrite использует staging и backup/restore.
 - Partial publication очищается; rollback failure типизирован и сохраняет recoverable backup.
-- Request/result/error diagnostics не раскрывают filesystem paths.
-- `:core:testing:test` включён в permanent Fast/Full gate; прежний false-positive validation gap закрыт.
+- `M3uCorpusCommand` имеет stable usage/publish/internal exit codes и не раскрывает supplied values или full paths.
+- `:core:testing:generateM3uCorpus` исполняет command через configuration-cache-compatible `JavaExec`.
+- Full validation реально генерирует и архивирует только synthetic `small-1k` pair.
+- Starter fixtures имеют stable IDs, per-fixture 16 KiB и aggregate 64 KiB bounds.
+- HLS fixtures описывают relative variants, encrypted key/segments, malformed master, header names и synthetic redirect.
+- XMLTV fixtures описывают DST/Unicode, missing channel reference и malformed timestamp.
+- Fixture diagnostics не публикуют payload; unknown lookup не повторяет supplied identifier.
+- `:core:testing:test` включён в permanent Fast/Full gate.
 
 ## Android TV evidence
 
@@ -99,7 +109,7 @@ Deterministic M3U corpus foundation и canonical artifact publication уже р�
 | old edge | `system-images;android-26;android-tv;x86` | 1536 MB / 2 | 4 | 21 | 10 | 12 |
 | current | `system-images;android-36;android-tv;x86_64` | 2048 MB / 2 | 4 | 21 | 10 | 12 |
 
-Run `30287803018` прошёл без fallback, failures, errors или skips. Последующие shared-manager, stale-variant, revocation, diagnostic-redaction и corpus изменения прошли cleaned-tree Full. Corpus utilities не меняют Android runtime, поэтому повторная DeviceMatrix не является merge gate для этих pure-Kotlin packages.
+Run `30287803018` прошёл без fallback, failures, errors или skips. Последующие shared-manager, stale-variant, revocation, diagnostic-redaction и pure-Kotlin corpus/fixture изменения прошли cleaned-tree Full. Pure-Kotlin evidence packages не меняют Android system boundaries, поэтому повторная DeviceMatrix не является их merge gate.
 
 Эмуляторная матрица доказывает Android API/lifecycle/Room/Keystore/focus/MediaSession contracts. Она не доказывает vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC или реальные zapping/performance характеристики.
 
@@ -115,16 +125,19 @@ Issue #27 остаётся активной.
 4. canonical serialized manifest JSON;
 5. deterministic `.m3u8 + .manifest.json` artifact pair publication;
 6. explicit overwrite, staging, backup/restore и typed rollback;
-7. byte-identical repeated output;
-8. parser agreement и permanent testing gate.
+7. repository-owned safe command и Gradle entry point;
+8. bounded typed HLS/XMLTV starter fixtures;
+9. byte-identical repeated output;
+10. parser agreement и permanent testing gate.
 
 Следующие packages:
 
-1. repository-owned Gradle/CLI generation entry point;
-2. starter HLS/XMLTV fixtures с typed manifests;
-3. importer agreement с serialized manifest where applicable;
-4. descriptive parse/stage/activate/query/Player measurements;
-5. repeated variance evidence до назначения budgets.
+1. descriptive M3U parse wall-time/allocation distributions;
+2. 250-entry staging и activation transaction measurements;
+3. active-channel/source-overview query measurements;
+4. Player request installation/reconnect proxy measurements;
+5. repeated normal/low-RAM variance evidence до назначения budgets;
+6. fixture consumer binding по мере появления issue #28/#30 runtime consumers.
 
 ## Последовательность после issue #27
 
@@ -143,5 +156,6 @@ Issue #27 остаётся активной.
 - Provider data, canonical channels и profile overlays разделены.
 - Remote playlists/XML/images/provider endpoints считаются untrusted и bounded.
 - Testing/corpus utilities не становятся production runtime dependencies.
+- Первый measurement package публикует distributions и raw samples, но не failing budgets.
 - Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine допускаются только после corpus-backed benchmark/security ADR.
 - Физические Android/Google TV/Fire TV проверки дополняют, но не заменяют автоматическую API-матрицу.
