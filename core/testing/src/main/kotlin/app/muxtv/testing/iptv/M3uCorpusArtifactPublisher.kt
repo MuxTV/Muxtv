@@ -266,15 +266,18 @@ class M3uCorpusArtifactPublisher(
     private fun restoreBackup(
         backup: Path,
         target: Path,
-    ): Boolean = try {
-        if (!fileOps.exists(backup)) {
-            return fileOps.exists(target)
+    ): Boolean {
+        return try {
+            if (!fileOps.exists(backup)) {
+                fileOps.exists(target)
+            } else {
+                fileOps.deleteIfExists(target)
+                fileOps.move(backup, target, replaceExisting = false)
+                true
+            }
+        } catch (_: Exception) {
+            false
         }
-        fileOps.deleteIfExists(target)
-        fileOps.move(backup, target, replaceExisting = false)
-        true
-    } catch (_: Exception) {
-        false
     }
 
     private fun deleteQuietly(path: Path) {
