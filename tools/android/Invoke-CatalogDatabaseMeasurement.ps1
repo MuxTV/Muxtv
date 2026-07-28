@@ -26,6 +26,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$LASTEXITCODE = 0
 if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
@@ -43,8 +44,14 @@ if ([string]::IsNullOrWhiteSpace($env:ANDROID_SERIAL)) {
 
 $tools = Get-AndroidSdkTools
 $serial = $env:ANDROID_SERIAL.Trim()
-$deviceState = (& $tools.Adb -s $serial get-state 2>$null | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or ([string]$deviceState).Trim() -ne "device") {
+$deviceStateOutput = @(& $tools.Adb -s $serial get-state 2>$null)
+$deviceStateExitCode = $LASTEXITCODE
+$deviceState = if ($deviceStateOutput.Count -gt 0) {
+    ([string]$deviceStateOutput[0]).Trim()
+} else {
+    ""
+}
+if ($deviceStateExitCode -ne 0 -or $deviceState -ne "device") {
     throw "The selected Android device is not ready."
 }
 
@@ -60,8 +67,10 @@ Remove-Item -Path $reportPath -Force -ErrorAction SilentlyContinue
 
 $remoteDirectory = "/sdcard/Android/data/app.muxtv.database.test/files/measurements"
 $remoteReport = "$remoteDirectory/$OutputName"
-& $tools.Adb -s $serial shell rm -rf $remoteDirectory 2>&1 | Add-Content -Path $logPath -Encoding utf8
-if ($LASTEXITCODE -ne 0) {
+$clearOutput = @(& $tools.Adb -s $serial shell rm -rf $remoteDirectory 2>&1)
+$clearExitCode = $LASTEXITCODE
+$clearOutput | Add-Content -Path $logPath -Encoding utf8
+if ($clearExitCode -ne 0) {
     throw "Unable to clear previous catalog measurement output."
 }
 
@@ -83,17 +92,19 @@ if ($NoDaemon) {
 }
 
 Set-Location $repositoryRoot
-$output = & $gradleWrapper @arguments 2>&1
+$output = @(& $gradleWrapper @arguments 2>&1)
 $gradleExitCode = $LASTEXITCODE
 $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
 if ($gradleExitCode -ne 0) {
     throw "Catalog database measurement instrumentation failed with exit code $gradleExitCode."
 }
 
-& $tools.Adb -s $serial pull $remoteReport $reportPath 2>&1 |
+$pullOutput = @(& $tools.Adb -s $serial pull $remoteReport $reportPath 2>&1)
+$pullExitCode = $LASTEXITCODE
+$pullOutput |
     Tee-Object -FilePath $logPath -Append |
     ForEach-Object { Write-Host $_ }
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path $reportPath -PathType Leaf)) {
+if ($pullExitCode -ne 0 -or -not (Test-Path $reportPath -PathType Leaf)) {
     throw "Catalog database measurement report was not produced."
 }
 
