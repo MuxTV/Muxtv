@@ -14,9 +14,6 @@ import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
 import app.muxtv.database.StagedCatalogEntry
 import java.io.File
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -348,10 +345,9 @@ internal class CatalogDatabaseMeasurementRunner(
     ) {
         companion object {
             fun create(workload: CatalogDatabaseMeasurementWorkload): PreparedCatalogFixture {
-                val digest = MessageDigest.getInstance("SHA-256")
                 val entries = List(workload.entryCount) { index ->
                     val suffix = index.toString().padStart(5, '0')
-                    val entry = StagedCatalogEntry(
+                    StagedCatalogEntry(
                         providerChannelId = "provider-$suffix",
                         providerKey = "tvg:measurement-$suffix",
                         rawName = "Synthetic Channel $suffix",
@@ -375,13 +371,6 @@ internal class CatalogDatabaseMeasurementRunner(
                             null
                         },
                     )
-                    digest.update(entry.providerChannelId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0.toByte())
-                    digest.update(entry.canonicalChannelId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0.toByte())
-                    digest.update(entry.streamVariantId.toByteArray(StandardCharsets.UTF_8))
-                    digest.update(0.toByte())
-                    entry
                 }
                 val immutableBatches = entries.chunked(workload.batchSize).map { batch -> batch.toList() }
                 check(immutableBatches.size == workload.entryCount / workload.batchSize) {
@@ -390,12 +379,8 @@ internal class CatalogDatabaseMeasurementRunner(
                 return PreparedCatalogFixture(
                     workload = workload,
                     batches = immutableBatches,
-                    sha256 = digest.digest().toHex(),
+                    sha256 = CatalogDatabaseFixtureDigest.sha256(entries),
                 )
-            }
-
-            private fun ByteArray.toHex(): String = joinToString(separator = "") { byte ->
-                String.format(Locale.ROOT, "%02x", byte.toInt() and 0xff)
             }
         }
     }
