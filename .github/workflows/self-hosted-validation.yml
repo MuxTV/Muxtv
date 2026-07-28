@@ -14,6 +14,7 @@ on:
           - DeviceCurrent
           - DeviceMatrix
           - CatalogMeasurement
+          - PlayerMeasurement
   pull_request:
     branches:
       - main
@@ -128,6 +129,11 @@ jobs:
 
           if ($mode -eq "CatalogMeasurement") {
             pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `
+              -SourceBranch $branch `
+              -SourceCommit $commit `
+              -NoDaemon
+          } elseif ($mode -eq "PlayerMeasurement") {
+            pwsh -NoProfile -File .\tools\android\Invoke-PlayerProxyDeviceValidation.ps1 `
               -SourceBranch $branch `
               -SourceCommit $commit `
               -NoDaemon
