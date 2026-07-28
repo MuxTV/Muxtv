@@ -4,7 +4,6 @@ import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.Random
-import kotlin.math.max
 
 enum class M3uCorpusProfile(
     val entryCount: Int,
@@ -15,7 +14,7 @@ enum class M3uCorpusProfile(
     ;
 
     val expectedDuplicateIdentities: Int
-        get() = max(1, entryCount / DUPLICATE_INTERVAL)
+        get() = entryCount / DUPLICATE_INTERVAL
 
     internal fun identityIndex(entryIndex: Int): Int {
         require(entryIndex in 0 until entryCount)
