@@ -125,6 +125,9 @@ try {
 if ([int]$report.schemaVersion -ne 1 -or [int]$report.methodVersion -ne 1) {
     throw "Catalog database measurement report schema is unsupported."
 }
+if ([string]$report.buildMode -cne "debug-instrumentation") {
+    throw "Catalog database measurement build mode is unsupported."
+}
 if ([bool]$report.thresholdApplied) {
     throw "Catalog database measurement unexpectedly applied a threshold."
 }
@@ -185,6 +188,7 @@ for ($index = 0; $index -lt $expectedOperations.Count; $index++) {
     "status=passed"
     "source_commit=$SourceCommit"
     "runner_label=$RunnerLabel"
+    "build_mode=$($report.buildMode)"
     "api_level=$($report.environment.apiLevel)"
     "fixture_sha256=$($report.fixture.sha256)"
     "operation_count=$($operations.Count)"
