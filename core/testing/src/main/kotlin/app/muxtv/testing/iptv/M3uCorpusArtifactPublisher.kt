@@ -83,21 +83,16 @@ object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
         target: Path,
         replaceExisting: Boolean,
     ) {
-        val atomicOptions = if (replaceExisting) {
-            arrayOf(ATOMIC_MOVE, REPLACE_EXISTING)
-        } else {
-            arrayOf(ATOMIC_MOVE)
-        }
-        val fallbackOptions = if (replaceExisting) {
-            arrayOf(REPLACE_EXISTING)
-        } else {
-            emptyArray()
+        if (!replaceExisting) {
+            // The default move contract must fail rather than replace an existing target.
+            Files.move(source, target)
+            return
         }
 
         try {
-            Files.move(source, target, *atomicOptions)
+            Files.move(source, target, ATOMIC_MOVE, REPLACE_EXISTING)
         } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source, target, *fallbackOptions)
+            Files.move(source, target, REPLACE_EXISTING)
         }
     }
 
@@ -110,15 +105,9 @@ class M3uCorpusArtifactPublisher(
     private val fileOps: M3uCorpusArtifactFileOps = NioM3uCorpusArtifactFileOps,
 ) {
     fun publish(request: M3uCorpusArtifactRequest): M3uCorpusArtifactPair {
-        fileOps.createDirectories(request.outputDirectory)
-
         val baseName = buildBaseName(request.spec)
         val playlistPath = request.outputDirectory.resolve("$baseName.m3u8")
         val manifestPath = request.outputDirectory.resolve("$baseName.manifest.json")
-
-        if (!request.overwrite && (fileOps.exists(playlistPath) || fileOps.exists(manifestPath))) {
-            throw M3uCorpusArtifactException(M3uCorpusArtifactFailureReason.TargetExists)
-        }
 
         var playlistTemp: Path? = null
         var manifestTemp: Path? = null
@@ -128,6 +117,12 @@ class M3uCorpusArtifactPublisher(
         var manifestPublished = false
 
         try {
+            fileOps.createDirectories(request.outputDirectory)
+
+            if (!request.overwrite && (fileOps.exists(playlistPath) || fileOps.exists(manifestPath))) {
+                throw M3uCorpusArtifactException(M3uCorpusArtifactFailureReason.TargetExists)
+            }
+
             playlistTemp = fileOps.createTempFile(
                 request.outputDirectory,
                 ".$baseName-",
@@ -185,7 +180,9 @@ class M3uCorpusArtifactPublisher(
                 manifestPath = manifestPath,
                 manifest = manifest,
             )
-        } catch (_: Throwable) {
+        } catch (error: M3uCorpusArtifactException) {
+            throw error
+        } catch (_: Exception) {
             val rollbackSucceeded = rollback(
                 playlistPath = playlistPath,
                 manifestPath = manifestPath,
@@ -258,7 +255,7 @@ class M3uCorpusArtifactPublisher(
     private fun deleteForRollback(path: Path): Boolean = try {
         fileOps.deleteIfExists(path)
         true
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
         false
     }
 
@@ -269,14 +266,14 @@ class M3uCorpusArtifactPublisher(
         fileOps.deleteIfExists(target)
         fileOps.move(backup, target, replaceExisting = false)
         true
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
         false
     }
 
     private fun deleteQuietly(path: Path) {
         try {
             fileOps.deleteIfExists(path)
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
             // Best effort only: committed pairs or rollback evidence remain authoritative.
         }
     }
