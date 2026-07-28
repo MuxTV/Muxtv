@@ -107,7 +107,7 @@ class M3uCorpusArtifactPublisherTest {
 
     @Test
     fun `failed second publish removes a new partial pair`() {
-        val publisher = M3uCorpusArtifactPublisher(
+        val publisher = M3uCorpusArtifactPublisher.forTesting(
             fileOps = FailOnceOnManifestPublishFileOps(NioM3uCorpusArtifactFileOps),
         )
         val request = M3uCorpusArtifactRequest(spec = spec(seed = 11L), outputDirectory = root)
@@ -131,7 +131,7 @@ class M3uCorpusArtifactPublisherTest {
         Files.write(existing.playlistPath, oldPlaylist)
         Files.write(existing.manifestPath, oldManifest)
 
-        val failingPublisher = M3uCorpusArtifactPublisher(
+        val failingPublisher = M3uCorpusArtifactPublisher.forTesting(
             fileOps = FailOnceOnManifestPublishFileOps(NioM3uCorpusArtifactFileOps),
         )
         val error = assertThrows(M3uCorpusArtifactException::class.java) {
@@ -171,12 +171,12 @@ class M3uCorpusArtifactPublisherTest {
     ) : M3uCorpusArtifactFileOps by delegate {
         private var failed = false
 
-        override fun move(source: Path, target: Path, replaceExisting: Boolean) {
+        override fun move(source: Path, target: Path) {
             if (!failed && target.fileName.toString().endsWith(".manifest.json")) {
                 failed = true
                 throw IllegalStateException("synthetic manifest publish failure")
             }
-            delegate.move(source, target, replaceExisting)
+            delegate.move(source, target)
         }
     }
 
