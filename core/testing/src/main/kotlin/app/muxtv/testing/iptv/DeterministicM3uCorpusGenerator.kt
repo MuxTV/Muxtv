@@ -5,6 +5,10 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.Random
 
+private val M3U_CORPUS_ARTIFACT_ID_PATTERN = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
+private val FULL_LOWERCASE_GIT_SHA_PATTERN = Regex("[0-9a-f]{40}")
+private val SHA_256_PATTERN = Regex("[0-9a-f]{64}")
+
 enum class M3uCorpusProfile(
     val artifactId: String,
     val entryCount: Int,
@@ -15,7 +19,7 @@ enum class M3uCorpusProfile(
     ;
 
     init {
-        require(artifactId.matches(ARTIFACT_ID_PATTERN))
+        require(artifactId.matches(M3U_CORPUS_ARTIFACT_ID_PATTERN))
     }
 
     val expectedDuplicateIdentities: Int
@@ -31,7 +35,6 @@ enum class M3uCorpusProfile(
     }
 
     private companion object {
-        val ARTIFACT_ID_PATTERN = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
         const val DUPLICATE_INTERVAL = 100
     }
 }
@@ -188,9 +191,6 @@ object DeterministicM3uCorpusGenerator {
     private const val EXPECTED_SKIPPED_ENTRIES = 1
     private const val EXPECTED_WARNING_COUNT = 2
 }
-
-private val FULL_LOWERCASE_GIT_SHA_PATTERN = Regex("[0-9a-f]{40}")
-private val SHA_256_PATTERN = Regex("[0-9a-f]{64}")
 
 private fun requireFullLowercaseGitSha(value: String) {
     require(value.matches(FULL_LOWERCASE_GIT_SHA_PATTERN))
