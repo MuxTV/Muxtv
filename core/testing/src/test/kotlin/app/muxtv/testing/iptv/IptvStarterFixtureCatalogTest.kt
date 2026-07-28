@@ -45,11 +45,22 @@ class IptvStarterFixtureCatalogTest {
                 assertThat(resource).doesNotContain("?")
                 assertThat(resource).doesNotContain("#")
             }
+            fixture.transport.redirects.forEach { redirect ->
+                assertThat(redirect.from).contains(".example/")
+                assertThat(redirect.to).contains(".example/")
+                assertThat(redirect.from).doesNotContain("?")
+                assertThat(redirect.to).doesNotContain("?")
+            }
+            assertThat(fixture.transport.requiredHeaderNames)
+                .containsNoDuplicates()
+            fixture.transport.requiredHeaderNames.forEach { headerName ->
+                assertThat(headerName).isAnyOf("Referer", "User-Agent")
+            }
         }
     }
 
     @Test
-    fun `HLS fixtures declare typed resource and issue expectations`() {
+    fun `HLS fixtures declare typed resource transport and issue expectations`() {
         val master = IptvStarterFixtureCatalog.require("hls-master-relative")
         val media = IptvStarterFixtureCatalog.require("hls-media-relative-key")
         val malformed = IptvStarterFixtureCatalog.require("hls-malformed-master")
@@ -63,6 +74,18 @@ class IptvStarterFixtureCatalogTest {
                 absoluteResourceCount = 0,
                 encrypted = false,
                 expectedIssues = emptySet(),
+            ),
+        )
+        assertThat(master.transport).isEqualTo(
+            IptvStarterFixtureTransport(
+                requiredHeaderNames = setOf("Referer", "User-Agent"),
+                redirects = listOf(
+                    IptvStarterFixtureRedirect(
+                        from = "https://origin.example/hls/master.m3u8",
+                        to = "https://edge.example/hls/master.m3u8",
+                        expectedAllowed = true,
+                    ),
+                ),
             ),
         )
         assertThat(media.kind).isEqualTo(IptvStarterFixtureKind.HLS_MEDIA)
