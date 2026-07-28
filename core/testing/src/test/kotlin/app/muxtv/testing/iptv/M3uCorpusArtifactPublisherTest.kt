@@ -1,7 +1,6 @@
 package app.muxtv.testing.iptv
 
 import com.google.common.truth.Truth.assertThat
-import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
@@ -108,7 +107,7 @@ class M3uCorpusArtifactPublisherTest {
     @Test
     fun `failed second publish removes a new partial pair`() {
         val publisher = M3uCorpusArtifactPublisher.forTesting(
-            fileOps = FailOnceOnManifestPublishFileOps(NioM3uCorpusArtifactFileOps),
+            moveFile = FailOnceOnManifestPublishMove(),
         )
         val request = M3uCorpusArtifactRequest(spec = spec(seed = 11L), outputDirectory = root)
 
@@ -132,7 +131,7 @@ class M3uCorpusArtifactPublisherTest {
         Files.write(existing.manifestPath, oldManifest)
 
         val failingPublisher = M3uCorpusArtifactPublisher.forTesting(
-            fileOps = FailOnceOnManifestPublishFileOps(NioM3uCorpusArtifactFileOps),
+            moveFile = FailOnceOnManifestPublishMove(),
         )
         val error = assertThrows(M3uCorpusArtifactException::class.java) {
             failingPublisher.publish(request.copy(overwrite = true))
@@ -166,17 +165,15 @@ class M3uCorpusArtifactPublisherTest {
         .digest(this)
         .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
-    private class FailOnceOnManifestPublishFileOps(
-        private val delegate: M3uCorpusArtifactFileOps,
-    ) : M3uCorpusArtifactFileOps by delegate {
+    private class FailOnceOnManifestPublishMove : (Path, Path) -> Unit {
         private var failed = false
 
-        override fun move(source: Path, target: Path) {
+        override fun invoke(source: Path, target: Path) {
             if (!failed && target.fileName.toString().endsWith(".manifest.json")) {
                 failed = true
                 throw IllegalStateException("synthetic manifest publish failure")
             }
-            delegate.move(source, target)
+            Files.move(source, target)
         }
     }
 
