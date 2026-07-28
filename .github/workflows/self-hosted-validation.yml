@@ -144,8 +144,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
           $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
-          & .\gradlew.bat `
+          $evidenceDirectory = ".work\evidence\corpus-generation"
+          $logPath = Join-Path $evidenceDirectory "corpus-generation.log"
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
+          $output = & .\gradlew.bat `
             :core:testing:generateM3uCorpus `
             --no-daemon `
             --stacktrace `
@@ -153,9 +161,12 @@ jobs:
             "-PcorpusProfile=small-1k" `
             "-PcorpusSeed=20260728" `
             "-PcorpusSourceCommit=$commit" `
-            "-PcorpusOverwrite=true"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Synthetic corpus generation failed with exit code $LASTEXITCODE."
+            "-PcorpusOverwrite=true" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
+
+          if ($exitCode -ne 0) {
+            throw "Synthetic corpus generation failed with exit code $exitCode."
           }
 
       - name: Upload validation evidence
