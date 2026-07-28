@@ -62,6 +62,7 @@ class CatalogDatabaseMeasurementStatisticsTest {
         assertThat(json).startsWith("{\n  \"schemaVersion\": 1,\n  \"methodVersion\": 1,")
         assertThat(json).endsWith("\n")
         assertThat(json).doesNotContain("\r")
+        assertThat(json).contains("\"buildMode\": \"debug-instrumentation\"")
         assertThat(json).contains("\"thresholdApplied\": false")
         assertThat(json).contains("\"rawSamples\": [")
         assertThat(json).contains("\"cacheState\": \"fresh-file-per-sample\"")
