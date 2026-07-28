@@ -28,17 +28,16 @@ class PlayerProxyMeasurementTest {
             "coordinator-cancel-before-install",
             "registry-disconnect-reacquire",
         ).inOrder()
-        assertThat(report.operations).allSatisfy { operation ->
-            assertThat(operation.samples).hasSize(arguments.spec.workload.measuredSamples)
-            assertThat(operation.expectedSuccessfulResultCount)
-                .isEqualTo(arguments.spec.workload.operationsPerSample)
-            assertThat(operation.samples).allSatisfy { sample ->
-                assertThat(sample.operationCount).isEqualTo(arguments.spec.workload.operationsPerSample)
-                assertThat(sample.successfulResultCount).isEqualTo(arguments.spec.workload.operationsPerSample)
-                assertThat(sample.batchWallTimeNanos).isGreaterThan(0L)
-                assertThat(sample.normalizedNanosPerOperation).isGreaterThan(0L)
-            }
-        }
+        assertThat(report.operations.all { operation ->
+            operation.samples.size == arguments.spec.workload.measuredSamples &&
+                operation.expectedSuccessfulResultCount == arguments.spec.workload.operationsPerSample &&
+                operation.samples.all { sample ->
+                    sample.operationCount == arguments.spec.workload.operationsPerSample &&
+                        sample.successfulResultCount == arguments.spec.workload.operationsPerSample &&
+                        sample.batchWallTimeNanos > 0L &&
+                        sample.normalizedNanosPerOperation > 0L
+                }
+        }).isTrue()
 
         val encoded = PlayerProxyMeasurementResultPublisher.publish(
             instrumentation = instrumentation,
