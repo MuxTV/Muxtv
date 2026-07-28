@@ -119,8 +119,8 @@ class M3uCorpusArtifactPublisher(
         var manifestTemp: Path? = null
         var playlistBackup: Path? = null
         var manifestBackup: Path? = null
-        var playlistPublished = false
-        var manifestPublished = false
+        var playlistPublishAttempted = false
+        var manifestPublishAttempted = false
 
         try {
             fileOps.createDirectories(request.outputDirectory)
@@ -149,31 +149,31 @@ class M3uCorpusArtifactPublisher(
 
             if (request.overwrite) {
                 if (fileOps.exists(playlistPath)) {
-                    playlistBackup = moveToBackup(
-                        target = playlistPath,
+                    playlistBackup = reserveBackupPath(
                         outputDirectory = request.outputDirectory,
                         baseName = baseName,
                         suffix = ".m3u8.bak",
                     )
+                    fileOps.move(playlistPath, playlistBackup, replaceExisting = false)
                 }
                 if (fileOps.exists(manifestPath)) {
-                    manifestBackup = moveToBackup(
-                        target = manifestPath,
+                    manifestBackup = reserveBackupPath(
                         outputDirectory = request.outputDirectory,
                         baseName = baseName,
                         suffix = ".manifest.json.bak",
                     )
+                    fileOps.move(manifestPath, manifestBackup, replaceExisting = false)
                 }
             }
 
+            playlistPublishAttempted = true
             fileOps.move(playlistTemp, playlistPath, replaceExisting = false)
             playlistTemp = null
-            playlistPublished = true
 
             // Manifest is the commit marker and is intentionally published last.
+            manifestPublishAttempted = true
             fileOps.move(manifestTemp, manifestPath, replaceExisting = false)
             manifestTemp = null
-            manifestPublished = true
 
             // The new pair is committed. Backup cleanup cannot invalidate that successful outcome.
             playlistBackup?.let(::deleteQuietly)
@@ -192,8 +192,8 @@ class M3uCorpusArtifactPublisher(
             val rollbackSucceeded = rollback(
                 playlistPath = playlistPath,
                 manifestPath = manifestPath,
-                playlistPublished = playlistPublished,
-                manifestPublished = manifestPublished,
+                playlistPublishAttempted = playlistPublishAttempted,
+                manifestPublishAttempted = manifestPublishAttempted,
                 playlistBackup = playlistBackup,
                 manifestBackup = manifestBackup,
             )
@@ -215,8 +215,7 @@ class M3uCorpusArtifactPublisher(
         }
     }
 
-    private fun moveToBackup(
-        target: Path,
+    private fun reserveBackupPath(
         outputDirectory: Path,
         baseName: String,
         suffix: String,
@@ -227,24 +226,23 @@ class M3uCorpusArtifactPublisher(
             suffix,
         )
         fileOps.deleteIfExists(backup)
-        fileOps.move(target, backup, replaceExisting = false)
         return backup
     }
 
     private fun rollback(
         playlistPath: Path,
         manifestPath: Path,
-        playlistPublished: Boolean,
-        manifestPublished: Boolean,
+        playlistPublishAttempted: Boolean,
+        manifestPublishAttempted: Boolean,
         playlistBackup: Path?,
         manifestBackup: Path?,
     ): Boolean {
         var succeeded = true
 
-        if (manifestPublished) {
+        if (manifestPublishAttempted) {
             succeeded = deleteForRollback(manifestPath) && succeeded
         }
-        if (playlistPublished) {
+        if (playlistPublishAttempted) {
             succeeded = deleteForRollback(playlistPath) && succeeded
         }
 
@@ -269,6 +267,9 @@ class M3uCorpusArtifactPublisher(
         backup: Path,
         target: Path,
     ): Boolean = try {
+        if (!fileOps.exists(backup)) {
+            return fileOps.exists(target)
+        }
         fileOps.deleteIfExists(target)
         fileOps.move(backup, target, replaceExisting = false)
         true
