@@ -1,12 +1,12 @@
 # MuxTV Post-HTTP-Approval Execution Plan
 
-> **Status:** active; repository hygiene and deterministic M3U foundation are complete.
+> **Status:** active; repository hygiene, deterministic M3U foundation, canonical manifest serialization and artifact-pair publication are complete.
 
 **Goal:** move from the completed secure source → catalog → Player vertical slice to reproducible corpus evidence, immutable EPG and daily-use TV flows without introducing speculative runtime complexity.
 
 ## Baseline
 
-- `main` includes exact-origin playback approval PR #42, runner hygiene PR #43, M3U diagnostic redaction PR #45 and deterministic M3U foundation PR #44.
+- `main` includes exact-origin playback approval PR #42, runner hygiene PR #43, M3U diagnostic redaction PR #45, deterministic M3U foundation PR #44, canonical manifest PR #47 and artifact publisher PR #48.
 - Issues #26 and #39 are completed; issue #27 remains active.
 - Kotlin, Compose for TV, Room and Media3 remain the production baseline.
 - One process-owned ExoPlayer/MediaSession and one encrypted source-access owner remain authoritative.
@@ -23,78 +23,96 @@
 - [x] pass Full twice without `Filename too long` cleanup warnings;
 - [x] merge as a small standalone PR.
 
-## Package 1A — Issue #27 deterministic M3U foundation
+## Package 1A — Deterministic M3U foundation
 
 **Status:** completed by PR #44, squash commit `3e24cccb188b53652285929a11e3b50697aad5f7`.
 
-- [x] create a deterministic generator owned by `core:testing`;
-- [x] define named profiles for 1k, 10k and 50k entries;
-- [x] take an explicit numeric seed and exact source commit;
-- [x] generate stable synthetic identities, groups, logos, headers and relative/absolute locators;
-- [x] include controlled duplicates, parser-recognized malformed input, long metadata, mixed line endings and skipped entries;
-- [x] stream output rather than retaining the whole large corpus in memory;
-- [x] calculate expected parsed/skipped/warning/duplicate counts, UTF-8 byte size and SHA-256;
-- [x] prove equal profile + seed + source commit produces byte-identical output;
-- [x] prove changed seed changes output/digest without changing profile expectations;
-- [x] assert manifest expectations through the real `StreamingM3uParser`;
-- [x] keep fixtures provider-neutral and credential-free;
-- [x] include `:core:testing:test` in the permanent Fast/Full gate;
-- [x] prove generator flushes but does not close caller-owned output.
+- [x] repository-owned streaming generator in `core:testing`;
+- [x] named 1k/10k/50k profiles;
+- [x] explicit numeric seed and exact source commit;
+- [x] synthetic identities/groups/logos/headers and relative/absolute locators;
+- [x] controlled duplicates, malformed input, long metadata and mixed line endings;
+- [x] streaming output without materializing the large corpus;
+- [x] expected parsed/skipped/warning/duplicate counts, UTF-8 size and SHA-256;
+- [x] byte-identical repeated output and changed-seed contract;
+- [x] real `StreamingM3uParser` agreement;
+- [x] provider-neutral and credential-free fixtures;
+- [x] permanent `:core:testing:test` Fast/Full gate;
+- [x] caller-owned stream flush/no-close contract.
 
-## Package 1B — Canonical corpus artifact and generation entry point
+## Package 1B — Canonical corpus artifacts
+
+**Status:** completed by PR #47 and PR #48.
+
+### Canonical manifest — PR #47
+
+- [x] stable artifact IDs `small-1k`, `medium-10k`, `large-50k`;
+- [x] full lowercase 40-character source commit;
+- [x] explicit manifest/generator schema versions;
+- [x] fixed-order UTF-8 JSON without reflection/map-order dependence;
+- [x] explicit LF and exactly one trailing newline;
+- [x] byte-identical serialization;
+- [x] writer flushes but never closes caller-owned output;
+- [x] no corpus payload/provider data/runtime dependency.
+
+### Artifact pair publisher — PR #48
+
+- [x] deterministic `.m3u8 + .manifest.json` filenames;
+- [x] playlist size/SHA-256 agree with manifest;
+- [x] manifest published last as commit marker;
+- [x] implicit overwrite refused before mutation;
+- [x] explicit overwrite through staging and backup/restore;
+- [x] partial pair removed on second-publish failure;
+- [x] previous complete pair restored on overwrite failure;
+- [x] typed `TargetExists`, `PublishFailed` and `RollbackFailed`;
+- [x] recoverable backup retained when rollback cannot finish;
+- [x] staging cleanup contributes to rollback outcome;
+- [x] filesystem paths redacted from request/result/error diagnostics;
+- [x] implementation remains pure Kotlin in `core:testing`.
+
+## Package 1C — Repository generation entry point
 
 **Status:** next implementation package.
 
-### Manifest artifact
+Add one repository-owned Gradle/CLI command over the merged publisher.
 
-Emit canonical UTF-8 JSON with stable field order:
+### Inputs
 
-1. manifest schema version;
-2. generator schema version;
-3. profile ID;
-4. seed;
-5. exact source commit;
-6. expected parsed/skipped/warning/duplicate/unique counts;
-7. UTF-8 playlist byte size;
-8. playlist SHA-256.
+- named profile: `small-1k`, `medium-10k`, `large-50k`;
+- signed 64-bit seed;
+- exact lowercase 40-character source commit;
+- output directory;
+- explicit overwrite flag.
 
-Constraints:
+### Behavior
 
-- no reflection-dependent or map-order-dependent serialization;
-- LF line ending and trailing newline are explicit;
-- same manifest produces byte-identical JSON across runs;
-- writer flushes but never closes caller-owned output;
-- source commit and digests are validated lowercase hex;
-- manifest diagnostics do not contain corpus payload or future provider values.
-
-### Generation entry point
-
-Add a repository-owned command/script that:
-
-- takes named profile, numeric seed, exact source commit and output directory;
-- writes `.m3u8` and `.manifest.json` with deterministic names;
-- refuses accidental overwrite unless explicitly requested;
-- writes through temporary files and moves completed artifacts into place;
-- removes partial temporary artifacts on failure/cancellation;
-- emits no private source values and does not require Android SDK/emulator.
+- parse arguments without echoing untrusted values into failures;
+- reject missing, duplicate and unknown options deterministically;
+- call only the existing `M3uCorpusArtifactPublisher`;
+- print safe profile/count/filename/digest summary, never the full output path;
+- return stable non-zero exit codes for usage and publication failures;
+- require no Android SDK, emulator or runtime dependency;
+- expose a documented Gradle task suitable for local and self-hosted use.
 
 ### Acceptance
 
-- [ ] RED tests for canonical JSON snapshot, deterministic bytes, field order, LF/newline and stream ownership;
-- [ ] RED tests for invalid source commit/digest and safe diagnostics;
-- [ ] minimal manifest writer implementation;
-- [ ] RED tests for artifact naming, overwrite refusal and partial-file cleanup;
-- [ ] minimal generation entry point;
-- [ ] focused tests and Full;
-- [ ] evidence contains generated small profile and manifest only, not a committed large corpus;
-- [ ] squash merge as a focused PR; keep issue #27 open.
+- [ ] RED tests for valid invocation and deterministic filenames;
+- [ ] RED tests for missing/duplicate/unknown arguments and invalid profile/seed/SHA;
+- [ ] RED test that stdout/stderr do not contain output-directory or supplied secret-like values;
+- [ ] RED test for target-exists mapping and explicit overwrite;
+- [ ] minimal command implementation;
+- [ ] Gradle `JavaExec` entry point with lazy project properties;
+- [ ] focused tests and Full validation;
+- [ ] generated small-profile evidence only; no large corpus committed;
+- [ ] squash merge as a focused PR; issue #27 remains open.
 
-## Package 1C — HLS and XMLTV starter fixtures
+## Package 1D — HLS and XMLTV starter fixtures
 
 - HLS master/media playlists with relative paths, redirects, header-sensitive subresources and malformed tags;
 - XMLTV timezones, DST transitions, malformed timestamps, missing channel references and Unicode;
 - keep fixtures bounded; large XMLTV measurements belong to issue #28;
-- define typed fixture manifests rather than relying on filenames alone.
+- define typed fixture manifests rather than relying on filenames alone;
+- keep every locator/provider identity synthetic and reserved.
 
 ## Package 2 — Issue #27 measured boundaries
 
