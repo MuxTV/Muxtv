@@ -19,8 +19,8 @@ internal class PlayerProxyMeasurementRunner(
         withContext(Dispatchers.Default) {
             val fixture = RequestFixture.create()
             val operations = listOf(
-                measureOperation(OPERATION_REQUEST_CONSTRUCT, spec.workload) { sampleToken ->
-                    measureRequestConstruction(sampleToken, spec.workload.operationsPerSample, fixture)
+                measureOperation(OPERATION_REQUEST_CONSTRUCT, spec.workload) {
+                    measureRequestConstruction(spec.workload.operationsPerSample, fixture)
                 },
                 measureOperation(OPERATION_SETUP_ENVELOPE, spec.workload) { sampleToken ->
                     measureSetupEnvelopeRoundTrip(sampleToken, spec.workload.operationsPerSample, fixture)
@@ -58,12 +58,11 @@ internal class PlayerProxyMeasurementRunner(
         block: (String) -> BatchResult,
     ): PlayerProxyOperationReport {
         repeat(workload.warmupSamples) { index ->
-            val warmup = block("warmup-${index + 1}")
-            check(warmup.successfulResultCount == workload.operationsPerSample) {
+            val result = block("warmup-${index + 1}")
+            check(result.successfulResultCount == workload.operationsPerSample) {
                 "Player proxy measurement warmup agreement failed."
             }
         }
-
         val samples = buildList(workload.measuredSamples) {
             repeat(workload.measuredSamples) { index ->
                 val result = block("sample-${index + 1}")
@@ -96,7 +95,6 @@ internal class PlayerProxyMeasurementRunner(
     }
 
     private fun measureRequestConstruction(
-        sampleToken: String,
         operationCount: Int,
         fixture: RequestFixture,
     ): BatchResult {
@@ -118,9 +116,7 @@ internal class PlayerProxyMeasurementRunner(
             }
         }
         val completedAt = nanoTime()
-        check(retained != null && sampleToken.isNotEmpty()) {
-            "Player proxy request construction agreement failed."
-        }
+        check(retained != null) { "Player proxy request construction agreement failed." }
         return BatchResult(completedAt - startedAt, successful)
     }
 
@@ -137,9 +133,7 @@ internal class PlayerProxyMeasurementRunner(
             val decoded = MuxTvPlaybackSessionContract.parseSetupArgs(
                 MuxTvPlaybackSessionContract.setupArgs(id, request),
             )
-            if (decoded?.id == id && decoded.request == request) {
-                successful += 1
-            }
+            if (decoded?.id == id && decoded.request == request) successful += 1
         }
         val completedAt = nanoTime()
         return BatchResult(completedAt - startedAt, successful)
@@ -156,12 +150,9 @@ internal class PlayerProxyMeasurementRunner(
         var clearCallbacks = 0
         var successful = 0
         val coordinator = PlaybackSetupCoordinator<PlaybackSessionRequest>(
-            install = { installed ->
-                if (installed === request) installCallbacks += 1
-            },
+            install = { installed -> if (installed === request) installCallbacks += 1 },
             clearInstalled = { clearCallbacks += 1 },
         )
-
         val startedAt = nanoTime()
         ids.forEach { id ->
             val installed = coordinator.install(id, request)
@@ -194,7 +185,6 @@ internal class PlayerProxyMeasurementRunner(
             install = { installCallbacks += 1 },
             clearInstalled = { clearCallbacks += 1 },
         )
-
         val startedAt = nanoTime()
         ids.forEach { id ->
             val cancelled = coordinator.cancel(id)
@@ -234,7 +224,6 @@ internal class PlayerProxyMeasurementRunner(
             releasePending = { releasedPending += 1 },
             releaseConnected = { releasedConnected += 1 },
         )
-
         val startedAt = nanoTime()
         fixtures.forEach { fixture ->
             val firstAcquire = registry.acquire { fixture.firstFuture }
@@ -260,14 +249,12 @@ internal class PlayerProxyMeasurementRunner(
         return BatchResult(completedAt - startedAt, successful)
     }
 
-    private fun setupIds(
-        sampleToken: String,
-        count: Int,
-    ): List<PlaybackSetupId> = List(count) { index ->
-        requireNotNull(PlaybackSetupId.parse("$sampleToken-${index.toString().padStart(5, '0')}")) {
-            "Player proxy setup identity preparation failed."
+    private fun setupIds(sampleToken: String, count: Int): List<PlaybackSetupId> =
+        List(count) { index ->
+            requireNotNull(
+                PlaybackSetupId.parse("$sampleToken-${index.toString().padStart(5, '0')}"),
+            ) { "Player proxy setup identity preparation failed." }
         }
-    }
 
     private fun captureEnvironment(): PlayerProxyMeasurementEnvironment {
         val activityManager = requireNotNull(
@@ -305,14 +292,12 @@ internal class PlayerProxyMeasurementRunner(
         val secondFuture: ListenableFuture<SyntheticController>,
     )
 
-    private class SyntheticController(
-        private val identity: String,
-    ) {
-        override fun toString(): String = "SyntheticController(<redacted>)"
-
+    private class SyntheticController(private val identity: String) {
         init {
             require(identity.isNotBlank())
         }
+
+        override fun toString(): String = "SyntheticController(<redacted>)"
     }
 
     private class RequestFixture private constructor(
@@ -339,28 +324,35 @@ internal class PlayerProxyMeasurementRunner(
 
         companion object {
             fun create(): RequestFixture {
+                val mediaIdPrefix = "measurement-channel"
+                val variantIdPrefix = "measurement-variant"
+                val locator = "https://stream.example/player/live.m3u8"
+                val displayName = "Synthetic Player Channel"
+                val artworkUri = "https://images.example/player/channel.png"
                 val headers = linkedMapOf(
                     "Referer" to "https://portal.example/player",
                     "User-Agent" to "MuxTV-Player-Measurement/1",
-                )
-                val identityRequest = PlaybackSessionRequest(
-                    mediaId = "measurement-channel-0",
-                    variantId = "measurement-variant-0",
-                    locator = "https://stream.example/player/live.m3u8",
-                    displayName = "Synthetic Player Channel",
-                    artworkUri = "https://images.example/player/channel.png",
-                    requestHeaders = headers,
-                    insecureHttpApproved = false,
-                )
+                ).toMap()
+                val profile = List(ID_VARIANTS) { index ->
+                    PlaybackSessionRequest(
+                        mediaId = "$mediaIdPrefix-$index",
+                        variantId = "$variantIdPrefix-$index",
+                        locator = locator,
+                        displayName = displayName,
+                        artworkUri = artworkUri,
+                        requestHeaders = headers,
+                        insecureHttpApproved = false,
+                    )
+                }
                 return RequestFixture(
-                    mediaIdPrefix = "measurement-channel",
-                    variantIdPrefix = "measurement-variant",
-                    locator = identityRequest.locator,
-                    displayName = requireNotNull(identityRequest.displayName),
-                    artworkUri = requireNotNull(identityRequest.artworkUri),
-                    headers = headers.toMap(),
-                    insecureHttpApproved = identityRequest.insecureHttpApproved,
-                    sha256 = PlayerProxyRequestProfileDigest.sha256(identityRequest),
+                    mediaIdPrefix = mediaIdPrefix,
+                    variantIdPrefix = variantIdPrefix,
+                    locator = locator,
+                    displayName = displayName,
+                    artworkUri = artworkUri,
+                    headers = headers,
+                    insecureHttpApproved = false,
+                    sha256 = PlayerProxyRequestProfileDigest.sha256(profile),
                 )
             }
         }
