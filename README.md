@@ -40,6 +40,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - согласованная публикация `.m3u8 + .manifest.json` через staging, explicit overwrite, backup/restore и typed rollback failures;
 - repository-owned безопасный CLI и Gradle task для генерации corpus artifact pair;
 - bounded typed HLS/XMLTV starter fixtures с synthetic `.example` resources и expected outcomes;
+- reproducible descriptive M3U parse measurements с raw samples, wall-time/allocation distributions и environment metadata;
+- reproducible Android Room measurements для 250-entry batch, 10k staging, activation, first-page channel query и source overview;
+- complete length-prefixed fixture SHA-256, DB/WAL/SHM footprint и отдельный manual `CatalogMeasurement` mode;
 - permanent `core:testing` contracts в Fast/Full validation;
 - repository-owned Windows cleanup с `core.longpaths`, explicit reset/clean и clean-workspace evidence;
 - repository-owned PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
@@ -57,13 +60,16 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - PR #48 — deterministic corpus artifact pair publisher;
 - PR #50 — repository corpus generation command и configuration-cache-safe Gradle task;
 - PR #51 — bounded typed HLS/XMLTV starter fixtures;
-- issues #26 и #39 закрыты; issue #27 остаётся активной до descriptive measurements и repeated variance evidence.
+- PR #52 — repository truth переведён к descriptive measurements;
+- PR #53 — descriptive M3U parse measurements;
+- PR #54 — Android Room stage/activate/query measurements и durable baseline;
+- issues #26 и #39 закрыты; issue #27 остаётся активной до Player proxy и repeated variance evidence.
 
-Следующий package issue #27 — descriptive M3U parse measurements с точными environment metadata и распределениями. Затем: stage/activate/query/Player proxy measurements, XMLTV/EPG и пользовательские Guide/Search/Favorites/Recent.
+Следующий package issue #27 — Player request installation/reconnect proxy measurements. Затем выполняются повторные parse/Room серии на current, old-edge и low-RAM virtual profiles с cross-series variance analysis; threshold gate допускается только после повторяемых данных.
 
 До первой публичной alpha ещё не завершены:
 
-- reproducible parse/stage/activate/query/Player measurements и evidence-backed performance budgets;
+- Player setup/reconnect proxy measurements, repeated parse/Room variance и evidence-backed performance budgets;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -105,6 +111,15 @@ pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
   -NoDaemon
 ```
 
+Focused Android Room measurement на current TV profile:
+
+```powershell
+pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `
+  -SourceBranch local `
+  -SourceCommit <полный-lowercase-40-character-git-sha> `
+  -NoDaemon
+```
+
 Harness самостоятельно выбирает доступные Android TV system images, создаёт headless AVD, выполняет non-zero instrumentation suites, сохраняет evidence и гарантированно останавливает emulator. Эмуляторная матрица проверяет Android API/lifecycle/Room/Keystore/focus/MediaSession contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS или производительность слабого ARM SoC.
 
 ## Документация
@@ -112,6 +127,8 @@ Harness самостоятельно выбирает доступные Android
 - архитектура, спецификации, ADR и machine-readable metadata: [`.work`](.work/README.md);
 - активный последовательный план: [`docs/superpowers/plans/2026-07-27-post-http-approval-execution.md`](docs/superpowers/plans/2026-07-27-post-http-approval-execution.md);
 - benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md);
+- M3U parse baseline: [`docs/performance/2026-07-28-m3u-parse-baseline.md`](docs/performance/2026-07-28-m3u-parse-baseline.md);
+- Android Room baseline: [`docs/performance/2026-07-28-catalog-database-baseline.md`](docs/performance/2026-07-28-catalog-database-baseline.md);
 - HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
 - открытые функциональные packages ведутся через GitHub Issues и отдельные PR.
