@@ -1,11 +1,8 @@
 package app.muxtv.testing.iptv
 
 import java.io.OutputStream
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption.ATOMIC_MOVE
-import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 
 data class M3uCorpusArtifactRequest(
     val spec: M3uCorpusSpec,
@@ -46,8 +43,8 @@ class M3uCorpusArtifactException(
     },
 )
 
-/** Minimal filesystem seam for deterministic failure/rollback contracts in the testing module. */
-interface M3uCorpusArtifactFileOps {
+/** Minimal internal seam for deterministic failure/rollback contracts. */
+internal interface M3uCorpusArtifactFileOps {
     fun createDirectories(directory: Path)
 
     fun exists(path: Path): Boolean
@@ -63,13 +60,12 @@ interface M3uCorpusArtifactFileOps {
     fun move(
         source: Path,
         target: Path,
-        replaceExisting: Boolean,
     )
 
     fun deleteIfExists(path: Path)
 }
 
-object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
+internal object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
     override fun createDirectories(directory: Path) {
         Files.createDirectories(directory)
     }
@@ -87,19 +83,9 @@ object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
     override fun move(
         source: Path,
         target: Path,
-        replaceExisting: Boolean,
     ) {
-        if (!replaceExisting) {
-            // The default move contract must fail rather than replace an existing target.
-            Files.move(source, target)
-            return
-        }
-
-        try {
-            Files.move(source, target, ATOMIC_MOVE, REPLACE_EXISTING)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source, target, REPLACE_EXISTING)
-        }
+        // Deliberately no REPLACE_EXISTING: overwrite is implemented through explicit backup/restore.
+        Files.move(source, target)
     }
 
     override fun deleteIfExists(path: Path) {
@@ -107,9 +93,11 @@ object NioM3uCorpusArtifactFileOps : M3uCorpusArtifactFileOps {
     }
 }
 
-class M3uCorpusArtifactPublisher(
-    private val fileOps: M3uCorpusArtifactFileOps = NioM3uCorpusArtifactFileOps,
+class M3uCorpusArtifactPublisher private constructor(
+    private val fileOps: M3uCorpusArtifactFileOps,
 ) {
+    constructor() : this(NioM3uCorpusArtifactFileOps)
+
     fun publish(request: M3uCorpusArtifactRequest): M3uCorpusArtifactPair {
         val baseName = buildBaseName(request.spec)
         val playlistPath = request.outputDirectory.resolve("$baseName.m3u8")
@@ -154,7 +142,7 @@ class M3uCorpusArtifactPublisher(
                         baseName = baseName,
                         suffix = ".m3u8.bak",
                     )
-                    fileOps.move(playlistPath, playlistBackup, replaceExisting = false)
+                    fileOps.move(playlistPath, playlistBackup)
                 }
                 if (fileOps.exists(manifestPath)) {
                     manifestBackup = reserveBackupPath(
@@ -162,17 +150,17 @@ class M3uCorpusArtifactPublisher(
                         baseName = baseName,
                         suffix = ".manifest.json.bak",
                     )
-                    fileOps.move(manifestPath, manifestBackup, replaceExisting = false)
+                    fileOps.move(manifestPath, manifestBackup)
                 }
             }
 
             playlistPublishAttempted = true
-            fileOps.move(playlistTemp, playlistPath, replaceExisting = false)
+            fileOps.move(playlistTemp, playlistPath)
             playlistTemp = null
 
             // Manifest is the commit marker and is intentionally published last.
             manifestPublishAttempted = true
-            fileOps.move(manifestTemp, manifestPath, replaceExisting = false)
+            fileOps.move(manifestTemp, manifestPath)
             manifestTemp = null
 
             // The new pair is committed. Backup cleanup cannot invalidate that successful outcome.
@@ -272,7 +260,7 @@ class M3uCorpusArtifactPublisher(
                 fileOps.exists(target)
             } else {
                 fileOps.deleteIfExists(target)
-                fileOps.move(backup, target, replaceExisting = false)
+                fileOps.move(backup, target)
                 true
             }
         } catch (_: Exception) {
@@ -298,5 +286,10 @@ class M3uCorpusArtifactPublisher(
         } else {
             value
         }
+    }
+
+    internal companion object {
+        fun forTesting(fileOps: M3uCorpusArtifactFileOps): M3uCorpusArtifactPublisher =
+            M3uCorpusArtifactPublisher(fileOps)
     }
 }
