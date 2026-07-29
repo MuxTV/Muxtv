@@ -41,10 +41,9 @@ data class PlaybackSessionRequest(
     }
 
     override fun toString(): String =
-        "PlaybackSessionRequest(mediaId=$mediaId, variantId=$variantId, locator=<redacted>, " +
-            "displayName=$displayName, artworkUri=${artworkUri != null}, " +
-            "insecureHttpApproved=$insecureHttpApproved, " +
-            "requestHeaders=${requestHeaders.keys.sorted()})"
+        "PlaybackSessionRequest(mediaId=<redacted>, variantId=<redacted>, locator=<redacted>, " +
+            "hasDisplayName=${displayName != null}, hasArtworkUri=${artworkUri != null}, " +
+            "headerCount=${requestHeaders.size}, insecureHttpApproved=$insecureHttpApproved)"
 
     companion object {
         private const val KEY_MEDIA_ID = "media_id"

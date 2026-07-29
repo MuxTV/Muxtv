@@ -17,7 +17,7 @@ class PlaybackModelsTest {
     }
 
     @Test
-    fun `request string redacts locator and header values`() {
+    fun `request string redacts all user-controlled playback fields`() {
         val request = PlaybackRequest(
             variantId = StreamVariantId("variant-1"),
             locator = "https://stream.example/live.m3u8?token=secret",
@@ -32,8 +32,17 @@ class PlaybackModelsTest {
 
         val text = request.toString()
 
+        assertThat(text).contains("variantId=<redacted>")
+        assertThat(text).contains("mediaId=<redacted>")
         assertThat(text).contains("locator=<redacted>")
-        assertThat(text).contains("requestHeaders=[Referer, User-Agent]")
+        assertThat(text).contains("hasDisplayName=true")
+        assertThat(text).contains("hasArtworkUri=true")
+        assertThat(text).contains("headerCount=2")
+        assertThat(text).doesNotContain("variant-1")
+        assertThat(text).doesNotContain("channel-1")
+        assertThat(text).doesNotContain("News")
+        assertThat(text).doesNotContain("User-Agent")
+        assertThat(text).doesNotContain("Referer")
         assertThat(text).doesNotContain("token=secret")
         assertThat(text).doesNotContain("Secret Agent")
         assertThat(text).doesNotContain("portal.example")

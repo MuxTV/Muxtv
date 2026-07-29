@@ -30,10 +30,9 @@ data class PlaybackRequest(
     }
 
     override fun toString(): String =
-        "PlaybackRequest(variantId=$variantId, mediaId=$mediaId, locator=<redacted>, " +
-            "displayName=$displayName, artworkUri=${artworkUri != null}, " +
-            "insecureHttpApproved=$insecureHttpApproved, " +
-            "requestHeaders=${requestHeaders.keys.sorted()})"
+        "PlaybackRequest(variantId=<redacted>, mediaId=<redacted>, locator=<redacted>, " +
+            "hasDisplayName=${displayName != null}, hasArtworkUri=${artworkUri != null}, " +
+            "headerCount=${requestHeaders.size}, insecureHttpApproved=$insecureHttpApproved)"
 
     private companion object {
         const val MAX_REQUEST_HEADERS = 32

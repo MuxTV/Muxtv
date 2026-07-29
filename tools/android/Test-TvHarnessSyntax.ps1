@@ -9,10 +9,13 @@ New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 $diagnosticPath = Join-Path $evidenceDirectory "harness-syntax.log"
 
 $files = @(
+    (Join-Path $PSScriptRoot "Initialize-AndroidSdkEnvironment.ps1"),
     (Join-Path $PSScriptRoot "AndroidSdk.ps1"),
     (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"),
     (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1")
+    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"),
+    (Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"),
+    (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1")
 )
 
 $messages = @()
@@ -32,7 +35,7 @@ foreach ($file in $files) {
     }
 }
 
-$androidSdkContent = Get-Content -Path $files[0] -Raw
+$androidSdkContent = Get-Content -Path $files[1] -Raw
 $requiredFunctions = @(
     "Get-AndroidSdkTools",
     "Resolve-TvSystemImage",
