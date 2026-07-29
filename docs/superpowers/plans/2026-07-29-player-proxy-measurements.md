@@ -85,9 +85,9 @@ Reviewed focused head: `a5e8756f03716873531db9da2155f3a7de21bb15`.
 - `failureCount=0`, `thresholdApplied=false`;
 - durable interpretation: `docs/performance/2026-07-29-player-proxy-baseline.md`.
 
-Final permanent-tree head: `e15ff00b49edbc70bc9f8cf935d0ab1728e08897`.
+Final permanent-tree head: `53569e2388f96d8508a5ccabc1c566568af38b11`.
 
-- Full run: `30479580175` — success;
+- Full run: `30480086398` — success;
 - repository validation, corpus generation and M3U parse evidence all succeeded;
 - temporary focused workflow is absent;
 - no unresolved review threads.
