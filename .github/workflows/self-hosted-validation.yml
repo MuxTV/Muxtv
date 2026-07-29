@@ -76,18 +76,22 @@ jobs:
       - name: Inspect runner environment
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           Write-Host "Runner: $env:RUNNER_NAME"
           Write-Host "OS: $env:RUNNER_OS"
           Write-Host "Architecture: $env:RUNNER_ARCH"
           Write-Host "Workspace: $env:GITHUB_WORKSPACE"
           java -version
-          if ($env:ANDROID_SDK_ROOT) {
-            Write-Host "ANDROID_SDK_ROOT is configured."
-          } elseif ($env:ANDROID_HOME) {
-            Write-Host "ANDROID_HOME is configured."
-          } else {
-            throw "ANDROID_SDK_ROOT or ANDROID_HOME must be configured on the self-hosted runner."
+          if ($LASTEXITCODE -ne 0) {
+            throw "Java runtime inspection failed."
           }
+
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          Write-Host "Android SDK tools resolved by the repository harness."
+          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
+          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
 
       - name: Validate Android TV harness syntax
         shell: pwsh
