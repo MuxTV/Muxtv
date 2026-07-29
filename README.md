@@ -34,6 +34,7 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - один process-owned `ExoPlayer` и `MediaSessionService`;
 - request-scoped Media3 OkHttp transport, immutable per-playback headers, redirect/downgrade и cross-origin credential policy;
 - retryable MediaController ownership, remote-session reconnect epoch и setup SET/CANCEL protocol без late install;
+- immutable owned header snapshots в `PlaybackRequest` и `PlaybackSessionRequest` с сохранёнными constructor/copy/component/value contracts;
 - redacted catalog/playback/M3U diagnostics без locator, exact origin, query, provider/source identity и credential values;
 - deterministic provider-neutral M3U corpus с профилями 1k/10k/50k, explicit seed/source commit, expected counts, byte size и SHA-256;
 - canonical fixed-order UTF-8 manifest JSON со stable schema/profile IDs и exact source commit;
@@ -42,7 +43,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - bounded typed HLS/XMLTV starter fixtures с synthetic `.example` resources и expected outcomes;
 - reproducible descriptive M3U parse measurements с raw samples, wall-time/allocation distributions и environment metadata;
 - reproducible Android Room measurements для 250-entry batch, 10k staging, activation, first-page channel query и source overview;
-- complete length-prefixed fixture SHA-256, DB/WAL/SHM footprint и отдельный manual `CatalogMeasurement` mode;
+- reproducible Android Player control-plane proxy measurements для request construction, SET codec, setup coordination и controller reconnect;
+- complete length-prefixed fixture/request-profile SHA-256, DB/WAL/SHM footprint и ручные `CatalogMeasurement` / `PlayerMeasurement` modes;
+- deterministic Windows Android SDK bootstrap, если runner process не получил `ANDROID_SDK_ROOT`/`ANDROID_HOME`;
 - permanent `core:testing` contracts в Fast/Full validation;
 - repository-owned Windows cleanup с `core.longpaths`, explicit reset/clean и clean-workspace evidence;
 - repository-owned PowerShell TV harness с последовательной API 26/API 36 DeviceMatrix.
@@ -63,13 +66,16 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - PR #52 — repository truth переведён к descriptive measurements;
 - PR #53 — descriptive M3U parse measurements;
 - PR #54 — Android Room stage/activate/query measurements и durable baseline;
-- issues #26 и #39 закрыты; issue #27 остаётся активной до Player proxy и repeated variance evidence.
+- PR #55 — repository truth после Room measurements;
+- PR #56 — Android Player proxy measurements, durable baseline и deterministic SDK bootstrap;
+- PR #57 — immutable ownership playback request headers и real-Android Bundle contract;
+- issues #26 и #39 закрыты; issue #27 остаётся активной только до repeated multi-profile series и threshold decision.
 
-Следующий package issue #27 — Player request installation/reconnect proxy measurements. Затем выполняются повторные parse/Room серии на current, old-edge и low-RAM virtual profiles с cross-series variance analysis; threshold gate допускается только после повторяемых данных.
+Следующий package issue #27 — повторяемые parse/Room/Player серии на current, old-edge и low-RAM virtual profiles с единым environment fingerprint и cross-series variance analysis. Failing threshold допускается только после сопоставимых повторных данных.
 
 До первой публичной alpha ещё не завершены:
 
-- Player setup/reconnect proxy measurements, repeated parse/Room variance и evidence-backed performance budgets;
+- repeated multi-profile measurement series и обоснованный threshold/no-threshold decision;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -120,6 +126,15 @@ pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1
   -NoDaemon
 ```
 
+Focused Player control-plane proxy measurement:
+
+```powershell
+pwsh -NoProfile -File .\tools\android\Invoke-PlayerProxyDeviceValidation.ps1 `
+  -SourceBranch local `
+  -SourceCommit <полный-lowercase-40-character-git-sha> `
+  -NoDaemon
+```
+
 Harness самостоятельно выбирает доступные Android TV system images, создаёт headless AVD, выполняет non-zero instrumentation suites, сохраняет evidence и гарантированно останавливает emulator. Эмуляторная матрица проверяет Android API/lifecycle/Room/Keystore/focus/MediaSession contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS или производительность слабого ARM SoC.
 
 ## Документация
@@ -129,6 +144,7 @@ Harness самостоятельно выбирает доступные Android
 - benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md);
 - M3U parse baseline: [`docs/performance/2026-07-28-m3u-parse-baseline.md`](docs/performance/2026-07-28-m3u-parse-baseline.md);
 - Android Room baseline: [`docs/performance/2026-07-28-catalog-database-baseline.md`](docs/performance/2026-07-28-catalog-database-baseline.md);
+- Player proxy baseline: [`docs/performance/2026-07-29-player-proxy-baseline.md`](docs/performance/2026-07-29-player-proxy-baseline.md);
 - HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
 - открытые функциональные packages ведутся через GitHub Issues и отдельные PR.
@@ -141,6 +157,7 @@ Harness самостоятельно выбирает доступные Android
 - immutable revisions и atomic activation вместо частично обновлённого live state;
 - один process-owned `ExoPlayer` и `MediaSession`;
 - один in-process owner encrypted source access; никакого второго approval/security store;
+- playback requests владеют immutable snapshots заголовков после валидации;
 - функциональные, schema/security, corpus/measurement, infrastructure и визуальные изменения выполняются отдельными reviewable PR;
 - Kotlin/Compose/Room/Media3 остаются baseline; Rust, libmpv, bundled SQLite и второй engine требуют измеримого bottleneck, corpus и отдельного ADR.
 
