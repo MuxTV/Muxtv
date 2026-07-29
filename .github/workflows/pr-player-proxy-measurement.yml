@@ -1,0 +1,76 @@
+name: PR Player proxy measurement
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-player-proxy-measurement-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    if: github.head_ref == 'perf/player-proxy-measurements'
+    name: Player proxy measurement
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout without pre-clean
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+
+      - name: Clean workspace with Windows long paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to reset the Player measurement workspace."
+          }
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to clean the Player measurement workspace.`n$cleanOutput"
+          }
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $dirty) {
+            throw "Player measurement workspace is not clean."
+          }
+
+      - name: Initialize Android SDK and validate harness
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          pwsh -NoProfile -File .\tools\android\Test-TvHarnessSyntax.ps1
+
+      - name: Run current-TV Player proxy measurement
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          pwsh -NoProfile -File .\tools\android\Invoke-PlayerProxyDeviceValidation.ps1 `
+            -SourceBranch "${{ github.head_ref }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha }}" `
+            -EvidenceRoot ".work/evidence/pr-player-proxy" `
+            -NoDaemon
+
+      - name: Upload Player proxy evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-player-proxy-measurement-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/pr-player-proxy/**/*.json
+            .work/evidence/pr-player-proxy/**/*.log
+            .work/evidence/pr-player-proxy/**/*.txt
+            .work/evidence/pr-player-proxy/**/*.png
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
