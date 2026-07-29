@@ -17,6 +17,43 @@ class PlaybackModelsTest {
     }
 
     @Test
+    fun `request owns a stable snapshot of caller headers`() {
+        val source = linkedMapOf("User-Agent" to "MuxTV/1")
+        val request = PlaybackRequest(
+            variantId = StreamVariantId("variant-1"),
+            locator = "https://stream.example/live.m3u8",
+            requestHeaders = source,
+        )
+        val equalRequest = request.copy()
+        val hashCode = request.hashCode()
+
+        source["User-Agent"] = "Changed"
+        source["Authorization"] = "Bearer secret"
+
+        assertThat(request.requestHeaders).containsExactly("User-Agent", "MuxTV/1")
+        assertThat(request).isEqualTo(equalRequest)
+        assertThat(request.hashCode()).isEqualTo(hashCode)
+        assertThrows(UnsupportedOperationException::class.java) {
+            @Suppress("UNCHECKED_CAST")
+            (request.requestHeaders as MutableMap<String, String>)["X-Test"] = "value"
+        }
+    }
+
+    @Test
+    fun `copy snapshots replacement headers independently`() {
+        val replacement = linkedMapOf("Referer" to "https://portal.example/player")
+        val request = PlaybackRequest(
+            variantId = StreamVariantId("variant-1"),
+            locator = "https://stream.example/live.m3u8",
+        ).copy(requestHeaders = replacement)
+
+        replacement.clear()
+
+        assertThat(request.requestHeaders)
+            .containsExactly("Referer", "https://portal.example/player")
+    }
+
+    @Test
     fun `request string redacts all user-controlled playback fields`() {
         val request = PlaybackRequest(
             variantId = StreamVariantId("variant-1"),
