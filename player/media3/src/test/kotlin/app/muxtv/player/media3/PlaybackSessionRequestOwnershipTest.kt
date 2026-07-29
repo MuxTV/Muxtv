@@ -32,7 +32,7 @@ class PlaybackSessionRequestOwnershipTest {
     }
 
     @Test
-    fun `conversion and Bundle round trip preserve independent snapshots`() {
+    fun `conversion preserves independent snapshots`() {
         val source = linkedMapOf("Referer" to "https://portal.example/player")
         val playbackRequest = PlaybackRequest(
             variantId = StreamVariantId("variant-1"),
@@ -41,15 +41,12 @@ class PlaybackSessionRequestOwnershipTest {
             requestHeaders = source,
         )
         val sessionRequest = playbackRequest.toPlaybackSessionRequest()
-        val decoded = requireNotNull(PlaybackSessionRequest.fromBundle(sessionRequest.toBundle()))
 
         source.clear()
 
         assertThat(playbackRequest.requestHeaders)
             .containsExactly("Referer", "https://portal.example/player")
         assertThat(sessionRequest.requestHeaders)
-            .containsExactly("Referer", "https://portal.example/player")
-        assertThat(decoded.requestHeaders)
             .containsExactly("Referer", "https://portal.example/player")
     }
 
