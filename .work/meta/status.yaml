@@ -8,7 +8,7 @@ repository_state:
   ci: present_self_hosted_full_device_matrix_and_focused_measurements
   tests: present_unit_android_and_instrumentation
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_parse_and_room_measurements
+  documentation: synchronized_after_player_measurements_and_header_ownership
   architecture_version: 3
 active_branch_after_merge: main
 implemented:
@@ -29,6 +29,7 @@ implemented:
   - media3_session_and_basic_player
   - media3_request_scoped_okhttp_transport
   - playback_header_isolation
+  - immutable_playback_request_header_snapshots
   - playback_redirect_downgrade_and_cross_origin_policy
   - retryable_media_controller_lifecycle
   - remote_session_reconnect_epoch
@@ -38,7 +39,7 @@ implemented:
   - singleton_remote_source_access_owner
   - typed_playback_catalog_resolution
   - player_http_warning_reresolution_and_revocation
-  - redacted_catalog_and_approval_diagnostics
+  - redacted_catalog_approval_and_playback_request_diagnostics
   - redacted_m3u_diagnostics
   - deterministic_m3u_corpus_profiles_1k_10k_50k
   - deterministic_m3u_manifest_counts_size_sha256
@@ -46,17 +47,18 @@ implemented:
   - deterministic_m3u_manifest_artifact_pair
   - explicit_artifact_overwrite_backup_restore
   - typed_artifact_publish_and_rollback_failures
-  - redacted_artifact_filesystem_diagnostics
   - repository_owned_corpus_command
   - configuration_cache_safe_corpus_gradle_task
-  - exact_head_small_corpus_evidence
   - bounded_typed_hls_xmltv_starter_fixtures
-  - permanent_core_testing_validation_gate
   - descriptive_m3u_parse_measurements
   - descriptive_android_room_stage_activate_query_measurements
-  - complete_length_prefixed_room_fixture_identity
+  - descriptive_android_player_proxy_measurements
+  - complete_length_prefixed_room_and_player_fixture_identity
   - host_validated_instrumentation_result_bundle_reports
   - manual_catalog_measurement_mode
+  - manual_player_measurement_mode
+  - deterministic_windows_android_sdk_bootstrap
+  - permanent_core_testing_validation_gate
   - windows_long_path_clean_workspace_gate
   - api_26_api_36_tv_device_harness
 accepted_specifications:
@@ -79,6 +81,9 @@ accepted_specifications:
   - fire_tv
   - reference_repository_review
   - exact_origin_http_playback_approval
+  - catalog_database_measurements
+  - player_proxy_measurements
+  - playback_request_header_ownership
 verified_evidence:
   source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
   media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
@@ -92,21 +97,21 @@ verified_evidence:
   corpus_artifact_pair_publisher_merge: d7bc58a398c065018d9131c176e8e1c131766c88
   corpus_generation_entry_point_merge: 7134a4aaf2968ae0b7d62cf01bab254eb97e6b9f
   typed_starter_fixtures_merge: a26fd4ba492948c413b317c168db5678db4ed00e
-  repository_truth_measurement_phase_merge: 0865e604ddce4f524de47e77cfb1366853484eb4
   m3u_parse_measurement_merge: ccf61362b61b2097cb56a4589f83edc7fa068ca1
   android_room_measurement_merge: d5afef744de71715ce3d34acd6ef80c4bd8fa957
+  repository_truth_after_room_merge: eca7982f18c12c23c6aeeecf39db8d1445c8c28d
+  player_proxy_measurement_merge: e020d747b59e07c45db5076b38409f4319c51b96
+  playback_header_ownership_merge: f1a92a2d8ef05f0dd61b0492b51a732a4978bd54
   final_exact_origin_full_run: 30295592181
   http_approval_device_matrix_run: 30287803018
-  repository_cleanup_full_run: 30297044258
-  deterministic_m3u_foundation_full_run: 30365096484
-  canonical_corpus_manifest_full_run: 30367547682
-  corpus_artifact_pair_publisher_full_run: 30370708253
-  corpus_generation_entry_point_full_run: 30377371429
-  typed_starter_fixtures_full_run: 30378845744
   m3u_parse_measurement_full_run: 30383400416
-  android_room_reviewed_full_run: 30400010584
   android_room_focused_run: 30400010579
   android_room_final_permanent_tree_full_run: 30401263889
+  player_proxy_focused_run: 30478201477
+  player_proxy_final_permanent_tree_full_run: 30480086398
+  playback_header_ownership_full_run: 30481920247
+  playback_header_ownership_device_current_run: 30482460465
+  playback_header_ownership_final_full_run: 30483078985
   generated_small_corpus:
     profile: small-1k
     seed: 20260728
@@ -137,6 +142,19 @@ verified_evidence:
     activation_p50_nanos: 5410500
     active_channel_page_p50_nanos: 35101500
     source_overview_p50_nanos: 5888100
+  android_player_proxy_baseline:
+    api: 36
+    build_mode: debug-instrumentation
+    measured_iterations: 10
+    operations_per_sample: 1000
+    threshold_applied: false
+    failure_count: 0
+    request_profile_sha256: de27c2dad7cb740dab5a62189b7ff5da78b851a217d18e1698497fd44c135a75
+    request_construct_p50_nanos: 365202
+    setup_envelope_roundtrip_p50_nanos: 78649
+    coordinator_install_clear_p50_nanos: 3314
+    coordinator_cancel_p50_nanos: 1207
+    registry_reconnect_p50_nanos: 12458
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
@@ -148,39 +166,26 @@ verified_evidence:
       fallback_used: false
       ram_mb: 2048
       cpu_cores: 2
-  instrumentation_per_profile:
-    credentials: 4
-    database: 21
-    media3: 10
-    application: 12
 next_milestone:
-  id: phase-01-player-proxy-and-variance-measurements
+  id: phase-01-repeated-measurement-variance
   issue: 27
   plan: docs/superpowers/plans/2026-07-27-post-http-approval-execution.md
   completed_packages:
-    - deterministic_provider_neutral_m3u_profiles_1k_10k_50k
-    - explicit_seed_source_commit_and_generator_schema
-    - expected_counts_byte_size_and_sha256_manifest
-    - canonical_serialized_manifest_json
-    - deterministic_playlist_manifest_pair_publication
-    - explicit_overwrite_backup_restore_and_typed_rollback
-    - repository_owned_corpus_generation_entry_point
-    - exact_head_small_corpus_generation_evidence
-    - deterministic_hls_and_xmltv_starter_fixtures
-    - deterministic_byte_identical_output
-    - duplicate_malformed_long_metadata_relative_url_and_header_variants
-    - real_parser_contract_and_permanent_testing_gate
+    - deterministic_corpus_and_canonical_artifacts
+    - repository_owned_generation_entry_point
+    - bounded_hls_xmltv_starter_fixtures
     - descriptive_m3u_parse_measurements
     - descriptive_android_room_stage_activate_query_measurements
-    - complete_room_fixture_identity_and_baseline_report
+    - descriptive_android_player_proxy_measurements
+    - immutable_playback_request_header_ownership
   remaining_exit_criteria:
-    - descriptive_player_setup_proxy_measurements
-    - repeated_current_old_edge_and_low_ram_series
+    - repeated_current_profile_series
+    - old_edge_api_26_or_28_series
+    - current_low_ram_series
     - cross_series_variance_analysis
-    - dedicated_threshold_gate_decision
+    - dedicated_threshold_gate_or_no_threshold_decision
     - fixture_consumer_binding_when_runtime_consumers_exist
 known_gaps:
-  - player_setup_reconnect_proxy_measurements
   - repeated_measurement_variance
   - xmltv_epg_revisions
   - guide_search_favorites_recent_product_flows
