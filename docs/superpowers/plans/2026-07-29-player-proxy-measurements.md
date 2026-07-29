@@ -1,6 +1,6 @@
 # Player Proxy Measurements Implementation Plan
 
-> **Status:** implementation and focused Android evidence complete; temporary workflow cleanup and final Full remain before merge.
+> **Status:** implementation and focused Android evidence complete; final permanent-tree Full is running before merge.
 
 **Goal:** Measure repository-owned Player request construction, SET envelope codec, setup coordination and reconnect registry proxies on Android without invoking ExoPlayer, network, Binder service startup or UI.
 
@@ -89,9 +89,9 @@ Reviewed focused head: `a5e8756f03716873531db9da2155f3a7de21bb15`.
 
 - [x] focused Android evidence on the reviewed source head;
 - [x] raw distributions and limitations documented;
-- [ ] remove temporary `pr-player-proxy-measurement.yml`;
-- [ ] run Full on the permanent tree;
-- [ ] confirm no unresolved review threads;
+- [x] temporary PR workflow removed;
+- [ ] Full run `30479409421` on final permanent-tree head `ec6abd67958ac07ee956e86e52a10c72cabde8ff`;
+- [x] no unresolved review threads before final Full;
 - [ ] mark ready and squash merge;
 - [ ] update issue #27.
 
