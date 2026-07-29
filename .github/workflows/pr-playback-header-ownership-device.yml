@@ -1,0 +1,71 @@
+name: PR playback header ownership device
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-playback-header-ownership-device-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.head_ref == 'fix/playback-request-header-ownership'
+    name: Playback header ownership DeviceCurrent
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout without pre-clean
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+
+      - name: Clean workspace
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
+          $clean = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$clean" }
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace is not clean." }
+
+      - name: Initialize Android SDK and validate harness
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          pwsh -NoProfile -File .\tools\android\Test-TvHarnessSyntax.ps1
+
+      - name: Run DeviceCurrent
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
+            -Mode DeviceCurrent `
+            -SourceBranch "${{ github.head_ref }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha }}" `
+            -EvidenceRoot ".work/evidence/pr-playback-header-ownership" `
+            -NoDaemon
+
+      - name: Upload device evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-playback-header-ownership-device-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/pr-playback-header-ownership/**/*.json
+            .work/evidence/pr-playback-header-ownership/**/*.log
+            .work/evidence/pr-playback-header-ownership/**/*.txt
+            .work/evidence/pr-playback-header-ownership/**/*.png
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
