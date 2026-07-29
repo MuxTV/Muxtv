@@ -1,99 +1,104 @@
 # Player Proxy Measurements Implementation Plan
 
-> **Execution mode:** TDD on branch `perf/player-proxy-measurements`. Preserve production behaviour and publish descriptive evidence only.
+> **Status:** implementation and focused Android evidence complete; temporary workflow cleanup and final Full remain before merge.
 
 **Goal:** Measure repository-owned Player request construction, SET envelope codec, setup coordination and reconnect registry proxies on Android without invoking ExoPlayer, network, Binder service startup or UI.
 
-**Architecture:** Debug-only model/runner/writer in `player:media3`; one dedicated instrumentation entry; repository-owned PowerShell host validation; canonical result-bundle JSON; manual focused self-hosted mode.
+**Architecture:** Debug-only model/runner/writer in `player:media3`; one dedicated instrumentation entry; repository-owned PowerShell host validation; canonical result-bundle JSON; permanent manual self-hosted mode.
 
-## Constraints
+## Constraints preserved
 
 - no production request/setup/reconnect behaviour change;
-- no public API expansion;
-- no release dependency;
-- no real ExoPlayer, MediaSource, network, Surface or first-frame work;
-- 2 warmup samples, 10 retained samples and 1,000 operations per sample by default;
-- five fixed operations;
-- all raw samples retained;
+- no public API expansion or release dependency;
+- no ExoPlayer, MediaSource, network, Surface, Binder-service or first-frame work;
+- 2 warmup samples, 10 retained samples and 1,000 operations per sample;
+- five fixed operations and all raw samples retained;
 - nearest-rank min/p50/p90/p95/max;
 - `thresholdApplied=false` and no failing budget;
 - complete deterministic request-profile SHA-256;
 - no locator/header/setup/controller values in report diagnostics;
-- ordinary DeviceCurrent/DeviceMatrix must record zero skips and exclude the measurement class.
+- ordinary DeviceCurrent/DeviceMatrix exclude the measurement class without skips.
 
-## Task 1 — opening RED contracts
+## Completed TDD sequence
 
-1. Add unit contract for nearest-rank summaries and immutable sample snapshots.
-2. Add unit contract that every request-profile field and header boundary contributes to SHA-256.
-3. Add canonical JSON contract: fixed order, LF, trailing newline, threshold false and payload redaction.
-4. Add instrumentation contract requiring exactly:
-   - `request-construct`;
-   - `setup-envelope-roundtrip`;
-   - `coordinator-install-active-clear`;
-   - `coordinator-cancel-before-install`;
-   - `registry-disconnect-reacquire`.
-5. Run Full and confirm failure is caused by absent measurement types.
+### Task 1 — opening RED contracts
 
-## Task 2 — model, statistics and identity
+- [x] nearest-rank and immutable-snapshot unit contracts;
+- [x] request-profile field/header digest contracts;
+- [x] canonical LF JSON and payload-redaction contract;
+- [x] fixed five-operation instrumentation contract;
+- [x] opening Full failed on absent measurement types.
 
-1. Add bounded workload/spec/environment/sample/operation/report models.
-2. Snapshot mutable inputs on construction.
-3. Add nearest-rank statistics.
-4. Add length-prefixed request-profile digest covering media ID, variant ID, locator, display name, artwork URI, approval flag and ordered header names/values.
-5. Keep `toString()` payload-redacted.
-6. Add canonical UTF-8/LF JSON writer.
-7. Make unit contracts GREEN.
+### Task 2 — model, statistics and identity
 
-## Task 3 — Android proxy runner
+- [x] bounded workload/spec/environment/sample/operation/report models;
+- [x] immutable snapshots;
+- [x] nearest-rank statistics;
+- [x] length-prefixed digest over every request field, nullable boundary and sorted header pair;
+- [x] payload-redacted request/report diagnostics;
+- [x] fixed-order UTF-8/LF JSON writer.
 
-1. Prepare synthetic `.example` fixture and identity batches outside timers.
-2. Measure request construction in a 1,000-iteration batch.
-3. Measure SET envelope encode/decode round-trip.
-4. Measure install + active clear through `PlaybackSetupCoordinator`.
-5. Measure cancel-before-install rejection path.
-6. Measure `ControllerConnectionRegistry` disconnect + reacquire sequence with fake identities/immediate futures.
-7. Verify exact result counts after each batch.
-8. Capture Android environment.
-9. Publish no report after any invariant failure.
+### Task 3 — Android proxy runner
 
-## Task 4 — dedicated instrumentation boundary
+- [x] synthetic `.example` fixture and identities prepared outside timers;
+- [x] request construction batch;
+- [x] SET envelope encode/decode round-trip;
+- [x] install + active clear through `PlaybackSetupCoordinator`;
+- [x] cancel-before-install rejection path;
+- [x] `ControllerConnectionRegistry` disconnect + reacquire sequence;
+- [x] exact result-count verification;
+- [x] Android environment capture;
+- [x] no publishable report after invariant failure.
 
-1. Add `PlayerProxyMeasurement` annotation.
-2. Exclude it in default Media3 instrumentation runner arguments.
-3. Include only the measurement class when `playerProxyMeasurements=true`.
-4. Parse strict source commit, runner label, warmups, samples, iterations and output name.
-5. Run the proxy runner and assert fixed operation order/counts.
-6. Serialize once and place Base64 JSON in the instrumentation result bundle.
-7. Preserve ordinary Media3 correctness test count with zero skips.
+### Task 4 — dedicated instrumentation boundary
 
-## Task 5 — host and self-hosted execution
+- [x] `PlayerProxyMeasurement` annotation;
+- [x] default-suite exclusion;
+- [x] focused class execution through `playerProxyMeasurements=true`;
+- [x] strict bounded arguments;
+- [x] fixed operation order/count assertions;
+- [x] Base64 instrumentation result-bundle publication.
 
-1. Add `Invoke-PlayerProxyMeasurement.ps1` for one booted device.
-2. Remove stale test results before execution.
-3. Run only the dedicated Media3 class.
-4. Decode one fresh result payload.
-5. Validate schema/method/build mode/source commit/profile SHA/operation order/raw counts/results/threshold/failure count.
-6. Add current-TV device wrapper reusing the repository AVD lifecycle.
-7. Retain child output and bounded secret-safe failure metadata.
-8. Add manual `PlayerMeasurement` workflow mode; do not add an always-on PR measurement.
+### Task 5 — host and self-hosted execution
 
-## Task 6 — evidence and merge
+- [x] `Invoke-PlayerProxyMeasurement.ps1` for one booted device;
+- [x] stale-result cleanup;
+- [x] exact class execution;
+- [x] one fresh result payload decode;
+- [x] schema/build/source/digest/operation/sample host validation;
+- [x] current-TV AVD wrapper;
+- [x] bounded failure metadata and child logs;
+- [x] permanent manual `PlayerMeasurement` workflow mode;
+- [x] deterministic Android SDK bootstrap when runner env variables are absent.
 
-1. Run Full on reviewed source head.
-2. Run focused current Android TV measurement on the same head.
-3. Record artifact name/digest, exact environment, profile SHA and raw distributions.
-4. Add `docs/performance/2026-07-29-player-proxy-baseline.md`.
-5. Explicitly state proxy/non-playback limitations.
-6. Review final diff and threads.
-7. Remove any temporary PR-only workflow.
-8. Run cleaned-tree Full.
-9. Mark ready and squash merge.
-10. Update issue #27; keep it open for repeated variance/threshold decision.
+## Evidence
+
+Reviewed focused head: `a5e8756f03716873531db9da2155f3a7de21bb15`.
+
+- dedicated run: `30478201477` — success;
+- artifact: `pr-player-proxy-measurement-30478201477-1`;
+- artifact digest: `sha256:59566b3da0d34eb111adb2d471fe23d60b74444344e11d4996bdd8bcd87feba1`;
+- Android TV API 36 x86_64, 2 cores, memory class 192 MB, no fallback;
+- request profile SHA-256: `de27c2dad7cb740dab5a62189b7ff5da78b851a217d18e1698497fd44c135a75`;
+- ten retained samples for each of five operations;
+- 1,000 successful results per sample;
+- `failureCount=0`, `thresholdApplied=false`;
+- durable interpretation: `docs/performance/2026-07-29-player-proxy-baseline.md`.
+
+## Final merge gates
+
+- [x] focused Android evidence on the reviewed source head;
+- [x] raw distributions and limitations documented;
+- [ ] remove temporary `pr-player-proxy-measurement.yml`;
+- [ ] run Full on the permanent tree;
+- [ ] confirm no unresolved review threads;
+- [ ] mark ready and squash merge;
+- [ ] update issue #27.
 
 ## Follow-up after this package
 
-1. Repeat parse and Room series on current, old-edge and low-RAM virtual profiles.
-2. Add comparable Player proxy series where the instrumentation APIs are supported.
-3. Calculate cross-series median, range and coefficient of variation.
-4. Decide whether any dedicated threshold gate is justified.
+1. Repeat parse, Room and Player proxy series on comparable current, old-edge and low-RAM virtual profiles.
+2. Calculate cross-series median, range and coefficient of variation.
+3. Decide whether any dedicated threshold gate is justified.
+4. Fix playback-request header snapshot ownership in a separate compatibility-focused package.
 5. Do not infer codec, zapping, first-frame, Fire OS or physical-TV performance from emulator proxy data.
