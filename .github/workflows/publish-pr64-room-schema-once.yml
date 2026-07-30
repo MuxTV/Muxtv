@@ -1,0 +1,75 @@
+name: Publish PR64 Room schema once
+
+on:
+  push:
+    branches:
+      - feat/epg-immutable-revisions
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-pr64-room-schema-once
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: feat/epg-immutable-revisions
+          fetch-depth: 0
+          clean: false
+
+      - name: Clean workspace
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          git reset --hard HEAD
+          git clean -ffdx
+
+      - name: Resolve Android SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Generate and commit Room schema v5
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $schemaPath = "core/database/schemas/app.muxtv.database.MuxTvDatabase/5.json"
+          $workflowPath = ".github/workflows/publish-pr64-room-schema-once.yml"
+
+          .\gradlew.bat :core:database:copyRoomSchemas --no-daemon --stacktrace --console=plain
+          if ($LASTEXITCODE -ne 0) {
+            throw "Room schema generation failed."
+          }
+          if (-not (Test-Path $schemaPath -PathType Leaf)) {
+            throw "Room schema v5 was not generated."
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $schemaPath
+          git rm -- $workflowPath
+
+          $staged = (& git diff --cached --name-only | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($staged)) {
+            throw "No Room schema publication changes were staged."
+          }
+
+          git commit -m "build: commit Room schema v5"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to commit Room schema v5."
+          }
+          git push origin HEAD:feat/epg-immutable-revisions
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to push Room schema v5 commit."
+          }
