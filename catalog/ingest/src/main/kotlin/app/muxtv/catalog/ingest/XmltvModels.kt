@@ -222,6 +222,7 @@ enum class XmltvParseFailureReason {
     ForbiddenDoctype,
     ForbiddenExternalEntity,
     SecureConfigurationUnavailable,
+    InputReadFailed,
     InputBytesExceeded,
     DepthExceeded,
     ElementCountExceeded,
