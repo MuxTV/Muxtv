@@ -230,9 +230,18 @@ object MeasurementReportAdapter {
             values = samples.map(ParsedM3uSample::wallTime),
         )
         val allocationSummary = root.requireNullableObject("allocationSummaryBytes")
-        if (allocationSummary != null) {
-            val allocations = samples.map { it.allocatedBytes ?: invalidReport() }
-            validateSummary(parseSummary(allocationSummary), allocations, allowZero = true)
+        when (allocationMeasurement) {
+            "thread-allocated-bytes" -> {
+                val summary = allocationSummary ?: invalidReport()
+                val allocations = samples.map { it.allocatedBytes ?: invalidReport() }
+                validateSummary(parseSummary(summary), allocations, allowZero = true)
+            }
+
+            "unavailable" -> if (
+                allocationSummary != null || samples.any { it.allocatedBytes != null }
+            ) {
+                invalidReport()
+            }
         }
 
         val identity = MeasurementComparisonIdentity(
