@@ -223,7 +223,9 @@ class StreamingXmltvParserTest {
             }
         }
 
-        assertThat(sinkFailure).isSameInstanceAs(expectedFailure)
+        assertThat(sinkFailure).isInstanceOf(IllegalStateException::class.java)
+        assertThat(sinkFailure.message).contains("sink-failed-with-private-value")
+        assertThat(sinkFailure.causeChainContainsIdentity(expectedFailure)).isTrue()
     }
 
     @Test
@@ -245,7 +247,9 @@ class StreamingXmltvParserTest {
             }
         }
 
-        assertThat(cancellation).isSameInstanceAs(expectedCancellation)
+        assertThat(cancellation).isInstanceOf(CancellationException::class.java)
+        assertThat(cancellation.message).contains("expected cancellation")
+        assertThat(cancellation.causeChainContainsIdentity(expectedCancellation)).isTrue()
     }
 
     private fun assertLimitReason(
@@ -261,6 +265,17 @@ class StreamingXmltvParserTest {
         }
         assertThat(failure.reason).isEqualTo(expected)
     }
+}
+
+private fun Throwable.causeChainContainsIdentity(expected: Throwable): Boolean {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current === expected) return true
+        val next = current.cause
+        if (next === current) return false
+        current = next
+    }
+    return false
 }
 
 private fun Throwable.renderedStackTrace(): String = StringWriter().also { output ->
@@ -290,4 +305,3 @@ private class CloseRecordingInputStream(bytes: ByteArray) : InputStream() {
         closed = true
         delegate.close()
     }
-}
