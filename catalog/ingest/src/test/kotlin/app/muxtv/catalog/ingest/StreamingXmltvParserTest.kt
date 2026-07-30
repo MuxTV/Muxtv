@@ -5,7 +5,6 @@ import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -98,7 +97,7 @@ class StreamingXmltvParserTest {
         val externalSystemId = "https://attacker.example/private.dtd?credential=secret"
         val doctype = """
             <?xml version="1.0"?>
-            <!DOCTYPE tv SYSTEM "$externalSystemId">
+            <!DOCTYPE tv SYSTEM="$externalSystemId">
             <tv/>
         """.trimIndent()
 
@@ -212,13 +211,14 @@ class StreamingXmltvParserTest {
         }
         assertThat(sinkFailure).isSameInstanceAs(expectedFailure)
 
+        val expectedCancellation = CancellationException("expected cancellation")
         val cancellation = assertThrows(CancellationException::class.java) {
             runTest {
                 StreamingXmltvParser().parse(
                     ByteArrayInputStream("<tv><channel id=\"one\"/></tv>".toByteArray()),
                     object : XmltvParseSink {
                         override suspend fun onChannel(channel: XmltvChannel) {
-                            cancel("expected cancellation")
+                            throw expectedCancellation
                         }
 
                         override suspend fun onProgramme(programme: XmltvProgramme) = Unit
@@ -227,7 +227,7 @@ class StreamingXmltvParserTest {
                 )
             }
         }
-        assertThat(cancellation.message).contains("expected cancellation")
+        assertThat(cancellation).isSameInstanceAs(expectedCancellation)
     }
 
     private fun assertLimitReason(
