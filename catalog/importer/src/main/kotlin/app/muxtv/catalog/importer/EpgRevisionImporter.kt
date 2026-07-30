@@ -31,6 +31,10 @@ data class EpgImportRequest(
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
     }
+
+    override fun toString(): String =
+        "EpgImportRequest(providerLinked=${providerSourceId != null}, " +
+            "accessRefPresent=${accessRef != null}, defaultZonePresent=${defaultZoneId != null})"
 }
 
 sealed interface EpgImportResult {
