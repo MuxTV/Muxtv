@@ -305,3 +305,4 @@ private class CloseRecordingInputStream(bytes: ByteArray) : InputStream() {
         closed = true
         delegate.close()
     }
+}
