@@ -55,8 +55,8 @@ class MeasurementSeriesCommandTest {
                 family = "m3u-parse",
                 outputName = "m3u-current-variance.json",
                 runs = listOf(
-                    "current-01" to "m3u-current-01.json",
-                    "current-02" to "m3u-current-02.json",
+                    "private-run-a" to "m3u-current-01.json",
+                    "private-run-b" to "m3u-current-02.json",
                 ),
                 androidProfile = "null",
             ),
@@ -78,7 +78,7 @@ class MeasurementSeriesCommandTest {
         assertThat(variance).contains("\"seriesCount\": 2")
         assertThat(variance).contains(sha256(firstBytes))
         assertThat(variance).contains(sha256(secondBytes))
-        assertThat(variance).doesNotContain("current-01")
+        assertThat(variance).doesNotContain("private-run-a")
         assertThat(variance).doesNotContain(root.toString())
 
         val manifest = Files.readString(output.resolve("m3u-current-variance.manifest.json"))
@@ -87,7 +87,7 @@ class MeasurementSeriesCommandTest {
         assertThat(manifest).contains("\"family\": \"m3u-parse\"")
         assertThat(manifest).contains("\"reportName\": \"m3u-current-01.json\"")
         assertThat(manifest).contains("\"sha256\": \"${sha256(firstBytes)}\"")
-        assertThat(manifest).doesNotContain("current-01")
+        assertThat(manifest).doesNotContain("private-run-a")
         assertThat(manifest).doesNotContain(root.toString())
     }
 
