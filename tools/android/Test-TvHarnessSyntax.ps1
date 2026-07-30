@@ -62,6 +62,12 @@ if ($messages.Count -gt 0) {
     throw $message
 }
 
-$message = "Android TV harness PowerShell syntax and function surface are valid."
+$measurementHarnessCheck = Join-Path $repositoryRoot "tools\measurements\Test-MeasurementHarnessSyntax.ps1"
+if (-not (Test-Path $measurementHarnessCheck -PathType Leaf)) {
+    throw "Measurement harness syntax checker was not found."
+}
+& $measurementHarnessCheck
+
+$message = "Android TV and measurement harness PowerShell syntax and function surfaces are valid."
 Set-Content -Path $diagnosticPath -Value $message -Encoding utf8
 Write-Host $message
