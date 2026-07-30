@@ -394,7 +394,7 @@ try {
                 "-SourceCommit", $SourceCommit,
                 "-RunnerLabel", $runnerLabel,
                 "-Warmups", "2",
-                "-Iterations", "5",
+                "-Samples", "5",
                 "-OperationsPerSample", "1000",
                 "-OutputName", $playerOutputName,
                 "-EvidenceDirectory", $repetitionDirectory
@@ -493,14 +493,10 @@ try {
     Write-Host "repetitions=$Repetitions"
     Write-Host "thresholdApplied=false"
 } catch {
-    $commandName = [string]$_.InvocationInfo.MyCommand.Name
-    if ([string]::IsNullOrWhiteSpace($commandName)) {
-        $commandName = "unknown"
-    }
     $manifest.status = "failed"
     $manifest.failureCode = "measurement-series-failed"
     $manifest.failureType = $_.Exception.GetType().FullName
-    $manifest.failureCommand = [System.IO.Path]::GetFileName($commandName)
+    $manifest.failureCommand = "Invoke-MeasurementSeries.ps1"
     $manifest.failureLine = [int]$_.InvocationInfo.ScriptLineNumber
     Write-Host "Measurement variance series failed. See evidence."
     throw "Measurement variance series failed. See evidence."
