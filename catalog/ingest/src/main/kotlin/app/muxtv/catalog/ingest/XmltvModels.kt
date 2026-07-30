@@ -10,6 +10,7 @@ class XmltvParseLimits(
     val maxInputBytes: Long = 512L * 1024L * 1024L,
     val maxDepth: Int = 64,
     val maxElements: Long = 10_000_000L,
+    val maxAttributesPerElement: Int = 64,
     val maxTextCharactersPerElement: Int = 256 * 1024,
     val maxChannels: Int = 100_000,
     val maxProgrammes: Int = 2_000_000,
@@ -27,6 +28,7 @@ class XmltvParseLimits(
         require(maxInputBytes > 0L)
         require(maxDepth > 0)
         require(maxElements > 0L)
+        require(maxAttributesPerElement > 0)
         require(maxTextCharactersPerElement > 0)
         require(maxChannels > 0)
         require(maxProgrammes > 0)
@@ -175,6 +177,7 @@ enum class XmltvParseFailureReason {
     InputBytesExceeded,
     DepthExceeded,
     ElementCountExceeded,
+    AttributeCountExceeded,
     TextCharactersExceeded,
     ChannelCountExceeded,
     ProgrammeCountExceeded,
