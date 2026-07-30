@@ -7,6 +7,7 @@ plugins { id("muxtv.kotlin.library") }
 dependencies {
     implementation(project(":catalog:ingest"))
     implementation(libs.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
