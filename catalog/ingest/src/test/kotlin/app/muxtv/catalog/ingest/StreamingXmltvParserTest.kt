@@ -3,8 +3,11 @@ package app.muxtv.catalog.ingest
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -102,7 +105,7 @@ class StreamingXmltvParserTest {
         """.trimIndent()
 
         val doctypeFailure = assertThrows(XmltvParseException::class.java) {
-            runTest {
+            runBlocking {
                 StreamingXmltvParser().parse(
                     ByteArrayInputStream(doctype.toByteArray()),
                     RecordingXmltvSink(),
@@ -112,10 +115,13 @@ class StreamingXmltvParserTest {
         assertThat(doctypeFailure.reason).isEqualTo(XmltvParseFailureReason.ForbiddenDoctype)
         assertThat(doctypeFailure.message).doesNotContain("attacker.example")
         assertThat(doctypeFailure.message).doesNotContain("credential=secret")
+        assertThat(doctypeFailure.cause).isNull()
+        assertThat(doctypeFailure.renderedStackTrace()).doesNotContain("attacker.example")
+        assertThat(doctypeFailure.renderedStackTrace()).doesNotContain("credential=secret")
 
         val privatePayload = "<tv><channel id=\"private-channel\"><display-name>Private"
         val malformedFailure = assertThrows(XmltvParseException::class.java) {
-            runTest {
+            runBlocking {
                 StreamingXmltvParser().parse(
                     ByteArrayInputStream(privatePayload.toByteArray()),
                     RecordingXmltvSink(),
@@ -125,6 +131,9 @@ class StreamingXmltvParserTest {
         assertThat(malformedFailure.reason).isEqualTo(XmltvParseFailureReason.MalformedXml)
         assertThat(malformedFailure.message).doesNotContain("private-channel")
         assertThat(malformedFailure.message).doesNotContain("Private")
+        assertThat(malformedFailure.cause).isNull()
+        assertThat(malformedFailure.renderedStackTrace()).doesNotContain("private-channel")
+        assertThat(malformedFailure.renderedStackTrace()).doesNotContain("Private")
     }
 
     @Test
@@ -132,40 +141,41 @@ class StreamingXmltvParserTest {
         val parser = StreamingXmltvParser()
 
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
-            limits = XmltvParseLimits(maxInputBytes = 16),
-            expected = XmltvParseFailureReason.InputBytesExceeded,
+            parser,
+            "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
+            XmltvParseLimits(maxInputBytes = 16),
+            XmltvParseFailureReason.InputBytesExceeded,
         )
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
-            limits = XmltvParseLimits(maxDepth = 2),
-            expected = XmltvParseFailureReason.DepthExceeded,
+            parser,
+            "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
+            XmltvParseLimits(maxDepth = 2),
+            XmltvParseFailureReason.DepthExceeded,
         )
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
-            limits = XmltvParseLimits(maxElements = 2),
-            expected = XmltvParseFailureReason.ElementCountExceeded,
+            parser,
+            "<tv><channel id=\"one\"><display-name>One</display-name></channel></tv>",
+            XmltvParseLimits(maxElements = 2),
+            XmltvParseFailureReason.ElementCountExceeded,
         )
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><channel id=\"one\"><display-name>0123456789</display-name></channel></tv>",
-            limits = XmltvParseLimits(maxTextCharactersPerElement = 5),
-            expected = XmltvParseFailureReason.TextCharactersExceeded,
+            parser,
+            "<tv><channel id=\"one\"><display-name>0123456789</display-name></channel></tv>",
+            XmltvParseLimits(maxTextCharactersPerElement = 5),
+            XmltvParseFailureReason.TextCharactersExceeded,
         )
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><channel id=\"one\"/><channel id=\"two\"/></tv>",
-            limits = XmltvParseLimits(maxChannels = 1),
-            expected = XmltvParseFailureReason.ChannelCountExceeded,
+            parser,
+            "<tv><channel id=\"one\"/><channel id=\"two\"/></tv>",
+            XmltvParseLimits(maxChannels = 1),
+            XmltvParseFailureReason.ChannelCountExceeded,
         )
         assertLimitReason(
-            parser = parser,
-            xml = "<tv><programme channel=\"one\" start=\"20260730120000 +0000\"/><programme channel=\"one\" start=\"20260730130000 +0000\"/></tv>",
-            limits = XmltvParseLimits(maxProgrammes = 1),
-            expected = XmltvParseFailureReason.ProgrammeCountExceeded,
+            parser,
+            "<tv><programme channel=\"one\" start=\"20260730120000 +0000\"/>" +
+                "<programme channel=\"one\" start=\"20260730130000 +0000\"/></tv>",
+            XmltvParseLimits(maxProgrammes = 1),
+            XmltvParseFailureReason.ProgrammeCountExceeded,
         )
     }
 
@@ -199,14 +209,13 @@ class StreamingXmltvParserTest {
         val expectedFailure = IllegalStateException("sink-failed-with-private-value")
 
         val sinkFailure = assertThrows(IllegalStateException::class.java) {
-            runTest {
+            runBlocking {
                 StreamingXmltvParser().parse(
                     ByteArrayInputStream("<tv><channel id=\"one\"/></tv>".toByteArray()),
                     object : XmltvParseSink {
                         override suspend fun onChannel(channel: XmltvChannel) {
                             throw expectedFailure
                         }
-
                         override suspend fun onProgramme(programme: XmltvProgramme) = Unit
                         override suspend fun onWarning(warning: XmltvWarning) = Unit
                     },
@@ -222,14 +231,13 @@ class StreamingXmltvParserTest {
         val expectedCancellation = CancellationException("expected cancellation")
 
         val cancellation = assertThrows(CancellationException::class.java) {
-            runTest {
+            runBlocking {
                 StreamingXmltvParser().parse(
                     ByteArrayInputStream("<tv><channel id=\"one\"/></tv>".toByteArray()),
                     object : XmltvParseSink {
                         override suspend fun onChannel(channel: XmltvChannel) {
                             throw expectedCancellation
                         }
-
                         override suspend fun onProgramme(programme: XmltvProgramme) = Unit
                         override suspend fun onWarning(warning: XmltvWarning) = Unit
                     },
@@ -247,7 +255,7 @@ class StreamingXmltvParserTest {
         expected: XmltvParseFailureReason,
     ) {
         val failure = assertThrows(XmltvParseException::class.java) {
-            runTest {
+            runBlocking {
                 parser.parse(ByteArrayInputStream(xml.toByteArray()), RecordingXmltvSink(), limits)
             }
         }
@@ -255,22 +263,18 @@ class StreamingXmltvParserTest {
     }
 }
 
+private fun Throwable.renderedStackTrace(): String = StringWriter().also { output ->
+    printStackTrace(PrintWriter(output))
+}.toString()
+
 private class RecordingXmltvSink : XmltvParseSink {
     val channels = mutableListOf<XmltvChannel>()
     val programmes = mutableListOf<XmltvProgramme>()
     val warnings = mutableListOf<XmltvWarning>()
 
-    override suspend fun onChannel(channel: XmltvChannel) {
-        channels += channel
-    }
-
-    override suspend fun onProgramme(programme: XmltvProgramme) {
-        programmes += programme
-    }
-
-    override suspend fun onWarning(warning: XmltvWarning) {
-        warnings += warning
-    }
+    override suspend fun onChannel(channel: XmltvChannel) { channels += channel }
+    override suspend fun onProgramme(programme: XmltvProgramme) { programmes += programme }
+    override suspend fun onWarning(warning: XmltvWarning) { warnings += warning }
 }
 
 private class CloseRecordingInputStream(bytes: ByteArray) : InputStream() {
@@ -279,7 +283,8 @@ private class CloseRecordingInputStream(bytes: ByteArray) : InputStream() {
         private set
 
     override fun read(): Int = delegate.read()
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = delegate.read(buffer, offset, length)
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        delegate.read(buffer, offset, length)
 
     override fun close() {
         closed = true
