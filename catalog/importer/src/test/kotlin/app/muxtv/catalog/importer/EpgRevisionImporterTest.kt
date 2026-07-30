@@ -16,7 +16,7 @@ import org.junit.Test
 
 class EpgRevisionImporterTest {
     @Test
-    fun `stages resolved records in bounded batches and activates after parse`() = runBlocking {
+    fun `stages resolved records in bounded batches and activates after parse`(): Unit = runBlocking {
         val store = RecordingEpgRevisionStore()
         val importer = EpgRevisionImporter(
             parser = StreamingXmltvParser(),
@@ -80,7 +80,7 @@ class EpgRevisionImporterTest {
     }
 
     @Test
-    fun `does not interpret offsetless programme as UTC`() = runBlocking {
+    fun `does not interpret offsetless programme as UTC`(): Unit = runBlocking {
         val store = RecordingEpgRevisionStore()
         val importer = EpgRevisionImporter(
             parser = StreamingXmltvParser(),
@@ -106,7 +106,7 @@ class EpgRevisionImporterTest {
     }
 
     @Test
-    fun `parser failure discards staging revision and returns redacted failure`() = runBlocking {
+    fun `parser failure discards staging revision and returns redacted failure`(): Unit = runBlocking {
         val store = RecordingEpgRevisionStore()
         val importer = EpgRevisionImporter(
             parser = StreamingXmltvParser(),
@@ -163,8 +163,8 @@ private class RecordingEpgRevisionStore(
     val batches = mutableListOf<Pair<List<EpgChannelEntity>, List<EpgProgrammeEntity>>>()
     val discardedRevisions = mutableListOf<Pair<String, Long>>()
     val activationStatistics = mutableListOf<EpgRevisionStatistics>()
-    val stagedChannels: List<EpgChannelEntity> get() = batches.flatMap(Pair<List<EpgChannelEntity>, List<EpgProgrammeEntity>>::first)
-    val stagedProgrammes: List<EpgProgrammeEntity> get() = batches.flatMap(Pair<List<EpgChannelEntity>, List<EpgProgrammeEntity>>::second)
+    val stagedChannels: List<EpgChannelEntity> get() = batches.flatMap { it.first }
+    val stagedProgrammes: List<EpgProgrammeEntity> get() = batches.flatMap { it.second }
 
     override suspend fun upsertSource(source: EpgSourceDefinition) {
         sources += source
