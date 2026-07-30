@@ -84,4 +84,25 @@ tasks.register<JavaExec>("measureM3uParse") {
     args = measurementCommandArguments
 }
 
+val measurementSeriesRequest = providers.gradleProperty("measurementSeriesRequest").orElse("")
+val measurementSeriesInputDirectory = providers.gradleProperty("measurementSeriesInputDirectory").orElse("")
+val measurementSeriesOutputDirectory = providers.gradleProperty("measurementSeriesOutputDirectory").orElse("")
+
+val measurementSeriesCommandArguments = listOf(
+    "--request",
+    measurementSeriesRequest.get(),
+    "--input-directory",
+    measurementSeriesInputDirectory.get(),
+    "--output-directory",
+    measurementSeriesOutputDirectory.get(),
+)
+
+tasks.register<JavaExec>("analyzeMeasurementSeries") {
+    group = "verification"
+    description = "Validates repeated measurement reports and publishes threshold-free variance evidence."
+    mainClass.set("app.muxtv.testing.measurements.MeasurementSeriesCommandKt")
+    classpath = mainSourceSet.runtimeClasspath
+    args = measurementSeriesCommandArguments
+}
+
 tasks.test { useJUnit() }
