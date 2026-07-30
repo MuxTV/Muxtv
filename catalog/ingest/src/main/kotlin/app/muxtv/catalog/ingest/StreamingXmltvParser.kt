@@ -182,6 +182,7 @@ private class XmltvHandler(
     private var channel: ChannelBuilder? = null
     private var programme: ProgrammeBuilder? = null
     private var capture: TextCapture? = null
+    private val textCharactersByDepth = IntArray(limits.maxDepth + 1)
 
     override fun setDocumentLocator(locator: Locator) {
         this.locator = locator
@@ -193,8 +194,10 @@ private class XmltvHandler(
         if (depth > limits.maxDepth) abort(XmltvParseFailureReason.DepthExceeded)
         elementCount += 1
         if (elementCount > limits.maxElements) abort(XmltvParseFailureReason.ElementCountExceeded)
+        textCharactersByDepth[depth] = 0
 
         val name = elementName(localName, qName)
+        validateElement(name, attributes)
         when (name) {
             "channel" -> startChannel(attributes)
             "programme" -> startProgramme(attributes)
@@ -209,11 +212,14 @@ private class XmltvHandler(
 
     override fun characters(characters: CharArray, start: Int, length: Int) {
         job.ensureActive()
-        val active = capture ?: return
-        if (active.text.length + length > limits.maxTextCharactersPerElement) {
-            abort(XmltvParseFailureReason.TextCharactersExceeded)
+        for (openDepth in 1..depth) {
+            val nextCount = textCharactersByDepth[openDepth] + length
+            if (nextCount > limits.maxTextCharactersPerElement) {
+                abort(XmltvParseFailureReason.TextCharactersExceeded)
+            }
+            textCharactersByDepth[openDepth] = nextCount
         }
-        active.text.append(characters, start, length)
+        capture?.text?.append(characters, start, length)
     }
 
     override fun endElement(uri: String?, localName: String?, qName: String?) {
@@ -227,6 +233,7 @@ private class XmltvHandler(
             "channel" -> finishChannel()
             "programme" -> finishProgramme()
         }
+        textCharactersByDepth[depth] = 0
         depth -= 1
     }
 
@@ -395,9 +402,12 @@ private class XmltvHandler(
             warn(XmltvWarningKind.InvalidTimestamp, builder.lineNumber, builder.columnNumber)
             return
         }
-        val stop = parseOptionalTimestamp(builder.stopRaw, builder) ?: if (builder.stopRaw.normalizedOptional() != null) return else null
-        val pdcStart = parseOptionalTimestamp(builder.pdcStartRaw, builder) ?: if (builder.pdcStartRaw.normalizedOptional() != null) return else null
-        val vpsStart = parseOptionalTimestamp(builder.vpsStartRaw, builder) ?: if (builder.vpsStartRaw.normalizedOptional() != null) return else null
+        val stop = parseOptionalTimestamp(builder.stopRaw, builder)
+            ?: if (builder.stopRaw.normalizedOptional() != null) return else null
+        val pdcStart = parseOptionalTimestamp(builder.pdcStartRaw, builder)
+            ?: if (builder.pdcStartRaw.normalizedOptional() != null) return else null
+        val vpsStart = parseOptionalTimestamp(builder.vpsStartRaw, builder)
+            ?: if (builder.vpsStartRaw.normalizedOptional() != null) return else null
         if (stop != null && stop.isBefore(start)) {
             warn(XmltvWarningKind.StopBeforeStart, builder.lineNumber, builder.columnNumber)
             return
@@ -457,6 +467,25 @@ private class XmltvHandler(
 
     private fun safeLine(): Int? = locator?.lineNumber?.takeIf { it > 0 }
     private fun safeColumn(): Int? = locator?.columnNumber?.takeIf { it > 0 }
+
+    private fun validateElement(name: String, attributes: Attributes) {
+        if (name.length > limits.maxStringCharacters) {
+            abort(XmltvParseFailureReason.TextCharactersExceeded)
+        }
+        if (attributes.length > limits.maxAttributesPerElement) {
+            abort(XmltvParseFailureReason.AttributeCountExceeded)
+        }
+        for (index in 0 until attributes.length) {
+            val attributeName = elementName(attributes.getLocalName(index), attributes.getQName(index))
+            val attributeValue = attributes.getValue(index).orEmpty()
+            if (
+                attributeName.length > limits.maxStringCharacters ||
+                attributeValue.length > limits.maxStringCharacters
+            ) {
+                abort(XmltvParseFailureReason.TextCharactersExceeded)
+            }
+        }
+    }
 
     private fun Attributes.safeValue(name: String): String? {
         val value = getValue(name) ?: return null
