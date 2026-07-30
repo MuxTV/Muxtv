@@ -70,6 +70,30 @@ internal abstract class EpgRevisionDao {
         if (programmes.isNotEmpty()) insertProgrammes(programmes)
     }
 
+    open suspend fun activeProgrammes(
+        sourceId: String,
+        externalChannelIds: List<String>,
+        fromEpochMillis: Long,
+        toEpochMillis: Long,
+        limit: Int,
+    ): List<EpgProgrammeEntity> {
+        require(sourceId.isNotBlank())
+        require(fromEpochMillis >= 0)
+        require(toEpochMillis > fromEpochMillis)
+        require(limit in 1..MAX_ACTIVE_PROGRAMME_LIMIT)
+        if (externalChannelIds.isEmpty()) return emptyList()
+        require(externalChannelIds.size <= MAX_ACTIVE_CHANNEL_IDS)
+        require(externalChannelIds.none(String::isBlank))
+
+        return selectActiveProgrammes(
+            sourceId = sourceId,
+            externalChannelIds = externalChannelIds.distinct(),
+            fromEpochMillis = fromEpochMillis,
+            toEpochMillis = toEpochMillis,
+            limit = limit,
+        )
+    }
+
     @Query(
         """
         SELECT p.*
@@ -84,7 +108,7 @@ internal abstract class EpgRevisionDao {
         LIMIT :limit
         """,
     )
-    abstract suspend fun activeProgrammes(
+    protected abstract suspend fun selectActiveProgrammes(
         sourceId: String,
         externalChannelIds: List<String>,
         fromEpochMillis: Long,
@@ -271,5 +295,10 @@ internal abstract class EpgRevisionDao {
     @Transaction
     open suspend fun discardRevision(sourceId: String, revisionNumber: Long) {
         deleteStagingRevision(sourceId, revisionNumber)
+    }
+
+    private companion object {
+        const val MAX_ACTIVE_CHANNEL_IDS = 256
+        const val MAX_ACTIVE_PROGRAMME_LIMIT = 500
     }
 }
