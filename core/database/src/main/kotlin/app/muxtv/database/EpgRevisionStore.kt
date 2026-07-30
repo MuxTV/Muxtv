@@ -11,6 +11,10 @@ data class EpgSourceDefinition(
         require(id.isNotBlank())
         require(name.isNotBlank())
     }
+
+    override fun toString(): String =
+        "EpgSourceDefinition(providerLinked=${providerSourceId != null}, " +
+            "accessRefPresent=${accessRef != null}, defaultZonePresent=${defaultZoneId != null})"
 }
 
 interface EpgRevisionStore {
