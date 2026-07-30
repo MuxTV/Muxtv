@@ -1,11 +1,22 @@
 package app.muxtv.testing.measurements
 
 import java.io.OutputStream
+import java.util.Collections
+
+private val SERIES_MANIFEST_FAMILY = Regex("[a-z0-9][a-z0-9-]{0,63}")
+private val SERIES_MANIFEST_JSON_NAME = Regex("[a-z0-9][a-z0-9._-]{0,63}\\.json")
+private val SERIES_MANIFEST_SHA = Regex("[0-9a-f]{64}")
 
 internal data class MeasurementSeriesAuditInput(
     val reportName: String,
     val sha256: String,
-)
+) {
+    init {
+        require(reportName.matches(SERIES_MANIFEST_JSON_NAME))
+        require(!reportName.contains(".."))
+        require(sha256.matches(SERIES_MANIFEST_SHA))
+    }
+}
 
 internal class MeasurementSeriesAuditManifest(
     val schemaVersion: Int,
@@ -17,11 +28,17 @@ internal class MeasurementSeriesAuditManifest(
     val seriesCount: Int,
     inputs: List<MeasurementSeriesAuditInput>,
 ) {
-    val inputs: List<MeasurementSeriesAuditInput> = inputs.toList()
+    val inputs: List<MeasurementSeriesAuditInput> =
+        Collections.unmodifiableList(ArrayList(inputs))
 
     init {
         require(schemaVersion == 1)
         require(!thresholdApplied)
+        require(family.matches(SERIES_MANIFEST_FAMILY))
+        require(outputName.matches(SERIES_MANIFEST_JSON_NAME))
+        require(!outputName.contains(".."))
+        require(varianceReportSha256.matches(SERIES_MANIFEST_SHA))
+        require(identityFingerprintSha256.matches(SERIES_MANIFEST_SHA))
         require(seriesCount in 2..20)
         require(this.inputs.size == seriesCount)
         require(this.inputs.map(MeasurementSeriesAuditInput::reportName).distinct().size == seriesCount)
