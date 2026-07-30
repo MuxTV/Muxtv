@@ -5,6 +5,7 @@ import java.io.IOException
 import java.io.InputStream
 import javax.xml.XMLConstants
 import javax.xml.parsers.ParserConfigurationException
+import javax.xml.parsers.SAXParser
 import javax.xml.parsers.SAXParserFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -39,7 +40,7 @@ class StreamingXmltvParser(
         val callerJob = currentCoroutineContext()[Job]
             ?: error("XMLTV parsing requires a coroutine Job")
         val boundedInput = BoundedNonClosingInputStream(input, limits.maxInputBytes)
-        val parser = async(parserDispatcher) {
+        val producer = async(parserDispatcher) {
             try {
                 parseBlocking(
                     input = boundedInput,
@@ -62,16 +63,16 @@ class StreamingXmltvParser(
             for (event in events) {
                 currentCoroutineContext().ensureActive()
                 when (event) {
-                    is XmltvEvent.Channel -> sink.onChannel(event.value)
-                    is XmltvEvent.Programme -> sink.onProgramme(event.value)
-                    is XmltvEvent.Warning -> sink.onWarning(event.value)
+                    is XmltvEvent.ChannelRecord -> sink.onChannel(event.value)
+                    is XmltvEvent.ProgrammeRecord -> sink.onProgramme(event.value)
+                    is XmltvEvent.WarningRecord -> sink.onWarning(event.value)
                 }
                 currentCoroutineContext().ensureActive()
             }
-            parser.await()
+            producer.await()
         } catch (failure: Throwable) {
             events.cancel()
-            parser.cancelAndJoin()
+            producer.cancelAndJoin()
             throw failure
         }
     }
@@ -86,39 +87,45 @@ class StreamingXmltvParser(
         val reader = createSecureReader(handler)
         try {
             reader.parse(InputSource(input))
-        } catch (failure: XmltvSaxAbortException) {
-            throw XmltvParseException(
-                reason = failure.reason,
-                lineNumber = failure.safeLineNumber,
-                columnNumber = failure.safeColumnNumber,
-                cause = failure,
-            )
-        } catch (failure: XmltvInputLimitException) {
-            throw XmltvParseException(
-                reason = XmltvParseFailureReason.InputBytesExceeded,
-                cause = failure,
-            )
-        } catch (failure: CancellationException) {
-            throw failure
-        } catch (failure: SAXParseException) {
-            throw XmltvParseException(
-                reason = XmltvParseFailureReason.MalformedXml,
-                lineNumber = failure.lineNumber.takeIf { it > 0 },
-                columnNumber = failure.columnNumber.takeIf { it > 0 },
-                cause = failure,
-            )
-        } catch (failure: SAXException) {
-            val cancellation = failure.cause as? CancellationException
-            if (cancellation != null) throw cancellation
-            throw XmltvParseException(
-                reason = XmltvParseFailureReason.MalformedXml,
-                cause = failure,
-            )
-        } catch (failure: IOException) {
-            throw XmltvParseException(
-                reason = XmltvParseFailureReason.InputReadFailed,
-                cause = failure,
-            )
+        } catch (failure: Throwable) {
+            if (failure is Error) throw failure
+
+            failure.findCause<XmltvSaxAbortException>()?.let { abort ->
+                throw XmltvParseException(
+                    reason = abort.reason,
+                    lineNumber = abort.safeLineNumber,
+                    columnNumber = abort.safeColumnNumber,
+                    cause = failure,
+                )
+            }
+            failure.findCause<XmltvInputLimitException>()?.let {
+                throw XmltvParseException(
+                    reason = XmltvParseFailureReason.InputBytesExceeded,
+                    cause = failure,
+                )
+            }
+            failure.findCause<CancellationException>()?.let { cancellation ->
+                throw cancellation
+            }
+
+            when (failure) {
+                is XmltvParseException -> throw failure
+                is SAXParseException -> throw XmltvParseException(
+                    reason = XmltvParseFailureReason.MalformedXml,
+                    lineNumber = failure.lineNumber.takeIf { it > 0 },
+                    columnNumber = failure.columnNumber.takeIf { it > 0 },
+                    cause = failure,
+                )
+                is SAXException -> throw XmltvParseException(
+                    reason = XmltvParseFailureReason.MalformedXml,
+                    cause = failure,
+                )
+                is IOException -> throw XmltvParseException(
+                    reason = XmltvParseFailureReason.InputReadFailed,
+                    cause = failure,
+                )
+                else -> throw failure
+            }
         }
         return handler.report(input.consumedBytes)
     }
@@ -135,8 +142,8 @@ class StreamingXmltvParser(
                 }
             }
             factory.setRequiredFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-            factory.setRequiredFeature(EXTERNAL_GENERAL_ENTITIES, false)
-            factory.setRequiredFeature(EXTERNAL_PARAMETER_ENTITIES, false)
+            factory.setOptionalFeature(EXTERNAL_GENERAL_ENTITIES, false)
+            factory.setOptionalFeature(EXTERNAL_PARAMETER_ENTITIES, false)
             factory.setOptionalFeature(LOAD_EXTERNAL_DTD, false)
 
             val parser = factory.newSAXParser()
@@ -145,8 +152,8 @@ class StreamingXmltvParser(
 
             return parser.xmlReader.apply {
                 setRequiredFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-                setRequiredFeature(EXTERNAL_GENERAL_ENTITIES, false)
-                setRequiredFeature(EXTERNAL_PARAMETER_ENTITIES, false)
+                setOptionalFeature(EXTERNAL_GENERAL_ENTITIES, false)
+                setOptionalFeature(EXTERNAL_PARAMETER_ENTITIES, false)
                 setOptionalFeature(LOAD_EXTERNAL_DTD, false)
                 try {
                     setProperty(LEXICAL_HANDLER, handler)
@@ -354,10 +361,26 @@ private class XmltvHandler(
         }
         programme?.let { builder ->
             when (active.elementName) {
-                "title" -> addBounded(builder.titles, XmltvText(value, active.language.normalizedOptional()), limits.maxCategoriesPerProgramme)
-                "sub-title" -> addBounded(builder.subTitles, XmltvText(value, active.language.normalizedOptional()), limits.maxCategoriesPerProgramme)
-                "desc" -> addBounded(builder.descriptions, XmltvText(value, active.language.normalizedOptional()), limits.maxCategoriesPerProgramme)
-                "category" -> addBounded(builder.categories, XmltvText(value, active.language.normalizedOptional()), limits.maxCategoriesPerProgramme)
+                "title" -> addBounded(
+                    builder.titles,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "sub-title" -> addBounded(
+                    builder.subTitles,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "desc" -> addBounded(
+                    builder.descriptions,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "category" -> addBounded(
+                    builder.categories,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
                 "keyword" -> addBounded(builder.keywords, value, limits.maxKeywordsPerProgramme)
                 "country" -> addBounded(builder.countries, value, limits.maxCountriesPerProgramme)
                 "url" -> addBounded(builder.urls, value, limits.maxUrlsPerRecord)
@@ -383,7 +406,7 @@ private class XmltvHandler(
             return
         }
         emit(
-            XmltvEvent.Channel(
+            XmltvEvent.ChannelRecord(
                 XmltvChannel(
                     externalId = externalId,
                     displayNames = builder.displayNames,
@@ -414,19 +437,17 @@ private class XmltvHandler(
             warn(XmltvWarningKind.InvalidTimestamp, builder.lineNumber, builder.columnNumber)
             return
         }
-        val stop = builder.stopRaw.normalizedOptional()?.let(XmltvTimestampParser::parse)
-        if (builder.stopRaw.normalizedOptional() != null && stop == null) {
-            warn(XmltvWarningKind.InvalidTimestamp, builder.lineNumber, builder.columnNumber)
-            return
-        }
+        val stop = parseOptionalTimestamp(builder.stopRaw, builder) ?: if (builder.stopRaw.normalizedOptional() != null) return else null
+        val pdcStart = parseOptionalTimestamp(builder.pdcStartRaw, builder)
+            ?: if (builder.pdcStartRaw.normalizedOptional() != null) return else null
+        val vpsStart = parseOptionalTimestamp(builder.vpsStartRaw, builder)
+            ?: if (builder.vpsStartRaw.normalizedOptional() != null) return else null
         if (stop != null && stop.isBefore(start)) {
             warn(XmltvWarningKind.StopBeforeStart, builder.lineNumber, builder.columnNumber)
             return
         }
-        val pdcStart = builder.pdcStartRaw.normalizedOptional()?.let(XmltvTimestampParser::parse)
-        val vpsStart = builder.vpsStartRaw.normalizedOptional()?.let(XmltvTimestampParser::parse)
         emit(
-            XmltvEvent.Programme(
+            XmltvEvent.ProgrammeRecord(
                 XmltvProgramme(
                     externalChannelId = channelId,
                     start = start,
@@ -453,6 +474,15 @@ private class XmltvHandler(
         emittedProgrammes += 1
     }
 
+    private fun parseOptionalTimestamp(raw: String?, builder: ProgrammeBuilder): XmltvTimestamp? {
+        val normalized = raw.normalizedOptional() ?: return null
+        val parsed = XmltvTimestampParser.parse(normalized)
+        if (parsed == null) {
+            warn(XmltvWarningKind.InvalidTimestamp, builder.lineNumber, builder.columnNumber)
+        }
+        return parsed
+    }
+
     private fun <T> addBounded(target: MutableList<T>, value: T, maximum: Int) {
         if (target.size < maximum) {
             target += value
@@ -463,7 +493,7 @@ private class XmltvHandler(
 
     private fun warn(kind: XmltvWarningKind, lineNumber: Int?, columnNumber: Int?) {
         warningCount += 1
-        emit(XmltvEvent.Warning(XmltvWarning(kind, lineNumber, columnNumber)))
+        emit(XmltvEvent.WarningRecord(XmltvWarning(kind, lineNumber, columnNumber)))
     }
 
     private fun abort(reason: XmltvParseFailureReason): Nothing =
@@ -496,9 +526,9 @@ private class XmltvHandler(
 }
 
 private sealed interface XmltvEvent {
-    class Channel(val value: XmltvChannel) : XmltvEvent
-    class Programme(val value: XmltvProgramme) : XmltvEvent
-    class Warning(val value: XmltvWarning) : XmltvEvent
+    class ChannelRecord(val value: XmltvChannel) : XmltvEvent
+    class ProgrammeRecord(val value: XmltvProgramme) : XmltvEvent
+    class WarningRecord(val value: XmltvWarning) : XmltvEvent
 }
 
 private class ChannelBuilder(
@@ -607,7 +637,7 @@ private fun SAXParserFactory.setOptionalFeature(name: String, value: Boolean) {
     try {
         setFeature(name, value)
     } catch (_: ParserConfigurationException) {
-        // Resolver, entity features and lexical DOCTYPE rejection remain mandatory.
+        // The mandatory secure-processing, resolver and lexical-handler boundary remains active.
     } catch (_: SAXNotRecognizedException) {
         // Implementation-specific defense in depth.
     } catch (_: SAXNotSupportedException) {
@@ -615,13 +645,13 @@ private fun SAXParserFactory.setOptionalFeature(name: String, value: Boolean) {
     }
 }
 
-private fun javax.xml.parsers.SAXParser.setOptionalProperty(name: String, value: String) {
+private fun SAXParser.setOptionalProperty(name: String, value: String) {
     try {
         setProperty(name, value)
     } catch (_: SAXNotRecognizedException) {
-        // External entities remain disabled and the resolver rejects access.
+        // DOCTYPE rejection and the entity resolver still deny external access.
     } catch (_: SAXNotSupportedException) {
-        // External entities remain disabled and the resolver rejects access.
+        // DOCTYPE rejection and the entity resolver still deny external access.
     }
 }
 
@@ -641,6 +671,17 @@ private fun XMLReader.setOptionalFeature(name: String, value: Boolean) {
     } catch (_: SAXNotSupportedException) {
         // Implementation-specific defense in depth.
     }
+}
+
+private inline fun <reified T : Throwable> Throwable.findCause(): T? {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is T) return current
+        val next = current.cause
+        if (next === current) return null
+        current = next
+    }
+    return null
 }
 
 private fun elementName(localName: String?, qName: String?): String =
