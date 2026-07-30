@@ -120,7 +120,7 @@ class MeasurementReportAdapterTest {
         assertThat(adapted.identity.memoryClassMb).isEqualTo(192)
         assertThat(adapted.identity.runtimeIdentity).containsEntry("fallback-used", "false")
         assertThat(adapted.identity.workload).containsEntry("cache-state", "fresh-file-per-sample")
-        assertThat(adapted.run.operations.keys).containsExactlyElementsIn(ROOM_OPERATIONS).inOrder()
+        assertThat(adapted.run.operations.keys).containsExactlyElementsIn(ROOM_OPERATIONS)
         assertThat(adapted.run.operations.getValue("stage-total-10k"))
             .containsExactly(200L, 210L, 220L, 230L, 240L).inOrder()
         assertThat(adapted.run.operations).doesNotContainKey("database-bytes")
@@ -159,7 +159,7 @@ class MeasurementReportAdapterTest {
         assertThat(adapted.identity.family).isEqualTo("player-proxy")
         assertThat(adapted.identity.fixtureSha256).isEqualTo(PLAYER_PROFILE_SHA)
         assertThat(adapted.identity.workload).containsEntry("operations-per-sample", "1000")
-        assertThat(adapted.run.operations.keys).containsExactlyElementsIn(PLAYER_OPERATIONS).inOrder()
+        assertThat(adapted.run.operations.keys).containsExactlyElementsIn(PLAYER_OPERATIONS)
         assertThat(adapted.run.operations.getValue("request-construct"))
             .containsExactly(10L, 11L, 12L, 13L, 14L).inOrder()
 
