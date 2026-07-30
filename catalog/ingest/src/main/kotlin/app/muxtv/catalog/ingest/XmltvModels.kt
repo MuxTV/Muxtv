@@ -21,7 +21,7 @@ class XmltvParseLimits(
     val maxKeywordsPerProgramme: Int = 64,
     val maxCountriesPerProgramme: Int = 16,
     val maxEpisodeNumbersPerProgramme: Int = 16,
-    val maxStringCharacters: Int = 128 * 1024,
+    val maxStringCharacters: Int = maxTextCharactersPerElement,
 ) {
     init {
         require(maxInputBytes > 0L)
