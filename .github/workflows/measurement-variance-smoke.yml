@@ -70,6 +70,25 @@ jobs:
           Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
           & .\tools\android\Test-TvHarnessSyntax.ps1
 
+      - name: Start repository-selected ADB server
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          $evidenceDirectory = ".work\evidence\measurement-adb"
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+          $logPath = Join-Path $evidenceDirectory "adb-server.log"
+
+          & $tools.Adb version 2>&1 | Set-Content -Path $logPath -Encoding utf8
+          & $tools.Adb kill-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
+          Start-Sleep -Seconds 1
+          & $tools.Adb start-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to start the repository-selected ADB server."
+          }
+          & $tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
+
       - name: Run two current-profile variance repetitions
         shell: pwsh
         run: |
