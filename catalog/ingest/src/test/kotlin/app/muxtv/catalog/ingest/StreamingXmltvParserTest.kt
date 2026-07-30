@@ -63,7 +63,7 @@ class StreamingXmltvParserTest {
         assertThat(programme.credits.single().role).isEqualTo(XmltvCreditRole.Director)
         assertThat(programme.isNew).isTrue()
 
-        val diagnostics = listOf(channel, programme, channel.icons.single(), sink.programmes.single().titles.single())
+        val diagnostics = listOf(channel, programme, channel.icons.single(), programme.titles.single())
             .joinToString(" | ")
         assertThat(diagnostics).doesNotContain("news.world")
         assertThat(diagnostics).doesNotContain("Private")
@@ -170,7 +170,7 @@ class StreamingXmltvParserTest {
     }
 
     @Test
-    fun `emits typed record warnings and preserves cancellation and sink failures`() = runTest {
+    fun `emits typed record warnings without exposing record values`() = runTest {
         val xml = """
             <tv>
               <channel><display-name>Missing ID</display-name></channel>
@@ -192,8 +192,12 @@ class StreamingXmltvParserTest {
         assertThat(sink.warnings.joinToString()).doesNotContain("Missing ID")
         assertThat(sink.warnings.joinToString()).doesNotContain("Bad timestamp")
         assertThat(sink.warnings.joinToString()).doesNotContain("Reverse")
+    }
 
+    @Test
+    fun `propagates sink failures unchanged`() {
         val expectedFailure = IllegalStateException("sink-failed-with-private-value")
+
         val sinkFailure = assertThrows(IllegalStateException::class.java) {
             runTest {
                 StreamingXmltvParser().parse(
@@ -209,9 +213,14 @@ class StreamingXmltvParserTest {
                 )
             }
         }
-        assertThat(sinkFailure).isSameInstanceAs(expectedFailure)
 
+        assertThat(sinkFailure).isSameInstanceAs(expectedFailure)
+    }
+
+    @Test
+    fun `propagates sink cancellation unchanged`() {
         val expectedCancellation = CancellationException("expected cancellation")
+
         val cancellation = assertThrows(CancellationException::class.java) {
             runTest {
                 StreamingXmltvParser().parse(
@@ -227,6 +236,7 @@ class StreamingXmltvParserTest {
                 )
             }
         }
+
         assertThat(cancellation).isSameInstanceAs(expectedCancellation)
     }
 
