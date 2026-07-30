@@ -5,12 +5,43 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
-import androidx.room3.Upsert
 
 @Dao
 internal abstract class EpgRevisionDao {
-    @Upsert
-    abstract suspend fun insertSource(source: EpgSourceEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertSourceRow(source: EpgSourceEntity): Long
+
+    @Query(
+        """
+        UPDATE epg_sources
+        SET name = :name,
+            providerSourceId = :providerSourceId,
+            accessRef = :accessRef,
+            defaultZoneId = :defaultZoneId
+        WHERE id = :sourceId
+        """,
+    )
+    protected abstract suspend fun updateSourceMetadata(
+        sourceId: String,
+        name: String,
+        providerSourceId: String?,
+        accessRef: String?,
+        defaultZoneId: String?,
+    ): Int
+
+    @Transaction
+    open suspend fun insertSource(source: EpgSourceEntity) {
+        insertSourceRow(source)
+        check(
+            updateSourceMetadata(
+                sourceId = source.id,
+                name = source.name,
+                providerSourceId = source.providerSourceId,
+                accessRef = source.accessRef,
+                defaultZoneId = source.defaultZoneId,
+            ) == 1,
+        ) { "Unable to persist EPG source metadata." }
+    }
 
     @Query(
         """
