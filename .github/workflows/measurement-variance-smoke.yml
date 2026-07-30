@@ -1,0 +1,101 @@
+name: Measurement variance smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/measurement-variance-smoke.yml
+      - core/testing/build.gradle.kts
+      - core/testing/src/main/kotlin/app/muxtv/testing/measurements/**
+      - core/testing/src/test/kotlin/app/muxtv/testing/measurements/**
+      - tools/measurements/**
+      - tools/android/AndroidSdk.ps1
+      - tools/android/Invoke-CatalogDatabaseMeasurement.ps1
+      - tools/android/Invoke-PlayerProxyMeasurement.ps1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: muxtv-measurement-variance-smoke
+  cancel-in-progress: true
+
+jobs:
+  current-profile-smoke:
+    name: Current Android TV variance smoke
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout without pre-clean
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+
+      - name: Clean workspace with Windows long paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to enable repository-local Git long-path support."
+          }
+
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to reset the checked-out workspace."
+          }
+
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to clean the checked-out workspace.`n$cleanOutput"
+          }
+
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $dirty) {
+            throw "Workspace is not clean after reset and clean."
+          }
+
+      - name: Resolve Android SDK and validate harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          Write-Host "Android SDK tools resolved."
+          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
+          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
+          & .\tools\android\Test-TvHarnessSyntax.ps1
+
+      - name: Run two current-profile variance repetitions
+        shell: pwsh
+        run: |
+          $branch = "${{ github.head_ref || github.ref_name }}"
+          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+
+          pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
+            -SourceBranch $branch `
+            -SourceCommit $commit `
+            -ProfileId current-normal `
+            -Repetitions 2 `
+            -EvidenceRoot .work\evidence `
+            -NoDaemon
+
+      - name: Upload variance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: measurement-variance-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/**/*.json
+            .work/evidence/**/*.log
+            .work/evidence/**/*.txt
+            .work/evidence/**/*.png
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
