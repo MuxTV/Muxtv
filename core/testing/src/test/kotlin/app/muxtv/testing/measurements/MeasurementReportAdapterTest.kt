@@ -469,8 +469,8 @@ class MeasurementReportAdapterTest {
 
     private companion object {
         const val SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
-        const val FIXTURE_SHA = "0f".repeat(32)
-        const val PLAYER_PROFILE_SHA = "1a".repeat(32)
+        val FIXTURE_SHA = "0f".repeat(32)
+        val PLAYER_PROFILE_SHA = "1a".repeat(32)
         val ROOM_OPERATIONS = listOf(
             "stage-batch-250",
             "stage-total-10k",
