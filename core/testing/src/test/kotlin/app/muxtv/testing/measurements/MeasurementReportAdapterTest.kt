@@ -310,7 +310,7 @@ class MeasurementReportAdapterTest {
             "jvmRuntimeName": "OpenJDK Runtime Environment",
             "availableProcessors": 4,
             "maxHeapBytes": 1073741824,
-            "allocationMeasurement": "thread-allocated-bytes"
+            "allocationMeasurement": "unavailable"
           },
           "wallTimeSummaryNanos": ${summaryJson(5, 100, 120, 140)},
           "allocationSummaryBytes": null,
