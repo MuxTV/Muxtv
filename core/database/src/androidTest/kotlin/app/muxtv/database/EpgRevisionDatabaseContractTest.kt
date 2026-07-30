@@ -143,6 +143,7 @@ class EpgRevisionDatabaseContractTest {
         assertThat(dao.activeRevision(SOURCE_ID)).isEqualTo(1)
         assertThat(dao.activeProgrammes(SOURCE_ID, listOf("news"), 0, 10_000, 20))
             .containsExactly(programme(1, 1, "news", 1_000, 2_000))
+        Unit
     }
 
     private suspend fun activate(revisionNumber: Long): EpgRevisionActivationResult =
