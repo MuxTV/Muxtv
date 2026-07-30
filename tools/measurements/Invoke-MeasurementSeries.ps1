@@ -188,11 +188,11 @@ function Wait-MeasurementAdbDevice {
         }
 
         & $Tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
-        if (Test-MeasurementAdbDeviceReady -Tools $Tools -Serial $ConsoleSerial) {
-            return $ConsoleSerial
-        }
         if (Test-MeasurementAdbDeviceReady -Tools $Tools -Serial $TcpSerial) {
             return $TcpSerial
+        }
+        if (Test-MeasurementAdbDeviceReady -Tools $Tools -Serial $ConsoleSerial) {
+            return $ConsoleSerial
         }
 
         if ((Get-Date) -ge $nextConnect) {
