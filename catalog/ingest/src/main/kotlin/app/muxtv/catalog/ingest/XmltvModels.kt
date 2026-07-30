@@ -43,14 +43,7 @@ class XmltvParseLimits(
     }
 }
 
-enum class XmltvTimestampPrecision {
-    Year,
-    Month,
-    Day,
-    Hour,
-    Minute,
-    Second,
-}
+enum class XmltvTimestampPrecision { Year, Month, Day, Hour, Minute, Second }
 
 sealed class XmltvTimestamp {
     abstract val precision: XmltvTimestampPrecision
@@ -76,65 +69,33 @@ sealed class XmltvTimestamp {
     }
 }
 
-class XmltvText(
-    val value: String,
-    val language: String?,
-) {
-    init {
-        require(value.isNotEmpty())
-    }
-
+class XmltvText(val value: String, val language: String?) {
+    init { require(value.isNotEmpty()) }
     override fun toString(): String =
         "XmltvText(length=${value.length}, languagePresent=${language != null})"
 }
 
-class XmltvIcon(
-    val source: String,
-    val width: Int?,
-    val height: Int?,
-) {
+class XmltvIcon(val source: String, val width: Int?, val height: Int?) {
     init {
         require(source.isNotEmpty())
         require(width == null || width > 0)
         require(height == null || height > 0)
     }
-
     override fun toString(): String =
         "XmltvIcon(sourcePresent=true, width=$width, height=$height)"
 }
 
 enum class XmltvCreditRole {
-    Director,
-    Actor,
-    Writer,
-    Adapter,
-    Producer,
-    Composer,
-    Editor,
-    Presenter,
-    Commentator,
-    Guest,
+    Director, Actor, Writer, Adapter, Producer, Composer, Editor, Presenter, Commentator, Guest,
 }
 
-class XmltvCredit(
-    val role: XmltvCreditRole,
-    val name: String,
-) {
-    init {
-        require(name.isNotEmpty())
-    }
-
+class XmltvCredit(val role: XmltvCreditRole, val name: String) {
+    init { require(name.isNotEmpty()) }
     override fun toString(): String = "XmltvCredit(role=$role, nameLength=${name.length})"
 }
 
-class XmltvEpisodeNumber(
-    val system: String?,
-    val value: String,
-) {
-    init {
-        require(value.isNotEmpty())
-    }
-
+class XmltvEpisodeNumber(val system: String?, val value: String) {
+    init { require(value.isNotEmpty()) }
     override fun toString(): String =
         "XmltvEpisodeNumber(systemPresent=${system != null}, valueLength=${value.length})"
 }
@@ -148,11 +109,7 @@ class XmltvChannel(
     val displayNames: List<XmltvText> = displayNames.immutableSnapshot()
     val icons: List<XmltvIcon> = icons.immutableSnapshot()
     val urls: List<String> = urls.immutableSnapshot()
-
-    init {
-        require(externalId.isNotEmpty())
-    }
-
+    init { require(externalId.isNotEmpty()) }
     override fun toString(): String =
         "XmltvChannel(displayNameCount=${displayNames.size}, iconCount=${icons.size}, urlCount=${urls.size})"
 }
@@ -178,21 +135,17 @@ class XmltvProgramme(
     val lastChance: Boolean,
     val isNew: Boolean,
 ) {
-    val titles: List<XmltvText> = titles.immutableSnapshot()
-    val subTitles: List<XmltvText> = subTitles.immutableSnapshot()
-    val descriptions: List<XmltvText> = descriptions.immutableSnapshot()
-    val categories: List<XmltvText> = categories.immutableSnapshot()
-    val keywords: List<String> = keywords.immutableSnapshot()
-    val countries: List<String> = countries.immutableSnapshot()
-    val urls: List<String> = urls.immutableSnapshot()
-    val icons: List<XmltvIcon> = icons.immutableSnapshot()
-    val episodeNumbers: List<XmltvEpisodeNumber> = episodeNumbers.immutableSnapshot()
-    val credits: List<XmltvCredit> = credits.immutableSnapshot()
-
-    init {
-        require(externalChannelId.isNotEmpty())
-    }
-
+    val titles = titles.immutableSnapshot()
+    val subTitles = subTitles.immutableSnapshot()
+    val descriptions = descriptions.immutableSnapshot()
+    val categories = categories.immutableSnapshot()
+    val keywords = keywords.immutableSnapshot()
+    val countries = countries.immutableSnapshot()
+    val urls = urls.immutableSnapshot()
+    val icons = icons.immutableSnapshot()
+    val episodeNumbers = episodeNumbers.immutableSnapshot()
+    val credits = credits.immutableSnapshot()
+    init { require(externalChannelId.isNotEmpty()) }
     override fun toString(): String =
         "XmltvProgramme(start=$start, stopPresent=${stop != null}, titleCount=${titles.size}, " +
             "categoryCount=${categories.size}, iconCount=${icons.size}, creditCount=${credits.size}, " +
@@ -208,11 +161,7 @@ enum class XmltvWarningKind {
     CollectionLimitExceeded,
 }
 
-class XmltvWarning(
-    val kind: XmltvWarningKind,
-    val lineNumber: Int?,
-    val columnNumber: Int?,
-) {
+class XmltvWarning(val kind: XmltvWarningKind, val lineNumber: Int?, val columnNumber: Int?) {
     override fun toString(): String =
         "XmltvWarning(kind=$kind, lineNumber=$lineNumber, columnNumber=$columnNumber)"
 }
@@ -235,14 +184,12 @@ class XmltvParseException(
     val reason: XmltvParseFailureReason,
     val lineNumber: Int? = null,
     val columnNumber: Int? = null,
-    cause: Throwable? = null,
 ) : IOException(
     buildString {
         append("XMLTV parse failed: reason=").append(reason)
         lineNumber?.let { append(", lineNumber=").append(it) }
         columnNumber?.let { append(", columnNumber=").append(it) }
     },
-    cause,
 )
 
 class XmltvParseReport(
@@ -259,7 +206,6 @@ class XmltvParseReport(
         require(elementCount >= 0L)
         require(consumedBytes >= 0L)
     }
-
     override fun toString(): String =
         "XmltvParseReport(channelCount=$channelCount, programmeCount=$programmeCount, " +
             "warningCount=$warningCount, elementCount=$elementCount, consumedBytes=$consumedBytes)"
