@@ -1,4 +1,5 @@
 import org.gradle.api.GradleException
+import org.gradle.api.tasks.Sync
 
 plugins {
     id("muxtv.android.library")
@@ -30,6 +31,15 @@ android {
 
 room3 {
     schemaDirectory("$projectDir/schemas")
+}
+
+val publishRoomSchemasEvidence = tasks.register<Sync>("publishRoomSchemasEvidence") {
+    from(layout.projectDirectory.dir("schemas"))
+    into(rootProject.layout.projectDirectory.dir(".work/evidence/room-schemas"))
+}
+
+tasks.matching { it.name == "copyRoomSchemas" }.configureEach {
+    finalizedBy(publishRoomSchemasEvidence)
 }
 
 dependencies {
