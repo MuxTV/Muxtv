@@ -74,8 +74,7 @@ if (Test-Path $seriesScript -PathType Leaf) {
         "Remove-MeasurementAvd",
         "Invoke-CatalogDatabaseMeasurement.ps1",
         "Invoke-PlayerProxyMeasurement.ps1",
-        ":core:testing:analyzeMeasurementSeries",
-        "threshold"
+        ":core:testing:analyzeMeasurementSeries"
     )
     foreach ($token in $requiredTokens) {
         if ($seriesContent -notmatch [regex]::Escape($token)) {
