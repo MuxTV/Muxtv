@@ -10,6 +10,7 @@ param(
     [ValidateRange(0, 20)]
     [int]$Warmups = 2,
 
+    [Alias("Iterations")]
     [ValidateRange(5, 100)]
     [int]$Samples = 10,
 
