@@ -6,7 +6,7 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Android TV приложение, модульный Gradle-проект, Room, защищённое хранилище, bounded M3U ingestion, управление источниками, Channels и process-owned Media3 Player существуют и проходят автоматические API 26/API 36 проверки.
+Проект находится в стадии **functional pre-alpha**. Android TV приложение, модульный Gradle-проект, Room, защищённое хранилище, bounded M3U ingestion, управление источниками, Channels и process-owned Media3 Player существуют и проходят автоматические API 26/API 36 проверки. Deterministic measurement foundation теперь включает повторяемые M3U/Room/Player series, строгую identity/provenance validation и отдельный current-profile AVD smoke gate.
 
 Рабочий пользовательский путь:
 
@@ -44,6 +44,13 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - reproducible descriptive M3U parse measurements с raw samples, wall-time/allocation distributions и environment metadata;
 - reproducible Android Room measurements для 250-entry batch, 10k staging, activation, first-page channel query и source overview;
 - reproducible Android Player control-plane proxy measurements для request construction, SET codec, setup coordination и controller reconnect;
+- immutable variance identity с exact source commit, fixture/workload/runtime fingerprint и unmodifiable snapshots;
+- строгие M3U/Room/Player report adapters с exact-byte SHA-256, bounded JSON и fail-closed schema/environment agreement;
+- canonical threshold-free variance reports и отдельные audit manifests с child-report SHA-256;
+- repository-owned `current-normal`, `old-edge-normal` и `current-low-ram` measurement profiles;
+- последовательный series orchestrator: host M3U отдельно, fresh AVD на repetition, Room → Player → shutdown;
+- stable Android boot readiness и interrupted-run evidence finalization;
+- dedicated trusted same-repository `Measurement variance smoke` workflow;
 - complete length-prefixed fixture/request-profile SHA-256, DB/WAL/SHM footprint и ручные `CatalogMeasurement` / `PlayerMeasurement` modes;
 - deterministic Windows Android SDK bootstrap, если runner process не получил `ANDROID_SDK_ROOT`/`ANDROID_HOME`;
 - permanent `core:testing` contracts в Fast/Full validation;
@@ -69,13 +76,17 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - PR #55 — repository truth после Room measurements;
 - PR #56 — Android Player proxy measurements, durable baseline и deterministic SDK bootstrap;
 - PR #57 — immutable ownership playback request headers и real-Android Bundle contract;
-- issues #26 и #39 закрыты; issue #27 остаётся активной только до repeated multi-profile series и threshold decision.
+- PR #58 — repository truth после Player/header packages;
+- PR #59 — immutable variance analysis foundation и provenance contracts;
+- PR #60 — strict canonical M3U/Room/Player report adapters;
+- PR #61 — sequential measurement series orchestration, current-profile smoke и stable ADB readiness;
+- issues #26 и #39 закрыты; issue #27 остаётся активной только до пятипрогонных current/old-edge/low-RAM datasets и threshold/warning/descriptive decision.
 
-Следующий package issue #27 — повторяемые parse/Room/Player серии на current, old-edge и low-RAM virtual profiles с единым environment fingerprint и cross-series variance analysis. Failing threshold допускается только после сопоставимых повторных данных.
+Следующий package issue #27 — пять сопоставимых Room/Player repetitions отдельно для `current-normal`, `old-edge-normal` и `current-low-ram`, затем отдельная интерпретация каждого environment class. Failing threshold допускается только после анализа этих данных; двухпрогонный smoke уже показал высокую variance staging и Player micro-operations.
 
 До первой публичной alpha ещё не завершены:
 
-- repeated multi-profile measurement series и обоснованный threshold/no-threshold decision;
+- five-run multi-profile measurement campaign и обоснованный threshold/warning/no-threshold decision;
 - XMLTV/EPG, Guide, Search, Favorites и Recent;
 - bounded stream fallback и TV Doctor Lite;
 - полный светлый TV-first visual redesign из issue #33;
@@ -113,7 +124,7 @@ pwsh -NoProfile -File .\tools\verify-local.ps1 -Mode Full -NoDaemon
 pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
   -Mode DeviceMatrix `
   -SourceBranch local `
-  -SourceCommit local `
+  -SourceCommit <полный-lowercase-40-character-git-sha> `
   -NoDaemon
 ```
 
@@ -135,6 +146,17 @@ pwsh -NoProfile -File .\tools\android\Invoke-PlayerProxyDeviceValidation.ps1 `
   -NoDaemon
 ```
 
+Двухпрогонная current-profile variance smoke series:
+
+```powershell
+pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
+  -SourceBranch local `
+  -SourceCommit <полный-lowercase-40-character-git-sha> `
+  -ProfileId current-normal `
+  -Repetitions 2 `
+  -NoDaemon
+```
+
 Harness самостоятельно выбирает доступные Android TV system images, создаёт headless AVD, выполняет non-zero instrumentation suites, сохраняет evidence и гарантированно останавливает emulator. Эмуляторная матрица проверяет Android API/lifecycle/Room/Keystore/focus/MediaSession contracts, но не vendor MediaCodec, HDR, passthrough, Fire OS или производительность слабого ARM SoC.
 
 ## Документация
@@ -145,6 +167,7 @@ Harness самостоятельно выбирает доступные Android
 - M3U parse baseline: [`docs/performance/2026-07-28-m3u-parse-baseline.md`](docs/performance/2026-07-28-m3u-parse-baseline.md);
 - Android Room baseline: [`docs/performance/2026-07-28-catalog-database-baseline.md`](docs/performance/2026-07-28-catalog-database-baseline.md);
 - Player proxy baseline: [`docs/performance/2026-07-29-player-proxy-baseline.md`](docs/performance/2026-07-29-player-proxy-baseline.md);
+- current-profile variance smoke: [`docs/performance/2026-07-30-current-variance-smoke.md`](docs/performance/2026-07-30-current-variance-smoke.md);
 - HTTP approval design/record: [`docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md`](docs/superpowers/specs/2026-07-27-exact-origin-http-playback-approval-design.md);
 - Media3 setup/reconnect evidence: [`docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md`](docs/superpowers/reports/2026-07-27-issue26-setup-reconnect-evidence.md);
 - открытые функциональные packages ведутся через GitHub Issues и отдельные PR.
