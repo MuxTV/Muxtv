@@ -20,7 +20,7 @@ class MeasurementM3uAllocationConsistencyTest {
     fun `unavailable allocation mode forbids allocation samples and summary`() {
         val unexpectedValues = report(
             allocationMeasurement = "unavailable",
-            allocationSummary = summaryJson(5, 10, 12, 14),
+            allocationSummary = summaryJson(5, 10, 10, 10),
             allocatedBytes = "10",
         )
 
@@ -33,7 +33,7 @@ class MeasurementM3uAllocationConsistencyTest {
             request(
                 report(
                     allocationMeasurement = "thread-allocated-bytes",
-                    allocationSummary = summaryJson(5, 10, 12, 14),
+                    allocationSummary = summaryJson(5, 10, 10, 10),
                     allocatedBytes = "10",
                 ),
             ),
