@@ -10,7 +10,8 @@ New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 $diagnosticPath = Join-Path $evidenceDirectory "measurement-harness-syntax.log"
 $profileScript = Join-Path $PSScriptRoot "MeasurementProfiles.ps1"
 $seriesScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
-$files = @($profileScript, $seriesScript)
+$finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
+$files = @($profileScript, $seriesScript, $finalizerScript)
 $messages = [System.Collections.Generic.List[string]]::new()
 
 foreach ($file in $files) {
@@ -89,6 +90,15 @@ if (Test-Path $seriesScript -PathType Leaf) {
     foreach ($token in $forbiddenTokens) {
         if ($seriesContent -match [regex]::Escape($token)) {
             $messages.Add("Measurement series script contains forbidden parallel execution: $token")
+        }
+    }
+}
+
+if (Test-Path $finalizerScript -PathType Leaf) {
+    $finalizerContent = Get-Content -Path $finalizerScript -Raw -Encoding utf8
+    foreach ($token in @("measurement-series-interrupted", 'status = "interrupted"')) {
+        if ($finalizerContent -notmatch [regex]::Escape($token)) {
+            $messages.Add("Measurement finalizer is missing required contract token: $token")
         }
     }
 }
