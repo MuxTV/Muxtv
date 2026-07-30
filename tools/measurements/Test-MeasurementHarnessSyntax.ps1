@@ -9,9 +9,10 @@ $evidenceDirectory = Join-Path $repositoryRoot ".work\evidence\measurement-harne
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 $diagnosticPath = Join-Path $evidenceDirectory "measurement-harness-syntax.log"
 $profileScript = Join-Path $PSScriptRoot "MeasurementProfiles.ps1"
-$seriesScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
+$seriesEntryScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
+$seriesCoreScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeriesCore.ps1"
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
-$files = @($profileScript, $seriesScript, $finalizerScript)
+$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $finalizerScript)
 $messages = [System.Collections.Generic.List[string]]::new()
 
 foreach ($file in $files) {
@@ -67,8 +68,22 @@ if (Test-Path $profileScript -PathType Leaf) {
     }
 }
 
-if (Test-Path $seriesScript -PathType Leaf) {
-    $seriesContent = Get-Content -Path $seriesScript -Raw -Encoding utf8
+if (Test-Path $seriesEntryScript -PathType Leaf) {
+    $entryContent = Get-Content -Path $seriesEntryScript -Raw -Encoding utf8
+    foreach ($token in @(
+        "Wait-MeasurementStableAndroidBoot",
+        "consecutiveReadyChecks",
+        "Invoke-MeasurementSeriesCore.ps1",
+        "Set-Alias"
+    )) {
+        if ($entryContent -notmatch [regex]::Escape($token)) {
+            $messages.Add("Measurement series entry point is missing required contract token: $token")
+        }
+    }
+}
+
+if (Test-Path $seriesCoreScript -PathType Leaf) {
+    $seriesContent = Get-Content -Path $seriesCoreScript -Raw -Encoding utf8
     $requiredTokens = @(
         "finally",
         "Stop-TvEmulator",
@@ -79,7 +94,7 @@ if (Test-Path $seriesScript -PathType Leaf) {
     )
     foreach ($token in $requiredTokens) {
         if ($seriesContent -notmatch [regex]::Escape($token)) {
-            $messages.Add("Measurement series script is missing required contract token: $token")
+            $messages.Add("Measurement series core is missing required contract token: $token")
         }
     }
     $forbiddenTokens = @(
@@ -89,7 +104,7 @@ if (Test-Path $seriesScript -PathType Leaf) {
     )
     foreach ($token in $forbiddenTokens) {
         if ($seriesContent -match [regex]::Escape($token)) {
-            $messages.Add("Measurement series script contains forbidden parallel execution: $token")
+            $messages.Add("Measurement series core contains forbidden parallel execution: $token")
         }
     }
 }
