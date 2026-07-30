@@ -3,6 +3,7 @@ package app.muxtv.testing.measurements
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
@@ -77,20 +78,32 @@ object MeasurementSeriesCommand {
             index += 2
         }
         if (values.keys != ALLOWED_OPTIONS) usageFailure()
-        return SeriesOptions(
-            requestFile = Path.of(requireNotNull(values[OPTION_REQUEST])),
-            inputDirectory = Path.of(requireNotNull(values[OPTION_INPUT_DIRECTORY])),
-            outputDirectory = Path.of(requireNotNull(values[OPTION_OUTPUT_DIRECTORY])),
-        )
+        return try {
+            SeriesOptions(
+                requestFile = Path.of(requireNotNull(values[OPTION_REQUEST])),
+                inputDirectory = Path.of(requireNotNull(values[OPTION_INPUT_DIRECTORY])),
+                outputDirectory = Path.of(requireNotNull(values[OPTION_OUTPUT_DIRECTORY])),
+            )
+        } catch (_: InvalidPathException) {
+            usageFailure()
+        }
     }
 
     private fun readRequest(path: Path): SeriesRequest {
         val bytes = readBoundedFile(path, MAX_SERIES_REQUEST_BYTES)
-        val root = try {
-            parseStrictJsonObject(bytes)
+        return try {
+            decodeRequest(bytes)
+        } catch (failure: SeriesInputException) {
+            throw failure
         } catch (_: MeasurementReportAdaptationException) {
             inputFailure()
+        } catch (_: IllegalArgumentException) {
+            inputFailure()
         }
+    }
+
+    private fun decodeRequest(bytes: ByteArray): SeriesRequest {
+        val root = parseStrictJsonObject(bytes)
         root.requireExactFields(
             "schemaVersion",
             "family",
@@ -211,21 +224,25 @@ object MeasurementSeriesCommand {
         val varianceOutput = ByteArrayOutputStream()
         MeasurementVarianceJsonWriter.write(variance, varianceOutput)
         val varianceBytes = varianceOutput.toByteArray()
-        val audit = MeasurementSeriesAuditManifest(
-            schemaVersion = 1,
-            thresholdApplied = false,
-            family = request.family.id,
-            outputName = request.outputName,
-            varianceReportSha256 = sha256(varianceBytes),
-            identityFingerprintSha256 = variance.identityFingerprintSha256,
-            seriesCount = request.runs.size,
-            inputs = request.runs.zip(adapted).map { (run, adaptedRun) ->
-                MeasurementSeriesAuditInput(
-                    reportName = run.reportName,
-                    sha256 = adaptedRun.run.sourceReportSha256,
-                )
-            },
-        )
+        val audit = try {
+            MeasurementSeriesAuditManifest(
+                schemaVersion = 1,
+                thresholdApplied = false,
+                family = request.family.id,
+                outputName = request.outputName,
+                varianceReportSha256 = sha256(varianceBytes),
+                identityFingerprintSha256 = variance.identityFingerprintSha256,
+                seriesCount = request.runs.size,
+                inputs = request.runs.zip(adapted).map { (run, adaptedRun) ->
+                    MeasurementSeriesAuditInput(
+                        reportName = run.reportName,
+                        sha256 = adaptedRun.run.sourceReportSha256,
+                    )
+                },
+            )
+        } catch (_: IllegalArgumentException) {
+            analysisFailure()
+        }
         val auditOutput = ByteArrayOutputStream()
         MeasurementSeriesAuditJsonWriter.write(audit, auditOutput)
         return SeriesAnalysisResult(
