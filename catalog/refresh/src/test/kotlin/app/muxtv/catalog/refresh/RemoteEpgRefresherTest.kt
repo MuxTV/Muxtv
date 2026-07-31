@@ -289,8 +289,12 @@ private class RecordingEpgRevisionStore : EpgRevisionStore {
 
     override suspend fun upsertSource(source: EpgSourceDefinition) = Unit
 
-    override suspend fun beginRevision(sourceId: String, startedAtEpochMillis: Long): Long =
-        nextRevision++.also(begunRevisions::add)
+    override suspend fun beginRevision(sourceId: String, startedAtEpochMillis: Long): Long {
+        val revisionNumber = nextRevision
+        nextRevision += 1
+        begunRevisions += revisionNumber
+        return revisionNumber
+    }
 
     override suspend fun stageBatch(
         channels: List<EpgChannelEntity>,
