@@ -49,6 +49,7 @@ sealed interface EpgImportResult {
     ) : EpgImportResult
 
     data object EmptyRevisionRejected : EpgImportResult
+    data object Superseded : EpgImportResult
     data class Failed(val reason: EpgImportFailureReason) : EpgImportResult
 }
 
@@ -133,6 +134,9 @@ class EpgRevisionImporter(
 
                 EpgRevisionActivationResult.EmptyRevisionRejected ->
                     EpgImportResult.EmptyRevisionRejected
+
+                EpgRevisionActivationResult.Superseded ->
+                    EpgImportResult.Superseded
 
                 EpgRevisionActivationResult.NotStaging ->
                     EpgImportResult.Failed(EpgImportFailureReason.StorageFailure)
