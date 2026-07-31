@@ -1,6 +1,5 @@
 package app.muxtv.catalog.refresh
 
-import app.muxtv.catalog.importer.EpgImportResult
 import app.muxtv.catalog.importer.EpgRevisionImporter
 import app.muxtv.catalog.ingest.StreamingXmltvParser
 import app.muxtv.credentials.CredentialId
@@ -104,6 +103,20 @@ class RemoteEpgRefresherTest {
             )
             assertThat(fixture.revisionStore.begunRevisions).isEmpty()
             assertThat(fixture.revisionStore.stagedProgrammes).isEmpty()
+        }
+    }
+
+    @Test
+    fun `not modified without request validators is an HTTP failure`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().code(304).build())
+            val fixture = fixture(server)
+
+            val result = fixture.refresher.refresh(request())
+
+            assertThat(result).isEqualTo(RemoteEpgRefreshResult.HttpFailure(304))
+            assertThat(fixture.revisionStore.begunRevisions).isEmpty()
         }
     }
 
