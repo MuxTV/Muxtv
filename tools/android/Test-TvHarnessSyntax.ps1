@@ -35,6 +35,18 @@ foreach ($file in $files) {
     }
 }
 
+$initializerContent = Get-Content -Path $files[0] -Raw
+foreach ($requiredInitializerFragment in @(
+    "Add-PathEntryIfMissing",
+    "System32",
+    "GITHUB_PATH"
+)) {
+    if ($initializerContent -notmatch [regex]::Escape($requiredInitializerFragment)) {
+        $messages += "Android SDK initialization does not preserve required Windows runtime PATH behavior: " +
+            $requiredInitializerFragment
+    }
+}
+
 $androidSdkContent = Get-Content -Path $files[1] -Raw
 $requiredFunctions = @(
     "Get-AndroidSdkTools",
@@ -51,6 +63,29 @@ foreach ($functionName in $requiredFunctions) {
     $pattern = "(?m)^function\s+" + [regex]::Escape($functionName) + "\s*\{"
     if ($androidSdkContent -notmatch $pattern) {
         $messages += "Missing function declaration: " + $functionName
+    }
+}
+if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages') {
+    $messages += "Resolve-TvSystemImage must preserve singleton image output as an array."
+}
+if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
+    $messages += "sdkmanager list output must be captured as an array."
+}
+
+if ($messages.Count -eq 0) {
+    . $files[1]
+    function Get-AvailableTvSystemImages {
+        param([Parameter(Mandatory)]$Tools)
+        return [pscustomobject]@{
+            Package = "system-images;android-36;android-tv;x86"
+            Api = 36
+            Flavor = "android-tv"
+            Abi = "x86"
+        }
+    }
+    $singletonResult = Resolve-TvSystemImage -Tools ([pscustomobject]@{}) -PreferredApi 36
+    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86") {
+        $messages += "Resolve-TvSystemImage did not handle singleton image output."
     }
 }
 
