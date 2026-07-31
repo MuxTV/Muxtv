@@ -5,9 +5,12 @@ on:
     branches:
       - main
     paths:
-      - core/database/src/main/kotlin/app/muxtv/database/DatabaseMigrations.kt
-      - core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabase.kt
+      - .github/workflows/database-migration-device-matrix.yml
+      - catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/EpgRevisionImporter.kt
+      - core/database/src/main/kotlin/app/muxtv/database/**
+      - core/database/src/androidTest/kotlin/app/muxtv/database/**
       - core/database/schemas/**
+      - tools/android/**
 
 permissions:
   contents: read
