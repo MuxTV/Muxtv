@@ -70,7 +70,8 @@ class EpgRevisionOrderingContractTest {
         ).isEqualTo(EpgRevisionActivationResult.Superseded)
         assertThat(dao.activeRevision(SOURCE_ID)).isEqualTo(newer)
         assertThat(dao.revisionStatus(SOURCE_ID, newer)).isEqualTo(EpgRevisionEntity.STATUS_ACTIVE)
-        assertThat(dao.revisionStatus(SOURCE_ID, older)).isEqualTo(EpgRevisionEntity.STATUS_STAGING)
+        assertThat(dao.revisionStatus(SOURCE_ID, older)).isNull()
+        assertThat(dao.revisionNumbers(SOURCE_ID)).containsExactly(newer)
         Unit
     }
 
