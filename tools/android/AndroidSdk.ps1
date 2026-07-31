@@ -260,9 +260,10 @@ function Test-AndroidSystemImageInstalled {
         return $false
     }
 
-    return
+    return (
         (Test-Path (Join-Path $directory "package.xml") -PathType Leaf) -or
         (Test-Path (Join-Path $directory "source.properties") -PathType Leaf)
+    )
 }
 
 function Install-AndroidPackage {
