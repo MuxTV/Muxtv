@@ -84,13 +84,11 @@ class EpgRevisionImporter(
                     defaultZoneId = request.defaultZoneId,
                 ),
             )
-            val revision = revisionStore.nextRevisionNumber(request.sourceId)
-            revisionNumber = revision
-            revisionStore.beginRevision(
+            val revision = revisionStore.beginRevision(
                 sourceId = request.sourceId,
-                revisionNumber = revision,
                 startedAtEpochMillis = nowEpochMillis(),
             )
+            revisionNumber = revision
 
             val sink = EpgStagingSink(
                 sourceId = request.sourceId,
