@@ -7,9 +7,12 @@ import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
+import app.muxtv.catalog.importer.EpgRevisionImporter
+import app.muxtv.catalog.importer.EpgRevisionImporterFactory
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
+import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -23,6 +26,7 @@ import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
+import app.muxtv.database.EpgRevisionStore
 import app.muxtv.database.InactiveSourceRemovalResult
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.database.MuxTvDatabaseFactory
@@ -80,6 +84,11 @@ object AppModule {
     ): SourceRevisionStore = components.sourceRevisionStore
 
     @Provides
+    fun provideEpgRevisionStore(
+        components: MuxTvDatabaseComponents,
+    ): EpgRevisionStore = components.epgRevisionStore
+
+    @Provides
     fun provideSourceRefreshStore(
         components: MuxTvDatabaseComponents,
     ): SourceRefreshStore = components.sourceRefreshStore
@@ -127,6 +136,12 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideEpgRevisionImporter(
+        revisionStore: EpgRevisionStore,
+    ): EpgRevisionImporter = EpgRevisionImporterFactory.create(revisionStore)
+
+    @Provides
+    @Singleton
     fun provideHttpResources(): MuxTvHttpResources = MuxTvHttpResources()
 
     @Provides
@@ -142,6 +157,18 @@ object AppModule {
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
     ): RemoteSourceRefresher = RemoteSourceRefresher(
+        accessManager = accessManager,
+        importer = importer,
+        sourceClient = clients.source,
+    )
+
+    @Provides
+    @Singleton
+    fun provideRemoteEpgRefresher(
+        accessManager: RemoteSourceAccessManager,
+        importer: EpgRevisionImporter,
+        clients: MuxTvHttpClients,
+    ): RemoteEpgRefresher = RemoteEpgRefresher(
         accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
