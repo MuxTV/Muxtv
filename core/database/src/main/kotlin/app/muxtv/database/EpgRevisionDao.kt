@@ -104,7 +104,10 @@ internal abstract class EpgRevisionDao {
         WHERE p.sourceId = :sourceId
           AND p.externalChannelId IN (:externalChannelIds)
           AND p.startEpochMillis < :toEpochMillis
-          AND COALESCE(p.stopEpochMillis, 9223372036854775807) > :fromEpochMillis
+          AND (
+              (p.stopEpochMillis IS NOT NULL AND p.stopEpochMillis > :fromEpochMillis)
+              OR (p.stopEpochMillis IS NULL AND p.startEpochMillis >= :fromEpochMillis)
+          )
         ORDER BY p.startEpochMillis ASC, p.sequenceNumber ASC
         LIMIT :limit
         """,
