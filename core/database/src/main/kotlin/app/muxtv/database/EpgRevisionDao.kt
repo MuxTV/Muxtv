@@ -287,6 +287,10 @@ internal abstract class EpgRevisionDao {
         val previousRevision = requireNotNull(activeRevision(sourceId)) {
             "EPG source does not exist."
         }
+        if (previousRevision > revisionNumber) {
+            return EpgRevisionActivationResult.Superseded
+        }
+
         markCurrentActiveAsRetained(sourceId)
         check(
             markRevisionActive(
