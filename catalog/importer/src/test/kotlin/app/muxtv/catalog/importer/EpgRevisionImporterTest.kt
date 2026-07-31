@@ -170,14 +170,10 @@ private class RecordingEpgRevisionStore(
         sources += source
     }
 
-    override suspend fun nextRevisionNumber(sourceId: String): Long = 1
-
-    override suspend fun beginRevision(
-        sourceId: String,
-        revisionNumber: Long,
-        startedAtEpochMillis: Long,
-    ) {
+    override suspend fun beginRevision(sourceId: String, startedAtEpochMillis: Long): Long {
+        val revisionNumber = begunRevisions.size + 1L
         begunRevisions += Triple(sourceId, revisionNumber, startedAtEpochMillis)
+        return revisionNumber
     }
 
     override suspend fun stageBatch(
