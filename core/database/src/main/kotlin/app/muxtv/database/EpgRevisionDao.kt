@@ -80,6 +80,7 @@ internal abstract class EpgRevisionDao {
         require(sourceId.isNotBlank())
         require(fromEpochMillis >= 0)
         require(toEpochMillis > fromEpochMillis)
+        require(toEpochMillis - fromEpochMillis <= MAX_ACTIVE_WINDOW_MILLIS)
         require(limit in 1..MAX_ACTIVE_PROGRAMME_LIMIT)
         if (externalChannelIds.isEmpty()) return emptyList()
         require(externalChannelIds.size <= MAX_ACTIVE_CHANNEL_IDS)
@@ -300,5 +301,6 @@ internal abstract class EpgRevisionDao {
     private companion object {
         const val MAX_ACTIVE_CHANNEL_IDS = 256
         const val MAX_ACTIVE_PROGRAMME_LIMIT = 500
+        const val MAX_ACTIVE_WINDOW_MILLIS = 31L * 24 * 60 * 60 * 1_000
     }
 }
