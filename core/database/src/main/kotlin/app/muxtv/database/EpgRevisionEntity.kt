@@ -81,4 +81,5 @@ sealed interface EpgRevisionActivationResult {
 
     data object EmptyRevisionRejected : EpgRevisionActivationResult
     data object NotStaging : EpgRevisionActivationResult
+    data object Superseded : EpgRevisionActivationResult
 }
