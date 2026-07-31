@@ -34,12 +34,16 @@ function Add-PathEntryIfMissing {
     }
     if ($null -eq $alreadyPresent) {
         $env:PATH = "$normalizedEntry$([System.IO.Path]::PathSeparator)$env:PATH"
-        if ($Persist) {
-            if ([string]::IsNullOrWhiteSpace($env:GITHUB_PATH)) {
-                throw "GITHUB_PATH is unavailable; the Windows runtime path cannot be persisted."
-            }
-            $normalizedEntry | Add-Content -Path $env:GITHUB_PATH -Encoding utf8
+    }
+
+    if ($Persist) {
+        if ([string]::IsNullOrWhiteSpace($env:GITHUB_PATH)) {
+            throw "GITHUB_PATH is unavailable; the Windows runtime path cannot be persisted."
         }
+        # GitHub Actions creates a fresh process environment for every step. Persist the
+        # entry even when it already exists in this step's PATH; otherwise the next step
+        # can lose System32 and batch wrappers such as gradlew.bat cannot find findstr.exe.
+        $normalizedEntry | Add-Content -Path $env:GITHUB_PATH -Encoding utf8
     }
 }
 
