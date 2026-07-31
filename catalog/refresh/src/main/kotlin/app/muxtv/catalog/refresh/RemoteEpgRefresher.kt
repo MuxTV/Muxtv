@@ -73,6 +73,9 @@ class RemoteEpgRefresher(
         return try {
             sourceClient.newCall(networkRequest).awaitSourceResponse().use { response ->
                 if (response.code == HTTP_NOT_MODIFIED) {
+                    if (request.validators.isEmpty) {
+                        return RemoteEpgRefreshResult.HttpFailure(HTTP_NOT_MODIFIED)
+                    }
                     return RemoteEpgRefreshResult.NotModified(
                         validators = response.notModifiedValidators(request.validators),
                     )
