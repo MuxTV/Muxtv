@@ -62,6 +62,17 @@ class EpgActiveQueryBoundsContractTest {
                     sourceId = "epg-source",
                     externalChannelIds = listOf("channel"),
                     fromEpochMillis = 0,
+                    toEpochMillis = MAX_ACTIVE_WINDOW_MILLIS + 1,
+                    limit = 20,
+                )
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                dao.activeProgrammes(
+                    sourceId = "epg-source",
+                    externalChannelIds = listOf("channel"),
+                    fromEpochMillis = 0,
                     toEpochMillis = 10_000,
                     limit = -1,
                 )
@@ -78,5 +89,9 @@ class EpgActiveQueryBoundsContractTest {
                 )
             }
         }
+    }
+
+    private companion object {
+        const val MAX_ACTIVE_WINDOW_MILLIS = 31L * 24 * 60 * 60 * 1_000
     }
 }
