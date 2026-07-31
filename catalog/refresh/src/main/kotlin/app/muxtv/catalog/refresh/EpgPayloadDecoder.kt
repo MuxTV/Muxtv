@@ -82,17 +82,13 @@ class EpgPayloadDecoder {
             val sniffed = ByteArray(MAGIC_BYTE_COUNT)
             val sniffedCount = readPrefix(source, sniffed)
             if (sniffedCount == 0) {
-                source.closeQuietly()
                 return EpgPayloadDecodeResult.Rejected(EpgPayloadRejectionReason.EmptyPayload)
             }
             source.unread(sniffed, 0, sniffedCount)
 
             val emptyZipArchiveMagic = isEmptyZipArchiveMagic(sniffed, sniffedCount)
             when (val selection = selectFormat(sniffed, sniffedCount, hints)) {
-                is FormatSelection.Rejected -> {
-                    source.closeQuietly()
-                    EpgPayloadDecodeResult.Rejected(selection.reason)
-                }
+                is FormatSelection.Rejected -> EpgPayloadDecodeResult.Rejected(selection.reason)
 
                 is FormatSelection.Selected -> when (selection.format) {
                     EpgPayloadFormat.Plain -> decodePlain(source, limits, consume)
@@ -106,8 +102,9 @@ class EpgPayloadDecoder {
                 }
             }
         } catch (failure: DecoderFailure) {
-            source.closeQuietly()
             EpgPayloadDecodeResult.Rejected(failure.reason)
+        } finally {
+            source.closeQuietly()
         }
     }
 
