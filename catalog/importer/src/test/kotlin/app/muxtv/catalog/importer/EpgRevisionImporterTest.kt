@@ -106,6 +106,32 @@ class EpgRevisionImporterTest {
     }
 
     @Test
+    fun `superseded import discards its staging revision`(): Unit = runBlocking {
+        val store = RecordingEpgRevisionStore(
+            activationResultOverride = EpgRevisionActivationResult.Superseded,
+        )
+        val importer = EpgRevisionImporter(
+            parser = StreamingXmltvParser(),
+            revisionStore = store,
+            nowEpochMillis = sequenceClock(10, 20),
+        )
+        val xml = """
+            <tv>
+              <channel id="one"><display-name>One</display-name></channel>
+              <programme channel="one" start="20260730120000 +0000">
+                <title>Older guide entry</title>
+              </programme>
+            </tv>
+        """.trimIndent()
+
+        val result = importer.import(request(), ByteArrayInputStream(xml.toByteArray()))
+
+        assertThat(result).isEqualTo(EpgImportResult.Superseded)
+        assertThat(store.discardedRevisions).containsExactly("epg-1" to 1L)
+        assertThat(store.activationStatistics).hasSize(1)
+    }
+
+    @Test
     fun `parser failure discards staging revision and returns redacted failure`(): Unit = runBlocking {
         val store = RecordingEpgRevisionStore()
         val importer = EpgRevisionImporter(
@@ -157,6 +183,7 @@ class EpgRevisionImporterTest {
 
 private class RecordingEpgRevisionStore(
     private val cancelOnFirstBatch: Boolean = false,
+    private val activationResultOverride: EpgRevisionActivationResult? = null,
 ) : EpgRevisionStore {
     val sources = mutableListOf<EpgSourceDefinition>()
     val begunRevisions = mutableListOf<Triple<String, Long, Long>>()
@@ -193,6 +220,7 @@ private class RecordingEpgRevisionStore(
         statistics: EpgRevisionStatistics,
     ): EpgRevisionActivationResult {
         activationStatistics += statistics
+        activationResultOverride?.let { return it }
         val programmeCount = stagedProgrammes.size
         return if (programmeCount == 0) {
             EpgRevisionActivationResult.EmptyRevisionRejected
