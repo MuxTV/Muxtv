@@ -278,17 +278,17 @@ internal abstract class EpgRevisionDao {
         activatedAtEpochMillis: Long,
         statistics: EpgRevisionStatistics,
     ): EpgRevisionActivationResult {
-        val programmeCount = countRevisionProgrammes(sourceId, revisionNumber)
-        if (programmeCount == 0) return EpgRevisionActivationResult.EmptyRevisionRejected
-        if (revisionStatus(sourceId, revisionNumber) != EpgRevisionEntity.STATUS_STAGING) {
-            return EpgRevisionActivationResult.NotStaging
-        }
-
         val previousRevision = requireNotNull(activeRevision(sourceId)) {
             "EPG source does not exist."
         }
         if (previousRevision > revisionNumber) {
             return EpgRevisionActivationResult.Superseded
+        }
+
+        val programmeCount = countRevisionProgrammes(sourceId, revisionNumber)
+        if (programmeCount == 0) return EpgRevisionActivationResult.EmptyRevisionRejected
+        if (revisionStatus(sourceId, revisionNumber) != EpgRevisionEntity.STATUS_STAGING) {
+            return EpgRevisionActivationResult.NotStaging
         }
 
         markCurrentActiveAsRetained(sourceId)
