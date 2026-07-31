@@ -105,7 +105,7 @@ function Get-AvailableTvSystemImages {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Tools)
 
-    $lines = & $Tools.SdkManager --list 2>&1
+    $lines = @(& $Tools.SdkManager --list 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "sdkmanager --list failed with exit code $LASTEXITCODE."
     }
@@ -141,7 +141,7 @@ function Resolve-TvSystemImage {
         [switch]$AllowOldEdgeFallback
     )
 
-    $images = Get-AvailableTvSystemImages -Tools $Tools
+    $images = @(Get-AvailableTvSystemImages -Tools $Tools)
     if ($images.Count -eq 0) {
         throw "No Android TV or Google TV system images were reported by sdkmanager."
     }
@@ -184,7 +184,7 @@ function Install-AndroidPackage {
         [Parameter(Mandatory)][string]$EvidenceDirectory
     )
 
-    $installed = & $Tools.SdkManager --list_installed 2>&1
+    $installed = @(& $Tools.SdkManager --list_installed 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "sdkmanager --list_installed failed with exit code $LASTEXITCODE."
     }
