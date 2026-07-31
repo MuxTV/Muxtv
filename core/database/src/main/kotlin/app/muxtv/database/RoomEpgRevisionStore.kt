@@ -37,6 +37,7 @@ internal class RoomEpgRevisionStore(
         channels: List<EpgChannelEntity>,
         programmes: List<EpgProgrammeEntity>,
     ) {
+        validateEpgStageBatch(channels, programmes)
         dao.stageBatch(channels, programmes)
     }
 
