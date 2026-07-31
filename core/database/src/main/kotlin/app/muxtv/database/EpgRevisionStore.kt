@@ -19,8 +19,7 @@ data class EpgSourceDefinition(
 
 interface EpgRevisionStore {
     suspend fun upsertSource(source: EpgSourceDefinition)
-    suspend fun nextRevisionNumber(sourceId: String): Long
-    suspend fun beginRevision(sourceId: String, revisionNumber: Long, startedAtEpochMillis: Long)
+    suspend fun beginRevision(sourceId: String, startedAtEpochMillis: Long): Long
     suspend fun stageBatch(
         channels: List<EpgChannelEntity>,
         programmes: List<EpgProgrammeEntity>,
