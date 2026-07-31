@@ -187,7 +187,7 @@ class RemoteEpgRefresherTest {
         server: MockWebServer,
         insecureHttpApproved: Boolean = true,
     ): Fixture {
-        val credentialStore = InMemoryCredentialStore()
+        val credentialStore = EpgTestCredentialStore()
         val accessManager = RemoteSourceAccessManager(credentialStore)
         assertThat(
             accessManager.save(
@@ -252,7 +252,7 @@ class RemoteEpgRefresherTest {
     }
 }
 
-private class InMemoryCredentialStore : CredentialStore {
+private class EpgTestCredentialStore : CredentialStore {
     private val records = mutableMapOf<CredentialId, ByteArray>()
 
     override suspend fun put(id: CredentialId, secret: SecretBytes): CredentialWriteResult {
