@@ -76,12 +76,16 @@ jobs:
       - name: Validate Android TV harness syntax
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Test-TvHarnessSyntax.ps1
 
       - name: Run old-edge and current Android TV matrix
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
             -Mode DeviceMatrix `
             -SourceBranch "${{ github.head_ref }}" `
             -SourceCommit "${{ github.event.pull_request.head.sha }}" `
