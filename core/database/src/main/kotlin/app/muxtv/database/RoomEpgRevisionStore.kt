@@ -15,23 +15,13 @@ internal class RoomEpgRevisionStore(
         )
     }
 
-    override suspend fun nextRevisionNumber(sourceId: String): Long =
-        dao.nextRevisionNumber(sourceId)
-
     override suspend fun beginRevision(
         sourceId: String,
-        revisionNumber: Long,
         startedAtEpochMillis: Long,
-    ) {
-        dao.insertRevision(
-            EpgRevisionEntity(
-                sourceId = sourceId,
-                revisionNumber = revisionNumber,
-                status = EpgRevisionEntity.STATUS_STAGING,
-                startedAtEpochMillis = startedAtEpochMillis,
-            ),
-        )
-    }
+    ): Long = dao.beginNextRevision(
+        sourceId = sourceId,
+        startedAtEpochMillis = startedAtEpochMillis,
+    )
 
     override suspend fun stageBatch(
         channels: List<EpgChannelEntity>,
