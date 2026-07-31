@@ -6,6 +6,55 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Add-PathEntryIfMissing {
+    param(
+        [Parameter(Mandatory)][string]$Entry,
+        [switch]$Persist
+    )
+
+    if (-not (Test-Path $Entry -PathType Container)) {
+        throw "Required Windows runtime directory does not exist."
+    }
+
+    $normalizedEntry = [System.IO.Path]::GetFullPath($Entry).TrimEnd('\')
+    $currentEntries = @(
+        ([string]$env:PATH).Split(
+            [System.IO.Path]::PathSeparator,
+            [System.StringSplitOptions]::RemoveEmptyEntries
+        ) | ForEach-Object {
+            try {
+                [System.IO.Path]::GetFullPath($_).TrimEnd('\')
+            } catch {
+                $_.Trim().TrimEnd('\')
+            }
+        }
+    )
+    $alreadyPresent = $currentEntries | Where-Object {
+        [string]::Equals($_, $normalizedEntry, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    if ($null -eq $alreadyPresent) {
+        $env:PATH = "$normalizedEntry$([System.IO.Path]::PathSeparator)$env:PATH"
+        if ($Persist) {
+            if ([string]::IsNullOrWhiteSpace($env:GITHUB_PATH)) {
+                throw "GITHUB_PATH is unavailable; the Windows runtime path cannot be persisted."
+            }
+            $normalizedEntry | Add-Content -Path $env:GITHUB_PATH -Encoding utf8
+        }
+    }
+}
+
+$windowsRoot = if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
+    $env:SystemRoot
+} else {
+    [Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+}
+if ([string]::IsNullOrWhiteSpace($windowsRoot)) {
+    throw "Windows system root could not be resolved."
+}
+Add-PathEntryIfMissing `
+    -Entry (Join-Path $windowsRoot "System32") `
+    -Persist:$PersistForGitHubActions
+
 $candidates = [System.Collections.Generic.List[string]]::new()
 foreach ($value in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME)) {
     if (-not [string]::IsNullOrWhiteSpace($value)) {
@@ -50,4 +99,4 @@ if ($PersistForGitHubActions) {
     ) | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
 }
 
-Write-Host "Android SDK environment initialized."
+Write-Host "Android SDK and Windows runtime environment initialized."
