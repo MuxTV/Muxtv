@@ -134,3 +134,92 @@ internal val MIGRATION_3_4 = Migration(3, 4) { connection ->
         "CREATE INDEX IF NOT EXISTS `index_pending_source_preparations_expiresAtEpochMillis` ON `pending_source_preparations` (`expiresAtEpochMillis`)",
     )
 }
+
+internal val MIGRATION_4_5 = Migration(4, 5) { connection ->
+    connection.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS `epg_sources` (
+            `id` TEXT NOT NULL,
+            `name` TEXT NOT NULL,
+            `providerSourceId` TEXT,
+            `accessRef` TEXT,
+            `defaultZoneId` TEXT,
+            `activeRevision` INTEGER NOT NULL,
+            PRIMARY KEY(`id`),
+            FOREIGN KEY(`providerSourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+        )
+        """.trimIndent(),
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_epg_sources_providerSourceId` ON `epg_sources` (`providerSourceId`)",
+    )
+
+    connection.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS `epg_revisions` (
+            `sourceId` TEXT NOT NULL,
+            `revisionNumber` INTEGER NOT NULL,
+            `status` TEXT NOT NULL,
+            `startedAtEpochMillis` INTEGER NOT NULL,
+            `activatedAtEpochMillis` INTEGER,
+            `acceptedChannels` INTEGER NOT NULL,
+            `acceptedProgrammes` INTEGER NOT NULL,
+            `skippedProgrammes` INTEGER NOT NULL,
+            `warningCount` INTEGER NOT NULL,
+            `unresolvedTimeCount` INTEGER NOT NULL,
+            PRIMARY KEY(`sourceId`, `revisionNumber`),
+            FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+        )
+        """.trimIndent(),
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_epg_revisions_sourceId_status` ON `epg_revisions` (`sourceId`, `status`)",
+    )
+
+    connection.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS `epg_channels` (
+            `sourceId` TEXT NOT NULL,
+            `revisionNumber` INTEGER NOT NULL,
+            `externalId` TEXT NOT NULL,
+            `primaryDisplayName` TEXT,
+            `primaryLanguage` TEXT,
+            `iconRef` TEXT,
+            PRIMARY KEY(`sourceId`, `revisionNumber`, `externalId`),
+            FOREIGN KEY(`sourceId`, `revisionNumber`) REFERENCES `epg_revisions`(`sourceId`, `revisionNumber`) ON UPDATE NO ACTION ON DELETE CASCADE
+        )
+        """.trimIndent(),
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_epg_channels_sourceId_revisionNumber` ON `epg_channels` (`sourceId`, `revisionNumber`)",
+    )
+
+    connection.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS `epg_programmes` (
+            `sourceId` TEXT NOT NULL,
+            `revisionNumber` INTEGER NOT NULL,
+            `sequenceNumber` INTEGER NOT NULL,
+            `externalChannelId` TEXT NOT NULL,
+            `startEpochMillis` INTEGER NOT NULL,
+            `stopEpochMillis` INTEGER,
+            `primaryTitle` TEXT,
+            `primaryLanguage` TEXT,
+            `subtitle` TEXT,
+            `description` TEXT,
+            `category` TEXT,
+            `iconRef` TEXT,
+            `episodeNumber` TEXT,
+            `isNew` INTEGER NOT NULL,
+            PRIMARY KEY(`sourceId`, `revisionNumber`, `sequenceNumber`),
+            FOREIGN KEY(`sourceId`, `revisionNumber`) REFERENCES `epg_revisions`(`sourceId`, `revisionNumber`) ON UPDATE NO ACTION ON DELETE CASCADE
+        )
+        """.trimIndent(),
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_epg_programmes_sourceId_revisionNumber_externalChannelId_startEpochMillis` ON `epg_programmes` (`sourceId`, `revisionNumber`, `externalChannelId`, `startEpochMillis`)",
+    )
+    connection.execSQL(
+        "CREATE INDEX IF NOT EXISTS `index_epg_programmes_sourceId_revisionNumber_startEpochMillis_stopEpochMillis` ON `epg_programmes` (`sourceId`, `revisionNumber`, `startEpochMillis`, `stopEpochMillis`)",
+    )
+}

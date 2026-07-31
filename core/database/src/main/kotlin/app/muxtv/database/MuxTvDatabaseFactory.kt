@@ -14,6 +14,7 @@ class MuxTvDatabaseComponents internal constructor(
     val pendingSourcePreparationStore: PendingSourcePreparationStore,
     val catalogRepository: CatalogRepository,
     val playbackCatalog: PlaybackCatalog,
+    val epgRevisionStore: EpgRevisionStore,
 )
 
 object MuxTvDatabaseFactory {
@@ -27,7 +28,7 @@ object MuxTvDatabaseFactory {
             klass = MuxTvDatabase::class.java,
             name = "muxtv.db",
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
@@ -41,6 +42,7 @@ object MuxTvDatabaseFactory {
                 dao = database.playbackCatalogDao(),
                 accessPolicyResolver = playbackAccessPolicyResolver,
             ),
+            epgRevisionStore = RoomEpgRevisionStore(database.epgRevisionDao()),
         )
     }
 

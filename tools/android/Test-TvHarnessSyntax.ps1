@@ -35,10 +35,27 @@ foreach ($file in $files) {
     }
 }
 
+$initializerContent = Get-Content -Path $files[0] -Raw
+foreach ($requiredInitializerFragment in @(
+    "Add-PathEntryIfMissing",
+    "System32",
+    "GITHUB_PATH"
+)) {
+    if ($initializerContent -notmatch [regex]::Escape($requiredInitializerFragment)) {
+        $messages += "Android SDK initialization does not preserve required Windows runtime PATH behavior: " +
+            $requiredInitializerFragment
+    }
+}
+
 $androidSdkContent = Get-Content -Path $files[1] -Raw
 $requiredFunctions = @(
     "Get-AndroidSdkTools",
+    "ConvertFrom-TvSystemImagePackage",
+    "ConvertFrom-SdkManagerTvSystemImageLines",
+    "Get-InstalledTvSystemImages",
+    "Get-AvailableTvSystemImages",
     "Resolve-TvSystemImage",
+    "Test-AndroidSystemImageInstalled",
     "Install-AndroidPackage",
     "Test-AndroidAcceleration",
     "New-TvAvd",
@@ -51,6 +68,54 @@ foreach ($functionName in $requiredFunctions) {
     $pattern = "(?m)^function\s+" + [regex]::Escape($functionName) + "\s*\{"
     if ($androidSdkContent -notmatch $pattern) {
         $messages += "Missing function declaration: " + $functionName
+    }
+}
+if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages') {
+    $messages += "Resolve-TvSystemImage must preserve singleton image output as an array."
+}
+if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
+    $messages += "sdkmanager list output must be captured as an array."
+}
+if ($androidSdkContent -notmatch 'Get-InstalledTvSystemImages') {
+    $messages += "TV system image resolution must inspect installed SDK directories."
+}
+
+if ($messages.Count -eq 0) {
+    . $files[1]
+
+    $parsedImages = @(ConvertFrom-SdkManagerTvSystemImageLines -Lines @(
+        "system-images;android-36;android-tv;x86 | 1 | Android TV",
+        "prefix system-images;android-30;google-tv;x86_64 suffix"
+    ))
+    if ($parsedImages.Count -ne 2) {
+        $messages += "sdkmanager TV image parser did not preserve all package lines."
+    }
+
+    $tempSdkRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("muxtv-sdk-catalog-" + [Guid]::NewGuid().ToString("N"))
+    try {
+        $installedImageDirectory = Join-Path $tempSdkRoot "system-images\android-36\android-tv\x86"
+        New-Item -ItemType Directory -Force -Path $installedImageDirectory | Out-Null
+        Set-Content -Path (Join-Path $installedImageDirectory "source.properties") -Value "Pkg.Revision=1" -Encoding ascii
+        $installedImages = @(Get-InstalledTvSystemImages -Tools ([pscustomobject]@{ Root = $tempSdkRoot }))
+        if ($installedImages.Count -ne 1 -or $installedImages[0].Package -ne "system-images;android-36;android-tv;x86") {
+            $messages += "Installed Android TV image discovery did not resolve the SDK filesystem package."
+        }
+    } finally {
+        Remove-Item -Path $tempSdkRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    function Get-AvailableTvSystemImages {
+        param([Parameter(Mandatory)]$Tools)
+        return [pscustomobject]@{
+            Package = "system-images;android-36;android-tv;x86"
+            Api = 36
+            Flavor = "android-tv"
+            Abi = "x86"
+        }
+    }
+    $singletonResult = Resolve-TvSystemImage -Tools ([pscustomobject]@{}) -PreferredApi 36
+    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86") {
+        $messages += "Resolve-TvSystemImage did not handle singleton image output."
     }
 }
 

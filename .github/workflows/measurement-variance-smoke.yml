@@ -12,6 +12,7 @@ on:
       - core/testing/src/test/kotlin/app/muxtv/testing/measurements/**
       - tools/measurements/**
       - tools/android/AndroidSdk.ps1
+      - tools/android/Initialize-AndroidSdkEnvironment.ps1
       - tools/android/Invoke-CatalogDatabaseMeasurement.ps1
       - tools/android/Invoke-PlayerProxyMeasurement.ps1
 
@@ -75,6 +76,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           . .\tools\android\AndroidSdk.ps1
           $tools = Get-AndroidSdkTools
           $evidenceDirectory = ".work\evidence\measurement-adb"
@@ -93,10 +95,12 @@ jobs:
       - name: Run two current-profile variance repetitions
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           $branch = "${{ github.head_ref || github.ref_name }}"
           $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
 
-          pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
+          & .\tools\measurements\Invoke-MeasurementSeries.ps1 `
             -SourceBranch $branch `
             -SourceCommit $commit `
             -ProfileId current-normal `

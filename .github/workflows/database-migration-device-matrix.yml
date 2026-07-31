@@ -1,0 +1,112 @@
+name: Database migration device matrix
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/database-migration-device-matrix.yml
+      - catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/EpgRevisionImporter.kt
+      - core/database/src/main/kotlin/app/muxtv/database/**
+      - core/database/src/androidTest/kotlin/app/muxtv/database/**
+      - core/database/schemas/**
+      - tools/android/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-migration-device-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Database migration device matrix
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout without pre-clean
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          clean: false
+
+      - name: Clean workspace with Windows long paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to enable repository-local Git long-path support."
+          }
+
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to reset the checked-out workspace."
+          }
+
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to clean the checked-out workspace.`n$cleanOutput"
+          }
+
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to inspect the checked-out workspace.`n$dirty"
+          }
+          if ($dirty) {
+            throw "Workspace remains dirty after explicit reset/clean.`n$dirty"
+          }
+
+      - name: Inspect runner environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "OS: $env:RUNNER_OS"
+          Write-Host "Architecture: $env:RUNNER_ARCH"
+          java -version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Java runtime inspection failed."
+          }
+
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
+          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
+
+      - name: Validate Android TV harness syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          & .\tools\android\Test-TvHarnessSyntax.ps1
+
+      - name: Run old-edge and current Android TV matrix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
+            -Mode DeviceMatrix `
+            -SourceBranch "${{ github.head_ref }}" `
+            -SourceCommit "${{ github.event.pull_request.head.sha }}" `
+            -NoDaemon
+
+      - name: Upload matrix evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: database-migration-device-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/**/*.json
+            .work/evidence/**/*.log
+            .work/evidence/**/*.txt
+            .work/evidence/**/*.png
+            core/database/schemas/**/*.json
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7

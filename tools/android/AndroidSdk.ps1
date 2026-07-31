@@ -101,33 +101,104 @@ function Invoke-CheckedNative {
     }
 }
 
+function ConvertFrom-TvSystemImagePackage {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Package)
+
+    if ($Package -notmatch '^system-images;android-(\d+);(android-tv|google-tv);(x86_64|x86)$') {
+        return $null
+    }
+
+    return [pscustomobject]@{
+        Package = $Package
+        Api = [int]$Matches[1]
+        Flavor = $Matches[2]
+        Abi = $Matches[3]
+    }
+}
+
+function ConvertFrom-SdkManagerTvSystemImageLines {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][object[]]$Lines)
+
+    $seen = @{}
+    $images = foreach ($line in @($Lines)) {
+        $text = ([string]$line) -replace '\x1B\[[0-?]*[ -/]*[@-~]', ''
+        foreach ($match in [regex]::Matches(
+            $text,
+            'system-images;android-\d+;(?:android-tv|google-tv);(?:x86_64|x86)'
+        )) {
+            $package = $match.Value
+            if (-not $seen.ContainsKey($package)) {
+                $seen[$package] = $true
+                ConvertFrom-TvSystemImagePackage -Package $package
+            }
+        }
+    }
+
+    return @($images)
+}
+
+function Get-InstalledTvSystemImages {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Tools)
+
+    $root = Join-Path $Tools.Root "system-images"
+    if (-not (Test-Path $root -PathType Container)) {
+        return @()
+    }
+
+    $packages = [System.Collections.Generic.List[string]]::new()
+    foreach ($apiDirectory in @(Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue)) {
+        if ($apiDirectory.Name -notmatch '^android-(\d+)$') {
+            continue
+        }
+        foreach ($flavor in @("android-tv", "google-tv")) {
+            $flavorDirectory = Join-Path $apiDirectory.FullName $flavor
+            if (-not (Test-Path $flavorDirectory -PathType Container)) {
+                continue
+            }
+            foreach ($abi in @("x86_64", "x86")) {
+                $imageDirectory = Join-Path $flavorDirectory $abi
+                if (-not (Test-Path $imageDirectory -PathType Container)) {
+                    continue
+                }
+                $hasMetadata =
+                    (Test-Path (Join-Path $imageDirectory "package.xml") -PathType Leaf) -or
+                    (Test-Path (Join-Path $imageDirectory "source.properties") -PathType Leaf)
+                if ($hasMetadata) {
+                    $packages.Add("system-images;$($apiDirectory.Name);$flavor;$abi")
+                }
+            }
+        }
+    }
+
+    return @($packages | ForEach-Object { ConvertFrom-TvSystemImagePackage -Package $_ })
+}
+
 function Get-AvailableTvSystemImages {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Tools)
 
-    $lines = & $Tools.SdkManager --list 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "sdkmanager --list failed with exit code $LASTEXITCODE."
+    $installed = @(Get-InstalledTvSystemImages -Tools $Tools)
+    $lines = @(& $Tools.SdkManager --list 2>&1)
+    $sdkManagerExitCode = $LASTEXITCODE
+    $reported = if ($sdkManagerExitCode -eq 0) {
+        @(ConvertFrom-SdkManagerTvSystemImageLines -Lines $lines)
+    } else {
+        @()
     }
 
     $seen = @{}
-    $images = foreach ($line in $lines) {
-        $text = [string]$line
-        if ($text -match '(system-images;android-(\d+);(android-tv|google-tv);(x86_64|x86))') {
-            $package = $Matches[1]
-            $api = [int]$Matches[2]
-            $flavor = $Matches[3]
-            $abi = $Matches[4]
-            if (-not $seen.ContainsKey($package)) {
-                $seen[$package] = $true
-                [pscustomobject]@{
-                    Package = $package
-                    Api = $api
-                    Flavor = $flavor
-                    Abi = $abi
-                }
-            }
+    $images = foreach ($image in @($installed + $reported)) {
+        if ($null -ne $image -and -not $seen.ContainsKey($image.Package)) {
+            $seen[$image.Package] = $true
+            $image
         }
+    }
+
+    if (@($images).Count -eq 0) {
+        throw "No Android TV or Google TV system images were discovered (sdkmanagerExitCode=$sdkManagerExitCode, outputLineCount=$($lines.Count))."
     }
 
     return @($images)
@@ -141,11 +212,7 @@ function Resolve-TvSystemImage {
         [switch]$AllowOldEdgeFallback
     )
 
-    $images = Get-AvailableTvSystemImages -Tools $Tools
-    if ($images.Count -eq 0) {
-        throw "No Android TV or Google TV system images were reported by sdkmanager."
-    }
-
+    $images = @(Get-AvailableTvSystemImages -Tools $Tools)
     $flavorRank = @{ "android-tv" = 0; "google-tv" = 1 }
     $abiRank = @{ "x86_64" = 0; "x86" = 1 }
 
@@ -176,6 +243,29 @@ function Resolve-TvSystemImage {
     throw "Required Android TV API $PreferredApi image is unavailable. Available TV images: $($available -join ', ')"
 }
 
+function Test-AndroidSystemImageInstalled {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Package
+    )
+
+    $image = ConvertFrom-TvSystemImagePackage -Package $Package
+    if ($null -eq $image) {
+        return $false
+    }
+
+    $directory = Join-Path $Tools.Root "system-images\android-$($image.Api)\$($image.Flavor)\$($image.Abi)"
+    if (-not (Test-Path $directory -PathType Container)) {
+        return $false
+    }
+
+    return (
+        (Test-Path (Join-Path $directory "package.xml") -PathType Leaf) -or
+        (Test-Path (Join-Path $directory "source.properties") -PathType Leaf)
+    )
+}
+
 function Install-AndroidPackage {
     [CmdletBinding()]
     param(
@@ -184,7 +274,12 @@ function Install-AndroidPackage {
         [Parameter(Mandatory)][string]$EvidenceDirectory
     )
 
-    $installed = & $Tools.SdkManager --list_installed 2>&1
+    if (Test-AndroidSystemImageInstalled -Tools $Tools -Package $Package) {
+        Write-Host "Android package already installed: $Package"
+        return
+    }
+
+    $installed = @(& $Tools.SdkManager --list_installed 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "sdkmanager --list_installed failed with exit code $LASTEXITCODE."
     }

@@ -17,8 +17,12 @@ import androidx.room3.RoomDatabase
         CanonicalChannelEntity::class,
         StreamVariantEntity::class,
         UserChannelOverlayEntity::class,
+        EpgSourceEntity::class,
+        EpgRevisionEntity::class,
+        EpgChannelEntity::class,
+        EpgProgrammeEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
@@ -29,4 +33,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun sourceRefreshDao(): SourceRefreshDao
     abstract fun pendingSourcePreparationDao(): PendingSourcePreparationDao
     abstract fun playbackCatalogDao(): PlaybackCatalogDao
+    abstract fun epgRevisionDao(): EpgRevisionDao
 }
