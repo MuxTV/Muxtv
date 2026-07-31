@@ -50,10 +50,29 @@ internal abstract class EpgRevisionDao {
         WHERE sourceId = :sourceId
         """,
     )
-    abstract suspend fun nextRevisionNumber(sourceId: String): Long
+    protected abstract suspend fun nextRevisionNumber(sourceId: String): Long
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRevision(revision: EpgRevisionEntity)
+
+    @Transaction
+    open suspend fun beginNextRevision(
+        sourceId: String,
+        startedAtEpochMillis: Long,
+    ): Long {
+        require(sourceId.isNotBlank())
+        require(startedAtEpochMillis >= 0)
+        val revisionNumber = nextRevisionNumber(sourceId)
+        insertRevision(
+            EpgRevisionEntity(
+                sourceId = sourceId,
+                revisionNumber = revisionNumber,
+                status = EpgRevisionEntity.STATUS_STAGING,
+                startedAtEpochMillis = startedAtEpochMillis,
+            ),
+        )
+        return revisionNumber
+    }
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertChannels(channels: List<EpgChannelEntity>)
