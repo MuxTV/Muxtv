@@ -114,7 +114,9 @@ class EpgPayloadDecoder {
         consume: suspend (InputStream) -> T,
     ): EpgPayloadDecodeResult<T> = try {
         val bounded = DecodedByteLimitInputStream(input, limits.maxDecodedBytes)
-        EpgPayloadDecodeResult.Decoded(EpgPayloadFormat.Plain, consume(bounded))
+        val value = consume(bounded)
+        bounded.throwIfLimitExceeded()
+        EpgPayloadDecodeResult.Decoded(EpgPayloadFormat.Plain, value)
     } finally {
         input.closeQuietly()
     }
@@ -140,7 +142,9 @@ class EpgPayloadDecoder {
                 malformedReason = EpgPayloadRejectionReason.MalformedGzip,
             )
             val bounded = DecodedByteLimitInputStream(normalized, limits.maxDecodedBytes)
-            EpgPayloadDecodeResult.Decoded(EpgPayloadFormat.Gzip, consume(bounded))
+            val value = consume(bounded)
+            bounded.throwIfLimitExceeded()
+            EpgPayloadDecodeResult.Decoded(EpgPayloadFormat.Gzip, value)
         } finally {
             gzip.closeQuietly()
         }
@@ -194,10 +198,9 @@ class EpgPayloadDecoder {
                     closeDelegate = false,
                 )
                 val bounded = DecodedByteLimitInputStream(normalized, limits.maxDecodedBytes)
-                return EpgPayloadDecodeResult.Decoded(
-                    EpgPayloadFormat.Zip,
-                    consume(bounded),
-                )
+                val value = consume(bounded)
+                bounded.throwIfLimitExceeded()
+                return EpgPayloadDecodeResult.Decoded(EpgPayloadFormat.Zip, value)
             }
         } finally {
             archive.closeQuietly()
@@ -303,6 +306,7 @@ private class DecodedByteLimitInputStream(
     private val maxDecodedBytes: Long,
 ) : FilterInputStream(input) {
     private var decodedBytes = 0L
+    private var limitExceeded = false
     private val skipBuffer = ByteArray(DEFAULT_BUFFER_SIZE)
 
     override fun read(): Int {
@@ -334,9 +338,16 @@ private class DecodedByteLimitInputStream(
         return skipped
     }
 
+    fun throwIfLimitExceeded() {
+        if (limitExceeded) {
+            throw DecoderFailure(EpgPayloadRejectionReason.DecodedSizeExceeded)
+        }
+    }
+
     private fun record(count: Long) {
         decodedBytes += count
         if (decodedBytes > maxDecodedBytes) {
+            limitExceeded = true
             throw DecoderFailure(EpgPayloadRejectionReason.DecodedSizeExceeded)
         }
     }

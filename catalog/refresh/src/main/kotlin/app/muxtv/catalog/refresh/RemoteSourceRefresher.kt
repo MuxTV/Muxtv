@@ -23,15 +23,9 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.suspendCancellableCoroutine
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 
 data class RemoteSourceRefreshRequest(
     val sourceId: String,
@@ -160,7 +154,7 @@ class RemoteSourceRefresher(
             .build()
 
         return try {
-            sourceClient.newCall(networkRequest).awaitResponse().use { response ->
+            sourceClient.newCall(networkRequest).awaitSourceResponse().use { response ->
                 if (!response.isSuccessful) {
                     return RemoteSourceRefreshResult.HttpFailure(response.code)
                 }
@@ -236,31 +230,4 @@ object RemoteSourceRefreshFactory {
 
     fun createAccessManager(credentialStore: CredentialStore): RemoteSourceAccessManager =
         RemoteSourceAccessManager(credentialStore)
-}
-
-private suspend fun Call.awaitResponse(): Response = suspendCancellableCoroutine { continuation ->
-    continuation.invokeOnCancellation { cancel() }
-    enqueue(
-        object : Callback {
-            override fun onFailure(
-                call: Call,
-                exception: IOException,
-            ) {
-                if (continuation.isActive) {
-                    continuation.resumeWithException(exception)
-                }
-            }
-
-            override fun onResponse(
-                call: Call,
-                response: Response,
-            ) {
-                if (continuation.isActive) {
-                    continuation.resume(response)
-                } else {
-                    response.close()
-                }
-            }
-        },
-    )
 }
