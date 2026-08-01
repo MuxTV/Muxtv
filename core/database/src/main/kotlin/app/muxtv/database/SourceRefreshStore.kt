@@ -28,7 +28,11 @@ data class SourceRefreshTarget(
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(credentialRef == null || credentialRef.isNotBlank())
     }
+
+    override fun toString(): String =
+        "SourceRefreshTarget(credentialRefPresent=${credentialRef != null})"
 }
 
 data class SourceRefreshPolicy(
@@ -107,6 +111,7 @@ data class SourceRefreshCompletion(
     init {
         require(state !in setOf(SourceRefreshRunState.IDLE, SourceRefreshRunState.RUNNING))
         require(resultFamily.isNotBlank())
+        require(resultCode == null || resultCode.isNotBlank())
         require(completedAtEpochMillis >= 0)
         require(revisionNumber == null || revisionNumber > 0)
         require(parsedEntries == null || parsedEntries >= 0)
@@ -117,6 +122,11 @@ data class SourceRefreshCompletion(
             requireNotNull(revisionNumber)
             requireNotNull(parsedEntries)
         }
+    }
+
+    companion object {
+        const val RESULT_FAMILY = "SOURCE_REFRESH"
+        const val RESULT_SUPERSEDED = "SUPERSEDED"
     }
 }
 
@@ -150,5 +160,23 @@ interface SourceRefreshStore {
         runToken: String,
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
     )
+
+    suspend fun completeWithDisposition(
+        sourceId: String,
+        runToken: String,
+        trigger: SourceRefreshTrigger,
+        completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
+    ): RefreshCompletionDisposition {
+        complete(
+            sourceId = sourceId,
+            runToken = runToken,
+            trigger = trigger,
+            completion = completion,
+            expectedCredentialRef = expectedCredentialRef,
+        )
+        return RefreshCompletionDisposition.APPLIED
+    }
 }

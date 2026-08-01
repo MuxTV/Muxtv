@@ -51,6 +51,13 @@ data class SourceRefreshAttemptEntity(
         require(httpStatus == null || httpStatus in 100..599)
     }
 
+    override fun toString(): String =
+        "SourceRefreshAttemptEntity(id=$id, runTokenPresent=true, trigger=$trigger, " +
+            "startedAtEpochMillis=$startedAtEpochMillis, completedAtEpochMillis=$completedAtEpochMillis, " +
+            "resultState=$resultState, resultFamily=$resultFamily, resultCode=$resultCode, " +
+            "revisionNumber=$revisionNumber, parsedEntries=$parsedEntries, skippedEntries=$skippedEntries, " +
+            "warningCount=$warningCount, httpStatus=$httpStatus)"
+
     private companion object {
         val VALID_TRIGGERS = SourceRefreshTrigger.entries.mapTo(mutableSetOf(), SourceRefreshTrigger::name)
         val VALID_STATES = SourceRefreshRunState.entries.mapTo(mutableSetOf(), SourceRefreshRunState::name)

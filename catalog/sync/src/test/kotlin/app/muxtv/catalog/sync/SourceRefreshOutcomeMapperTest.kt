@@ -2,6 +2,7 @@ package app.muxtv.catalog.sync
 
 import app.muxtv.catalog.refresh.RemoteSourceNetworkFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceRefreshResult
+import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -23,6 +24,20 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.revisionNumber).isEqualTo(3)
         assertThat(decision.parsedEntries).isEqualTo(120)
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isTrue()
+    }
+
+    @Test
+    fun `superseded publication is successful terminal work and never retried`() {
+        val decision = SourceRefreshOutcomeMapper.map(RemoteSourceRefreshResult.Superseded)
+
+        assertThat(decision.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(decision.resultFamily).isEqualTo(SourceRefreshCompletion.RESULT_FAMILY)
+        assertThat(decision.resultCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+        assertThat(decision.revisionNumber).isNull()
+        assertThat(decision.parsedEntries).isNull()
+        assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isTrue()
     }
 
     @Test
@@ -32,6 +47,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.state).isEqualTo(SourceRefreshRunState.FAILED)
         assertThat(decision.resultFamily).isEqualTo("HTTP")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -40,6 +56,7 @@ class SourceRefreshOutcomeMapperTest {
 
         assertThat(decision.state).isEqualTo(SourceRefreshRunState.NEEDS_AUTH)
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -51,6 +68,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.resultFamily).isEqualTo("NETWORK")
         assertThat(decision.resultCode).isEqualTo("TLS")
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -61,6 +79,7 @@ class SourceRefreshOutcomeMapperTest {
 
         assertThat(decision.resultCode).isEqualTo("IO")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -71,6 +90,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.resultFamily).isEqualTo("WORK")
         assertThat(decision.resultCode).isEqualTo("TIMEOUT")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
         assertThat(decision.httpStatus).isNull()
     }
 }

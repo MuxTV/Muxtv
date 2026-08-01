@@ -11,6 +11,7 @@ import app.muxtv.credentials.CredentialId
 import app.muxtv.database.EpgRefreshStore
 import app.muxtv.database.EpgRefreshTarget
 import app.muxtv.database.EpgRefreshTrigger
+import app.muxtv.database.RefreshCompletionDisposition
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.UUID
@@ -68,8 +69,8 @@ class EpgRefreshWorker @AssistedInject constructor(
 
         return try {
             val decision = refresh(target, runToken)
-            complete(target, runToken, trigger, decision)
-            decision.toWorkResult()
+            val disposition = complete(target, runToken, trigger, decision)
+            decision.toWorkResult(disposition)
         } catch (cancelled: CancellationException) {
             finalizeCancellationAndRethrow(cancelled) {
                 complete(
@@ -81,10 +82,10 @@ class EpgRefreshWorker @AssistedInject constructor(
             }
         } catch (_: Exception) {
             val decision = EpgRefreshOutcomeMapper.internalFailure()
-            runCatching {
+            val disposition = runCatching {
                 complete(target, runToken, trigger, decision)
-            }
-            decision.toWorkResult()
+            }.getOrNull()
+            decision.toWorkResult(disposition)
         }
     }
 
@@ -123,8 +124,8 @@ class EpgRefreshWorker @AssistedInject constructor(
         runToken: String,
         trigger: EpgRefreshTrigger,
         decision: EpgRefreshDecision,
-    ) = withContext(NonCancellable) {
-        refreshStore.complete(
+    ): RefreshCompletionDisposition = withContext(NonCancellable) {
+        refreshStore.completeWithDisposition(
             sourceId = target.sourceId,
             runToken = runToken,
             trigger = trigger,
@@ -136,7 +137,10 @@ class EpgRefreshWorker @AssistedInject constructor(
         )
     }
 
-    private fun EpgRefreshDecision.toWorkResult(): Result = when {
+    private fun EpgRefreshDecision.toWorkResult(
+        disposition: RefreshCompletionDisposition?,
+    ): Result = when {
+        disposition != null && disposition != RefreshCompletionDisposition.APPLIED -> Result.success()
         workSucceeded -> Result.success()
         retryable -> transientWorkResult()
         else -> Result.failure()

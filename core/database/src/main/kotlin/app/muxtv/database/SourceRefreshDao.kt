@@ -12,7 +12,10 @@ internal data class SourceRefreshTargetRow(
     val sourceId: String,
     val sourceName: String,
     val credentialRef: String?,
-)
+) {
+    override fun toString(): String =
+        "SourceRefreshTargetRow(credentialRefPresent=${credentialRef != null})"
+}
 
 internal data class SourceRefreshOverviewRow(
     val sourceId: String,
@@ -91,7 +94,16 @@ internal abstract class SourceRefreshDao {
     abstract suspend fun upsertPolicy(policy: SourceRefreshPolicyEntity)
 
     @Query("DELETE FROM source_refresh_policies WHERE sourceId = :sourceId")
-    abstract suspend fun deletePolicy(sourceId: String): Int
+    protected abstract suspend fun deletePolicyRow(sourceId: String): Int
+
+    @Query("DELETE FROM source_refresh_states WHERE sourceId = :sourceId")
+    protected abstract suspend fun deleteSchedulingState(sourceId: String): Int
+
+    @Transaction
+    open suspend fun removePolicy(sourceId: String) {
+        deletePolicyRow(sourceId)
+        deleteSchedulingState(sourceId)
+    }
 
     @Query("SELECT * FROM source_refresh_states WHERE sourceId = :sourceId LIMIT 1")
     abstract fun observeState(sourceId: String): Flow<SourceRefreshStateEntity?>
@@ -161,13 +173,20 @@ internal abstract class SourceRefreshDao {
         """
         SELECT startedAtEpochMillis
         FROM source_refresh_states
-        WHERE sourceId = :sourceId AND runToken = :runToken
+        WHERE sourceId = :sourceId
+          AND state = :runningState
+          AND runToken = :runToken
+        LIMIT 1
         """,
     )
-    abstract suspend fun startedAt(
+    protected abstract suspend fun startedAt(
         sourceId: String,
         runToken: String,
+        runningState: String = SourceRefreshRunState.RUNNING.name,
     ): Long?
+
+    @Query("SELECT credentialRef FROM sources WHERE id = :sourceId LIMIT 1")
+    protected abstract suspend fun currentCredentialRef(sourceId: String): String?
 
     @Query(
         """
@@ -199,7 +218,7 @@ internal abstract class SourceRefreshDao {
           AND runToken = :runToken
         """,
     )
-    abstract suspend fun finishState(
+    protected abstract suspend fun finishState(
         sourceId: String,
         runToken: String,
         state: String,
@@ -215,7 +234,7 @@ internal abstract class SourceRefreshDao {
     ): Int
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    abstract suspend fun insertAttempt(attempt: SourceRefreshAttemptEntity)
+    protected abstract suspend fun insertAttempt(attempt: SourceRefreshAttemptEntity)
 
     @Query(
         """
@@ -230,7 +249,7 @@ internal abstract class SourceRefreshDao {
           )
         """,
     )
-    abstract suspend fun pruneAttempts(
+    protected abstract suspend fun pruneAttempts(
         sourceId: String,
         keepCount: Int,
     )
@@ -241,21 +260,25 @@ internal abstract class SourceRefreshDao {
         runToken: String,
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
-    ) {
-        val startedAtEpochMillis = startedAt(sourceId, runToken) ?: return
+        expectedCredentialRef: String?,
+    ): RefreshCompletionDisposition {
+        val startedAtEpochMillis = startedAt(sourceId, runToken)
+            ?: return RefreshCompletionDisposition.IGNORED
+        val superseded = currentCredentialRef(sourceId) != expectedCredentialRef
+        val effectiveCompletion = if (superseded) completion.toSuperseded() else completion
         val updated = finishState(
             sourceId = sourceId,
             runToken = runToken,
-            state = completion.state.name,
-            resultFamily = completion.resultFamily,
-            resultCode = completion.resultCode,
-            completedAtEpochMillis = completion.completedAtEpochMillis,
-            revisionNumber = completion.revisionNumber,
-            skippedEntries = completion.skippedEntries,
-            warningCount = completion.warningCount,
-            httpStatus = completion.httpStatus,
+            state = effectiveCompletion.state.name,
+            resultFamily = effectiveCompletion.resultFamily,
+            resultCode = effectiveCompletion.resultCode,
+            completedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
+            revisionNumber = effectiveCompletion.revisionNumber,
+            skippedEntries = effectiveCompletion.skippedEntries,
+            warningCount = effectiveCompletion.warningCount,
+            httpStatus = effectiveCompletion.httpStatus,
         )
-        if (updated != 1) return
+        if (updated != 1) return RefreshCompletionDisposition.IGNORED
 
         insertAttempt(
             SourceRefreshAttemptEntity(
@@ -263,17 +286,29 @@ internal abstract class SourceRefreshDao {
                 runToken = runToken,
                 trigger = trigger.name,
                 startedAtEpochMillis = startedAtEpochMillis,
-                completedAtEpochMillis = completion.completedAtEpochMillis,
-                resultState = completion.state.name,
-                resultFamily = completion.resultFamily,
-                resultCode = completion.resultCode,
-                revisionNumber = completion.revisionNumber,
-                parsedEntries = completion.parsedEntries,
-                skippedEntries = completion.skippedEntries,
-                warningCount = completion.warningCount,
-                httpStatus = completion.httpStatus,
+                completedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
+                resultState = effectiveCompletion.state.name,
+                resultFamily = effectiveCompletion.resultFamily,
+                resultCode = effectiveCompletion.resultCode,
+                revisionNumber = effectiveCompletion.revisionNumber,
+                parsedEntries = effectiveCompletion.parsedEntries,
+                skippedEntries = effectiveCompletion.skippedEntries,
+                warningCount = effectiveCompletion.warningCount,
+                httpStatus = effectiveCompletion.httpStatus,
             ),
         )
         pruneAttempts(sourceId, MAX_SOURCE_REFRESH_ATTEMPTS)
+        return if (superseded) {
+            RefreshCompletionDisposition.SUPERSEDED
+        } else {
+            RefreshCompletionDisposition.APPLIED
+        }
     }
 }
+
+private fun SourceRefreshCompletion.toSuperseded(): SourceRefreshCompletion = SourceRefreshCompletion(
+    state = SourceRefreshRunState.CANCELLED,
+    resultFamily = SourceRefreshCompletion.RESULT_FAMILY,
+    resultCode = SourceRefreshCompletion.RESULT_SUPERSEDED,
+    completedAtEpochMillis = completedAtEpochMillis,
+)

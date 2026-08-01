@@ -1,0 +1,378 @@
+package app.muxtv.database
+
+import androidx.room3.Room
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class SourceRefreshOwnershipContractTest {
+    private lateinit var database: MuxTvDatabase
+    private lateinit var revisionStore: SourceRevisionStore
+    private lateinit var refreshStore: SourceRefreshStore
+
+    @Before
+    fun setUp() = runTest {
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            MuxTvDatabase::class.java,
+        ).build()
+        revisionStore = RoomSourceRevisionStore(database.sourceRevisionDao())
+        refreshStore = RoomSourceRefreshStore(database.sourceRefreshDao())
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Guide source",
+                credentialRef = CREDENTIAL_A,
+            ),
+        )
+    }
+
+    @After
+    fun tearDown() {
+        database.close()
+    }
+
+    @Test
+    fun replacedCredentialCannotActivateOldStagingRevision() = runTest {
+        stageRevision(1)
+        acquire(runToken = "run-a", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "run-a",
+            activatedAtEpochMillis = 120,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(0)
+        assertThat(database.sourceRevisionDao().countRevisionEntries(SOURCE_ID, 1)).isEqualTo(0)
+    }
+
+    @Test
+    fun reclaimedOldRunTokenCannotActivateEvenWhenCredentialIsUnchanged() = runTest {
+        stageRevision(1)
+        acquire(runToken = "old-run", startedAtEpochMillis = 100)
+        assertThat(
+            refreshStore.tryAcquire(
+                sourceId = SOURCE_ID,
+                runToken = "new-run",
+                startedAtEpochMillis = 300,
+                staleBeforeEpochMillis = 200,
+            ),
+        ).isTrue()
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "old-run",
+            activatedAtEpochMillis = 320,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(0)
+    }
+
+    @Test
+    fun removingSchedulingPolicyRevokesOldRunTokenPublicationOwnership() = runTest {
+        stageRevision(1)
+        refreshStore.upsertPolicy(
+            SourceRefreshPolicy(
+                sourceId = SOURCE_ID,
+                enabled = true,
+                intervalMinutes = 60,
+                unmeteredOnly = false,
+                requiresCharging = false,
+                updatedAtEpochMillis = 90,
+            ),
+        )
+        acquire(runToken = "run-a", startedAtEpochMillis = 100)
+
+        refreshStore.removePolicy(SOURCE_ID)
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "run-a",
+            activatedAtEpochMillis = 120,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(refreshStore.getPolicies()).isEmpty()
+        assertThat(refreshStore.observeStatus(SOURCE_ID).first()).isNull()
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(0)
+    }
+
+    @Test
+    fun staleTerminalCompletionCannotPublishFailureToReplacementCredential() = runTest {
+        acquire(runToken = "run-a", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        refreshStore.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-a",
+            trigger = SourceRefreshTrigger.PERIODIC,
+            completion = SourceRefreshCompletion(
+                state = SourceRefreshRunState.NEEDS_AUTH,
+                resultFamily = "HTTP",
+                resultCode = "401",
+                completedAtEpochMillis = 120,
+                httpStatus = 401,
+            ),
+            expectedCredentialRef = CREDENTIAL_A,
+        )
+
+        val status = requireNotNull(refreshStore.observeStatus(SOURCE_ID).first())
+        assertThat(status.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(status.failureFamily).isEqualTo(SourceRefreshCompletion.RESULT_FAMILY)
+        assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+        assertThat(status.httpStatus).isNull()
+        assertThat(refreshStore.getRecentAttempts(SOURCE_ID)).hasSize(1)
+    }
+
+    @Test
+    fun staleSuccessCannotPublishRevisionOrCountersToReplacementCredential() = runTest {
+        acquire(runToken = "run-success", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        refreshStore.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-success",
+            trigger = SourceRefreshTrigger.PERIODIC,
+            completion = SourceRefreshCompletion(
+                state = SourceRefreshRunState.SUCCEEDED,
+                resultFamily = "SUCCESS",
+                resultCode = null,
+                completedAtEpochMillis = 130,
+                revisionNumber = 9,
+                parsedEntries = 100,
+                skippedEntries = 7,
+                warningCount = 8,
+            ),
+            expectedCredentialRef = CREDENTIAL_A,
+        )
+
+        val status = requireNotNull(refreshStore.observeStatus(SOURCE_ID).first())
+        assertThat(status.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(status.lastSuccessRevision).isNull()
+        assertThat(status.lastSuccessAtEpochMillis).isNull()
+        assertThat(status.failureFamily).isEqualTo(SourceRefreshCompletion.RESULT_FAMILY)
+        assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+        assertThat(status.skippedEntries).isEqualTo(0)
+        assertThat(status.warningCount).isEqualTo(0)
+
+        val attempt = refreshStore.getRecentAttempts(SOURCE_ID).single()
+        assertThat(attempt.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(attempt.revisionNumber).isNull()
+        assertThat(attempt.parsedEntries).isNull()
+        assertThat(attempt.skippedEntries).isEqualTo(0)
+        assertThat(attempt.warningCount).isEqualTo(0)
+    }
+
+    @Test
+    fun missingCredentialSnapshotCannotPublishAfterCredentialIsAttached() = runTest {
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Guide source",
+                credentialRef = null,
+            ),
+        )
+        acquire(runToken = "run-a", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Guide source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        refreshStore.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-a",
+            trigger = SourceRefreshTrigger.STARTUP,
+            completion = SourceRefreshCompletion(
+                state = SourceRefreshRunState.NEEDS_AUTH,
+                resultFamily = "CREDENTIAL",
+                resultCode = "MISSING_REFERENCE",
+                completedAtEpochMillis = 120,
+            ),
+            expectedCredentialRef = null,
+        )
+
+        val status = requireNotNull(refreshStore.observeStatus(SOURCE_ID).first())
+        assertThat(status.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+    }
+
+    @Test
+    fun supersededRefreshPreservesPreviousGoodActiveCatalog() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Previous good")
+        assertThat(
+            revisionStore.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = 1,
+                activatedAtEpochMillis = 50,
+                statistics = statistics(),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Stale rename")
+        acquire(runToken = "stale-run", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "stale-run",
+            activatedAtEpochMillis = 120,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(1)
+        assertThat(database.sourceRevisionDao().countRevisionEntries(SOURCE_ID, 1)).isEqualTo(1)
+        assertThat(database.sourceRevisionDao().countRevisionEntries(SOURCE_ID, 2)).isEqualTo(0)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Previous good")
+    }
+
+    @Test
+    fun stagingCannotChangeDisplayMetadataOfAlreadyActiveCanonicalChannel() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Current channel")
+        assertThat(
+            revisionStore.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = 1,
+                activatedAtEpochMillis = 50,
+                statistics = statistics(),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Current channel")
+
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Uncommitted rename")
+
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Current channel")
+    }
+
+    @Test
+    fun successfulActivationPublishesCanonicalDisplayMetadataAtomically() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Current channel")
+        revisionStore.activate(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            activatedAtEpochMillis = 50,
+            statistics = statistics(),
+        )
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Committed rename")
+
+        val result = revisionStore.activate(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            activatedAtEpochMillis = 100,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Committed rename")
+    }
+
+    private suspend fun stageRevision(
+        revisionNumber: Long,
+        canonicalDisplayName: String = "Channel",
+    ) {
+        revisionStore.beginRevision(
+            sourceId = SOURCE_ID,
+            revisionNumber = revisionNumber,
+            startedAtEpochMillis = 10,
+        )
+        revisionStore.stageBatch(
+            sourceId = SOURCE_ID,
+            revisionNumber = revisionNumber,
+            entries = listOf(
+                StagedCatalogEntry(
+                    providerChannelId = "provider-channel-$revisionNumber",
+                    providerKey = "provider-key-$revisionNumber",
+                    rawName = canonicalDisplayName,
+                    canonicalChannelId = CANONICAL_CHANNEL_ID,
+                    canonicalDisplayName = canonicalDisplayName,
+                    streamVariantId = "variant-$revisionNumber",
+                    locator = "https://example.invalid/live/$revisionNumber",
+                    tvgName = canonicalDisplayName,
+                ),
+            ),
+        )
+    }
+
+    private suspend fun acquire(
+        runToken: String,
+        startedAtEpochMillis: Long,
+    ) {
+        assertThat(
+            refreshStore.tryAcquire(
+                sourceId = SOURCE_ID,
+                runToken = runToken,
+                startedAtEpochMillis = startedAtEpochMillis,
+                staleBeforeEpochMillis = startedAtEpochMillis - 1,
+            ),
+        ).isTrue()
+    }
+
+    private fun statistics(): SourceRevisionStatistics = SourceRevisionStatistics(
+        parsedEntries = 1,
+        skippedEntries = 0,
+        warningCount = 0,
+    )
+
+    private companion object {
+        const val SOURCE_ID = "source-ownership-contract"
+        const val CANONICAL_CHANNEL_ID = "canonical-channel"
+        const val CREDENTIAL_A = "00000000-0000-0000-0000-000000000076"
+        const val CREDENTIAL_B = "00000000-0000-0000-0000-000000000077"
+    }
+}

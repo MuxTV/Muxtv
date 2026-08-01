@@ -36,6 +36,13 @@ data class SourceRefreshStateEntity(
         require(warningCount >= 0)
     }
 
+    override fun toString(): String =
+        "SourceRefreshStateEntity(state=$state, runTokenPresent=${runToken != null}, " +
+            "startedAtEpochMillis=$startedAtEpochMillis, completedAtEpochMillis=$completedAtEpochMillis, " +
+            "lastSuccessRevision=$lastSuccessRevision, lastSuccessAtEpochMillis=$lastSuccessAtEpochMillis, " +
+            "failureFamily=$failureFamily, failureCode=$failureCode, httpStatus=$httpStatus, " +
+            "skippedEntries=$skippedEntries, warningCount=$warningCount)"
+
     private companion object {
         val VALID_STATES = SourceRefreshRunState.entries.mapTo(mutableSetOf(), SourceRefreshRunState::name)
     }

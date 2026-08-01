@@ -25,6 +25,11 @@ internal data class EpgRefreshTargetRow(
             "lastModifiedPresent=${lastModified != null})"
 }
 
+private data class CheckedEpgRefreshCompletion(
+    val completion: EpgRefreshCompletion,
+    val superseded: Boolean,
+)
+
 @Dao
 internal abstract class EpgRefreshDao {
     @Query(
@@ -280,18 +285,19 @@ internal abstract class EpgRefreshDao {
         trigger: EpgRefreshTrigger,
         completion: EpgRefreshCompletion,
         expectedAccessRef: String?,
-    ) {
+    ): RefreshCompletionDisposition {
         val startedAtEpochMillis = startedAt(
             sourceId = sourceId,
             runToken = runToken,
             runningState = EpgRefreshRunState.RUNNING.name,
-        ) ?: return
+        ) ?: return RefreshCompletionDisposition.IGNORED
 
-        val effectiveCompletion = accessCheckedCompletion(
+        val checkedCompletion = accessCheckedCompletion(
             sourceId = sourceId,
             completion = completion,
             expectedAccessRef = expectedAccessRef,
         )
+        val effectiveCompletion = checkedCompletion.completion
         val updated = when (effectiveCompletion) {
             is EpgRefreshCompletion.Refreshed -> finishRefreshed(
                 sourceId = sourceId,
@@ -325,7 +331,7 @@ internal abstract class EpgRefreshDao {
                 runningState = EpgRefreshRunState.RUNNING.name,
             )
         }
-        if (updated != 1) return
+        if (updated != 1) return RefreshCompletionDisposition.IGNORED
 
         when (effectiveCompletion) {
             is EpgRefreshCompletion.Refreshed -> replaceValidators(
@@ -354,16 +360,24 @@ internal abstract class EpgRefreshDao {
             ),
         )
         pruneAttempts(sourceId, MAX_EPG_REFRESH_ATTEMPTS)
+        return if (checkedCompletion.superseded) {
+            RefreshCompletionDisposition.SUPERSEDED
+        } else {
+            RefreshCompletionDisposition.APPLIED
+        }
     }
 
     private suspend fun accessCheckedCompletion(
         sourceId: String,
         completion: EpgRefreshCompletion,
         expectedAccessRef: String?,
-    ): EpgRefreshCompletion {
+    ): CheckedEpgRefreshCompletion {
         val currentAccessRef = currentAccessRef(sourceId)
         if (!epgRefreshAccessBindingMatches(expectedAccessRef, currentAccessRef)) {
-            return completion.toSuperseded()
+            return CheckedEpgRefreshCompletion(
+                completion = completion.toSuperseded(),
+                superseded = true,
+            )
         }
 
         return when (completion) {
@@ -372,9 +386,12 @@ internal abstract class EpgRefreshDao {
                     expectedAccessRef != null &&
                     completion.accessRefBinding == expectedAccessRef
                 ) {
-                    completion
+                    CheckedEpgRefreshCompletion(completion = completion, superseded = false)
                 } else {
-                    completion.toSuperseded()
+                    CheckedEpgRefreshCompletion(
+                        completion = completion.toSuperseded(),
+                        superseded = true,
+                    )
                 }
 
             is EpgRefreshCompletion.NotModified ->
@@ -382,12 +399,19 @@ internal abstract class EpgRefreshDao {
                     expectedAccessRef != null &&
                     completion.accessRefBinding == expectedAccessRef
                 ) {
-                    completion
+                    CheckedEpgRefreshCompletion(completion = completion, superseded = false)
                 } else {
-                    completion.toSuperseded()
+                    CheckedEpgRefreshCompletion(
+                        completion = completion.toSuperseded(),
+                        superseded = true,
+                    )
                 }
 
-            is EpgRefreshCompletion.Terminal -> completion
+            is EpgRefreshCompletion.Terminal -> CheckedEpgRefreshCompletion(
+                completion = completion,
+                superseded = completion.resultFamily == EpgRefreshCompletion.RESULT_FAMILY &&
+                    completion.resultCode == EpgRefreshCompletion.RESULT_SUPERSEDED,
+            )
         }
     }
 

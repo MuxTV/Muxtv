@@ -67,10 +67,26 @@ internal class RoomEpgRefreshStore(
         completion: EpgRefreshCompletion,
         expectedAccessRef: String?,
     ) {
+        completeWithDisposition(
+            sourceId = sourceId,
+            runToken = runToken,
+            trigger = trigger,
+            completion = completion,
+            expectedAccessRef = expectedAccessRef,
+        )
+    }
+
+    override suspend fun completeWithDisposition(
+        sourceId: String,
+        runToken: String,
+        trigger: EpgRefreshTrigger,
+        completion: EpgRefreshCompletion,
+        expectedAccessRef: String?,
+    ): RefreshCompletionDisposition {
         require(sourceId.isNotBlank())
         require(runToken.isNotBlank())
         require(expectedAccessRef == null || expectedAccessRef.isNotBlank())
-        dao.complete(
+        return dao.complete(
             sourceId = sourceId,
             runToken = runToken,
             trigger = trigger,

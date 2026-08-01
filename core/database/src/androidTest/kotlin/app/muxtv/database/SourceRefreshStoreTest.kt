@@ -64,6 +64,7 @@ class SourceRefreshStoreTest {
             runToken = "run-1",
             trigger = SourceRefreshTrigger.MANUAL,
             completion = success(completedAt = 2_000_100, revision = 1),
+            expectedCredentialRef = CREDENTIAL_REFERENCE,
         )
         assertThat(store.observeStatus(SOURCE_ID).first()?.state)
             .isEqualTo(SourceRefreshRunState.RUNNING)
@@ -73,6 +74,7 @@ class SourceRefreshStoreTest {
             runToken = "run-2",
             trigger = SourceRefreshTrigger.PERIODIC,
             completion = success(completedAt = 2_000_500, revision = 2),
+            expectedCredentialRef = CREDENTIAL_REFERENCE,
         )
 
         val status = store.observeStatus(SOURCE_ID).first()
@@ -124,6 +126,7 @@ class SourceRefreshStoreTest {
             runToken = "run-overview",
             trigger = SourceRefreshTrigger.MANUAL,
             completion = success(completedAt = 11_000, revision = 3),
+            expectedCredentialRef = CREDENTIAL_REFERENCE,
         )
 
         val overview = store.observeOverviews().first().single()

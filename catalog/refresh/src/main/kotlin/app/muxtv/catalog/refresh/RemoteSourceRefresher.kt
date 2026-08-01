@@ -3,6 +3,7 @@ package app.muxtv.catalog.refresh
 import app.muxtv.catalog.importer.CatalogImportFailureReason
 import app.muxtv.catalog.importer.CatalogImportRequest
 import app.muxtv.catalog.importer.CatalogImportResult
+import app.muxtv.catalog.importer.CatalogImportSourceOwnership
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.ingest.M3uParseLimits
 import app.muxtv.catalog.ingest.M3uParseOptions
@@ -31,13 +32,18 @@ data class RemoteSourceRefreshRequest(
     val sourceId: String,
     val sourceName: String,
     val accessCredentialId: CredentialId,
+    val refreshRunToken: String? = null,
     val responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
     val parseLimits: M3uParseLimits = M3uParseLimits(),
 ) {
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(refreshRunToken == null || refreshRunToken.isNotBlank())
     }
+
+    override fun toString(): String =
+        "RemoteSourceRefreshRequest(refreshRunTokenPresent=${refreshRunToken != null})"
 }
 
 sealed interface RemoteSourceRefreshResult {
@@ -49,6 +55,7 @@ sealed interface RemoteSourceRefreshResult {
         val warningCount: Int,
     ) : RemoteSourceRefreshResult
 
+    data object Superseded : RemoteSourceRefreshResult
     data object AccessCredentialNotFound : RemoteSourceRefreshResult
 
     data class AccessCredentialUnavailable(
@@ -161,14 +168,21 @@ class RemoteSourceRefresher(
 
                 val body = response.body
                 val charset = body.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+                val durableRefresh = request.refreshRunToken != null
                 when (
                     val imported = importer.import(
                         request = CatalogImportRequest(
                             sourceId = request.sourceId,
                             sourceName = request.sourceName,
                             credentialRef = request.accessCredentialId.value,
+                            refreshRunToken = request.refreshRunToken,
                             parseLimits = request.parseLimits,
                             parseOptions = M3uParseOptions(charset = charset),
+                            sourceOwnership = if (durableRefresh) {
+                                CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING
+                            } else {
+                                CatalogImportSourceOwnership.UPSERT_METADATA
+                            },
                         ),
                         input = body.byteStream(),
                     )
@@ -181,6 +195,7 @@ class RemoteSourceRefresher(
                         warningCount = imported.warningCount,
                     )
 
+                    CatalogImportResult.Superseded -> RemoteSourceRefreshResult.Superseded
                     CatalogImportResult.EmptyRevisionRejected ->
                         RemoteSourceRefreshResult.EmptyRevisionRejected
 

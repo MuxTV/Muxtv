@@ -216,6 +216,23 @@ interface EpgRefreshStore {
         completion: EpgRefreshCompletion,
         expectedAccessRef: String?,
     )
+
+    suspend fun completeWithDisposition(
+        sourceId: String,
+        runToken: String,
+        trigger: EpgRefreshTrigger,
+        completion: EpgRefreshCompletion,
+        expectedAccessRef: String?,
+    ): RefreshCompletionDisposition {
+        complete(
+            sourceId = sourceId,
+            runToken = runToken,
+            trigger = trigger,
+            completion = completion,
+            expectedAccessRef = expectedAccessRef,
+        )
+        return RefreshCompletionDisposition.APPLIED
+    }
 }
 
 private fun validateOptionalHttpValidator(

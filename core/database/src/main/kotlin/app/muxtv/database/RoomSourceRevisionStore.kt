@@ -99,6 +99,36 @@ internal class RoomSourceRevisionStore(
         statistics = statistics,
     )
 
+    override suspend fun activateIfCredentialMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult = dao.activateRevisionIfCredentialMatches(
+        sourceId = sourceId,
+        revisionNumber = revisionNumber,
+        expectedCredentialRef = expectedCredentialRef,
+        activatedAtEpochMillis = activatedAtEpochMillis,
+        statistics = statistics,
+    )
+
+    override suspend fun activateIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult = dao.activateRevisionIfRefreshOwnerMatches(
+        sourceId = sourceId,
+        revisionNumber = revisionNumber,
+        expectedCredentialRef = expectedCredentialRef,
+        expectedRunToken = expectedRunToken,
+        activatedAtEpochMillis = activatedAtEpochMillis,
+        statistics = statistics,
+    )
+
     override suspend fun discard(
         sourceId: String,
         revisionNumber: Long,

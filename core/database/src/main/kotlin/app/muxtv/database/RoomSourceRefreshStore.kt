@@ -29,7 +29,7 @@ internal class RoomSourceRefreshStore(
 
     override suspend fun removePolicy(sourceId: String) {
         require(sourceId.isNotBlank())
-        dao.deletePolicy(sourceId)
+        dao.removePolicy(sourceId)
     }
 
     override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> {
@@ -69,14 +69,33 @@ internal class RoomSourceRefreshStore(
         runToken: String,
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
     ) {
-        require(sourceId.isNotBlank())
-        require(runToken.isNotBlank())
-        dao.complete(
+        completeWithDisposition(
             sourceId = sourceId,
             runToken = runToken,
             trigger = trigger,
             completion = completion,
+            expectedCredentialRef = expectedCredentialRef,
+        )
+    }
+
+    override suspend fun completeWithDisposition(
+        sourceId: String,
+        runToken: String,
+        trigger: SourceRefreshTrigger,
+        completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
+    ): RefreshCompletionDisposition {
+        require(sourceId.isNotBlank())
+        require(runToken.isNotBlank())
+        require(expectedCredentialRef == null || expectedCredentialRef.isNotBlank())
+        return dao.complete(
+            sourceId = sourceId,
+            runToken = runToken,
+            trigger = trigger,
+            completion = completion,
+            expectedCredentialRef = expectedCredentialRef,
         )
     }
 }

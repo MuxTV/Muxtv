@@ -8,7 +8,11 @@ data class SourceDefinition(
     init {
         require(id.isNotBlank())
         require(name.isNotBlank())
+        require(credentialRef == null || credentialRef.isNotBlank())
     }
+
+    override fun toString(): String =
+        "SourceDefinition(credentialRefPresent=${credentialRef != null})"
 }
 
 data class StagedCatalogEntry(
@@ -62,6 +66,7 @@ sealed interface SourceRevisionActivationResult {
     ) : SourceRevisionActivationResult
 
     data object EmptyRevisionRejected : SourceRevisionActivationResult
+    data object Superseded : SourceRevisionActivationResult
 }
 
 enum class InactiveSourceRemovalResult {
@@ -92,6 +97,23 @@ interface SourceRevisionStore {
     suspend fun activate(
         sourceId: String,
         revisionNumber: Long,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult
+
+    suspend fun activateIfCredentialMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult
+
+    suspend fun activateIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        expectedRunToken: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
     ): SourceRevisionActivationResult
