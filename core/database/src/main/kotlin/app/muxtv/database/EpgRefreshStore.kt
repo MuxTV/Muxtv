@@ -214,7 +214,7 @@ interface EpgRefreshStore {
         runToken: String,
         trigger: EpgRefreshTrigger,
         completion: EpgRefreshCompletion,
-        expectedAccessRef: String? = null,
+        expectedAccessRef: String?,
     )
 }
 
