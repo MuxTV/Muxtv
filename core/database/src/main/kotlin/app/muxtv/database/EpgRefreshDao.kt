@@ -362,25 +362,30 @@ internal abstract class EpgRefreshDao {
         expectedAccessRef: String?,
     ): EpgRefreshCompletion {
         val currentAccessRef = currentAccessRef(sourceId)
-        if (expectedAccessRef != null) {
-            if (currentAccessRef != expectedAccessRef) return completion.toSuperseded()
-            return when (completion) {
-                is EpgRefreshCompletion.Refreshed ->
-                    if (completion.accessRefBinding == expectedAccessRef) completion else completion.toSuperseded()
-
-                is EpgRefreshCompletion.NotModified ->
-                    if (completion.accessRefBinding == expectedAccessRef) completion else completion.toSuperseded()
-
-                is EpgRefreshCompletion.Terminal -> completion
-            }
+        if (!epgRefreshAccessBindingMatches(expectedAccessRef, currentAccessRef)) {
+            return completion.toSuperseded()
         }
 
         return when (completion) {
             is EpgRefreshCompletion.Refreshed ->
-                if (currentAccessRef == completion.accessRefBinding) completion else completion.toSuperseded()
+                if (
+                    expectedAccessRef != null &&
+                    completion.accessRefBinding == expectedAccessRef
+                ) {
+                    completion
+                } else {
+                    completion.toSuperseded()
+                }
 
             is EpgRefreshCompletion.NotModified ->
-                if (currentAccessRef == completion.accessRefBinding) completion else completion.toSuperseded()
+                if (
+                    expectedAccessRef != null &&
+                    completion.accessRefBinding == expectedAccessRef
+                ) {
+                    completion
+                } else {
+                    completion.toSuperseded()
+                }
 
             is EpgRefreshCompletion.Terminal -> completion
         }
