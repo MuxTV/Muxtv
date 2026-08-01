@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import app.muxtv.catalog.refresh.RemoteSourceRefreshRequest
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
 import app.muxtv.credentials.CredentialId
+import app.muxtv.database.RefreshCompletionDisposition
 import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
 import app.muxtv.database.SourceRefreshStore
@@ -57,8 +58,8 @@ class SourceRefreshWorker @AssistedInject constructor(
 
         return try {
             val decision = refresh(target, runToken)
-            complete(target, runToken, trigger, decision)
-            decision.toWorkResult()
+            val disposition = complete(target, runToken, trigger, decision)
+            decision.toWorkResult(disposition)
         } catch (cancelled: CancellationException) {
             finalizeCancellationAndRethrow(cancelled) {
                 complete(
@@ -74,10 +75,10 @@ class SourceRefreshWorker @AssistedInject constructor(
             }
         } catch (_: Exception) {
             val decision = SourceRefreshOutcomeMapper.internalFailure()
-            runCatching {
+            val disposition = runCatching {
                 complete(target, runToken, trigger, decision)
-            }
-            decision.toWorkResult()
+            }.getOrNull()
+            decision.toWorkResult(disposition)
         }
     }
 
@@ -110,8 +111,8 @@ class SourceRefreshWorker @AssistedInject constructor(
         runToken: String,
         trigger: SourceRefreshTrigger,
         decision: SourceRefreshDecision,
-    ) = withContext(NonCancellable) {
-        refreshStore.complete(
+    ): RefreshCompletionDisposition = withContext(NonCancellable) {
+        refreshStore.completeWithDisposition(
             sourceId = target.sourceId,
             runToken = runToken,
             trigger = trigger,
@@ -130,7 +131,10 @@ class SourceRefreshWorker @AssistedInject constructor(
         )
     }
 
-    private fun SourceRefreshDecision.toWorkResult(): Result = when {
+    private fun SourceRefreshDecision.toWorkResult(
+        disposition: RefreshCompletionDisposition?,
+    ): Result = when {
+        disposition != null && disposition != RefreshCompletionDisposition.APPLIED -> Result.success()
         workSucceeded -> Result.success()
         retryable -> transientWorkResult()
         else -> Result.failure()
