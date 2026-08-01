@@ -261,8 +261,9 @@ class EpgMatchingStoreTest {
     }
 
     @Test
-    fun providerReconcileRejectsUnboundedGuideFanout() = runTest {
-        repeat(EpgMatchingStore.MAX_LINKED_EPG_SOURCES) { index ->
+    fun providerReconcileProcessesAllLinkedEpgSources() = runTest {
+        val linkedGuideCount = 33
+        repeat(linkedGuideCount - 1) { index ->
             insertEpgSource(
                 sourceId = "epg-extra-$index",
                 providerSourceId = SOURCE_A,
@@ -273,8 +274,11 @@ class EpgMatchingStoreTest {
         val result = store.reconcileProviderSource(SOURCE_A)
 
         assertThat(result).isEqualTo(
-            EpgProviderMatchingReconcileResult.CapacityExceeded(
-                limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES,
+            EpgProviderMatchingReconcileResult.Applied(
+                processedCount = linkedGuideCount,
+                appliedCount = linkedGuideCount,
+                notReadyCount = 0,
+                supersededCount = 0,
             ),
         )
     }
