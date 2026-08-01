@@ -62,6 +62,7 @@ sealed interface SourceRevisionActivationResult {
     ) : SourceRevisionActivationResult
 
     data object EmptyRevisionRejected : SourceRevisionActivationResult
+    data object Superseded : SourceRevisionActivationResult
 }
 
 enum class InactiveSourceRemovalResult {
@@ -92,6 +93,23 @@ interface SourceRevisionStore {
     suspend fun activate(
         sourceId: String,
         revisionNumber: Long,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult
+
+    suspend fun activateIfCredentialMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult
+
+    suspend fun activateIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        expectedRunToken: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
     ): SourceRevisionActivationResult
