@@ -44,6 +44,7 @@ data class RemoteEpgRefreshRequest(
     val providerSourceId: String?,
     val accessCredentialId: CredentialId,
     val defaultZoneId: String?,
+    val refreshRunToken: String? = null,
     val validators: EpgHttpValidators = EpgHttpValidators(),
     val responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
     val decodeLimits: EpgPayloadDecodeLimits = EpgPayloadDecodeLimits(),
@@ -54,11 +55,13 @@ data class RemoteEpgRefreshRequest(
         require(sourceName.isNotBlank())
         require(providerSourceId == null || providerSourceId.isNotBlank())
         require(defaultZoneId == null || defaultZoneId.isNotBlank())
+        require(refreshRunToken == null || refreshRunToken.isNotBlank())
     }
 
     override fun toString(): String =
         "RemoteEpgRefreshRequest(providerLinked=${providerSourceId != null}, " +
-            "defaultZonePresent=${defaultZoneId != null}, validators=$validators)"
+            "defaultZonePresent=${defaultZoneId != null}, refreshRunTokenPresent=${refreshRunToken != null}, " +
+            "validators=$validators)"
 }
 
 sealed interface RemoteEpgRefreshResult {
