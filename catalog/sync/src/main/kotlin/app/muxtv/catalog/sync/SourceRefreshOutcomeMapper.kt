@@ -3,6 +3,7 @@ package app.muxtv.catalog.sync
 import app.muxtv.catalog.importer.CatalogImportFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceNetworkFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceRefreshResult
+import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
 
 internal data class SourceRefreshDecision(
@@ -27,6 +28,12 @@ internal object SourceRefreshOutcomeMapper {
             parsedEntries = result.entryCount,
             skippedEntries = result.skippedEntries,
             warningCount = result.warningCount,
+        )
+
+        RemoteSourceRefreshResult.Superseded -> SourceRefreshDecision(
+            state = SourceRefreshRunState.CANCELLED,
+            resultFamily = SourceRefreshCompletion.RESULT_FAMILY,
+            resultCode = SourceRefreshCompletion.RESULT_SUPERSEDED,
         )
 
         RemoteSourceRefreshResult.AccessCredentialNotFound -> needsAuth("NOT_FOUND")
