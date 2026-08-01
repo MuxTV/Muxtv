@@ -39,26 +39,32 @@ class EpgMigration5To6Test {
     }
 
     @Test
-    fun migrationPreservesActiveEpgAndAddsIsolatedRefreshPersistence() = runBlocking {
-        val version5 = migrationHelper.createDatabase(5)
-        version5.execSQL("PRAGMA foreign_keys = ON")
-        version5.execSQL(
-            "INSERT INTO epg_sources(" +
-                "id, name, providerSourceId, accessRef, defaultZoneId, activeRevision" +
-                ") VALUES('epg-source-1', 'Guide', NULL, 'opaque-access-ref', 'UTC', 7)",
+    fun committedV4FixtureAppliesV5AndV6MigrationsAndAddsRefreshPersistence() = runBlocking {
+        val version4 = migrationHelper.createDatabase(4)
+        version4.execSQL("PRAGMA foreign_keys = ON")
+        version4.execSQL(
+            "INSERT INTO profiles(id, name, isPrimary, archivedAtEpochMillis) " +
+                "VALUES('profile-1', 'Primary', 1, NULL)",
         )
-        version5.close()
+        version4.execSQL(
+            "INSERT INTO installations(id, primaryProfileId) VALUES('installation-1', 'profile-1')",
+        )
+        version4.execSQL(
+            "INSERT INTO sources(id, name, credentialRef, activeRevision) " +
+                "VALUES('source-1', 'Playlist', 'credential-ref', 1)",
+        )
+        version4.close()
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             version = 6,
-            migrations = listOf(MIGRATION_5_6),
+            migrations = listOf(MIGRATION_4_5, MIGRATION_5_6),
         )
 
-        assertSingleLong(
-            migrated,
-            "SELECT activeRevision FROM epg_sources WHERE id = 'epg-source-1'",
-            7,
-        )
+        assertSingleLong(migrated, "SELECT activeRevision FROM sources WHERE id = 'source-1'", 1)
+        assertSchemaObjectExists(migrated, "table", "epg_sources")
+        assertSchemaObjectExists(migrated, "table", "epg_revisions")
+        assertSchemaObjectExists(migrated, "table", "epg_channels")
+        assertSchemaObjectExists(migrated, "table", "epg_programmes")
         assertSchemaObjectExists(migrated, "table", "epg_refresh_policies")
         assertSchemaObjectExists(migrated, "table", "epg_refresh_states")
         assertSchemaObjectExists(migrated, "table", "epg_refresh_attempts")
@@ -73,6 +79,11 @@ class EpgMigration5To6Test {
 
         migrated.execSQL("PRAGMA foreign_keys = ON")
         migrated.execSQL(
+            "INSERT INTO epg_sources(" +
+                "id, name, providerSourceId, accessRef, defaultZoneId, activeRevision" +
+                ") VALUES('epg-source-1', 'Guide', 'source-1', 'opaque-access-ref', 'UTC', 0)",
+        )
+        migrated.execSQL(
             "INSERT INTO epg_refresh_policies(" +
                 "sourceId, enabled, intervalMinutes, unmeteredOnly, requiresCharging, updatedAtEpochMillis" +
                 ") VALUES('epg-source-1', 1, 60, 0, 0, 100)",
@@ -81,7 +92,7 @@ class EpgMigration5To6Test {
             "INSERT INTO epg_refresh_states(" +
                 "sourceId, state, runToken, startedAtEpochMillis, completedAtEpochMillis, " +
                 "lastSuccessRevision, lastSuccessAtEpochMillis, resultFamily, resultCode, httpStatus" +
-                ") VALUES('epg-source-1', 'SUCCEEDED', NULL, 90, 100, 7, 100, " +
+                ") VALUES('epg-source-1', 'SUCCEEDED', NULL, 90, 100, NULL, 100, " +
                 "'EPG_REFRESH', 'NOT_MODIFIED', 304)",
         )
         migrated.execSQL(
@@ -128,6 +139,6 @@ class EpgMigration5To6Test {
     }
 
     private companion object {
-        const val DATABASE_NAME = "epg-migration-5-6.db"
+        const val DATABASE_NAME = "epg-migration-4-6-chain.db"
     }
 }
