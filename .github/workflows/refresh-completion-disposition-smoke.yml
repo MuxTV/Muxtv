@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/source-refresh-ownership-76
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
