@@ -38,4 +38,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun pendingSourcePreparationDao(): PendingSourcePreparationDao
     abstract fun playbackCatalogDao(): PlaybackCatalogDao
     abstract fun epgRevisionDao(): EpgRevisionDao
+    abstract fun epgRefreshDao(): EpgRefreshDao
 }
