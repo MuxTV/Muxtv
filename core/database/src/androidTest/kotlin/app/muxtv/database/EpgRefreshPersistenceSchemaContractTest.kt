@@ -6,6 +6,7 @@ import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -37,7 +38,7 @@ class EpgRefreshPersistenceSchemaContractTest {
     }
 
     @Test
-    fun currentSchemaProvidesIsolatedDurableEpgRefreshTables() {
+    fun currentSchemaProvidesIsolatedDurableEpgRefreshTables() = runBlocking {
         val database = migrationHelper.createDatabase(5)
 
         assertSchemaObjectExists(database, "table", "epg_refresh_policies")
