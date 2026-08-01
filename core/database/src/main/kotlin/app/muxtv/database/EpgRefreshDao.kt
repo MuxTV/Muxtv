@@ -76,7 +76,16 @@ internal abstract class EpgRefreshDao {
     abstract suspend fun upsertPolicy(policy: EpgRefreshPolicyEntity)
 
     @Query("DELETE FROM epg_refresh_policies WHERE sourceId = :sourceId")
-    abstract suspend fun deletePolicy(sourceId: String): Int
+    protected abstract suspend fun deletePolicyRow(sourceId: String): Int
+
+    @Query("DELETE FROM epg_refresh_states WHERE sourceId = :sourceId")
+    protected abstract suspend fun deleteSchedulingState(sourceId: String): Int
+
+    @Transaction
+    open suspend fun removePolicy(sourceId: String) {
+        deletePolicyRow(sourceId)
+        deleteSchedulingState(sourceId)
+    }
 
     @Query("SELECT * FROM epg_refresh_states WHERE sourceId = :sourceId LIMIT 1")
     abstract fun observeState(sourceId: String): Flow<EpgRefreshStateEntity?>
