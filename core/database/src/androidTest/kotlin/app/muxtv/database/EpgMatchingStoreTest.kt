@@ -51,7 +51,7 @@ class EpgMatchingStoreTest {
             tvgId = "other.id",
             tvgName = "News",
         )
-        insertEpgChannel(externalId = "news.id", displayName = "News")
+        insertEpgChannel(EPG_SOURCE, externalId = "news.id", displayName = "News")
 
         val result = store.reconcile(EPG_SOURCE)
 
@@ -102,7 +102,7 @@ class EpgMatchingStoreTest {
             tvgId = "id-2",
             tvgName = "Shared News",
         )
-        insertEpgChannel(externalId = "missing-id", displayName = " shared\u00A0 NEWS ")
+        insertEpgChannel(EPG_SOURCE, externalId = "missing-id", displayName = " shared\u00A0 NEWS ")
 
         store.reconcile(EPG_SOURCE)
 
@@ -125,7 +125,7 @@ class EpgMatchingStoreTest {
             tvgId = "elsewhere-id",
             tvgName = "Only Elsewhere",
         )
-        insertEpgChannel(externalId = "missing-id", displayName = "Only Elsewhere")
+        insertEpgChannel(EPG_SOURCE, externalId = "missing-id", displayName = "Only Elsewhere")
 
         store.reconcile(EPG_SOURCE)
 
@@ -147,7 +147,7 @@ class EpgMatchingStoreTest {
             tvgId = "stable-id",
             tvgName = "Also Different",
         )
-        insertEpgChannel(externalId = "stable-id", displayName = "Guide Rename")
+        insertEpgChannel(EPG_SOURCE, externalId = "stable-id", displayName = "Guide Rename")
 
         store.reconcile(EPG_SOURCE)
 
@@ -167,7 +167,7 @@ class EpgMatchingStoreTest {
             tvgId = "news.id",
             tvgName = "News",
         )
-        insertEpgChannel(externalId = "news.id", displayName = "News")
+        insertEpgChannel(EPG_SOURCE, externalId = "news.id", displayName = "News")
 
         val first = store.reconcile(EPG_SOURCE)
         val firstRows = database.epgMatchingDao().matchesForEpgSource(EPG_SOURCE)
@@ -189,7 +189,7 @@ class EpgMatchingStoreTest {
             tvgId = "news.id",
             tvgName = "News",
         )
-        insertEpgChannel(externalId = "news.id", displayName = "News")
+        insertEpgChannel(EPG_SOURCE, externalId = "news.id", displayName = "News")
         val dao = database.epgMatchingDao()
         val snapshot = requireNotNull(dao.relationSnapshot(EPG_SOURCE))
 
@@ -224,6 +224,59 @@ class EpgMatchingStoreTest {
 
         assertThat(publication).isEqualTo(EpgMatchPublicationResult.Superseded)
         assertThat(dao.matchesForEpgSource(EPG_SOURCE)).isEmpty()
+    }
+
+    @Test
+    fun providerReconcileTouchesOnlyLinkedEpgSources() = runTest {
+        insertProviderChannel(
+            id = "provider-1",
+            sourceId = SOURCE_A,
+            revisionNumber = 1,
+            canonicalId = "canonical-1",
+            rawName = "News",
+            tvgId = "news.id",
+            tvgName = "News",
+        )
+        insertEpgChannel(EPG_SOURCE, externalId = "news.id", displayName = "News")
+        insertEpgSource(EPG_SOURCE_2, providerSourceId = SOURCE_A, activeRevision = 1)
+        insertEpgChannel(EPG_SOURCE_2, externalId = "news.id", displayName = "News")
+
+        insertCatalogSource(SOURCE_B, activeRevision = 1)
+        insertEpgSource(EPG_SOURCE_B, providerSourceId = SOURCE_B, activeRevision = 1)
+        insertEpgChannel(EPG_SOURCE_B, externalId = "news.id", displayName = "News")
+
+        val result = store.reconcileProviderSource(SOURCE_A)
+
+        assertThat(result).isEqualTo(
+            EpgProviderMatchingReconcileResult.Applied(
+                processedCount = 2,
+                appliedCount = 2,
+                notReadyCount = 0,
+                supersededCount = 0,
+            ),
+        )
+        assertThat(database.epgMatchingDao().matchesForEpgSource(EPG_SOURCE)).hasSize(1)
+        assertThat(database.epgMatchingDao().matchesForEpgSource(EPG_SOURCE_2)).hasSize(1)
+        assertThat(database.epgMatchingDao().matchesForEpgSource(EPG_SOURCE_B)).isEmpty()
+    }
+
+    @Test
+    fun providerReconcileRejectsUnboundedGuideFanout() = runTest {
+        repeat(EpgMatchingStore.MAX_LINKED_EPG_SOURCES) { index ->
+            insertEpgSource(
+                sourceId = "epg-extra-$index",
+                providerSourceId = SOURCE_A,
+                activeRevision = 1,
+            )
+        }
+
+        val result = store.reconcileProviderSource(SOURCE_A)
+
+        assertThat(result).isEqualTo(
+            EpgProviderMatchingReconcileResult.CapacityExceeded(
+                limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES,
+            ),
+        )
     }
 
     private suspend fun insertCatalogSource(sourceId: String, activeRevision: Long) {
@@ -310,11 +363,15 @@ class EpgMatchingStoreTest {
         )
     }
 
-    private suspend fun insertEpgChannel(externalId: String, displayName: String?) {
+    private suspend fun insertEpgChannel(
+        sourceId: String,
+        externalId: String,
+        displayName: String?,
+    ) {
         database.epgRevisionDao().insertChannels(
             listOf(
                 EpgChannelEntity(
-                    sourceId = EPG_SOURCE,
+                    sourceId = sourceId,
                     revisionNumber = 1,
                     externalId = externalId,
                     primaryDisplayName = displayName,
@@ -329,5 +386,7 @@ class EpgMatchingStoreTest {
         const val SOURCE_A = "source-a"
         const val SOURCE_B = "source-b"
         const val EPG_SOURCE = "epg-a"
+        const val EPG_SOURCE_2 = "epg-a-2"
+        const val EPG_SOURCE_B = "epg-b"
     }
 }
