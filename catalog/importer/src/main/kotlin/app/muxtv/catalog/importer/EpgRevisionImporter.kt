@@ -30,12 +30,14 @@ data class EpgImportRequest(
     val providerSourceId: String?,
     val accessRef: String?,
     val defaultZoneId: String?,
+    val refreshRunToken: String? = null,
     val parseLimits: XmltvParseLimits = XmltvParseLimits(),
     val sourceOwnership: EpgImportSourceOwnership = EpgImportSourceOwnership.UPSERT_METADATA,
 ) {
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(refreshRunToken == null || refreshRunToken.isNotBlank())
         if (sourceOwnership == EpgImportSourceOwnership.EXISTING_REMOTE_BINDING) {
             require(!accessRef.isNullOrBlank()) {
                 "Existing remote EPG imports require an opaque access binding."
@@ -46,7 +48,7 @@ data class EpgImportRequest(
     override fun toString(): String =
         "EpgImportRequest(providerLinked=${providerSourceId != null}, " +
             "accessRefPresent=${accessRef != null}, defaultZonePresent=${defaultZoneId != null}, " +
-            "sourceOwnership=$sourceOwnership)"
+            "refreshRunTokenPresent=${refreshRunToken != null}, sourceOwnership=$sourceOwnership)"
 }
 
 sealed interface EpgImportResult {
@@ -133,14 +135,28 @@ class EpgRevisionImporter(
                     statistics = statistics,
                 )
 
-                EpgImportSourceOwnership.EXISTING_REMOTE_BINDING ->
-                    revisionStore.activateRevisionIfAccessMatches(
-                        sourceId = request.sourceId,
-                        revisionNumber = revision,
-                        expectedAccessRef = requireNotNull(request.accessRef),
-                        activatedAtEpochMillis = nowEpochMillis(),
-                        statistics = statistics,
-                    )
+                EpgImportSourceOwnership.EXISTING_REMOTE_BINDING -> {
+                    val expectedAccessRef = requireNotNull(request.accessRef)
+                    val refreshRunToken = request.refreshRunToken
+                    if (refreshRunToken == null) {
+                        revisionStore.activateRevisionIfAccessMatches(
+                            sourceId = request.sourceId,
+                            revisionNumber = revision,
+                            expectedAccessRef = expectedAccessRef,
+                            activatedAtEpochMillis = nowEpochMillis(),
+                            statistics = statistics,
+                        )
+                    } else {
+                        revisionStore.activateRevisionIfRefreshOwnerMatches(
+                            sourceId = request.sourceId,
+                            revisionNumber = revision,
+                            expectedAccessRef = expectedAccessRef,
+                            expectedRunToken = refreshRunToken,
+                            activatedAtEpochMillis = nowEpochMillis(),
+                            statistics = statistics,
+                        )
+                    }
+                }
             }
             when (activation) {
                 is EpgRevisionActivationResult.Activated -> {
