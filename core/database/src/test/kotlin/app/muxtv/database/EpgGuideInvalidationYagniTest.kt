@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
-class EpgGuideInvalidationYagniTest {
+class EpgMatchGuideInvalidationYagniTest {
     @Test
     fun identicalQueryValuesStillInvalidateBecauseUnderlyingRowsMayHaveChanged() = runBlocking {
         val version = listOf(
