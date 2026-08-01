@@ -148,6 +148,21 @@ internal abstract class EpgRevisionDao {
     @Query(
         """
         SELECT COUNT(*)
+        FROM epg_refresh_states
+        WHERE sourceId = :sourceId
+          AND state = :runningState
+          AND runToken = :expectedRunToken
+        """,
+    )
+    protected abstract suspend fun refreshRunOwnerCount(
+        sourceId: String,
+        expectedRunToken: String,
+        runningState: String,
+    ): Int
+
+    @Query(
+        """
+        SELECT COUNT(*)
         FROM epg_programmes
         WHERE sourceId = :sourceId AND revisionNumber = :revisionNumber
         """,
@@ -284,6 +299,34 @@ internal abstract class EpgRevisionDao {
     ): EpgRevisionActivationResult {
         require(expectedAccessRef.isNotBlank())
         if (sourceAccessRef(sourceId) != expectedAccessRef) {
+            deleteStagingRevision(sourceId, revisionNumber)
+            return EpgRevisionActivationResult.Superseded
+        }
+        return activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        )
+    }
+
+    @Transaction
+    open suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult {
+        require(expectedAccessRef.isNotBlank())
+        require(expectedRunToken.isNotBlank())
+        val ownsRefresh = refreshRunOwnerCount(
+            sourceId = sourceId,
+            expectedRunToken = expectedRunToken,
+            runningState = EpgRefreshRunState.RUNNING.name,
+        ) == 1
+        if (sourceAccessRef(sourceId) != expectedAccessRef || !ownsRefresh) {
             deleteStagingRevision(sourceId, revisionNumber)
             return EpgRevisionActivationResult.Superseded
         }
