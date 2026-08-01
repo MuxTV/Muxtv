@@ -16,6 +16,7 @@ internal data class SourceRefreshDecision(
     val warningCount: Int = 0,
     val httpStatus: Int? = null,
     val retryable: Boolean = false,
+    val workSucceeded: Boolean = false,
 )
 
 internal object SourceRefreshOutcomeMapper {
@@ -28,12 +29,14 @@ internal object SourceRefreshOutcomeMapper {
             parsedEntries = result.entryCount,
             skippedEntries = result.skippedEntries,
             warningCount = result.warningCount,
+            workSucceeded = true,
         )
 
         RemoteSourceRefreshResult.Superseded -> SourceRefreshDecision(
             state = SourceRefreshRunState.CANCELLED,
             resultFamily = SourceRefreshCompletion.RESULT_FAMILY,
             resultCode = SourceRefreshCompletion.RESULT_SUPERSEDED,
+            workSucceeded = true,
         )
 
         RemoteSourceRefreshResult.AccessCredentialNotFound -> needsAuth("NOT_FOUND")
