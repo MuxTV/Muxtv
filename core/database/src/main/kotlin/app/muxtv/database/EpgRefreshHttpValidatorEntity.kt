@@ -17,17 +17,20 @@ import androidx.room3.ForeignKey
 )
 data class EpgRefreshHttpValidatorEntity(
     val sourceId: String,
+    val accessRefBinding: String,
     val etag: String? = null,
     val lastModified: String? = null,
     val updatedAtEpochMillis: Long,
 ) {
     init {
         require(sourceId.isNotBlank())
+        require(accessRefBinding.isNotBlank())
         EpgRefreshHttpValidators(etag = etag, lastModified = lastModified)
         require(updatedAtEpochMillis >= 0)
     }
 
     override fun toString(): String =
-        "EpgRefreshHttpValidatorEntity(sourceId=<redacted>, etagPresent=${etag != null}, " +
-            "lastModifiedPresent=${lastModified != null}, updatedAtEpochMillis=$updatedAtEpochMillis)"
+        "EpgRefreshHttpValidatorEntity(sourceId=<redacted>, accessRefPresent=true, " +
+            "etagPresent=${etag != null}, lastModifiedPresent=${lastModified != null}, " +
+            "updatedAtEpochMillis=$updatedAtEpochMillis)"
 }
