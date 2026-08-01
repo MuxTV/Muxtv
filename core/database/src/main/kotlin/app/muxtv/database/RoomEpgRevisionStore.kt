@@ -57,6 +57,22 @@ internal class RoomEpgRevisionStore(
         statistics = statistics,
     )
 
+    override suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult = dao.activateRevisionIfRefreshOwnerMatches(
+        sourceId = sourceId,
+        revisionNumber = revisionNumber,
+        expectedAccessRef = expectedAccessRef,
+        expectedRunToken = expectedRunToken,
+        activatedAtEpochMillis = activatedAtEpochMillis,
+        statistics = statistics,
+    )
+
     override suspend fun discardRevision(sourceId: String, revisionNumber: Long) {
         dao.discardRevision(sourceId, revisionNumber)
     }
