@@ -145,6 +145,12 @@ class DefaultRemoteSourceOnboarding(
                 warningCount = result.warningCount,
             )
 
+            RemoteSourceRefreshResult.Superseded -> cleanupFailure(
+                token,
+                sourceId,
+                RemoteSourceActivationFailure.Unexpected,
+            )
+
             RemoteSourceRefreshResult.AccessCredentialNotFound -> cleanupFailure(
                 token,
                 sourceId,
