@@ -6,7 +6,6 @@ import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 internal class RoomEpgGuideRepository(
@@ -41,7 +40,6 @@ internal class RoomEpgGuideRepository(
     }
 
     override fun observeDataChanges(): Flow<Unit> = dao.observeDataVersion()
-        .distinctUntilChanged()
         .map { }
 
     private fun readyProjection(
