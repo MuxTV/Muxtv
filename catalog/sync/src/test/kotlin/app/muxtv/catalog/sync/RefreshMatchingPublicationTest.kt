@@ -4,12 +4,12 @@ import app.muxtv.database.EpgRefreshHttpValidators
 import app.muxtv.database.RefreshCompletionDisposition
 import app.muxtv.database.SourceRefreshRunState
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class RefreshMatchingPublicationTest {
     @Test
-    fun appliedEpgRefreshReconcilesMatching() = runTest {
+    fun appliedEpgRefreshReconcilesMatching() = runBlocking {
         var calls = 0
 
         reconcileEpgAfterPublication(
@@ -21,7 +21,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun epgNotModifiedDoesNotReconcileMatching() = runTest {
+    fun epgNotModifiedDoesNotReconcileMatching() = runBlocking {
         var calls = 0
 
         reconcileEpgAfterPublication(
@@ -33,7 +33,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun staleEpgCompletionDoesNotReconcileMatching() = runTest {
+    fun staleEpgCompletionDoesNotReconcileMatching() = runBlocking {
         var calls = 0
 
         reconcileEpgAfterPublication(
@@ -45,7 +45,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun appliedCatalogRefreshReconcilesLinkedGuideSources() = runTest {
+    fun appliedCatalogRefreshReconcilesLinkedGuideSources() = runBlocking {
         var calls = 0
 
         reconcileSourceAfterPublication(
@@ -57,7 +57,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun failedCatalogRefreshDoesNotReconcileMatching() = runTest {
+    fun failedCatalogRefreshDoesNotReconcileMatching() = runBlocking {
         var calls = 0
 
         reconcileSourceAfterPublication(
@@ -74,7 +74,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun matchingFailureIsBestEffortAfterDurablePublication() = runTest {
+    fun matchingFailureIsBestEffortAfterDurablePublication() = runBlocking {
         val result = runCatching {
             reconcileEpgAfterPublication(
                 decision = refreshedEpgDecision(),
