@@ -32,6 +32,26 @@ class EpgRefreshStoreTest {
     }
 
     @Test
+    fun policyRoundTripsWithoutProviderValues() = runTest {
+        val policy = EpgRefreshPolicy(
+            sourceId = SOURCE_ID,
+            enabled = true,
+            intervalMinutes = 60,
+            unmeteredOnly = true,
+            requiresCharging = false,
+            updatedAtEpochMillis = 90,
+        )
+
+        store.upsertPolicy(policy)
+
+        assertThat(store.getPolicy(SOURCE_ID)).isEqualTo(policy)
+        assertThat(store.getPolicies()).containsExactly(policy)
+
+        store.removePolicy(SOURCE_ID)
+        assertThat(store.getPolicy(SOURCE_ID)).isNull()
+    }
+
+    @Test
     fun freshLeaseCannotBeStolenButStaleLeaseCanBeReclaimed() = runTest {
         assertThat(
             store.tryAcquire(
@@ -63,23 +83,14 @@ class EpgRefreshStoreTest {
 
     @Test
     fun notModifiedIsSuccessfulWithoutNewRevisionAndRotatesValidators() = runTest {
-        acquire("run-1", 100)
-        store.complete(
-            sourceId = SOURCE_ID,
+        completeRefreshed(
             runToken = "run-1",
-            trigger = EpgRefreshTrigger.MANUAL,
-            completion = EpgRefreshCompletion.Refreshed(
-                completedAtEpochMillis = 120,
-                revisionNumber = 7,
-                channelCount = 12,
-                programmeCount = 300,
-                skippedProgrammeCount = 2,
-                warningCount = 1,
-                unresolvedTimeCount = 3,
-                validators = EpgRefreshHttpValidators(
-                    etag = "etag-a",
-                    lastModified = "last-modified-a",
-                ),
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 7,
+            validators = EpgRefreshHttpValidators(
+                etag = "etag-a",
+                lastModified = "last-modified-a",
             ),
         )
 
@@ -113,6 +124,58 @@ class EpgRefreshStoreTest {
         assertThat(target?.activeRevision).isEqualTo(0)
         assertThat(target?.validators?.etag).isEqualTo("etag-b")
         assertThat(target?.validators?.lastModified).isEqualTo("last-modified-b")
+    }
+
+    @Test
+    fun refreshedResponseWithoutValidatorsClearsPreviousValidators() = runTest {
+        completeRefreshed(
+            runToken = "run-1",
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 7,
+            validators = EpgRefreshHttpValidators(etag = "etag-a"),
+        )
+        assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
+
+        completeRefreshed(
+            runToken = "run-2",
+            startedAtEpochMillis = 200,
+            completedAtEpochMillis = 220,
+            revisionNumber = 8,
+            validators = EpgRefreshHttpValidators(),
+        )
+
+        assertThat(store.getTarget(SOURCE_ID)?.validators?.isEmpty).isTrue()
+    }
+
+    @Test
+    fun terminalFailurePreservesSuccessfulValidators() = runTest {
+        completeRefreshed(
+            runToken = "run-1",
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 7,
+            validators = EpgRefreshHttpValidators(etag = "etag-a"),
+        )
+
+        acquire("run-2", 200)
+        store.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-2",
+            trigger = EpgRefreshTrigger.PERIODIC,
+            completion = EpgRefreshCompletion.Terminal(
+                state = EpgRefreshRunState.FAILED,
+                completedAtEpochMillis = 220,
+                resultFamily = "NETWORK",
+                resultCode = "TIMEOUT",
+            ),
+        )
+
+        val status = store.observeStatus(SOURCE_ID).first()
+        assertThat(status?.state).isEqualTo(EpgRefreshRunState.FAILED)
+        assertThat(status?.lastSuccessRevision).isEqualTo(7)
+        assertThat(status?.lastSuccessAtEpochMillis).isEqualTo(120)
+        assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
     }
 
     @Test
@@ -158,21 +221,12 @@ class EpgRefreshStoreTest {
 
     @Test
     fun accessRefChangeInvalidatesValidatorsWithoutChangingActiveRevision() = runTest {
-        acquire("run-1", 100)
-        store.complete(
-            sourceId = SOURCE_ID,
+        completeRefreshed(
             runToken = "run-1",
-            trigger = EpgRefreshTrigger.MANUAL,
-            completion = EpgRefreshCompletion.Refreshed(
-                completedAtEpochMillis = 120,
-                revisionNumber = 9,
-                channelCount = 1,
-                programmeCount = 1,
-                skippedProgrammeCount = 0,
-                warningCount = 0,
-                unresolvedTimeCount = 0,
-                validators = EpgRefreshHttpValidators(etag = "etag-a"),
-            ),
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 9,
+            validators = EpgRefreshHttpValidators(etag = "etag-a"),
         )
         assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
 
@@ -181,6 +235,21 @@ class EpgRefreshStoreTest {
         val target = store.getTarget(SOURCE_ID)
         assertThat(target?.activeRevision).isEqualTo(0)
         assertThat(target?.validators?.isEmpty).isTrue()
+    }
+
+    @Test
+    fun unchangedAccessRefPreservesValidators() = runTest {
+        completeRefreshed(
+            runToken = "run-1",
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 9,
+            validators = EpgRefreshHttpValidators(etag = "etag-a"),
+        )
+
+        insertSource(accessRef = "access-a")
+
+        assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
     }
 
     @Test
@@ -204,7 +273,56 @@ class EpgRefreshStoreTest {
 
         val attempts = store.getRecentAttempts(SOURCE_ID)
         assertThat(attempts).hasSize(MAX_EPG_REFRESH_ATTEMPTS)
-        assertThat(attempts.first().runToken).isEqualTo("run-${MAX_EPG_REFRESH_ATTEMPTS + 4}")
+        assertThat(attempts.first().completedAtEpochMillis)
+            .isEqualTo(1_000L + ((MAX_EPG_REFRESH_ATTEMPTS + 4) * 10L) + 1)
+    }
+
+    @Test
+    fun sensitiveRefreshModelsRedactRawValuesFromToString() = runTest {
+        val validators = EpgRefreshHttpValidators(
+            etag = "secret-etag-value",
+            lastModified = "secret-last-modified-value",
+        )
+        completeRefreshed(
+            runToken = "run-1",
+            startedAtEpochMillis = 100,
+            completedAtEpochMillis = 120,
+            revisionNumber = 7,
+            validators = validators,
+        )
+
+        val targetText = requireNotNull(store.getTarget(SOURCE_ID)).toString()
+        val validatorText = validators.toString()
+        assertThat(targetText).doesNotContain("access-a")
+        assertThat(targetText).doesNotContain("secret-etag-value")
+        assertThat(targetText).doesNotContain("secret-last-modified-value")
+        assertThat(validatorText).doesNotContain("secret-etag-value")
+        assertThat(validatorText).doesNotContain("secret-last-modified-value")
+    }
+
+    private suspend fun completeRefreshed(
+        runToken: String,
+        startedAtEpochMillis: Long,
+        completedAtEpochMillis: Long,
+        revisionNumber: Long,
+        validators: EpgRefreshHttpValidators,
+    ) {
+        acquire(runToken, startedAtEpochMillis)
+        store.complete(
+            sourceId = SOURCE_ID,
+            runToken = runToken,
+            trigger = EpgRefreshTrigger.MANUAL,
+            completion = EpgRefreshCompletion.Refreshed(
+                completedAtEpochMillis = completedAtEpochMillis,
+                revisionNumber = revisionNumber,
+                channelCount = 12,
+                programmeCount = 300,
+                skippedProgrammeCount = 2,
+                warningCount = 1,
+                unresolvedTimeCount = 3,
+                validators = validators,
+            ),
+        )
     }
 
     private suspend fun acquire(runToken: String, startedAtEpochMillis: Long) {
