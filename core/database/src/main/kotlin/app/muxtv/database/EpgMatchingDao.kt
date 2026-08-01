@@ -91,12 +91,10 @@ internal abstract class EpgMatchingDao {
         WHERE providerSourceId = :providerSourceId
           AND activeRevision > 0
         ORDER BY id COLLATE BINARY ASC
-        LIMIT :limit
         """,
     )
     abstract suspend fun linkedActiveEpgSourceIds(
         providerSourceId: String,
-        limit: Int,
     ): List<String>
 
     @Query(
