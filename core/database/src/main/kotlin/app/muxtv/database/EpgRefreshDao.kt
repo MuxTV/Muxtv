@@ -41,11 +41,30 @@ internal abstract class EpgRefreshDao {
         FROM epg_sources
         LEFT JOIN epg_refresh_http_validators
             ON epg_refresh_http_validators.sourceId = epg_sources.id
+           AND epg_refresh_http_validators.accessRefBinding = epg_sources.accessRef
         WHERE epg_sources.id = :sourceId
         LIMIT 1
         """,
     )
-    abstract suspend fun getTarget(sourceId: String): EpgRefreshTargetRow?
+    protected abstract suspend fun selectTarget(sourceId: String): EpgRefreshTargetRow?
+
+    @Query(
+        """
+        DELETE FROM epg_refresh_http_validators
+        WHERE sourceId = :sourceId
+          AND (
+              (SELECT accessRef FROM epg_sources WHERE id = :sourceId) IS NULL
+              OR accessRefBinding != (SELECT accessRef FROM epg_sources WHERE id = :sourceId)
+          )
+        """,
+    )
+    protected abstract suspend fun deleteStaleValidators(sourceId: String): Int
+
+    @Transaction
+    open suspend fun getTarget(sourceId: String): EpgRefreshTargetRow? {
+        deleteStaleValidators(sourceId)
+        return selectTarget(sourceId)
+    }
 
     @Query("SELECT * FROM epg_refresh_policies ORDER BY sourceId")
     abstract suspend fun getPolicies(): List<EpgRefreshPolicyEntity>
@@ -112,12 +131,7 @@ internal abstract class EpgRefreshDao {
         startedAtEpochMillis: Long,
         staleBeforeEpochMillis: Long,
     ): Boolean {
-        insertState(
-            EpgRefreshStateEntity(
-                sourceId = sourceId,
-                state = EpgRefreshRunState.IDLE.name,
-            ),
-        )
+        insertState(EpgRefreshStateEntity(sourceId = sourceId))
         return markRunning(
             sourceId = sourceId,
             runToken = runToken,
@@ -298,12 +312,14 @@ internal abstract class EpgRefreshDao {
         when (completion) {
             is EpgRefreshCompletion.Refreshed -> replaceValidators(
                 sourceId = sourceId,
+                accessRefBinding = completion.accessRefBinding,
                 validators = completion.validators,
                 updatedAtEpochMillis = completion.completedAtEpochMillis,
             )
 
             is EpgRefreshCompletion.NotModified -> replaceValidators(
                 sourceId = sourceId,
+                accessRefBinding = completion.accessRefBinding,
                 validators = completion.validators,
                 updatedAtEpochMillis = completion.completedAtEpochMillis,
             )
@@ -324,6 +340,7 @@ internal abstract class EpgRefreshDao {
 
     private suspend fun replaceValidators(
         sourceId: String,
+        accessRefBinding: String,
         validators: EpgRefreshHttpValidators,
         updatedAtEpochMillis: Long,
     ) {
@@ -333,6 +350,7 @@ internal abstract class EpgRefreshDao {
             upsertValidators(
                 EpgRefreshHttpValidatorEntity(
                     sourceId = sourceId,
+                    accessRefBinding = accessRefBinding,
                     etag = validators.etag,
                     lastModified = validators.lastModified,
                     updatedAtEpochMillis = updatedAtEpochMillis,
