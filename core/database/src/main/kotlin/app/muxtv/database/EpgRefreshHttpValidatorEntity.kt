@@ -23,8 +23,7 @@ data class EpgRefreshHttpValidatorEntity(
 ) {
     init {
         require(sourceId.isNotBlank())
-        require(etag == null || etag.isNotBlank())
-        require(lastModified == null || lastModified.isNotBlank())
+        EpgRefreshHttpValidators(etag = etag, lastModified = lastModified)
         require(updatedAtEpochMillis >= 0)
     }
 
