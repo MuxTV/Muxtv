@@ -23,6 +23,18 @@ import kotlinx.coroutines.withTimeout
 internal const val EPG_REFRESH_TIMEOUT_MILLIS = 20 * 60 * 1000L
 internal const val EPG_LEASE_STALE_AFTER_MILLIS = 30 * 60 * 1000L
 
+internal suspend fun finalizeCancellationAndRethrow(
+    cancellation: CancellationException,
+    finalize: suspend () -> Unit,
+): Nothing {
+    try {
+        finalize()
+    } catch (_: Exception) {
+        // Persistence is best-effort here. The original coroutine cancellation remains authoritative.
+    }
+    throw cancellation
+}
+
 @HiltWorker
 class EpgRefreshWorker @AssistedInject constructor(
     @Assisted appContext: Context,
@@ -59,13 +71,14 @@ class EpgRefreshWorker @AssistedInject constructor(
             complete(target, runToken, trigger, decision)
             decision.toWorkResult()
         } catch (cancelled: CancellationException) {
-            complete(
-                target = target,
-                runToken = runToken,
-                trigger = trigger,
-                decision = EpgRefreshOutcomeMapper.cancellation(),
-            )
-            throw cancelled
+            finalizeCancellationAndRethrow(cancelled) {
+                complete(
+                    target = target,
+                    runToken = runToken,
+                    trigger = trigger,
+                    decision = EpgRefreshOutcomeMapper.cancellation(),
+                )
+            }
         } catch (_: Exception) {
             val decision = EpgRefreshOutcomeMapper.internalFailure()
             runCatching {
