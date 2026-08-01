@@ -157,6 +157,9 @@ internal abstract class EpgRefreshDao {
         runningState: String = "RUNNING",
     ): Long?
 
+    @Query("SELECT accessRef FROM epg_sources WHERE id = :sourceId LIMIT 1")
+    protected abstract suspend fun currentAccessRef(sourceId: String): String?
+
     @Query(
         """
         UPDATE epg_refresh_states
@@ -274,12 +277,13 @@ internal abstract class EpgRefreshDao {
             runningState = EpgRefreshRunState.RUNNING.name,
         ) ?: return
 
-        val updated = when (completion) {
+        val effectiveCompletion = accessCheckedCompletion(sourceId, completion)
+        val updated = when (effectiveCompletion) {
             is EpgRefreshCompletion.Refreshed -> finishRefreshed(
                 sourceId = sourceId,
                 runToken = runToken,
-                completedAtEpochMillis = completion.completedAtEpochMillis,
-                revisionNumber = completion.revisionNumber,
+                completedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
+                revisionNumber = effectiveCompletion.revisionNumber,
                 resultFamily = EpgRefreshCompletion.RESULT_FAMILY,
                 resultCode = EpgRefreshCompletion.RESULT_REFRESHED,
                 runningState = EpgRefreshRunState.RUNNING.name,
@@ -289,7 +293,7 @@ internal abstract class EpgRefreshDao {
             is EpgRefreshCompletion.NotModified -> finishNotModified(
                 sourceId = sourceId,
                 runToken = runToken,
-                completedAtEpochMillis = completion.completedAtEpochMillis,
+                completedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
                 resultFamily = EpgRefreshCompletion.RESULT_FAMILY,
                 resultCode = EpgRefreshCompletion.RESULT_NOT_MODIFIED,
                 runningState = EpgRefreshRunState.RUNNING.name,
@@ -299,36 +303,36 @@ internal abstract class EpgRefreshDao {
             is EpgRefreshCompletion.Terminal -> finishTerminal(
                 sourceId = sourceId,
                 runToken = runToken,
-                state = completion.state.name,
-                completedAtEpochMillis = completion.completedAtEpochMillis,
-                resultFamily = completion.resultFamily,
-                resultCode = completion.resultCode,
-                httpStatus = completion.httpStatus,
+                state = effectiveCompletion.state.name,
+                completedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
+                resultFamily = effectiveCompletion.resultFamily,
+                resultCode = effectiveCompletion.resultCode,
+                httpStatus = effectiveCompletion.httpStatus,
                 runningState = EpgRefreshRunState.RUNNING.name,
             )
         }
         if (updated != 1) return
 
-        when (completion) {
+        when (effectiveCompletion) {
             is EpgRefreshCompletion.Refreshed -> replaceValidators(
                 sourceId = sourceId,
-                accessRefBinding = completion.accessRefBinding,
-                validators = completion.validators,
-                updatedAtEpochMillis = completion.completedAtEpochMillis,
+                accessRefBinding = effectiveCompletion.accessRefBinding,
+                validators = effectiveCompletion.validators,
+                updatedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
             )
 
             is EpgRefreshCompletion.NotModified -> replaceValidators(
                 sourceId = sourceId,
-                accessRefBinding = completion.accessRefBinding,
-                validators = completion.validators,
-                updatedAtEpochMillis = completion.completedAtEpochMillis,
+                accessRefBinding = effectiveCompletion.accessRefBinding,
+                validators = effectiveCompletion.validators,
+                updatedAtEpochMillis = effectiveCompletion.completedAtEpochMillis,
             )
 
             is EpgRefreshCompletion.Terminal -> Unit
         }
 
         insertAttempt(
-            completion.toAttemptEntity(
+            effectiveCompletion.toAttemptEntity(
                 sourceId = sourceId,
                 runToken = runToken,
                 trigger = trigger,
@@ -336,6 +340,27 @@ internal abstract class EpgRefreshDao {
             ),
         )
         pruneAttempts(sourceId, MAX_EPG_REFRESH_ATTEMPTS)
+    }
+
+    private suspend fun accessCheckedCompletion(
+        sourceId: String,
+        completion: EpgRefreshCompletion,
+    ): EpgRefreshCompletion = when (completion) {
+        is EpgRefreshCompletion.Refreshed ->
+            if (currentAccessRef(sourceId) == completion.accessRefBinding) {
+                completion
+            } else {
+                completion.toSuperseded()
+            }
+
+        is EpgRefreshCompletion.NotModified ->
+            if (currentAccessRef(sourceId) == completion.accessRefBinding) {
+                completion
+            } else {
+                completion.toSuperseded()
+            }
+
+        is EpgRefreshCompletion.Terminal -> completion
     }
 
     private suspend fun replaceValidators(
@@ -359,6 +384,14 @@ internal abstract class EpgRefreshDao {
         }
     }
 }
+
+private fun EpgRefreshCompletion.toSuperseded(): EpgRefreshCompletion.Terminal =
+    EpgRefreshCompletion.Terminal(
+        state = EpgRefreshRunState.CANCELLED,
+        completedAtEpochMillis = completedAtEpochMillis,
+        resultFamily = EpgRefreshCompletion.RESULT_FAMILY,
+        resultCode = EpgRefreshCompletion.RESULT_SUPERSEDED,
+    )
 
 private fun EpgRefreshCompletion.toAttemptEntity(
     sourceId: String,
