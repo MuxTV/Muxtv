@@ -4,6 +4,7 @@ import app.muxtv.database.EpgRefreshHttpValidators
 import app.muxtv.database.RefreshCompletionDisposition
 import app.muxtv.database.SourceRefreshRunState
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
@@ -85,6 +86,25 @@ class RefreshMatchingPublicationTest {
         }
 
         assertThat(result.isSuccess).isTrue()
+    }
+
+    @Test
+    fun matchingCancellationRemainsAuthoritative() = runBlocking {
+        val original = CancellationException("synthetic matching cancellation")
+        var observed: CancellationException? = null
+
+        try {
+            reconcileEpgAfterPublication(
+                decision = refreshedEpgDecision(),
+                disposition = RefreshCompletionDisposition.APPLIED,
+            ) {
+                throw original
+            }
+        } catch (cancelled: CancellationException) {
+            observed = cancelled
+        }
+
+        assertThat(observed).isSameInstanceAs(original)
     }
 
     private fun refreshedEpgDecision(): EpgRefreshDecision.Refreshed =
