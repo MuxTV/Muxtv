@@ -19,6 +19,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
+enum class EpgImportSourceOwnership {
+    UPSERT_METADATA,
+    EXISTING_REMOTE_BINDING,
+}
+
 data class EpgImportRequest(
     val sourceId: String,
     val sourceName: String,
@@ -26,15 +31,22 @@ data class EpgImportRequest(
     val accessRef: String?,
     val defaultZoneId: String?,
     val parseLimits: XmltvParseLimits = XmltvParseLimits(),
+    val sourceOwnership: EpgImportSourceOwnership = EpgImportSourceOwnership.UPSERT_METADATA,
 ) {
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        if (sourceOwnership == EpgImportSourceOwnership.EXISTING_REMOTE_BINDING) {
+            require(!accessRef.isNullOrBlank()) {
+                "Existing remote EPG imports require an opaque access binding."
+            }
+        }
     }
 
     override fun toString(): String =
         "EpgImportRequest(providerLinked=${providerSourceId != null}, " +
-            "accessRefPresent=${accessRef != null}, defaultZonePresent=${defaultZoneId != null})"
+            "accessRefPresent=${accessRef != null}, defaultZonePresent=${defaultZoneId != null}, " +
+            "sourceOwnership=$sourceOwnership)"
 }
 
 sealed interface EpgImportResult {
@@ -76,15 +88,17 @@ class EpgRevisionImporter(
         var activated = false
 
         return try {
-            revisionStore.upsertSource(
-                EpgSourceDefinition(
-                    id = request.sourceId,
-                    name = request.sourceName,
-                    providerSourceId = request.providerSourceId,
-                    accessRef = request.accessRef,
-                    defaultZoneId = request.defaultZoneId,
-                ),
-            )
+            if (request.sourceOwnership == EpgImportSourceOwnership.UPSERT_METADATA) {
+                revisionStore.upsertSource(
+                    EpgSourceDefinition(
+                        id = request.sourceId,
+                        name = request.sourceName,
+                        providerSourceId = request.providerSourceId,
+                        accessRef = request.accessRef,
+                        defaultZoneId = request.defaultZoneId,
+                    ),
+                )
+            }
             val revision = revisionStore.beginRevision(
                 sourceId = request.sourceId,
                 startedAtEpochMillis = nowEpochMillis(),
@@ -111,14 +125,24 @@ class EpgRevisionImporter(
                 warningCount = sink.warningCount,
                 unresolvedTimeCount = sink.unresolvedTimeCount,
             )
-            when (
-                val activation = revisionStore.activateRevision(
+            val activation = when (request.sourceOwnership) {
+                EpgImportSourceOwnership.UPSERT_METADATA -> revisionStore.activateRevision(
                     sourceId = request.sourceId,
                     revisionNumber = revision,
                     activatedAtEpochMillis = nowEpochMillis(),
                     statistics = statistics,
                 )
-            ) {
+
+                EpgImportSourceOwnership.EXISTING_REMOTE_BINDING ->
+                    revisionStore.activateRevisionIfAccessMatches(
+                        sourceId = request.sourceId,
+                        revisionNumber = revision,
+                        expectedAccessRef = requireNotNull(request.accessRef),
+                        activatedAtEpochMillis = nowEpochMillis(),
+                        statistics = statistics,
+                    )
+            }
+            when (activation) {
                 is EpgRevisionActivationResult.Activated -> {
                     activated = true
                     EpgImportResult.Imported(
