@@ -115,6 +115,7 @@ class EpgRefreshWorker @AssistedInject constructor(
                 completedAtEpochMillis = System.currentTimeMillis(),
                 accessRefBinding = target.accessRef.orEmpty(),
             ),
+            expectedAccessRef = target.accessRef,
         )
     }
 
