@@ -174,6 +174,7 @@ sealed interface EpgRefreshCompletion {
         const val RESULT_FAMILY = "EPG_REFRESH"
         const val RESULT_REFRESHED = "REFRESHED"
         const val RESULT_NOT_MODIFIED = "NOT_MODIFIED"
+        const val RESULT_SUPERSEDED = "SUPERSEDED"
 
         private val TERMINAL_FAILURE_STATES = setOf(
             EpgRefreshRunState.FAILED,
