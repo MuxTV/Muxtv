@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   unit:
@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Run EPG matching contracts
-        run: ./gradlew :catalog:api:test :catalog:sync:test :core:database:testDebugUnitTest --tests 'app.muxtv.database.EpgMatch*' :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
+        run: ./gradlew :catalog:api:test :catalog:sync:test :core:database:testDebugUnitTest --tests 'app.muxtv.database.EpgMatch*' :core:database:compileDebugAndroidTestKotlin :catalog:importer:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
       - name: Upload generated Room schema
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -34,19 +34,3 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 1
-      - name: Commit generated Room v7 schema
-        if: success()
-        shell: bash
-        run: |
-          set -euo pipefail
-          schema='core/database/schemas/app.muxtv.database.MuxTvDatabase/7.json'
-          test -f "$schema"
-          if [[ -z "$(git status --porcelain -- "$schema")" ]]; then
-            echo 'Room v7 schema is already committed.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$schema"
-          git commit -m 'chore: commit Room schema v7'
-          git push origin HEAD:${{ github.head_ref }}
