@@ -29,7 +29,7 @@ internal class RoomSourceRefreshStore(
 
     override suspend fun removePolicy(sourceId: String) {
         require(sourceId.isNotBlank())
-        dao.deletePolicy(sourceId)
+        dao.removePolicy(sourceId)
     }
 
     override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> {
@@ -69,6 +69,7 @@ internal class RoomSourceRefreshStore(
         runToken: String,
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
     ) {
         require(sourceId.isNotBlank())
         require(runToken.isNotBlank())
@@ -77,6 +78,7 @@ internal class RoomSourceRefreshStore(
             runToken = runToken,
             trigger = trigger,
             completion = completion,
+            expectedCredentialRef = expectedCredentialRef,
         )
     }
 }
