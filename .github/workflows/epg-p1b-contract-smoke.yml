@@ -1,0 +1,26 @@
+name: EPG P1B contract smoke
+
+on:
+  push:
+    branches:
+      - wip/epg-refresh-access-guard-70
+
+permissions:
+  contents: read
+
+jobs:
+  compile-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile Android contracts and app
+        run: ./gradlew :core:database:compileDebugAndroidTestKotlin :catalog:sync:testDebugUnitTest :app:tv:assembleDebug --no-daemon --stacktrace --console=plain
