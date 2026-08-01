@@ -10,6 +10,7 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -157,6 +158,7 @@ class EpgNowNextRepositoryTest {
         val emissions = async {
             repository.observeDataChanges().take(2).toList()
         }
+        runCurrent()
 
         database.sourceRevisionDao().insertRevision(
             SourceRevisionEntity(
