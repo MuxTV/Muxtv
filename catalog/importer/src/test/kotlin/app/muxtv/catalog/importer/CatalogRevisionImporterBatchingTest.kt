@@ -72,11 +72,31 @@ class CatalogRevisionImporterBatchingTest {
             revisionNumber: Long,
             activatedAtEpochMillis: Long,
             statistics: SourceRevisionStatistics,
-        ): SourceRevisionActivationResult = SourceRevisionActivationResult.Activated(
-            revisionNumber = revisionNumber,
-            previousRevisionNumber = 0,
-            entryCount = batches.sumOf { it.size },
-        )
+        ): SourceRevisionActivationResult = activation(revisionNumber)
+
+        override suspend fun activateIfCredentialMatches(
+            sourceId: String,
+            revisionNumber: Long,
+            expectedCredentialRef: String,
+            activatedAtEpochMillis: Long,
+            statistics: SourceRevisionStatistics,
+        ): SourceRevisionActivationResult = activation(revisionNumber)
+
+        override suspend fun activateIfRefreshOwnerMatches(
+            sourceId: String,
+            revisionNumber: Long,
+            expectedCredentialRef: String,
+            expectedRunToken: String,
+            activatedAtEpochMillis: Long,
+            statistics: SourceRevisionStatistics,
+        ): SourceRevisionActivationResult = activation(revisionNumber)
+
+        private fun activation(revisionNumber: Long): SourceRevisionActivationResult =
+            SourceRevisionActivationResult.Activated(
+                revisionNumber = revisionNumber,
+                previousRevisionNumber = 0,
+                entryCount = batches.sumOf { it.size },
+            )
 
         override suspend fun discard(sourceId: String, revisionNumber: Long) = Unit
 
