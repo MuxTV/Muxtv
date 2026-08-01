@@ -142,6 +142,9 @@ internal abstract class EpgRevisionDao {
     @Query("SELECT activeRevision FROM epg_sources WHERE id = :sourceId")
     abstract suspend fun activeRevision(sourceId: String): Long?
 
+    @Query("SELECT accessRef FROM epg_sources WHERE id = :sourceId LIMIT 1")
+    protected abstract suspend fun sourceAccessRef(sourceId: String): String?
+
     @Query(
         """
         SELECT COUNT(*)
@@ -270,6 +273,27 @@ internal abstract class EpgRevisionDao {
         revisionNumber: Long,
         stagingStatus: String = EpgRevisionEntity.STATUS_STAGING,
     ): Int
+
+    @Transaction
+    open suspend fun activateRevisionIfAccessMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult {
+        require(expectedAccessRef.isNotBlank())
+        if (sourceAccessRef(sourceId) != expectedAccessRef) {
+            deleteStagingRevision(sourceId, revisionNumber)
+            return EpgRevisionActivationResult.Superseded
+        }
+        return activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        )
+    }
 
     @Transaction
     open suspend fun activateRevision(
