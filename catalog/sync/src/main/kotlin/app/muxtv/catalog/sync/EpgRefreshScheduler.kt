@@ -62,10 +62,9 @@ class EpgRefreshScheduler @Inject constructor(
         workManager().cancelUniqueWork(
             EpgRefreshWorkNames.immediate(sourceId, EpgRefreshTrigger.MANUAL),
         )
-        workManager().cancelUniqueWork(
-            EpgRefreshWorkNames.immediate(sourceId, EpgRefreshTrigger.STARTUP),
-        )
-        workManager().cancelUniqueWork(EpgRefreshWorkNames.periodic(sourceId))
+        epgPolicyOwnedWorkNames(sourceId).forEach { workName ->
+            workManager().cancelUniqueWork(workName)
+        }
     }
 
     private fun enqueueOneShot(
@@ -94,7 +93,9 @@ class EpgRefreshScheduler @Inject constructor(
 
     private fun applyPolicy(policy: EpgRefreshPolicy) {
         if (!policy.enabled) {
-            workManager().cancelUniqueWork(EpgRefreshWorkNames.periodic(policy.sourceId))
+            epgPolicyOwnedWorkNames(policy.sourceId).forEach { workName ->
+                workManager().cancelUniqueWork(workName)
+            }
             return
         }
 
@@ -157,6 +158,14 @@ internal fun epgOneShotConstraints(
 
     EpgRefreshTrigger.PERIODIC -> error(
         "Periodic EPG refresh constraints are created from the periodic policy path.",
+    )
+}
+
+internal fun epgPolicyOwnedWorkNames(sourceId: String): List<String> {
+    require(sourceId.isNotBlank())
+    return listOf(
+        EpgRefreshWorkNames.immediate(sourceId, EpgRefreshTrigger.STARTUP),
+        EpgRefreshWorkNames.periodic(sourceId),
     )
 }
 
