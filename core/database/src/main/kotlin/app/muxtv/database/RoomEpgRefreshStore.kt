@@ -25,7 +25,7 @@ internal class RoomEpgRefreshStore(
 
     override suspend fun removePolicy(sourceId: String) {
         require(sourceId.isNotBlank())
-        dao.deletePolicy(sourceId)
+        dao.removePolicy(sourceId)
     }
 
     override fun observeStatus(sourceId: String): Flow<EpgRefreshStatus?> {
