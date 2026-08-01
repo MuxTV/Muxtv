@@ -25,7 +25,7 @@ data class EpgRefreshPolicyEntity(
 ) {
     init {
         require(sourceId.isNotBlank())
-        require(intervalMinutes > 0)
+        require(intervalMinutes >= MIN_EPG_REFRESH_INTERVAL_MINUTES)
         require(updatedAtEpochMillis >= 0)
     }
 }
