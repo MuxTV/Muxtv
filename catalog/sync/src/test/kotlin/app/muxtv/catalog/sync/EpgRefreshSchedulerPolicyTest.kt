@@ -35,4 +35,14 @@ class EpgRefreshSchedulerPolicyTest {
         assertThat(constraints.requiredNetworkType).isEqualTo(NetworkType.CONNECTED)
         assertThat(constraints.requiresCharging()).isFalse()
     }
+
+    @Test
+    fun `manual and startup use trigger-distinct unique work identities`() {
+        val manual = EpgRefreshWorkNames.immediate("epg-1", EpgRefreshTrigger.MANUAL)
+        val startup = EpgRefreshWorkNames.immediate("epg-1", EpgRefreshTrigger.STARTUP)
+
+        assertThat(manual).isNotEqualTo(startup)
+        assertThat(manual).contains("epg-1")
+        assertThat(startup).contains("epg-1")
+    }
 }
