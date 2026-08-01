@@ -9,7 +9,10 @@ import androidx.room3.Transaction
 internal data class SourceRemovalSnapshot(
     val activeRevision: Long,
     val credentialRef: String?,
-)
+) {
+    override fun toString(): String =
+        "SourceRemovalSnapshot(activeRevision=$activeRevision, credentialRefPresent=${credentialRef != null})"
+}
 
 @Dao
 internal abstract class SourceRevisionDao {
@@ -135,8 +138,8 @@ internal abstract class SourceRevisionDao {
         providerChannels: List<ProviderChannelEntity>,
         streamVariants: List<StreamVariantEntity>,
     ) {
-        // Canonical rows are identity placeholders while a revision is STAGING. Existing active
-        // display metadata must not change until the revision itself is atomically activated.
+        // STAGING may create a missing canonical identity, but it cannot mutate metadata already
+        // visible through an active revision. Display metadata is published in activateRevision().
         insertCanonicalChannels(canonicalChannels)
         insertProviderChannels(providerChannels)
         insertStreamVariants(streamVariants)
@@ -204,7 +207,12 @@ internal abstract class SourceRevisionDao {
         """
         UPDATE canonical_channels
         SET displayName = (
-            SELECT COALESCE(NULLIF(provider_channels.tvgName, ''), provider_channels.rawName)
+            SELECT CASE
+                WHEN provider_channels.tvgName IS NOT NULL
+                 AND TRIM(provider_channels.tvgName) != ''
+                    THEN provider_channels.tvgName
+                ELSE provider_channels.rawName
+            END
             FROM stream_variants
             INNER JOIN provider_channels
                 ON provider_channels.id = stream_variants.providerChannelId
