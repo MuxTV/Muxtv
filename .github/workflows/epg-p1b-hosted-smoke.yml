@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Java 21
-        uses: actions/setup-java@7a445ee88d4e23b52c33ac419e0b9c9a79577b89
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
