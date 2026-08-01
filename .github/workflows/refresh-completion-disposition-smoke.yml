@@ -1,0 +1,26 @@
+name: Refresh completion disposition smoke
+
+on:
+  push:
+    branches:
+      - fix/source-refresh-ownership-76
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile refresh completion contracts
+        run: ./gradlew :core:database:compileDebugAndroidTestKotlin :catalog:sync:testDebugUnitTest --no-daemon --stacktrace --console=plain
