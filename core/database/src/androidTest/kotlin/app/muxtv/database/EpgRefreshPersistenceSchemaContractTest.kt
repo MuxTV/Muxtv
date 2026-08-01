@@ -1,67 +1,56 @@
 package app.muxtv.database
 
-import androidx.room3.testing.MigrationTestHelper
-import androidx.sqlite.SQLiteConnection
-import androidx.sqlite.driver.AndroidSQLiteDriver
+import androidx.room3.Room
+import androidx.room3.useReaderConnection
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class EpgRefreshPersistenceSchemaContractTest {
-    private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val targetContext = instrumentation.targetContext
-    private val databaseFile = targetContext.getDatabasePath(DATABASE_NAME)
-
-    @get:Rule
-    val migrationHelper = MigrationTestHelper(
-        instrumentation = instrumentation,
-        file = databaseFile,
-        driver = AndroidSQLiteDriver(),
-        databaseClass = MuxTvDatabase::class,
-    )
+    private lateinit var database: MuxTvDatabase
 
     @Before
     fun setUp() {
-        targetContext.deleteDatabase(DATABASE_NAME)
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            MuxTvDatabase::class.java,
+        ).build()
     }
 
     @After
     fun tearDown() {
-        targetContext.deleteDatabase(DATABASE_NAME)
-    }
-
-    @Test
-    fun currentSchemaProvidesIsolatedDurableEpgRefreshTables() = runBlocking {
-        val database = migrationHelper.createDatabase(5)
-
-        assertSchemaObjectExists(database, "table", "epg_refresh_policies")
-        assertSchemaObjectExists(database, "table", "epg_refresh_states")
-        assertSchemaObjectExists(database, "table", "epg_refresh_attempts")
-        assertSchemaObjectExists(database, "table", "epg_refresh_http_validators")
-
-        assertColumnAbsent(database, "epg_refresh_states", "etag")
-        assertColumnAbsent(database, "epg_refresh_states", "lastModified")
-        assertColumnAbsent(database, "epg_refresh_attempts", "etag")
-        assertColumnAbsent(database, "epg_refresh_attempts", "lastModified")
-
         database.close()
     }
 
-    private fun assertSchemaObjectExists(
-        connection: SQLiteConnection,
+    @Test
+    fun currentSchemaProvidesIsolatedDurableEpgRefreshTables() = runTest {
+        database.useReaderConnection { connection ->
+            assertSchemaObjectExists(connection, "table", "epg_refresh_policies")
+            assertSchemaObjectExists(connection, "table", "epg_refresh_states")
+            assertSchemaObjectExists(connection, "table", "epg_refresh_attempts")
+            assertSchemaObjectExists(connection, "table", "epg_refresh_http_validators")
+
+            assertColumnAbsent(connection, "epg_refresh_states", "etag")
+            assertColumnAbsent(connection, "epg_refresh_states", "lastModified")
+            assertColumnAbsent(connection, "epg_refresh_attempts", "etag")
+            assertColumnAbsent(connection, "epg_refresh_attempts", "lastModified")
+        }
+    }
+
+    private suspend fun assertSchemaObjectExists(
+        connection: androidx.room3.Transactor,
         type: String,
         name: String,
     ) {
-        connection.prepare(
+        connection.usePrepared(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = ? AND name = ?",
-        ).use { statement ->
+        ) { statement ->
             statement.bindText(1, type)
             statement.bindText(2, name)
             assertThat(statement.step()).isTrue()
@@ -70,19 +59,15 @@ class EpgRefreshPersistenceSchemaContractTest {
         }
     }
 
-    private fun assertColumnAbsent(
-        connection: SQLiteConnection,
+    private suspend fun assertColumnAbsent(
+        connection: androidx.room3.Transactor,
         table: String,
         column: String,
     ) {
-        connection.prepare("PRAGMA table_info(`$table`)").use { statement ->
+        connection.usePrepared("PRAGMA table_info(`$table`)") { statement ->
             while (statement.step()) {
                 assertThat(statement.getText(1)).isNotEqualTo(column)
             }
         }
-    }
-
-    private companion object {
-        const val DATABASE_NAME = "epg-refresh-persistence-schema.db"
     }
 }
