@@ -86,6 +86,21 @@ internal abstract class EpgMatchingDao {
 
     @Query(
         """
+        SELECT id
+        FROM epg_sources
+        WHERE providerSourceId = :providerSourceId
+          AND activeRevision > 0
+        ORDER BY id COLLATE BINARY ASC
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun linkedActiveEpgSourceIds(
+        providerSourceId: String,
+        limit: Int,
+    ): List<String>
+
+    @Query(
+        """
         SELECT externalId, primaryDisplayName
         FROM epg_channels
         WHERE sourceId = :epgSourceId
