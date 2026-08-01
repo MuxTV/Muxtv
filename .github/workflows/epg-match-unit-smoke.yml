@@ -20,8 +20,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Run EPG match unit contracts
-        run: ./gradlew :core:database:testDebugUnitTest --tests 'app.muxtv.database.EpgMatch*' --no-daemon --stacktrace --console=plain
+      - name: Run EPG matching contracts
+        run: ./gradlew :core:database:testDebugUnitTest --tests 'app.muxtv.database.EpgMatch*' :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
       - name: Upload generated Room schema
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
