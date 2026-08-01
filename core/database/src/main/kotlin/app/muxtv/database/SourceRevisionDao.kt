@@ -5,7 +5,6 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
-import androidx.room3.Upsert
 
 internal data class SourceRemovalSnapshot(
     val activeRevision: Long,
@@ -121,8 +120,8 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRevision(revision: SourceRevisionEntity)
 
-    @Upsert
-    abstract suspend fun upsertCanonicalChannels(channels: List<CanonicalChannelEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertCanonicalChannels(channels: List<CanonicalChannelEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertProviderChannels(channels: List<ProviderChannelEntity>)
@@ -136,7 +135,9 @@ internal abstract class SourceRevisionDao {
         providerChannels: List<ProviderChannelEntity>,
         streamVariants: List<StreamVariantEntity>,
     ) {
-        upsertCanonicalChannels(canonicalChannels)
+        // Canonical rows are identity placeholders while a revision is STAGING. Existing active
+        // display metadata must not change until the revision itself is atomically activated.
+        insertCanonicalChannels(canonicalChannels)
         insertProviderChannels(providerChannels)
         insertStreamVariants(streamVariants)
     }
@@ -201,6 +202,52 @@ internal abstract class SourceRevisionDao {
 
     @Query(
         """
+        UPDATE canonical_channels
+        SET displayName = (
+            SELECT COALESCE(NULLIF(provider_channels.tvgName, ''), provider_channels.rawName)
+            FROM stream_variants
+            INNER JOIN provider_channels
+                ON provider_channels.id = stream_variants.providerChannelId
+            INNER JOIN sources AS active_sources
+                ON active_sources.id = provider_channels.sourceId
+            WHERE stream_variants.canonicalChannelId = canonical_channels.id
+              AND provider_channels.revisionNumber = active_sources.activeRevision
+            ORDER BY provider_channels.sourceId COLLATE BINARY ASC,
+                     provider_channels.providerKey COLLATE BINARY ASC,
+                     provider_channels.id COLLATE BINARY ASC
+            LIMIT 1
+        )
+        WHERE id IN (
+            SELECT DISTINCT stream_variants.canonicalChannelId
+            FROM stream_variants
+            INNER JOIN provider_channels
+                ON provider_channels.id = stream_variants.providerChannelId
+            WHERE provider_channels.sourceId = :sourceId
+              AND (
+                  provider_channels.revisionNumber = :currentRevision
+                  OR provider_channels.revisionNumber = :previousRevision
+              )
+        )
+          AND EXISTS (
+              SELECT 1
+              FROM stream_variants
+              INNER JOIN provider_channels
+                  ON provider_channels.id = stream_variants.providerChannelId
+              INNER JOIN sources AS active_sources
+                  ON active_sources.id = provider_channels.sourceId
+              WHERE stream_variants.canonicalChannelId = canonical_channels.id
+                AND provider_channels.revisionNumber = active_sources.activeRevision
+          )
+        """,
+    )
+    abstract suspend fun publishCanonicalDisplayMetadata(
+        sourceId: String,
+        currentRevision: Long,
+        previousRevision: Long,
+    ): Int
+
+    @Query(
+        """
         DELETE FROM provider_channels
         WHERE sourceId = :sourceId
           AND revisionNumber != :currentRevision
@@ -249,6 +296,23 @@ internal abstract class SourceRevisionDao {
         revisionNumber: Long,
         stagingStatus: String = SourceRevisionEntity.STATUS_STAGING,
     )
+
+    @Query(
+        """
+        DELETE FROM canonical_channels
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM stream_variants
+            WHERE stream_variants.canonicalChannelId = canonical_channels.id
+        )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM user_channel_overlays
+              WHERE user_channel_overlays.canonicalChannelId = canonical_channels.id
+          )
+        """,
+    )
+    abstract suspend fun deleteUnreferencedCanonicalChannels(): Int
 
     @Transaction
     open suspend fun activateRevisionIfCredentialMatches(
@@ -326,6 +390,11 @@ internal abstract class SourceRevisionDao {
         check(updateActiveRevision(sourceId, revisionNumber) == 1) {
             "Source does not exist."
         }
+        publishCanonicalDisplayMetadata(
+            sourceId = sourceId,
+            currentRevision = revisionNumber,
+            previousRevision = previousRevision,
+        )
 
         deleteProviderChannelsExcept(
             sourceId = sourceId,
@@ -337,6 +406,7 @@ internal abstract class SourceRevisionDao {
             currentRevision = revisionNumber,
             previousRevision = previousRevision,
         )
+        deleteUnreferencedCanonicalChannels()
 
         return SourceRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -352,5 +422,6 @@ internal abstract class SourceRevisionDao {
     ) {
         deleteProviderChannelsForRevision(sourceId, revisionNumber)
         deleteStagingRevision(sourceId, revisionNumber)
+        deleteUnreferencedCanonicalChannels()
     }
 }
