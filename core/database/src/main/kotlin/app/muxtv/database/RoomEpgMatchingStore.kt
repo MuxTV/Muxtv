@@ -1,10 +1,18 @@
 package app.muxtv.database
 
-internal interface EpgMatchingStore {
+interface EpgMatchingStore {
     suspend fun reconcile(epgSourceId: String): EpgMatchingReconcileResult
+
+    suspend fun reconcileProviderSource(
+        providerSourceId: String,
+    ): EpgProviderMatchingReconcileResult
+
+    companion object {
+        const val MAX_LINKED_EPG_SOURCES = 32
+    }
 }
 
-internal data class EpgMatchingSummary(
+data class EpgMatchingSummary(
     val epgRevisionNumber: Long,
     val catalogRevisionNumber: Long,
     val matchedCount: Int,
@@ -20,13 +28,38 @@ internal data class EpgMatchingSummary(
     }
 }
 
-internal sealed interface EpgMatchingReconcileResult {
+sealed interface EpgMatchingReconcileResult {
     data class Applied(
         val summary: EpgMatchingSummary,
     ) : EpgMatchingReconcileResult
 
     data object NotReady : EpgMatchingReconcileResult
     data object Superseded : EpgMatchingReconcileResult
+}
+
+sealed interface EpgProviderMatchingReconcileResult {
+    data class Applied(
+        val processedCount: Int,
+        val appliedCount: Int,
+        val notReadyCount: Int,
+        val supersededCount: Int,
+    ) : EpgProviderMatchingReconcileResult {
+        init {
+            require(processedCount >= 0)
+            require(appliedCount >= 0)
+            require(notReadyCount >= 0)
+            require(supersededCount >= 0)
+            require(appliedCount + notReadyCount + supersededCount == processedCount)
+        }
+    }
+
+    data class CapacityExceeded(
+        val limit: Int,
+    ) : EpgProviderMatchingReconcileResult {
+        init {
+            require(limit > 0)
+        }
+    }
 }
 
 internal class RoomEpgMatchingStore(
@@ -115,6 +148,38 @@ internal class RoomEpgMatchingStore(
             EpgMatchPublicationResult.Applied -> EpgMatchingReconcileResult.Applied(summary)
             EpgMatchPublicationResult.Superseded -> EpgMatchingReconcileResult.Superseded
         }
+    }
+
+    override suspend fun reconcileProviderSource(
+        providerSourceId: String,
+    ): EpgProviderMatchingReconcileResult {
+        require(providerSourceId.isNotBlank())
+        val linkedSourceIds = dao.linkedActiveEpgSourceIds(
+            providerSourceId = providerSourceId,
+            limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES + 1,
+        )
+        if (linkedSourceIds.size > EpgMatchingStore.MAX_LINKED_EPG_SOURCES) {
+            return EpgProviderMatchingReconcileResult.CapacityExceeded(
+                limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES,
+            )
+        }
+
+        var appliedCount = 0
+        var notReadyCount = 0
+        var supersededCount = 0
+        linkedSourceIds.forEach { epgSourceId ->
+            when (reconcile(epgSourceId)) {
+                is EpgMatchingReconcileResult.Applied -> appliedCount++
+                EpgMatchingReconcileResult.NotReady -> notReadyCount++
+                EpgMatchingReconcileResult.Superseded -> supersededCount++
+            }
+        }
+        return EpgProviderMatchingReconcileResult.Applied(
+            processedCount = linkedSourceIds.size,
+            appliedCount = appliedCount,
+            notReadyCount = notReadyCount,
+            supersededCount = supersededCount,
+        )
     }
 
     private fun buildEvidenceIndex(
