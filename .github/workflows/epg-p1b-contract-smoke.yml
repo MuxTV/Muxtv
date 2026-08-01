@@ -26,4 +26,4 @@ jobs:
           java-version: '21'
 
       - name: Run focused EPG P1B contracts
-        run: ./gradlew :catalog:sync:testDebugUnitTest :core:database:testDebugUnitTest --tests app.muxtv.database.EpgRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
+        run: ./gradlew :catalog:sync:compileDebugUnitTestKotlin :core:database:testDebugUnitTest --tests app.muxtv.database.EpgRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
