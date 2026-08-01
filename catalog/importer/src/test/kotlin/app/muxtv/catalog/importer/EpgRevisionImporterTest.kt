@@ -76,6 +76,40 @@ class EpgRevisionImporterTest {
                 unresolvedTimeCount = 0,
             ),
         )
+        assertThat(store.guardedAccessRefs).isEmpty()
+        assertThat(store.guardedRunTokens).isEmpty()
+        assertThat(store.discardedRevisions).isEmpty()
+    }
+
+    @Test
+    fun `remote-bound durable import never rewrites metadata and guards access plus lease`(): Unit = runBlocking {
+        val store = RecordingEpgRevisionStore()
+        val importer = EpgRevisionImporter(
+            parser = StreamingXmltvParser(),
+            revisionStore = store,
+            nowEpochMillis = sequenceClock(10, 20),
+        )
+        val xml = """
+            <tv>
+              <channel id="one"><display-name>One</display-name></channel>
+              <programme channel="one" start="20260730120000 +0000">
+                <title>Bound guide</title>
+              </programme>
+            </tv>
+        """.trimIndent()
+
+        val result = importer.import(
+            request(
+                sourceOwnership = EpgImportSourceOwnership.EXISTING_REMOTE_BINDING,
+                refreshRunToken = "run-a",
+            ),
+            ByteArrayInputStream(xml.toByteArray()),
+        )
+
+        assertThat(result).isInstanceOf(EpgImportResult.Imported::class.java)
+        assertThat(store.sources).isEmpty()
+        assertThat(store.guardedAccessRefs).containsExactly("opaque-ref")
+        assertThat(store.guardedRunTokens).containsExactly("run-a")
         assertThat(store.discardedRevisions).isEmpty()
     }
 
@@ -172,12 +206,17 @@ class EpgRevisionImporterTest {
         assertThat(store.activationStatistics).isEmpty()
     }
 
-    private fun request(): EpgImportRequest = EpgImportRequest(
+    private fun request(
+        sourceOwnership: EpgImportSourceOwnership = EpgImportSourceOwnership.UPSERT_METADATA,
+        refreshRunToken: String? = null,
+    ): EpgImportRequest = EpgImportRequest(
         sourceId = "epg-1",
         sourceName = "Synthetic EPG",
         providerSourceId = "playlist-1",
         accessRef = "opaque-ref",
         defaultZoneId = null,
+        refreshRunToken = refreshRunToken,
+        sourceOwnership = sourceOwnership,
     )
 }
 
@@ -190,6 +229,8 @@ private class RecordingEpgRevisionStore(
     val batches = mutableListOf<Pair<List<EpgChannelEntity>, List<EpgProgrammeEntity>>>()
     val discardedRevisions = mutableListOf<Pair<String, Long>>()
     val activationStatistics = mutableListOf<EpgRevisionStatistics>()
+    val guardedAccessRefs = mutableListOf<String>()
+    val guardedRunTokens = mutableListOf<String>()
     val stagedChannels: List<EpgChannelEntity> get() = batches.flatMap { it.first }
     val stagedProgrammes: List<EpgProgrammeEntity> get() = batches.flatMap { it.second }
 
@@ -218,6 +259,35 @@ private class RecordingEpgRevisionStore(
         revisionNumber: Long,
         activatedAtEpochMillis: Long,
         statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult = activation(statistics, revisionNumber)
+
+    override suspend fun activateRevisionIfAccessMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult {
+        guardedAccessRefs += expectedAccessRef
+        return activation(statistics, revisionNumber)
+    }
+
+    override suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult {
+        guardedAccessRefs += expectedAccessRef
+        guardedRunTokens += expectedRunToken
+        return activation(statistics, revisionNumber)
+    }
+
+    private fun activation(
+        statistics: EpgRevisionStatistics,
+        revisionNumber: Long,
     ): EpgRevisionActivationResult {
         activationStatistics += statistics
         activationResultOverride?.let { return it }

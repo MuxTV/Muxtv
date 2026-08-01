@@ -30,5 +30,20 @@ interface EpgRevisionStore {
         activatedAtEpochMillis: Long,
         statistics: EpgRevisionStatistics,
     ): EpgRevisionActivationResult
+    suspend fun activateRevisionIfAccessMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult
+    suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult
     suspend fun discardRevision(sourceId: String, revisionNumber: Long)
 }

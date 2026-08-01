@@ -5,7 +5,12 @@ import org.junit.Test
 
 class RefreshRuntimePolicyTest {
     @Test
-    fun `refresh timeout remains below stale lease threshold`() {
+    fun `source refresh timeout remains below stale lease threshold`() {
         assertThat(REFRESH_TIMEOUT_MILLIS).isLessThan(LEASE_STALE_AFTER_MILLIS)
+    }
+
+    @Test
+    fun `epg refresh timeout remains below stale lease threshold`() {
+        assertThat(EPG_REFRESH_TIMEOUT_MILLIS).isLessThan(EPG_LEASE_STALE_AFTER_MILLIS)
     }
 }
