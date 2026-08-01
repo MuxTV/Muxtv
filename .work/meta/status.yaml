@@ -8,16 +8,16 @@ repository_state:
   ci: present_self_hosted_full_device_matrix_focused_measurements_and_variance_smoke
   tests: present_unit_android_instrumentation_migration_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_secure_remote_epg_refresh
+  documentation: synchronized_after_durable_epg_refresh
   architecture_version: 3
 active_branch_after_merge: main
-implementation_source_commit: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
-room_schema: 5
+implementation_source_commit: c31b34d65ef90848bd907a521b9a0ba8860ed83a
+room_schema: 6
 implemented:
   - android_tv_application_shell
   - navigation3_top_level_routes
   - deterministic_dpad_focus
-  - room_schema_v5_and_migrations
+  - room_schema_v6_and_migrations
   - android_keystore_credentials
   - bounded_secure_network_foundation
   - bounded_streaming_m3u_parser
@@ -77,6 +77,16 @@ implemented:
   - secure_conditional_remote_epg_refresh
   - cancellable_shared_okhttp_await_boundary
   - epg_http_304_conditional_validation
+  - room_v5_to_v6_epg_refresh_migration
+  - durable_epg_refresh_policy_state_attempts
+  - epg_refresh_http_validator_ownership
+  - epg_refresh_database_lease_and_stale_reclaim
+  - epg_workmanager_manual_startup_periodic_orchestration
+  - epg_startup_policy_constraint_reconciliation
+  - epg_access_and_run_token_publication_ownership
+  - epg_nullable_access_completion_ownership
+  - epg_cancellation_authority_preservation
+  - epg_refresh_diagnostic_redaction
 accepted_specifications:
   - profiles
   - domain_model
@@ -103,6 +113,7 @@ accepted_specifications:
   - repeated_measurement_variance
   - immutable_epg_revisions
   - secure_remote_epg_refresh
+  - durable_epg_refresh
 verified_evidence:
   source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
   media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
@@ -123,6 +134,8 @@ verified_evidence:
   immutable_epg_revision_merge: 1a032c232aef67553354077a3000a1a74e867bee
   epg_payload_decoder_merge: 34dae3ec4f2a97d574bcf6bb00132c295a707872
   secure_remote_epg_refresh_merge: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
+  durable_epg_refresh_state_merge: ab96f0fee5b80ebc8ae7f5a2cc23608ee5450030
+  durable_epg_refresh_orchestration_merge: c31b34d65ef90848bd907a521b9a0ba8860ed83a
   measurement_series_final_full_run: 30568786155
   measurement_series_current_smoke_run: 30568786175
   xmltv_parser_final_full_run: 30576931624
@@ -130,6 +143,10 @@ verified_evidence:
   epg_database_migration_matrix_run: 30663759884
   epg_payload_decoder_final_full_run: 30666205286
   secure_remote_epg_refresh_final_full_run: 30668000159
+  durable_epg_state_final_full_run: 30703994191
+  durable_epg_state_matrix_run: 30703994190
+  durable_epg_orchestration_final_full_run: 30708756373
+  durable_epg_orchestration_matrix_run: 30708756357
   current_variance_smoke:
     source_head: 5091d3a1bdc005a5682b5d0915c617f7491885eb
     profile: current-normal
@@ -152,27 +169,31 @@ verified_evidence:
       ram_mb: 2048
       cpu_cores: 2
 next_milestone:
-  id: phase-01-durable-epg-refresh
-  issue: 70
-  plan: docs/superpowers/plans/2026-08-01-post-remote-epg-execution.md
+  id: phase-01-source-refresh-ownership-hardening
+  issue: 76
+  plan: docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md
   completed_packages:
     - deterministic_corpus_and_measurement_foundation
     - bounded_xmltv_streaming_parser
     - immutable_epg_room_v5
     - bounded_epg_payload_decoder
     - secure_conditional_remote_epg_refresh
+    - durable_epg_refresh_persistence_room_v6
+    - durable_epg_workmanager_orchestration_and_publication_ownership
   immediate_sequence:
-    - epg_refresh_persistence_and_room_v5_to_v6
-    - epg_workmanager_orchestration
+    - source_refresh_publication_ownership_issue_76
     - deterministic_epg_channel_matching_and_now_next_issue_71
     - close_issue_28_after_integration_evidence
   parallel_work:
     - issue_27_five_run_current_normal
     - issue_27_five_run_old_edge_normal
     - issue_27_five_run_current_low_ram
+    - issue_27_cross_profile_interpretation
     - issue_27_per_operation_threshold_decisions
 known_gaps:
-  - durable_epg_refresh_scheduling_and_state
+  - source_refresh_binding_and_run_token_publication_ownership
+  - source_refresh_completion_binding_guard
+  - source_refresh_cancellation_authority_and_entity_redaction
   - deterministic_epg_channel_matching
   - bounded_now_next_projection
   - five_run_multi_profile_measurement_variance
