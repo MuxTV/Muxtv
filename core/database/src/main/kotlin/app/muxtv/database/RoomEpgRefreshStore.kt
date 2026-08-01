@@ -65,14 +65,17 @@ internal class RoomEpgRefreshStore(
         runToken: String,
         trigger: EpgRefreshTrigger,
         completion: EpgRefreshCompletion,
+        expectedAccessRef: String?,
     ) {
         require(sourceId.isNotBlank())
         require(runToken.isNotBlank())
+        require(expectedAccessRef == null || expectedAccessRef.isNotBlank())
         dao.complete(
             sourceId = sourceId,
             runToken = runToken,
             trigger = trigger,
             completion = completion,
+            expectedAccessRef = expectedAccessRef,
         )
     }
 }
