@@ -18,18 +18,38 @@ import app.muxtv.database.StagedCatalogEntry
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+
+enum class CatalogImportSourceOwnership {
+    UPSERT_METADATA,
+    EXISTING_REMOTE_BINDING,
+}
 
 data class CatalogImportRequest(
     val sourceId: String,
     val sourceName: String,
     val credentialRef: String? = null,
+    val refreshRunToken: String? = null,
     val parseLimits: M3uParseLimits = M3uParseLimits(),
     val parseOptions: M3uParseOptions = M3uParseOptions(),
+    val sourceOwnership: CatalogImportSourceOwnership = CatalogImportSourceOwnership.UPSERT_METADATA,
 ) {
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(credentialRef == null || credentialRef.isNotBlank())
+        require(refreshRunToken == null || refreshRunToken.isNotBlank())
+        if (sourceOwnership == CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING) {
+            require(!credentialRef.isNullOrBlank()) {
+                "Existing remote catalog imports require an opaque credential binding."
+            }
+        }
     }
+
+    override fun toString(): String =
+        "CatalogImportRequest(credentialRefPresent=${credentialRef != null}, " +
+            "refreshRunTokenPresent=${refreshRunToken != null}, sourceOwnership=$sourceOwnership)"
 }
 
 sealed interface CatalogImportResult {
@@ -42,6 +62,7 @@ sealed interface CatalogImportResult {
     ) : CatalogImportResult
 
     data object EmptyRevisionRejected : CatalogImportResult
+    data object Superseded : CatalogImportResult
 
     data class Failed(
         val reason: CatalogImportFailureReason,
@@ -68,15 +89,18 @@ class CatalogRevisionImporter(
         input: InputStream,
     ): CatalogImportResult {
         var revisionNumber: Long? = null
+        var activated = false
 
         return try {
-            revisionStore.upsertSource(
-                SourceDefinition(
-                    id = request.sourceId,
-                    name = request.sourceName,
-                    credentialRef = request.credentialRef,
-                ),
-            )
+            if (request.sourceOwnership == CatalogImportSourceOwnership.UPSERT_METADATA) {
+                revisionStore.upsertSource(
+                    SourceDefinition(
+                        id = request.sourceId,
+                        name = request.sourceName,
+                        credentialRef = request.credentialRef,
+                    ),
+                )
+            }
             val revision = revisionStore.nextRevisionNumber(request.sourceId)
             revisionNumber = revision
             revisionStore.beginRevision(
@@ -101,64 +125,81 @@ class CatalogRevisionImporter(
             }
             sink.flush()
 
+            val statistics = SourceRevisionStatistics(
+                parsedEntries = report.parsedEntries,
+                skippedEntries = report.skippedEntries,
+                warningCount = report.warningCount,
+            )
             val activation = traceAsyncSection(TRACE_ACTIVATE) {
-                revisionStore.activate(
-                    sourceId = request.sourceId,
-                    revisionNumber = revision,
-                    activatedAtEpochMillis = nowEpochMillis(),
-                    statistics = SourceRevisionStatistics(
-                        parsedEntries = report.parsedEntries,
-                        skippedEntries = report.skippedEntries,
-                        warningCount = report.warningCount,
-                    ),
-                )
+                when (request.sourceOwnership) {
+                    CatalogImportSourceOwnership.UPSERT_METADATA -> revisionStore.activate(
+                        sourceId = request.sourceId,
+                        revisionNumber = revision,
+                        activatedAtEpochMillis = nowEpochMillis(),
+                        statistics = statistics,
+                    )
+
+                    CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING -> {
+                        val expectedCredentialRef = requireNotNull(request.credentialRef)
+                        val refreshRunToken = request.refreshRunToken
+                        if (refreshRunToken == null) {
+                            revisionStore.activateIfCredentialMatches(
+                                sourceId = request.sourceId,
+                                revisionNumber = revision,
+                                expectedCredentialRef = expectedCredentialRef,
+                                activatedAtEpochMillis = nowEpochMillis(),
+                                statistics = statistics,
+                            )
+                        } else {
+                            revisionStore.activateIfRefreshOwnerMatches(
+                                sourceId = request.sourceId,
+                                revisionNumber = revision,
+                                expectedCredentialRef = expectedCredentialRef,
+                                expectedRunToken = refreshRunToken,
+                                activatedAtEpochMillis = nowEpochMillis(),
+                                statistics = statistics,
+                            )
+                        }
+                    }
+                }
             }
             when (activation) {
-                is SourceRevisionActivationResult.Activated -> CatalogImportResult.Imported(
-                    revisionNumber = activation.revisionNumber,
-                    previousRevisionNumber = activation.previousRevisionNumber,
-                    entryCount = activation.entryCount,
-                    skippedEntries = report.skippedEntries,
-                    warningCount = report.warningCount,
-                )
-
-                SourceRevisionActivationResult.EmptyRevisionRejected -> {
-                    revisionStore.discard(request.sourceId, revision)
-                    CatalogImportResult.EmptyRevisionRejected
+                is SourceRevisionActivationResult.Activated -> {
+                    activated = true
+                    CatalogImportResult.Imported(
+                        revisionNumber = activation.revisionNumber,
+                        previousRevisionNumber = activation.previousRevisionNumber,
+                        entryCount = activation.entryCount,
+                        skippedEntries = report.skippedEntries,
+                        warningCount = report.warningCount,
+                    )
                 }
+
+                SourceRevisionActivationResult.EmptyRevisionRejected ->
+                    CatalogImportResult.EmptyRevisionRejected
+
+                SourceRevisionActivationResult.Superseded -> CatalogImportResult.Superseded
             }
         } catch (error: CancellationException) {
-            revisionNumber?.let { revision ->
-                try {
-                    revisionStore.discard(request.sourceId, revision)
-                } catch (_: Exception) {
-                    // Preserve the original cancellation without swallowing VM/linkage errors.
+            throw error
+        } catch (_: M3uEncodingException) {
+            CatalogImportResult.Failed(CatalogImportFailureReason.InvalidEncoding)
+        } catch (_: M3uLimitExceededException) {
+            CatalogImportResult.Failed(CatalogImportFailureReason.ParserLimitExceeded)
+        } catch (_: Exception) {
+            CatalogImportResult.Failed(CatalogImportFailureReason.StorageFailure)
+        } finally {
+            if (!activated) {
+                revisionNumber?.let { revision ->
+                    withContext(NonCancellable) {
+                        try {
+                            revisionStore.discard(request.sourceId, revision)
+                        } catch (_: Exception) {
+                            // Cleanup is best-effort and must not replace cancellation or a typed failure.
+                        }
+                    }
                 }
             }
-            throw error
-        } catch (error: M3uEncodingException) {
-            discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.InvalidEncoding)
-        } catch (error: M3uLimitExceededException) {
-            discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.ParserLimitExceeded)
-        } catch (error: Exception) {
-            discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.StorageFailure)
-        }
-    }
-
-    private suspend fun discardSafely(
-        sourceId: String,
-        revisionNumber: Long?,
-    ) {
-        if (revisionNumber == null) return
-        try {
-            revisionStore.discard(sourceId, revisionNumber)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            // Preserve the original typed import failure when best-effort discard also fails.
         }
     }
 }
