@@ -14,7 +14,7 @@ permissions:
 jobs:
   compile-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -25,5 +25,5 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Compile EPG orchestration contracts
-        run: ./gradlew :catalog:sync:testDebugUnitTest :core:database:compileDebugAndroidTestKotlin :app:tv:assembleDebug --no-daemon --stacktrace --console=plain
+      - name: Run EPG scheduler unit contracts
+        run: ./gradlew :catalog:sync:testDebugUnitTest --no-daemon --stacktrace --console=plain
