@@ -4,6 +4,7 @@ import androidx.room3.Dao
 import androidx.room3.Query
 import androidx.room3.Transaction
 import app.muxtv.catalog.NowNextQuery
+import kotlinx.coroutines.flow.Flow
 
 internal data class EpgGuideMatchCountRow(
     val canonicalChannelId: String,
@@ -35,6 +36,18 @@ internal data class EpgGuideProgrammeCandidateRow(
             "stopPresent=${stopEpochMillis != null}, titlePresent=${primaryTitle != null})"
 }
 
+internal data class EpgGuideDataVersionRow(
+    val epgSourceId: String,
+    val epgRevisionNumber: Long,
+    val providerSourceId: String?,
+    val catalogRevisionNumber: Long,
+    val currentMatchCount: Long,
+) {
+    override fun toString(): String =
+        "EpgGuideDataVersionRow(epgRevisionNumber=$epgRevisionNumber, " +
+            "catalogRevisionNumber=$catalogRevisionNumber, currentMatchCount=$currentMatchCount)"
+}
+
 internal data class EpgGuideProjectionSnapshot(
     val matchCounts: List<EpgGuideMatchCountRow>,
     val programmeCandidates: List<EpgGuideProgrammeCandidateRow>,
@@ -42,6 +55,33 @@ internal data class EpgGuideProjectionSnapshot(
 
 @Dao
 internal abstract class EpgGuideDao {
+    @Query(
+        """
+        SELECT epg_sources.id AS epgSourceId,
+               epg_sources.activeRevision AS epgRevisionNumber,
+               epg_sources.providerSourceId AS providerSourceId,
+               sources.activeRevision AS catalogRevisionNumber,
+               COUNT(epg_channel_matches.epgExternalChannelId) AS currentMatchCount
+        FROM epg_sources
+        INNER JOIN sources
+            ON sources.id = epg_sources.providerSourceId
+        LEFT JOIN epg_channel_matches
+            ON epg_channel_matches.epgSourceId = epg_sources.id
+           AND epg_channel_matches.epgRevisionNumber = epg_sources.activeRevision
+           AND epg_channel_matches.providerSourceId = epg_sources.providerSourceId
+           AND epg_channel_matches.catalogRevisionNumber = sources.activeRevision
+        WHERE epg_sources.providerSourceId IS NOT NULL
+          AND epg_sources.activeRevision > 0
+          AND sources.activeRevision > 0
+        GROUP BY epg_sources.id,
+                 epg_sources.activeRevision,
+                 epg_sources.providerSourceId,
+                 sources.activeRevision
+        ORDER BY epg_sources.id COLLATE BINARY ASC
+        """,
+    )
+    abstract fun observeDataVersion(): Flow<List<EpgGuideDataVersionRow>>
+
     @Query(
         """
         SELECT epg_channel_matches.canonicalChannelId AS canonicalChannelId,
