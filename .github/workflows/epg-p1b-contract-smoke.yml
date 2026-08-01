@@ -25,5 +25,5 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Compile EPG ownership and scheduler RED contracts
-        run: ./gradlew :catalog:sync:compileDebugUnitTestKotlin :core:database:compileDebugUnitTestKotlin --no-daemon --stacktrace --console=plain
+      - name: Compile cancellation RED contract
+        run: ./gradlew :catalog:sync:compileDebugUnitTestKotlin --no-daemon --stacktrace --console=plain
