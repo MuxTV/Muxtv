@@ -1,0 +1,58 @@
+name: Bootstrap Room schema fixtures (hosted)
+
+on:
+  push:
+    branches:
+      - feat/epg-refresh-state-70
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap-room-schemas-hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          ref: feat/epg-refresh-state-70
+
+      - name: Restore exact Room v5 and v6 schema exports
+        shell: python
+        run: |
+          import base64
+          import gzip
+          import hashlib
+          import pathlib
+          import re
+          import subprocess
+
+          source = pathlib.Path('.github/workflows/bootstrap-room-schema-fixtures.yml').read_text()
+          values = dict(re.findall(r"\$(v[56]) = '([^']+)'", source))
+          if set(values) != {'v5', 'v6'}:
+              raise SystemExit(f'Unable to recover embedded schema payloads: {sorted(values)}')
+
+          expected = {
+              'v5': 'e9cdb2916bd51dee33e62e957b0612946fef50d2f383222286719cead0102f10',
+              'v6': '7468d52b010ad36096e02492c727659df8228cdd336189f2be5a23af9589764a',
+          }
+          schema_dir = pathlib.Path('core/database/schemas/app.muxtv.database.MuxTvDatabase')
+          schema_dir.mkdir(parents=True, exist_ok=True)
+          for key, encoded in values.items():
+              data = gzip.decompress(base64.b64decode(encoded))
+              actual = hashlib.sha256(data).hexdigest()
+              if actual != expected[key]:
+                  raise SystemExit(f'Unexpected {key} schema hash: {actual}')
+              (schema_dir / f'{key[1:]}.json').write_bytes(data)
+
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'add', '--', str(schema_dir / '5.json'), str(schema_dir / '6.json')], check=True)
+          diff = subprocess.run(['git', 'diff', '--cached', '--quiet'])
+          if diff.returncode == 0:
+              print('Exact Room schema fixtures are already committed.')
+          else:
+              subprocess.run(['git', 'commit', '-m', 'test(database): commit exact Room v5 and v6 schemas'], check=True)
+              subprocess.run(['git', 'push', 'origin', 'HEAD:feat/epg-refresh-state-70'], check=True)
