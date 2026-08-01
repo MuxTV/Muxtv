@@ -1,0 +1,66 @@
+name: Bootstrap Room schema fixtures
+
+on:
+  push:
+    branches:
+      - feat/epg-refresh-state-70
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap-room-schemas:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          ref: feat/epg-refresh-state-70
+
+      - name: Restore exact Room v5 and v6 schema exports
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $schemaDir = Join-Path $PWD 'core/database/schemas/app.muxtv.database.MuxTvDatabase'
+          New-Item -ItemType Directory -Force -Path $schemaDir | Out-Null
+
+          function Expand-GzipBase64([string]$Base64, [string]$Path) {
+            [byte[]]$compressed = [Convert]::FromBase64String($Base64)
+            $inputStream = [IO.MemoryStream]::new(,$compressed)
+            $gzip = [IO.Compression.GZipStream]::new($inputStream, [IO.Compression.CompressionMode]::Decompress)
+            $outputStream = [IO.File]::Create($Path)
+            try {
+              $gzip.CopyTo($outputStream)
+            } finally {
+              $outputStream.Dispose()
+              $gzip.Dispose()
+              $inputStream.Dispose()
+            }
+          }
+
+          $v5 = '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'
+          $v6 = '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'
+
+          $v5Path = Join-Path $schemaDir '5.json'
+          $v6Path = Join-Path $schemaDir '6.json'
+          Expand-GzipBase64 $v5 $v5Path
+          Expand-GzipBase64 $v6 $v6Path
+
+          $v5Hash = (Get-FileHash $v5Path -Algorithm SHA256).Hash.ToLowerInvariant()
+          $v6Hash = (Get-FileHash $v6Path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($v5Hash -ne 'e9cdb2916bd51dee33e62e957b0612946fef50d2f383222286719cead0102f10') { throw "Unexpected v5 schema hash: $v5Hash" }
+          if ($v6Hash -ne '7468d52b010ad36096e02492c727659df8228cdd336189f2be5a23af9589764a') { throw "Unexpected v6 schema hash: $v6Hash" }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- 'core/database/schemas/app.muxtv.database.MuxTvDatabase/5.json' 'core/database/schemas/app.muxtv.database.MuxTvDatabase/6.json'
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Exact Room schema fixtures are already committed.'
+            exit 0
+          }
+
+          git commit -m 'test(database): commit Room v5 and v6 schema fixtures'
+          git push origin HEAD:feat/epg-refresh-state-70
