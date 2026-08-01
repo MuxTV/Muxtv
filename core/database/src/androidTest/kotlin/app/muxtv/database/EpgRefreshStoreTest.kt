@@ -23,7 +23,7 @@ class EpgRefreshStoreTest {
             MuxTvDatabase::class.java,
         ).build()
         store = RoomEpgRefreshStore(database.epgRefreshDao())
-        insertSource(accessRef = "access-a")
+        insertSource(accessRef = ACCESS_A)
     }
 
     @After
@@ -101,6 +101,7 @@ class EpgRefreshStoreTest {
             trigger = EpgRefreshTrigger.PERIODIC,
             completion = EpgRefreshCompletion.NotModified(
                 completedAtEpochMillis = 220,
+                accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(
                     etag = "etag-b",
                     lastModified = "last-modified-b",
@@ -196,6 +197,7 @@ class EpgRefreshStoreTest {
             trigger = EpgRefreshTrigger.MANUAL,
             completion = EpgRefreshCompletion.NotModified(
                 completedAtEpochMillis = 310,
+                accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "stale-etag"),
             ),
         )
@@ -211,6 +213,7 @@ class EpgRefreshStoreTest {
             trigger = EpgRefreshTrigger.PERIODIC,
             completion = EpgRefreshCompletion.NotModified(
                 completedAtEpochMillis = 320,
+                accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "current-etag"),
             ),
         )
@@ -230,11 +233,32 @@ class EpgRefreshStoreTest {
         )
         assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
 
-        insertSource(accessRef = "access-b")
+        insertSource(accessRef = ACCESS_B)
 
         val target = store.getTarget(SOURCE_ID)
         assertThat(target?.activeRevision).isEqualTo(0)
         assertThat(target?.validators?.isEmpty).isTrue()
+    }
+
+    @Test
+    fun responseFromOldAccessRefCannotAttachValidatorsToChangedSource() = runTest {
+        acquire("run-1", 100)
+        insertSource(accessRef = ACCESS_B)
+
+        store.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-1",
+            trigger = EpgRefreshTrigger.MANUAL,
+            completion = EpgRefreshCompletion.NotModified(
+                completedAtEpochMillis = 120,
+                accessRefBinding = ACCESS_A,
+                validators = EpgRefreshHttpValidators(etag = "old-resource-etag"),
+            ),
+        )
+
+        val target = requireNotNull(store.getTarget(SOURCE_ID))
+        assertThat(target.accessRef).isEqualTo(ACCESS_B)
+        assertThat(target.validators.isEmpty).isTrue()
     }
 
     @Test
@@ -247,7 +271,7 @@ class EpgRefreshStoreTest {
             validators = EpgRefreshHttpValidators(etag = "etag-a"),
         )
 
-        insertSource(accessRef = "access-a")
+        insertSource(accessRef = ACCESS_A)
 
         assertThat(store.getTarget(SOURCE_ID)?.validators?.etag).isEqualTo("etag-a")
     }
@@ -283,21 +307,36 @@ class EpgRefreshStoreTest {
             etag = "secret-etag-value",
             lastModified = "secret-last-modified-value",
         )
-        completeRefreshed(
-            runToken = "run-1",
-            startedAtEpochMillis = 100,
+        val completion = EpgRefreshCompletion.Refreshed(
             completedAtEpochMillis = 120,
+            accessRefBinding = ACCESS_A,
             revisionNumber = 7,
+            channelCount = 1,
+            programmeCount = 1,
+            skippedProgrammeCount = 0,
+            warningCount = 0,
+            unresolvedTimeCount = 0,
             validators = validators,
+        )
+        acquire("run-1", 100)
+        store.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-1",
+            trigger = EpgRefreshTrigger.MANUAL,
+            completion = completion,
         )
 
         val targetText = requireNotNull(store.getTarget(SOURCE_ID)).toString()
         val validatorText = validators.toString()
-        assertThat(targetText).doesNotContain("access-a")
+        val completionText = completion.toString()
+        assertThat(targetText).doesNotContain(ACCESS_A)
         assertThat(targetText).doesNotContain("secret-etag-value")
         assertThat(targetText).doesNotContain("secret-last-modified-value")
         assertThat(validatorText).doesNotContain("secret-etag-value")
         assertThat(validatorText).doesNotContain("secret-last-modified-value")
+        assertThat(completionText).doesNotContain(ACCESS_A)
+        assertThat(completionText).doesNotContain("secret-etag-value")
+        assertThat(completionText).doesNotContain("secret-last-modified-value")
     }
 
     private suspend fun completeRefreshed(
@@ -314,6 +353,7 @@ class EpgRefreshStoreTest {
             trigger = EpgRefreshTrigger.MANUAL,
             completion = EpgRefreshCompletion.Refreshed(
                 completedAtEpochMillis = completedAtEpochMillis,
+                accessRefBinding = ACCESS_A,
                 revisionNumber = revisionNumber,
                 channelCount = 12,
                 programmeCount = 300,
@@ -350,5 +390,7 @@ class EpgRefreshStoreTest {
 
     private companion object {
         const val SOURCE_ID = "epg-source-1"
+        const val ACCESS_A = "access-a"
+        const val ACCESS_B = "access-b"
     }
 }
