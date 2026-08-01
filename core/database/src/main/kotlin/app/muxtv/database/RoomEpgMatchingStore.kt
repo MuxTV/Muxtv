@@ -6,10 +6,6 @@ interface EpgMatchingStore {
     suspend fun reconcileProviderSource(
         providerSourceId: String,
     ): EpgProviderMatchingReconcileResult
-
-    companion object {
-        const val MAX_LINKED_EPG_SOURCES = 32
-    }
 }
 
 data class EpgMatchingSummary(
@@ -50,14 +46,6 @@ sealed interface EpgProviderMatchingReconcileResult {
             require(notReadyCount >= 0)
             require(supersededCount >= 0)
             require(appliedCount + notReadyCount + supersededCount == processedCount)
-        }
-    }
-
-    data class CapacityExceeded(
-        val limit: Int,
-    ) : EpgProviderMatchingReconcileResult {
-        init {
-            require(limit > 0)
         }
     }
 }
@@ -154,15 +142,7 @@ internal class RoomEpgMatchingStore(
         providerSourceId: String,
     ): EpgProviderMatchingReconcileResult {
         require(providerSourceId.isNotBlank())
-        val linkedSourceIds = dao.linkedActiveEpgSourceIds(
-            providerSourceId = providerSourceId,
-            limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES + 1,
-        )
-        if (linkedSourceIds.size > EpgMatchingStore.MAX_LINKED_EPG_SOURCES) {
-            return EpgProviderMatchingReconcileResult.CapacityExceeded(
-                limit = EpgMatchingStore.MAX_LINKED_EPG_SOURCES,
-            )
-        }
+        val linkedSourceIds = dao.linkedActiveEpgSourceIds(providerSourceId)
 
         var appliedCount = 0
         var notReadyCount = 0
