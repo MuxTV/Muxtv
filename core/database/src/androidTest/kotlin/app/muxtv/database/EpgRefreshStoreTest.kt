@@ -107,6 +107,7 @@ class EpgRefreshStoreTest {
                     lastModified = "last-modified-b",
                 ),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         val status = store.observeStatus(SOURCE_ID).first()
@@ -170,6 +171,7 @@ class EpgRefreshStoreTest {
                 resultFamily = "NETWORK",
                 resultCode = "TIMEOUT",
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         val status = store.observeStatus(SOURCE_ID).first()
@@ -200,6 +202,7 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "stale-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         assertThat(store.observeStatus(SOURCE_ID).first()?.state)
@@ -216,6 +219,7 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "current-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         assertThat(store.getRecentAttempts(SOURCE_ID)).hasSize(1)
@@ -241,7 +245,7 @@ class EpgRefreshStoreTest {
     }
 
     @Test
-    fun responseFromOldAccessRefCannotAttachValidatorsToChangedSource() = runTest {
+    fun responseFromOldAccessRefCannotPublishSuccessOrValidatorsToChangedSource() = runTest {
         acquire("run-1", 100)
         insertSource(accessRef = ACCESS_B)
 
@@ -254,7 +258,21 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "old-resource-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
+
+        val status = requireNotNull(store.observeStatus(SOURCE_ID).first())
+        assertThat(status.state).isEqualTo(EpgRefreshRunState.CANCELLED)
+        assertThat(status.lastSuccessAtEpochMillis).isNull()
+        assertThat(status.resultFamily).isEqualTo(EpgRefreshCompletion.RESULT_FAMILY)
+        assertThat(status.resultCode).isEqualTo("SUPERSEDED")
+        assertThat(status.httpStatus).isNull()
+
+        val attempts = store.getRecentAttempts(SOURCE_ID)
+        assertThat(attempts).hasSize(1)
+        assertThat(attempts.single().state).isEqualTo(EpgRefreshRunState.CANCELLED)
+        assertThat(attempts.single().resultCode).isEqualTo("SUPERSEDED")
+        assertThat(attempts.single().revisionNumber).isNull()
 
         val target = requireNotNull(store.getTarget(SOURCE_ID))
         assertThat(target.accessRef).isEqualTo(ACCESS_B)
@@ -292,6 +310,7 @@ class EpgRefreshStoreTest {
                     resultFamily = "NETWORK",
                     resultCode = "TIMEOUT",
                 ),
+                expectedAccessRef = ACCESS_A,
             )
         }
 
@@ -324,6 +343,7 @@ class EpgRefreshStoreTest {
             runToken = "run-1",
             trigger = EpgRefreshTrigger.MANUAL,
             completion = completion,
+            expectedAccessRef = ACCESS_A,
         )
 
         val targetText = requireNotNull(store.getTarget(SOURCE_ID)).toString()
@@ -362,6 +382,7 @@ class EpgRefreshStoreTest {
                 unresolvedTimeCount = 3,
                 validators = validators,
             ),
+            expectedAccessRef = ACCESS_A,
         )
     }
 

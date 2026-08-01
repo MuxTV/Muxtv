@@ -2,6 +2,7 @@ package app.muxtv.catalog.refresh
 
 import app.muxtv.catalog.importer.EpgImportRequest
 import app.muxtv.catalog.importer.EpgImportResult
+import app.muxtv.catalog.importer.EpgImportSourceOwnership
 import app.muxtv.catalog.importer.EpgRevisionImporter
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.RedirectRejectedException
@@ -101,7 +102,9 @@ class RemoteEpgRefresher(
                                 providerSourceId = request.providerSourceId,
                                 accessRef = request.accessCredentialId.value,
                                 defaultZoneId = request.defaultZoneId,
+                                refreshRunToken = request.refreshRunToken,
                                 parseLimits = request.parseLimits,
+                                sourceOwnership = EpgImportSourceOwnership.EXISTING_REMOTE_BINDING,
                             ),
                             input = decodedInput,
                         )

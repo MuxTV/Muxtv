@@ -57,4 +57,12 @@ data class EpgRefreshAttemptEntity(
         require(unresolvedTimeCount == null || unresolvedTimeCount >= 0)
         require(httpStatus == null || httpStatus in 100..599)
     }
+
+    override fun toString(): String =
+        "EpgRefreshAttemptEntity(id=$id, runTokenPresent=true, trigger=$trigger, " +
+            "startedAtEpochMillis=$startedAtEpochMillis, completedAtEpochMillis=$completedAtEpochMillis, " +
+            "resultState=$resultState, resultFamily=$resultFamily, resultCode=$resultCode, " +
+            "revisionNumber=$revisionNumber, channelCount=$channelCount, programmeCount=$programmeCount, " +
+            "skippedProgrammeCount=$skippedProgrammeCount, warningCount=$warningCount, " +
+            "unresolvedTimeCount=$unresolvedTimeCount, httpStatus=$httpStatus)"
 }

@@ -309,7 +309,26 @@ private class RecordingEpgRevisionStore : EpgRevisionStore {
         revisionNumber: Long,
         activatedAtEpochMillis: Long,
         statistics: EpgRevisionStatistics,
-    ): EpgRevisionActivationResult {
+    ): EpgRevisionActivationResult = activateRecordedRevision(revisionNumber)
+
+    override suspend fun activateRevisionIfAccessMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult = activateRecordedRevision(revisionNumber)
+
+    override suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedAccessRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: EpgRevisionStatistics,
+    ): EpgRevisionActivationResult = activateRecordedRevision(revisionNumber)
+
+    private fun activateRecordedRevision(revisionNumber: Long): EpgRevisionActivationResult {
         val programmeCount = stagedProgrammes.count { it.revisionNumber == revisionNumber }
         if (programmeCount == 0) return EpgRevisionActivationResult.EmptyRevisionRejected
         val previous = activeRevision

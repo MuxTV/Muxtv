@@ -39,4 +39,10 @@ data class EpgRefreshStateEntity(
         require(resultCode == null || resultCode.isNotBlank())
         require(httpStatus == null || httpStatus in 100..599)
     }
+
+    override fun toString(): String =
+        "EpgRefreshStateEntity(state=$state, runTokenPresent=${runToken != null}, " +
+            "startedAtEpochMillis=$startedAtEpochMillis, completedAtEpochMillis=$completedAtEpochMillis, " +
+            "lastSuccessRevision=$lastSuccessRevision, lastSuccessAtEpochMillis=$lastSuccessAtEpochMillis, " +
+            "resultFamily=$resultFamily, resultCode=$resultCode, httpStatus=$httpStatus)"
 }
