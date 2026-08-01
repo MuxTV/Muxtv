@@ -100,6 +100,42 @@ class SourceRefreshOwnershipContractTest {
     }
 
     @Test
+    fun removingSchedulingPolicyRevokesOldRunTokenPublicationOwnership() = runTest {
+        stageRevision(1)
+        refreshStore.upsertPolicy(
+            SourceRefreshPolicy(
+                sourceId = SOURCE_ID,
+                enabled = true,
+                intervalMinutes = 60,
+                unmeteredOnly = false,
+                requiresCharging = false,
+                updatedAtEpochMillis = 90,
+            ),
+        )
+        acquire(runToken = "run-a", startedAtEpochMillis = 100)
+
+        refreshStore.removePolicy(SOURCE_ID)
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "run-a",
+            activatedAtEpochMillis = 120,
+            statistics = SourceRevisionStatistics(
+                parsedEntries = 1,
+                skippedEntries = 0,
+                warningCount = 0,
+            ),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(refreshStore.getPolicies()).isEmpty()
+        assertThat(refreshStore.observeStatus(SOURCE_ID).first()).isNull()
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(0)
+    }
+
+    @Test
     fun staleTerminalCompletionCannotPublishFailureToReplacementCredential() = runTest {
         acquire(runToken = "run-a", startedAtEpochMillis = 100)
         revisionStore.upsertSource(
