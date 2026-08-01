@@ -94,8 +94,9 @@ class EpgMigration5To6Test {
         )
         migrated.execSQL(
             "INSERT INTO epg_refresh_http_validators(" +
-                "sourceId, etag, lastModified, updatedAtEpochMillis" +
-                ") VALUES('epg-source-1', 'synthetic-etag', 'synthetic-last-modified', 100)",
+                "sourceId, accessRefBinding, etag, lastModified, updatedAtEpochMillis" +
+                ") VALUES('epg-source-1', 'opaque-access-ref', 'synthetic-etag', " +
+                "'synthetic-last-modified', 100)",
         )
 
         migrated.execSQL("DELETE FROM epg_sources WHERE id = 'epg-source-1'")
