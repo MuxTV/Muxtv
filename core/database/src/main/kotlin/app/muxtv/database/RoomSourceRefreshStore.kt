@@ -71,9 +71,26 @@ internal class RoomSourceRefreshStore(
         completion: SourceRefreshCompletion,
         expectedCredentialRef: String?,
     ) {
+        completeWithDisposition(
+            sourceId = sourceId,
+            runToken = runToken,
+            trigger = trigger,
+            completion = completion,
+            expectedCredentialRef = expectedCredentialRef,
+        )
+    }
+
+    override suspend fun completeWithDisposition(
+        sourceId: String,
+        runToken: String,
+        trigger: SourceRefreshTrigger,
+        completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
+    ): RefreshCompletionDisposition {
         require(sourceId.isNotBlank())
         require(runToken.isNotBlank())
-        dao.complete(
+        require(expectedCredentialRef == null || expectedCredentialRef.isNotBlank())
+        return dao.complete(
             sourceId = sourceId,
             runToken = runToken,
             trigger = trigger,
