@@ -36,10 +36,9 @@ class EpgMatchingFanoutYagniUnitTest {
 
         override suspend fun linkedActiveEpgSourceIds(
             providerSourceId: String,
-            limit: Int,
         ): List<String> {
             require(providerSourceId == PROVIDER_SOURCE)
-            return linkedIds.take(limit)
+            return linkedIds
         }
 
         override suspend fun epgChannels(
