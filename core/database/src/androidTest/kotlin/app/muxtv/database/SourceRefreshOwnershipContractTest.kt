@@ -57,11 +57,7 @@ class SourceRefreshOwnershipContractTest {
             expectedCredentialRef = CREDENTIAL_A,
             expectedRunToken = "run-a",
             activatedAtEpochMillis = 120,
-            statistics = SourceRevisionStatistics(
-                parsedEntries = 1,
-                skippedEntries = 0,
-                warningCount = 0,
-            ),
+            statistics = statistics(),
         )
 
         assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
@@ -88,11 +84,7 @@ class SourceRefreshOwnershipContractTest {
             expectedCredentialRef = CREDENTIAL_A,
             expectedRunToken = "old-run",
             activatedAtEpochMillis = 320,
-            statistics = SourceRevisionStatistics(
-                parsedEntries = 1,
-                skippedEntries = 0,
-                warningCount = 0,
-            ),
+            statistics = statistics(),
         )
 
         assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
@@ -122,11 +114,7 @@ class SourceRefreshOwnershipContractTest {
             expectedCredentialRef = CREDENTIAL_A,
             expectedRunToken = "run-a",
             activatedAtEpochMillis = 120,
-            statistics = SourceRevisionStatistics(
-                parsedEntries = 1,
-                skippedEntries = 0,
-                warningCount = 0,
-            ),
+            statistics = statistics(),
         )
 
         assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
@@ -204,7 +192,56 @@ class SourceRefreshOwnershipContractTest {
         assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
     }
 
-    private suspend fun stageRevision(revisionNumber: Long) {
+    @Test
+    fun stagingCannotChangeDisplayMetadataOfAlreadyActiveCanonicalChannel() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Current channel")
+        assertThat(
+            revisionStore.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = 1,
+                activatedAtEpochMillis = 50,
+                statistics = statistics(),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Current channel")
+
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Uncommitted rename")
+
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Current channel")
+    }
+
+    @Test
+    fun successfulActivationPublishesCanonicalDisplayMetadataAtomically() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Current channel")
+        revisionStore.activate(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            activatedAtEpochMillis = 50,
+            statistics = statistics(),
+        )
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Committed rename")
+
+        val result = revisionStore.activate(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            activatedAtEpochMillis = 100,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Committed rename")
+    }
+
+    private suspend fun stageRevision(
+        revisionNumber: Long,
+        canonicalDisplayName: String = "Channel",
+    ) {
         revisionStore.beginRevision(
             sourceId = SOURCE_ID,
             revisionNumber = revisionNumber,
@@ -217,11 +254,12 @@ class SourceRefreshOwnershipContractTest {
                 StagedCatalogEntry(
                     providerChannelId = "provider-channel-$revisionNumber",
                     providerKey = "provider-key-$revisionNumber",
-                    rawName = "Channel",
-                    canonicalChannelId = "canonical-channel",
-                    canonicalDisplayName = "Channel",
+                    rawName = canonicalDisplayName,
+                    canonicalChannelId = CANONICAL_CHANNEL_ID,
+                    canonicalDisplayName = canonicalDisplayName,
                     streamVariantId = "variant-$revisionNumber",
                     locator = "https://example.invalid/live/$revisionNumber",
+                    tvgName = canonicalDisplayName,
                 ),
             ),
         )
@@ -241,8 +279,15 @@ class SourceRefreshOwnershipContractTest {
         ).isTrue()
     }
 
+    private fun statistics(): SourceRevisionStatistics = SourceRevisionStatistics(
+        parsedEntries = 1,
+        skippedEntries = 0,
+        warningCount = 0,
+    )
+
     private companion object {
         const val SOURCE_ID = "source-ownership-contract"
+        const val CANONICAL_CHANNEL_ID = "canonical-channel"
         const val CREDENTIAL_A = "00000000-0000-0000-0000-000000000076"
         const val CREDENTIAL_B = "00000000-0000-0000-0000-000000000077"
     }
