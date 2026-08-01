@@ -29,4 +29,4 @@ jobs:
         run: ./gradlew :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
 
       - name: Run source ownership unit contracts
-        run: ./gradlew :catalog:importer:testDebugUnitTest --tests app.muxtv.catalog.importer.CatalogRevisionImporterOwnershipTest :core:database:testDebugUnitTest --tests app.muxtv.database.SourceRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
+        run: ./gradlew :catalog:importer:testDebugUnitTest --tests app.muxtv.catalog.importer.CatalogRevisionImporterOwnershipTest :catalog:sync:testDebugUnitTest --tests app.muxtv.catalog.sync.SourceRefreshOutcomeMapperTest :core:database:testDebugUnitTest --tests app.muxtv.database.SourceRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
