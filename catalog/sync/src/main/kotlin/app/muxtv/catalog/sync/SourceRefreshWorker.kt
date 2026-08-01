@@ -56,31 +56,35 @@ class SourceRefreshWorker @AssistedInject constructor(
         if (!acquiredResult.getOrThrow()) return Result.success()
 
         return try {
-            val decision = refresh(target)
-            complete(sourceId, runToken, trigger, decision)
+            val decision = refresh(target, runToken)
+            complete(target, runToken, trigger, decision)
             decision.toWorkResult()
         } catch (cancelled: CancellationException) {
-            complete(
-                sourceId = sourceId,
-                runToken = runToken,
-                trigger = trigger,
-                decision = SourceRefreshDecision(
-                    state = SourceRefreshRunState.CANCELLED,
-                    resultFamily = "WORK",
-                    resultCode = "CANCELLED",
-                ),
-            )
-            throw cancelled
+            finalizeCancellationAndRethrow(cancelled) {
+                complete(
+                    target = target,
+                    runToken = runToken,
+                    trigger = trigger,
+                    decision = SourceRefreshDecision(
+                        state = SourceRefreshRunState.CANCELLED,
+                        resultFamily = "WORK",
+                        resultCode = "CANCELLED",
+                    ),
+                )
+            }
         } catch (_: Exception) {
             val decision = SourceRefreshOutcomeMapper.internalFailure()
             runCatching {
-                complete(sourceId, runToken, trigger, decision)
+                complete(target, runToken, trigger, decision)
             }
             decision.toWorkResult()
         }
     }
 
-    private suspend fun refresh(target: SourceRefreshTarget): SourceRefreshDecision {
+    private suspend fun refresh(
+        target: SourceRefreshTarget,
+        runToken: String,
+    ): SourceRefreshDecision {
         val credentialRef = target.credentialRef
             ?: return SourceRefreshOutcomeMapper.missingCredentialReference()
         val credentialId = runCatching { CredentialId.parse(credentialRef) }
@@ -89,6 +93,7 @@ class SourceRefreshWorker @AssistedInject constructor(
             sourceId = target.sourceId,
             sourceName = target.sourceName,
             accessCredentialId = credentialId,
+            refreshRunToken = runToken,
         )
 
         return try {
@@ -101,13 +106,13 @@ class SourceRefreshWorker @AssistedInject constructor(
     }
 
     private suspend fun complete(
-        sourceId: String,
+        target: SourceRefreshTarget,
         runToken: String,
         trigger: SourceRefreshTrigger,
         decision: SourceRefreshDecision,
     ) = withContext(NonCancellable) {
         refreshStore.complete(
-            sourceId = sourceId,
+            sourceId = target.sourceId,
             runToken = runToken,
             trigger = trigger,
             completion = SourceRefreshCompletion(
@@ -121,6 +126,7 @@ class SourceRefreshWorker @AssistedInject constructor(
                 warningCount = decision.warningCount,
                 httpStatus = decision.httpStatus,
             ),
+            expectedCredentialRef = target.credentialRef,
         )
     }
 
