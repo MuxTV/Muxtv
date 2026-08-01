@@ -1,0 +1,26 @@
+name: EPG matching schema RED smoke
+
+on:
+  push:
+    branches:
+      - wip/epg-matching-now-next-71
+
+permissions:
+  contents: read
+
+jobs:
+  compile-red-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile v7 migration contract
+        run: ./gradlew :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
