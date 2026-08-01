@@ -48,7 +48,43 @@ class EpgRefreshCompletionAccessGuardContractTest {
         }
     }
 
-    private fun source(accessRef: String) = EpgSourceEntity(
+    @Test
+    fun missingAccessSnapshotCannotPublishAuthFailureAfterAccessIsAttached() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            MuxTvDatabase::class.java,
+        ).build()
+        try {
+            val revisionDao = database.epgRevisionDao()
+            revisionDao.insertSource(source(null))
+            val store: EpgRefreshStore = RoomEpgRefreshStore(database.epgRefreshDao())
+            assertThat(store.tryAcquire(SOURCE_ID, "run-missing", 200, 199)).isTrue()
+            revisionDao.insertSource(source(ACCESS_B))
+
+            store.complete(
+                sourceId = SOURCE_ID,
+                runToken = "run-missing",
+                trigger = EpgRefreshTrigger.MANUAL,
+                completion = EpgRefreshCompletion.Terminal(
+                    state = EpgRefreshRunState.NEEDS_AUTH,
+                    completedAtEpochMillis = 220,
+                    resultFamily = "CREDENTIAL",
+                    resultCode = "MISSING_REFERENCE",
+                ),
+                expectedAccessRef = null,
+            )
+
+            val status = requireNotNull(store.observeStatus(SOURCE_ID).first())
+            assertThat(status.state).isEqualTo(EpgRefreshRunState.CANCELLED)
+            assertThat(status.resultFamily).isEqualTo(EpgRefreshCompletion.RESULT_FAMILY)
+            assertThat(status.resultCode).isEqualTo(EpgRefreshCompletion.RESULT_SUPERSEDED)
+            assertThat(status.httpStatus).isNull()
+        } finally {
+            database.close()
+        }
+    }
+
+    private fun source(accessRef: String?) = EpgSourceEntity(
         id = SOURCE_ID,
         name = "Guide",
         providerSourceId = null,
