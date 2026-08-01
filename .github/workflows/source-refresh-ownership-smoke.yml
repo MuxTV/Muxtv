@@ -28,5 +28,5 @@ jobs:
       - name: Compile source ownership Android contracts
         run: ./gradlew :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
 
-      - name: Run source redaction contract
-        run: ./gradlew :core:database:testDebugUnitTest --tests app.muxtv.database.SourceRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
+      - name: Run source ownership unit contracts
+        run: ./gradlew :catalog:importer:testDebugUnitTest --tests app.muxtv.catalog.importer.CatalogRevisionImporterOwnershipTest :core:database:testDebugUnitTest --tests app.muxtv.database.SourceRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
