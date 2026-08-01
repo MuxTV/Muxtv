@@ -75,6 +75,7 @@ internal val MIGRATION_5_6 = Migration(5, 6) { connection ->
         """
         CREATE TABLE IF NOT EXISTS `epg_refresh_http_validators` (
             `sourceId` TEXT NOT NULL,
+            `accessRefBinding` TEXT NOT NULL,
             `etag` TEXT,
             `lastModified` TEXT,
             `updatedAtEpochMillis` INTEGER NOT NULL,
