@@ -30,6 +30,9 @@ data class SourceRefreshTarget(
         require(sourceName.isNotBlank())
         require(credentialRef == null || credentialRef.isNotBlank())
     }
+
+    override fun toString(): String =
+        "SourceRefreshTarget(credentialRefPresent=${credentialRef != null})"
 }
 
 data class SourceRefreshPolicy(
