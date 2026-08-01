@@ -9,4 +9,7 @@ data class SourceEntity(
     val name: String,
     val credentialRef: String? = null,
     val activeRevision: Long = 0,
-)
+) {
+    override fun toString(): String =
+        "SourceEntity(credentialRefPresent=${credentialRef != null}, activeRevision=$activeRevision)"
+}
