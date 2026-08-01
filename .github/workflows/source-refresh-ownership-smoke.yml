@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  compile-red-contracts:
+  red-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,5 +22,8 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Compile source ownership RED contracts
+      - name: Compile source ownership Android contracts
         run: ./gradlew :core:database:compileDebugAndroidTestKotlin --no-daemon --stacktrace --console=plain
+
+      - name: Run source redaction contract
+        run: ./gradlew :core:database:testDebugUnitTest --tests app.muxtv.database.SourceRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
