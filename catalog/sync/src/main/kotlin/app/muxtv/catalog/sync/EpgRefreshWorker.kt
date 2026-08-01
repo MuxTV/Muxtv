@@ -55,7 +55,7 @@ class EpgRefreshWorker @AssistedInject constructor(
         if (!acquiredResult.getOrThrow()) return Result.success()
 
         return try {
-            val decision = refresh(target)
+            val decision = refresh(target, runToken)
             complete(target, runToken, trigger, decision)
             decision.toWorkResult()
         } catch (cancelled: CancellationException) {
@@ -75,7 +75,10 @@ class EpgRefreshWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun refresh(target: EpgRefreshTarget): EpgRefreshDecision {
+    private suspend fun refresh(
+        target: EpgRefreshTarget,
+        runToken: String,
+    ): EpgRefreshDecision {
         val accessRef = target.accessRef
             ?: return EpgRefreshOutcomeMapper.missingAccessReference()
         val credentialId = runCatching { CredentialId.parse(accessRef) }
@@ -86,6 +89,7 @@ class EpgRefreshWorker @AssistedInject constructor(
             providerSourceId = target.providerSourceId,
             accessCredentialId = credentialId,
             defaultZoneId = target.defaultZoneId,
+            refreshRunToken = runToken,
             validators = EpgHttpValidators(
                 etag = target.validators.etag,
                 lastModified = target.validators.lastModified,
