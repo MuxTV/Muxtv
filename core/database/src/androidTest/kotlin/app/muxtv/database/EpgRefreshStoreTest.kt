@@ -107,6 +107,7 @@ class EpgRefreshStoreTest {
                     lastModified = "last-modified-b",
                 ),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         val status = store.observeStatus(SOURCE_ID).first()
@@ -170,6 +171,7 @@ class EpgRefreshStoreTest {
                 resultFamily = "NETWORK",
                 resultCode = "TIMEOUT",
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         val status = store.observeStatus(SOURCE_ID).first()
@@ -200,6 +202,7 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "stale-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         assertThat(store.observeStatus(SOURCE_ID).first()?.state)
@@ -216,6 +219,7 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "current-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         assertThat(store.getRecentAttempts(SOURCE_ID)).hasSize(1)
@@ -254,6 +258,7 @@ class EpgRefreshStoreTest {
                 accessRefBinding = ACCESS_A,
                 validators = EpgRefreshHttpValidators(etag = "old-resource-etag"),
             ),
+            expectedAccessRef = ACCESS_A,
         )
 
         val status = requireNotNull(store.observeStatus(SOURCE_ID).first())
@@ -305,6 +310,7 @@ class EpgRefreshStoreTest {
                     resultFamily = "NETWORK",
                     resultCode = "TIMEOUT",
                 ),
+                expectedAccessRef = ACCESS_A,
             )
         }
 
@@ -337,6 +343,7 @@ class EpgRefreshStoreTest {
             runToken = "run-1",
             trigger = EpgRefreshTrigger.MANUAL,
             completion = completion,
+            expectedAccessRef = ACCESS_A,
         )
 
         val targetText = requireNotNull(store.getTarget(SOURCE_ID)).toString()
@@ -375,6 +382,7 @@ class EpgRefreshStoreTest {
                 unresolvedTimeCount = 3,
                 validators = validators,
             ),
+            expectedAccessRef = ACCESS_A,
         )
     }
 
