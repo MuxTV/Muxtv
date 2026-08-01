@@ -157,6 +157,51 @@ class SourceRefreshOwnershipContractTest {
     }
 
     @Test
+    fun staleSuccessCannotPublishRevisionOrCountersToReplacementCredential() = runTest {
+        acquire(runToken = "run-success", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        refreshStore.complete(
+            sourceId = SOURCE_ID,
+            runToken = "run-success",
+            trigger = SourceRefreshTrigger.PERIODIC,
+            completion = SourceRefreshCompletion(
+                state = SourceRefreshRunState.SUCCEEDED,
+                resultFamily = "SUCCESS",
+                resultCode = null,
+                completedAtEpochMillis = 130,
+                revisionNumber = 9,
+                parsedEntries = 100,
+                skippedEntries = 7,
+                warningCount = 8,
+            ),
+            expectedCredentialRef = CREDENTIAL_A,
+        )
+
+        val status = requireNotNull(refreshStore.observeStatus(SOURCE_ID).first())
+        assertThat(status.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(status.lastSuccessRevision).isNull()
+        assertThat(status.lastSuccessAtEpochMillis).isNull()
+        assertThat(status.failureFamily).isEqualTo(SourceRefreshCompletion.RESULT_FAMILY)
+        assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+        assertThat(status.skippedEntries).isEqualTo(0)
+        assertThat(status.warningCount).isEqualTo(0)
+
+        val attempt = refreshStore.getRecentAttempts(SOURCE_ID).single()
+        assertThat(attempt.state).isEqualTo(SourceRefreshRunState.CANCELLED)
+        assertThat(attempt.revisionNumber).isNull()
+        assertThat(attempt.parsedEntries).isNull()
+        assertThat(attempt.skippedEntries).isEqualTo(0)
+        assertThat(attempt.warningCount).isEqualTo(0)
+    }
+
+    @Test
     fun missingCredentialSnapshotCannotPublishAfterCredentialIsAttached() = runTest {
         revisionStore.upsertSource(
             SourceDefinition(
@@ -190,6 +235,45 @@ class SourceRefreshOwnershipContractTest {
         val status = requireNotNull(refreshStore.observeStatus(SOURCE_ID).first())
         assertThat(status.state).isEqualTo(SourceRefreshRunState.CANCELLED)
         assertThat(status.failureCode).isEqualTo(SourceRefreshCompletion.RESULT_SUPERSEDED)
+    }
+
+    @Test
+    fun supersededRefreshPreservesPreviousGoodActiveCatalog() = runTest {
+        stageRevision(revisionNumber = 1, canonicalDisplayName = "Previous good")
+        assertThat(
+            revisionStore.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = 1,
+                activatedAtEpochMillis = 50,
+                statistics = statistics(),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        stageRevision(revisionNumber = 2, canonicalDisplayName = "Stale rename")
+        acquire(runToken = "stale-run", startedAtEpochMillis = 100)
+        revisionStore.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Replacement source",
+                credentialRef = CREDENTIAL_B,
+            ),
+        )
+
+        val result = revisionStore.activateIfRefreshOwnerMatches(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            expectedCredentialRef = CREDENTIAL_A,
+            expectedRunToken = "stale-run",
+            activatedAtEpochMillis = 120,
+            statistics = statistics(),
+        )
+
+        assertThat(result).isEqualTo(SourceRevisionActivationResult.Superseded)
+        assertThat(database.sourceRevisionDao().activeRevision(SOURCE_ID)).isEqualTo(1)
+        assertThat(database.sourceRevisionDao().countRevisionEntries(SOURCE_ID, 1)).isEqualTo(1)
+        assertThat(database.sourceRevisionDao().countRevisionEntries(SOURCE_ID, 2)).isEqualTo(0)
+        assertThat(
+            database.catalogDao().findActiveCanonicalChannel(CANONICAL_CHANNEL_ID)?.displayName,
+        ).isEqualTo("Previous good")
     }
 
     @Test
