@@ -1,165 +1,195 @@
 ---
 status: accepted
-last_reviewed: 2026-07-30
+last_reviewed: 2026-08-01
 architecture_version: 3
-implementation_source_commit: a99461b0f54e42d95aea8bf31d81215ced2a49e3
+implementation_source_commit: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
 ---
 
 # Текущее состояние
 
 ## Классификация проекта
 
-MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует и исполняется. Явное HTTP trust переносится из encrypted source access в exact-origin playback resolution с warning, повторным разрешением active variant и revocation.
+MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует. После EPG-цикла также существует production foundation XMLTV → bounded payload decode → immutable EPG staging/activation → secure conditional remote refresh.
 
-Deterministic IPTV evidence foundation включает M3U profiles 1k/10k/50k, canonical artifacts, repository CLI, bounded HLS/XMLTV fixtures, descriptive M3U parse, Android Room и Player proxy measurements, immutable variance identity, strict report adapters и последовательный multi-run orchestrator. Первый двухпрогонный `current-normal` smoke прошёл на API 36. Issue #27 остаётся открытой для пятипрогонных current/old-edge/low-RAM datasets и threshold/warning/descriptive decision. XMLTV/EPG, daily-use discovery, fallback/Doctor, visual modernization, release pipeline и physical-device evidence остаются открытыми.
+Основной риск проекта сместился от parser/network/storage correctness к durable EPG orchestration, deterministic channel matching/now-next, daily-use discovery, bounded playback recovery, TV-first polish и physical-device/release evidence.
 
 ## Проверенные факты
 
 - Репозиторий: `MuxTV/Muxtv`, private, default branch `main`, BSD 3-Clause.
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
-- В `settings.gradle.kts` подключены 23 Gradle-проекта плюс included build `build-logic`.
-- Room schema v4; measurement packages не потребовали production migration.
-- CI использует Windows self-hosted runner и режимы Fast, Full, DeviceCurrent, DeviceMatrix, CatalogMeasurement, PlayerMeasurement и отдельный Measurement variance smoke.
-- PR #38 слит `8665f80d6e38bc90d10ead0d3a3618fbecd4e304` и закрыл issue #26.
-- PR #42 слит `764ec102808c4df57e826d05ce7b1334063bb520` и закрыл issue #39.
-- PR #43 слит `80dff5132f624ffedacfdbab0d7bdfe67d85f2a8`; Windows workspace очищается с repository-local `core.longpaths`.
-- PR #44/#47/#48/#50/#51 завершили deterministic corpus, canonical manifest, artifact publication, executable entry point и typed starter fixtures.
-- PR #53 слит `ccf61362b61b2097cb56a4589f83edc7fa068ca1`; descriptive M3U parse measurements завершены.
-- PR #54 слит `d5afef744de71715ce3d34acd6ef80c4bd8fa957`; Android Room measurements завершены.
-- PR #56 слит `e020d747b59e07c45db5076b38409f4319c51b96`; Android Player proxy measurements завершены.
-- PR #57 слит `f1a92a2d8ef05f0dd61b0492b51a732a4978bd54`; playback request/session header ownership исправлен.
-- PR #58 слит `fae4373...`; repository truth синхронизирован после Player/header packages.
-- PR #59 слит `76bc9ad9a55d1535a7d6e5ff408502f2062fd8d5`; immutable variance foundation и provenance contracts завершены.
-- PR #60 слит `da1b377032a7eb66fcf4086ee7518616047b672b`; strict M3U/Room/Player report adapters завершены.
-- PR #61 слит `a99461b0f54e42d95aea8bf31d81215ced2a49e3`; sequential series orchestration, trusted smoke, interrupted evidence finalization и stable ADB readiness завершены.
-- Final PR #61 Full: run `30568786155`.
-- Final current-profile variance smoke: run `30568786175`.
-- Последняя API 26/API 36 correctness DeviceMatrix: run `30287803018`.
+- 23 Gradle-проекта плюс included build `build-logic`.
+- Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3.
+- Room schema **v5**.
+- `main` на момент ревью: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1` (`feat: add secure remote EPG refresh (#72)`).
+- Открытых PR на момент ревью нет.
 
-## Реализованный рабочий путь
-
-### Источники, trust и каталог
+## Реализованный source/catalog/Player путь
 
 - URL policy отклоняет unsupported schemes, embedded credentials, fragments и encoded control separators до persistence.
 - Remote source access хранится в Android Keystore-backed credential store вне Room public projections.
-- Один singleton `RemoteSourceAccessManager` владеет encrypted save/read/update/remove для onboarding, refresh и playback approvals; read-modify-write mutations сериализованы.
-- Source-entry поддерживает HTTPS и отдельное явное подтверждение HTTP.
-- `RemoteSourceAccess` codec v2 хранит bounded exact HTTP playback origins и читает legacy v1 records.
-- Source-level HTTP refresh approval отделён от playback origins.
-- Locator остаётся только в bounded transient state и не попадает в Navigation, SavedState или stable semantics.
+- Один singleton `RemoteSourceAccessManager` владеет encrypted source access и exact-origin playback approvals.
 - M3U обрабатывается bounded streaming parser.
-- Source revisions immutable; импорт идёт через staging с atomic activation/rollback.
-- Source refresh поддерживает manual/periodic WorkManager scheduling и typed attempt state.
+- Source revisions immutable; импорт использует staging + atomic activation/rollback.
+- M3U refresh поддерживает manual/periodic WorkManager scheduling, DB lease, typed attempt state и startup reconciliation.
+- PlaybackCatalog разрешает active channel/variant без выдачи credential reference в public projections.
+- Exact-origin HTTP approval ограничен `scheme + normalized host + effective port`; stale variant не падает на другой active stream.
+- Один process-owned MediaSessionService/ExoPlayer сохраняется при Activity recreation/reconnect.
+- Playback request/session владеют immutable header snapshots; cross-origin sensitive headers не протекают.
+- Channels использует stable canonical identity, bounded viewport state и explicit focus ownership; Player → Back восстанавливает surviving channel.
 
-### Каналы и Player
+## Реализованный EPG foundation
 
-- PlaybackCatalog строит active channel/variant projections из Room.
-- Credential reference выбирается только во внутреннем DAO row и не добавляется в public channel/variant models.
-- `resolveVariant()` возвращает typed Ready / HTTP approval required / access unavailable.
-- Approval identity: `http + normalized host + effective port`; другой host/port не наследует trust.
-- Stale variant ID не падает назад на другой active stream.
-- Player показывает только canonical origin; до подтверждения SET в MediaSession не отправляется.
-- После approval Player заново разрешает current active variant.
-- Playback request/session владеют unmodifiable insertion-preserving header snapshots.
-- Constructor/defaults, `copy`, `component1..7`, value equality/hash и redacted diagnostics сохранены.
-- Channels использует stable channel identity, bounded viewport state и explicit FocusRequester ownership.
-- Player → Back восстанавливает канал по stable identity; после удаления применяется nearest-previous fallback.
-- Один process-owned MediaSessionService/ExoPlayer сохраняется при Activity recreation и reconnect.
-- Setup protocol использует opaque `PlaybackSetupId`, SET/CANCEL и защищён от late install/stale cancel.
+### PR #63 — bounded XMLTV streaming parser
 
-### Diagnostics и security
+Merge: `0f484905b6aefff5f2e284b521c946b35c4a70de`.
 
-- Channel, approval, request и M3U diagnostic representations не раскрывают untrusted/sensitive values.
-- Search text, provider/source identity, locator, query, exact origin, cookies, Authorization/Referer и credential values не должны появляться в logs/errors/traces.
-- HTTPS → HTTP redirect запрещён; cross-origin sensitive headers снимаются.
-- Production manifest не содержит process-wide cleartext opt-in.
-- Request-scoped repository clients являются HTTP security boundary на всех поддерживаемых API.
+- secure SAX/streaming parsing без DOM;
+- запрет external entity/DTD expansion;
+- independent byte/depth/element/attribute/text/channel/programme/per-record bounds;
+- caller-owned `InputStream` и suspend sink;
+- deterministic timestamp precision/offset parsing;
+- offsetless timestamps дают typed unresolved result, а не скрытый UTC;
+- diagnostics не содержат XML/programme/provider values;
+- canonical XMLTV fixtures привязаны к production parser.
 
-### Deterministic corpus и measurements
+Final Full evidence: run `30576931624`.
 
-- `core:testing` владеет provider-neutral M3U generator, canonical writer/publisher, commands, fixtures, measurement identities/adapters/analyzer; production runtime не зависит от testing module.
-- Profiles corpus: 1k, 10k, 50k. Equal profile + seed + source commit дают byte-identical output и SHA-256.
-- Corpus использует reserved `.example` hosts и synthetic identities.
-- Canonical JSON имеет fixed field order, LF и одну trailing newline.
-- Manifest публикуется последним; implicit overwrite запрещён.
-- M3U measurement использует production parser, no-retention sink и raw samples.
-- Room measurement использует fresh file-backed WAL database per sample и отдельно измеряет staging/activation/reads.
-- Player measurement измеряет request construction, SET codec, coordinator и registry proxy operations, не first frame.
-- Report adapters проверяют exact bytes, schema/method, workload/environment и child SHA-256.
-- Variance identity включает exact source commit, fixture, runner, runtime, API/image/ABI/RAM/CPU и workload.
-- Aggregate report хранит distinct child SHA-256, per-run medians, range, standard deviation, CV и worst p95; `thresholdApplied=false`.
-- Series orchestrator выполняет host M3U отдельно, затем fresh AVD per repetition, Room → Player → shutdown.
-- Stable boot требует двух последовательных `device + sys.boot_completed=1` и package-manager readiness.
-- Cancelled workflow finalizes still-running manifest as `interrupted`.
-- Dedicated smoke workflow не исполняет fork PR code на self-hosted runner.
+### PR #64 — immutable EPG revisions / Room v5
 
-## Current-profile variance smoke
+Merge: `1a032c232aef67553354077a3000a1a74e867bee`.
 
-Run `30568786175`, exact head `5091d3a1bdc005a5682b5d0915c617f7491885eb`:
+- `epg_sources`, `epg_revisions`, `epg_channels`, `epg_programmes`;
+- explicit Room migration 4→5;
+- immutable staging + monotonic atomic activation;
+- current + previous-good retention;
+- superseded activation protection;
+- bounded active-programme queries и open-ended programme semantics;
+- streaming parser → importer batches;
+- failed/cancelled staging cleanup preserving previous-good guide;
+- API 26/API 36 migration/device contracts.
 
-| Field | Value |
-|---|---|
-| Profile | `current-normal` |
-| Image | `system-images;android-36;android-tv;x86_64` |
-| RAM / CPU | 2048 MiB / 2 |
-| Repetitions | 2 fresh AVD |
-| Fallback | false |
-| Result | passed |
+Final Full: `30663759211`. Database migration matrix: `30663759884`.
 
-Initial descriptive signals:
+### PR #68 — bounded EPG payload decoding
 
-- M3U range 4.32%, CV 2.99%;
-- Room activation range 1.47%; first-page query 0.01%; source overview 5.54%;
-- Room stage-batch range 67.14%; stage-total range 20.76%;
-- Player request construction range 11.06%; setup-envelope range 29.95%;
-- very short coordinator/registry operations have high relative variance at microsecond absolute duration.
+Merge: `34dae3ec4f2a97d574bcf6bb00132c295a707872`.
 
-These values are smoke evidence only, not budgets. Durable record: `docs/performance/2026-07-30-current-variance-smoke.md`.
+- magic-first plain/gzip/ZIP detection;
+- HTTP hints only when magic is inconclusive;
+- post-decompression decoded-byte bound, including `skip` paths;
+- bounded ZIP leading-entry count and entry-name length;
+- stream first regular ZIP entry only; no archive extraction/full buffering;
+- typed value-free rejections and explicit resource ownership.
+
+Final Full: `30666205286`.
+
+### PR #72 — secure remote EPG refresh
+
+Merge/current main: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1`.
+
+- reusable cancellable OkHttp await boundary shared with source refresh;
+- encrypted access through existing singleton `RemoteSourceAccessManager`;
+- existing source URL policy, explicit HTTP approval, redirect/header isolation and raw response-size limits;
+- conditional `If-None-Match` / `If-Modified-Since`;
+- `304` accepted only when request was genuinely conditional;
+- `200` streams response through bounded payload decoder → immutable EPG importer;
+- returned HTTP validators are value-redacted in diagnostics;
+- decoded-size overflow remains typed;
+- cancellation preserves previous-good guide.
+
+Exact-head Full: `30668000159`.
+
+## Measurement/corpus foundation
+
+Issue #27 остаётся открытой, но уже завершены:
+
+- deterministic M3U 1k/10k/50k corpus + canonical manifests/artifact publication;
+- bounded HLS/XMLTV starter fixtures;
+- descriptive M3U parse, Android Room and Player proxy measurements;
+- immutable comparison/variance identity;
+- strict report adapters + exact-byte SHA-256 provenance;
+- sequential fresh-AVD measurement series orchestration;
+- current-profile two-run smoke.
+
+Осталось по #27:
+
+1. five-run `current-normal`;
+2. five-run `old-edge-normal`;
+3. five-run `current-low-ram`;
+4. separated cross-profile interpretation;
+5. per-operation `hard-gate` / `warning-only` / `descriptive-only` decision;
+6. HLS runtime fixture binding остаётся за issue #30.
+
+Эти измерения идут **параллельно** текущему EPG critical path и не требуют отката уже реализованного issue #28 foundation.
+
+## Текущий critical path
+
+### P0 — repository truth sync
+
+Документация должна быть синхронизирована с Room v5, PR #63/#64/#68/#72 и текущим `main`. Активный план: `docs/superpowers/plans/2026-08-01-post-remote-epg-execution.md`.
+
+### P1 — issue #70: durable EPG refresh scheduling/state
+
+Требуется:
+
+- EPG-specific policy/state/attempt contracts;
+- Room v5→v6 migration, если добавляются таблицы;
+- DB lease per EPG source, stale reclamation и old-token completion rejection;
+- manual/startup unique `KEEP`, periodic unique periodic `UPDATE`;
+- typed constraints connected/unmetered/charging;
+- timeout строго меньше lease staleness;
+- distinct success semantics for `REFRESHED` и `NOT_MODIFIED`;
+- validator values не должны попадать в public refresh state/history/diagnostics;
+- cancellation finalizes `CANCELLED` в `NonCancellable` и rethrows;
+- startup reconciliation;
+- API 26/API 36 migration/device coverage.
+
+Важно: существующий M3U `SourceRefreshCompletion` нельзя переиспользовать механически, потому что он требует `revisionNumber` на любом `SUCCEEDED`, а корректный EPG `304 Not Modified` не создаёт revision.
+
+### P2 — issue #71: deterministic matching + now-next
+
+- exact external/tvg identity within provider relation;
+- exact normalized display name within provider/source;
+- constrained deterministic aliases;
+- otherwise unresolved/ambiguous, no weak fuzzy winner;
+- hidden/deleted channels excluded;
+- bounded queries keyed by canonical channel ID;
+- `NowNext(current,next,nextBoundary)`;
+- open-ended programme effective boundary from next programme where possible;
+- invalidation only on EPG revision change/programme boundary, no full-guide polling.
+
+Если persistence matching требует новой схемы, она должна идти отдельной v6→v7 migration, а не смешиваться с #70.
+
+### P3 — close issue #28
+
+После #70/#71: Full, API 26/API 36 migration/device evidence, synthetic XMLTV→remote refresh→activation→matching→now-next integration, cancellation/failure previous-good preservation и redaction audit.
+
+### P4 — issue #29 daily-use discovery
+
+Channels now/next, Favorites, bounded Recent, bounded/debounced Search, bounded/lazy Guide и стабильный D-pad focus/Player Back.
+
+### P5/P6 — issue #33 и #30
+
+UX: dedicated channel rows → real now/next → hidden Player overlay → Sources simplification → real Guide/Search routes → light shell → credential-free logos → QA.
+
+Fallback/Doctor: bounded variant ladder, typed failure families, no retry storms, HLS fixture runtime binding, redacted TV Doctor export. Media3 остаётся единственным player engine без отдельного evidence-backed ADR.
+
+### P7 — issue #31 alpha hardening
+
+R8/resource shrinking, Baseline Profile, measured startup/journey evidence, virtual old/mainstream/current/low-RAM matrix, physical Android/Google TV/constrained/Fire TV checks, signing, changelog, SBOM/licenses и release checklist.
 
 ## Android TV evidence limits
 
-API 26/API 36 matrix and current smoke prove Android API/lifecycle/Room/Keystore/focus/MediaSession and measurement-harness contracts. They do not prove vendor MediaCodec, HDR, passthrough, Fire OS, weak ARM performance, real network zapping or physical-device thermal behavior. The staged virtual-matrix strategy remains old edge + current now, representative middle/low-RAM next, physical Android/Google TV/Fire TV before alpha.
-
-## Ближайший milestone
-
-Issue #27 остаётся активной.
-
-Завершено:
-
-1. deterministic corpus/canonical artifacts;
-2. safe repository entry point и typed HLS/XMLTV fixtures;
-3. descriptive M3U, Room и Player baselines;
-4. immutable header ownership;
-5. immutable variance foundation;
-6. strict report adapters;
-7. sequential orchestrator и current two-run smoke.
-
-Осталось:
-
-1. five-run `current-normal` Room/Player dataset;
-2. five-run `old-edge-normal` dataset;
-3. five-run `current-low-ram` dataset;
-4. separated cross-profile interpretation;
-5. explicit per-operation hard-gate / warning-only / descriptive-only decision;
-6. fixture consumer binding при появлении issue #28/#30 runtime consumers.
-
-## Последовательность после issue #27
-
-1. issue #28 — bounded XMLTV ingest и immutable EPG revisions;
-2. issue #29 — now/next, Guide, Search, Favorites и Recent;
-3. issue #30 — bounded variant fallback и TV Doctor Lite;
-4. issue #33 — TV-first visual modernization без новой state architecture;
-5. issue #31 — R8, Baseline/Startup Profiles, signing, SBOM, release checklist и physical-device alpha gate.
+Эмуляторные API 26/API 36 проверки доказывают Android API/lifecycle/Room/Keystore/focus/MediaSession/database contracts. Они не доказывают vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC, реальные сетевые zap timings или thermal behavior. До alpha обязательна физическая проверка.
 
 ## Сохраняемые архитектурные решения
 
 - Kotlin + Compose остаются Android TV baseline.
-- Room/SQLite остаётся Android-first storage boundary.
-- Media3 остаётся primary playback engine behind stable contracts.
-- Source/EPG updates используют immutable revisions, staging и atomic commit.
+- Room/SQLite остаётся storage boundary.
+- Media3 остаётся primary playback engine.
+- Source/EPG updates используют immutable revisions, staging и atomic activation.
 - Provider data, canonical channels и profile overlays разделены.
 - Remote playlists/XML/images/provider endpoints считаются untrusted и bounded.
+- WorkManager scheduling переиспользует существующую архитектуру, но EPG semantic state не смешивается с M3U-specific completion fields.
 - Testing/corpus utilities не становятся production runtime dependencies.
-- Measurement packages не создают failing budgets без repeated evidence.
-- Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine требуют corpus-backed bottleneck/security ADR.
-- Физические Android/Google TV/Fire TV проверки дополняют, но не заменяют автоматическую API-матрицу.
+- Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine требуют reproducible bottleneck/compatibility evidence и ADR.
