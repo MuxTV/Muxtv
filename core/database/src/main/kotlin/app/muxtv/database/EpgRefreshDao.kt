@@ -279,6 +279,7 @@ internal abstract class EpgRefreshDao {
         runToken: String,
         trigger: EpgRefreshTrigger,
         completion: EpgRefreshCompletion,
+        expectedAccessRef: String?,
     ) {
         val startedAtEpochMillis = startedAt(
             sourceId = sourceId,
@@ -286,7 +287,11 @@ internal abstract class EpgRefreshDao {
             runningState = EpgRefreshRunState.RUNNING.name,
         ) ?: return
 
-        val effectiveCompletion = accessCheckedCompletion(sourceId, completion)
+        val effectiveCompletion = accessCheckedCompletion(
+            sourceId = sourceId,
+            completion = completion,
+            expectedAccessRef = expectedAccessRef,
+        )
         val updated = when (effectiveCompletion) {
             is EpgRefreshCompletion.Refreshed -> finishRefreshed(
                 sourceId = sourceId,
@@ -354,22 +359,31 @@ internal abstract class EpgRefreshDao {
     private suspend fun accessCheckedCompletion(
         sourceId: String,
         completion: EpgRefreshCompletion,
-    ): EpgRefreshCompletion = when (completion) {
-        is EpgRefreshCompletion.Refreshed ->
-            if (currentAccessRef(sourceId) == completion.accessRefBinding) {
-                completion
-            } else {
-                completion.toSuperseded()
-            }
+        expectedAccessRef: String?,
+    ): EpgRefreshCompletion {
+        val currentAccessRef = currentAccessRef(sourceId)
+        if (expectedAccessRef != null) {
+            if (currentAccessRef != expectedAccessRef) return completion.toSuperseded()
+            return when (completion) {
+                is EpgRefreshCompletion.Refreshed ->
+                    if (completion.accessRefBinding == expectedAccessRef) completion else completion.toSuperseded()
 
-        is EpgRefreshCompletion.NotModified ->
-            if (currentAccessRef(sourceId) == completion.accessRefBinding) {
-                completion
-            } else {
-                completion.toSuperseded()
-            }
+                is EpgRefreshCompletion.NotModified ->
+                    if (completion.accessRefBinding == expectedAccessRef) completion else completion.toSuperseded()
 
-        is EpgRefreshCompletion.Terminal -> completion
+                is EpgRefreshCompletion.Terminal -> completion
+            }
+        }
+
+        return when (completion) {
+            is EpgRefreshCompletion.Refreshed ->
+                if (currentAccessRef == completion.accessRefBinding) completion else completion.toSuperseded()
+
+            is EpgRefreshCompletion.NotModified ->
+                if (currentAccessRef == completion.accessRefBinding) completion else completion.toSuperseded()
+
+            is EpgRefreshCompletion.Terminal -> completion
+        }
     }
 
     private suspend fun replaceValidators(
