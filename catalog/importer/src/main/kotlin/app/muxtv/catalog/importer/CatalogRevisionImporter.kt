@@ -89,7 +89,6 @@ class CatalogRevisionImporter(
         input: InputStream,
     ): CatalogImportResult {
         var revisionNumber: Long? = null
-        var activated = false
 
         return try {
             if (request.sourceOwnership == CatalogImportSourceOwnership.UPSERT_METADATA) {
@@ -164,42 +163,69 @@ class CatalogRevisionImporter(
                 }
             }
             when (activation) {
-                is SourceRevisionActivationResult.Activated -> {
-                    activated = true
-                    CatalogImportResult.Imported(
-                        revisionNumber = activation.revisionNumber,
-                        previousRevisionNumber = activation.previousRevisionNumber,
-                        entryCount = activation.entryCount,
-                        skippedEntries = report.skippedEntries,
-                        warningCount = report.warningCount,
-                    )
+                is SourceRevisionActivationResult.Activated -> CatalogImportResult.Imported(
+                    revisionNumber = activation.revisionNumber,
+                    previousRevisionNumber = activation.previousRevisionNumber,
+                    entryCount = activation.entryCount,
+                    skippedEntries = report.skippedEntries,
+                    warningCount = report.warningCount,
+                )
+
+                SourceRevisionActivationResult.EmptyRevisionRejected -> {
+                    discardSafely(request.sourceId, revision)
+                    CatalogImportResult.EmptyRevisionRejected
                 }
 
-                SourceRevisionActivationResult.EmptyRevisionRejected ->
-                    CatalogImportResult.EmptyRevisionRejected
-
-                SourceRevisionActivationResult.Superseded -> CatalogImportResult.Superseded
+                SourceRevisionActivationResult.Superseded -> {
+                    // Guarded Room activation already discards staging transactionally. Calling
+                    // discard again keeps alternate/test stores honest and remains idempotent.
+                    discardSafely(request.sourceId, revision)
+                    CatalogImportResult.Superseded
+                }
             }
-        } catch (error: CancellationException) {
-            throw error
+        } catch (cancelled: CancellationException) {
+            discardAfterCancellationBestEffort(
+                sourceId = request.sourceId,
+                revisionNumber = revisionNumber,
+            )
+            throw cancelled
         } catch (_: M3uEncodingException) {
+            discardSafely(request.sourceId, revisionNumber)
             CatalogImportResult.Failed(CatalogImportFailureReason.InvalidEncoding)
         } catch (_: M3uLimitExceededException) {
+            discardSafely(request.sourceId, revisionNumber)
             CatalogImportResult.Failed(CatalogImportFailureReason.ParserLimitExceeded)
         } catch (_: Exception) {
+            discardSafely(request.sourceId, revisionNumber)
             CatalogImportResult.Failed(CatalogImportFailureReason.StorageFailure)
-        } finally {
-            if (!activated) {
-                revisionNumber?.let { revision ->
-                    withContext(NonCancellable) {
-                        try {
-                            revisionStore.discard(request.sourceId, revision)
-                        } catch (_: Exception) {
-                            // Cleanup is best-effort and must not replace cancellation or a typed failure.
-                        }
-                    }
-                }
+        }
+    }
+
+    private suspend fun discardAfterCancellationBestEffort(
+        sourceId: String,
+        revisionNumber: Long?,
+    ) {
+        if (revisionNumber == null) return
+        withContext(NonCancellable) {
+            try {
+                revisionStore.discard(sourceId, revisionNumber)
+            } catch (_: Exception) {
+                // The original request cancellation is authoritative.
             }
+        }
+    }
+
+    private suspend fun discardSafely(
+        sourceId: String,
+        revisionNumber: Long?,
+    ) {
+        if (revisionNumber == null) return
+        try {
+            revisionStore.discard(sourceId, revisionNumber)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Preserve the original typed import failure when best-effort discard also fails.
         }
     }
 }
