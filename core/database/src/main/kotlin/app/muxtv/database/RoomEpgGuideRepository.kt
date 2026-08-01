@@ -5,6 +5,9 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 internal class RoomEpgGuideRepository(
     private val dao: EpgGuideDao,
@@ -36,6 +39,10 @@ internal class RoomEpgGuideRepository(
             }
         }
     }
+
+    override fun observeDataChanges(): Flow<Unit> = dao.observeDataVersion()
+        .distinctUntilChanged()
+        .map { Unit }
 
     private fun readyProjection(
         canonicalChannelId: String,
