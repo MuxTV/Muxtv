@@ -19,6 +19,15 @@ class SourceRefreshEntityRedactionTest {
                 sourceName = "Source",
                 credentialRef = credential,
             ),
+            SourceRefreshTargetRow(
+                sourceId = "source-1",
+                sourceName = "Source",
+                credentialRef = credential,
+            ),
+            SourceRemovalSnapshot(
+                activeRevision = 1,
+                credentialRef = credential,
+            ),
             SourceEntity(
                 id = "source-1",
                 name = "Source",
