@@ -45,4 +45,17 @@ class EpgRefreshSchedulerPolicyTest {
         assertThat(manual).contains("epg-1")
         assertThat(startup).contains("epg-1")
     }
+
+    @Test
+    fun `disabling policy cancels startup and periodic but not manual work`() {
+        val policyOwned = epgPolicyOwnedWorkNames("epg-1")
+
+        assertThat(policyOwned).containsExactly(
+            EpgRefreshWorkNames.immediate("epg-1", EpgRefreshTrigger.STARTUP),
+            EpgRefreshWorkNames.periodic("epg-1"),
+        )
+        assertThat(policyOwned).doesNotContain(
+            EpgRefreshWorkNames.immediate("epg-1", EpgRefreshTrigger.MANUAL),
+        )
+    }
 }
