@@ -113,6 +113,7 @@ sealed interface EpgRefreshCompletion {
 
     data class Refreshed(
         override val completedAtEpochMillis: Long,
+        val accessRefBinding: String,
         val revisionNumber: Long,
         val channelCount: Int,
         val programmeCount: Int,
@@ -123,6 +124,7 @@ sealed interface EpgRefreshCompletion {
     ) : EpgRefreshCompletion {
         init {
             require(completedAtEpochMillis >= 0)
+            require(accessRefBinding.isNotBlank())
             require(revisionNumber > 0)
             require(channelCount >= 0)
             require(programmeCount >= 0)
@@ -130,15 +132,26 @@ sealed interface EpgRefreshCompletion {
             require(warningCount >= 0)
             require(unresolvedTimeCount >= 0)
         }
+
+        override fun toString(): String =
+            "Refreshed(accessRefPresent=true, revisionNumber=$revisionNumber, " +
+                "channelCount=$channelCount, programmeCount=$programmeCount, " +
+                "skippedProgrammeCount=$skippedProgrammeCount, warningCount=$warningCount, " +
+                "unresolvedTimeCount=$unresolvedTimeCount, validators=$validators)"
     }
 
     data class NotModified(
         override val completedAtEpochMillis: Long,
+        val accessRefBinding: String,
         val validators: EpgRefreshHttpValidators,
     ) : EpgRefreshCompletion {
         init {
             require(completedAtEpochMillis >= 0)
+            require(accessRefBinding.isNotBlank())
         }
+
+        override fun toString(): String =
+            "NotModified(accessRefPresent=true, validators=$validators)"
     }
 
     data class Terminal(
