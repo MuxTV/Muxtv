@@ -8,7 +8,11 @@ data class SourceDefinition(
     init {
         require(id.isNotBlank())
         require(name.isNotBlank())
+        require(credentialRef == null || credentialRef.isNotBlank())
     }
+
+    override fun toString(): String =
+        "SourceDefinition(credentialRefPresent=${credentialRef != null})"
 }
 
 data class StagedCatalogEntry(
