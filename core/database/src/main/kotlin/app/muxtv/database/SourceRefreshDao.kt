@@ -12,7 +12,10 @@ internal data class SourceRefreshTargetRow(
     val sourceId: String,
     val sourceName: String,
     val credentialRef: String?,
-)
+) {
+    override fun toString(): String =
+        "SourceRefreshTargetRow(credentialRefPresent=${credentialRef != null})"
+}
 
 internal data class SourceRefreshOverviewRow(
     val sourceId: String,
