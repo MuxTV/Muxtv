@@ -131,7 +131,7 @@ class SourceRefreshWorker @AssistedInject constructor(
     }
 
     private fun SourceRefreshDecision.toWorkResult(): Result = when {
-        state == SourceRefreshRunState.SUCCEEDED -> Result.success()
+        workSucceeded -> Result.success()
         retryable -> transientWorkResult()
         else -> Result.failure()
     }
