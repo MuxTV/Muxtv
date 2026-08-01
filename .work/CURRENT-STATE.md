@@ -2,16 +2,16 @@
 status: accepted
 last_reviewed: 2026-08-01
 architecture_version: 3
-implementation_source_commit: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
+implementation_source_commit: c31b34d65ef90848bd907a521b9a0ba8860ed83a
 ---
 
 # Текущее состояние
 
 ## Классификация проекта
 
-MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует. После EPG-цикла также существует production foundation XMLTV → bounded payload decode → immutable EPG staging/activation → secure conditional remote refresh.
+MuxTV находится в стадии **functional pre-alpha**. Сквозной Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player существует. EPG foundation теперь проходит XMLTV → bounded payload decode → secure conditional remote acquisition → immutable staging/activation → durable policy/lease/state orchestration.
 
-Основной риск проекта сместился от parser/network/storage correctness к durable EPG orchestration, deterministic channel matching/now-next, daily-use discovery, bounded playback recovery, TV-first polish и physical-device/release evidence.
+Главный correctness-риск сместился дальше: сначала нужно закрыть обнаруженный stale-publication race в старом M3U/source refresh пути (#76), затем построить deterministic EPG matching/now-next (#71), после чего можно закрывать umbrella #28 и переходить к daily-use Guide/Search/Favorites/Recent, playback recovery и alpha hardening.
 
 ## Проверенные факты
 
@@ -19,9 +19,10 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
 - 23 Gradle-проекта плюс included build `build-logic`.
 - Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3.
-- Room schema **v5**.
-- `main` на момент ревью: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1` (`feat: add secure remote EPG refresh (#72)`).
-- Открытых PR на момент ревью нет.
+- Room schema **v6**.
+- `main` после #75: `c31b34d65ef90848bd907a521b9a0ba8860ed83a` (`feat: finish durable EPG refresh orchestration (#75)`).
+- Issue #70 закрыта как completed.
+- Self-hosted Android TV harness и API 26/API 36 matrix являются постоянной evidence-инфраструктурой, а не отдельным product milestone.
 
 ## Реализованный source/catalog/Player путь
 
@@ -36,6 +37,18 @@ MuxTV находится в стадии **functional pre-alpha**. Сквозн�
 - Один process-owned MediaSessionService/ExoPlayer сохраняется при Activity recreation/reconnect.
 - Playback request/session владеют immutable header snapshots; cross-origin sensitive headers не протекают.
 - Channels использует stable canonical identity, bounded viewport state и explicit focus ownership; Player → Back восстанавливает surviving channel.
+
+### Известный source-refresh correctness debt
+
+Ревью #70 выявило в существующем M3U пути отдельный stale-publication race, вынесенный в #76:
+
+- remote importer сейчас может переписать `sources.credentialRef` snapshot'ом старого in-flight запроса;
+- source revision activation пока не проверяет текущий credential binding и durable refresh `runToken`;
+- source completion пока не сравнивает nullable credential snapshot;
+- source worker имеет тот же класс cancellation-finalization masking;
+- несколько source refresh diagnostic data classes требуют явного redacted `toString()`.
+
+Это следующий correctness package и он должен быть закрыт до #71, чтобы EPG matcher опирался на стабильные immutable revision producers с обеих сторон.
 
 ## Реализованный EPG foundation
 
@@ -52,7 +65,7 @@ Merge: `0f484905b6aefff5f2e284b521c946b35c4a70de`.
 - diagnostics не содержат XML/programme/provider values;
 - canonical XMLTV fixtures привязаны к production parser.
 
-Final Full evidence: run `30576931624`.
+Final Full evidence: `30576931624`.
 
 ### PR #64 — immutable EPG revisions / Room v5
 
@@ -76,7 +89,7 @@ Merge: `34dae3ec4f2a97d574bcf6bb00132c295a707872`.
 
 - magic-first plain/gzip/ZIP detection;
 - HTTP hints only when magic is inconclusive;
-- post-decompression decoded-byte bound, including `skip` paths;
+- post-decompression decoded-byte bound, включая `skip` paths;
 - bounded ZIP leading-entry count and entry-name length;
 - stream first regular ZIP entry only; no archive extraction/full buffering;
 - typed value-free rejections and explicit resource ownership.
@@ -85,7 +98,7 @@ Final Full: `30666205286`.
 
 ### PR #72 — secure remote EPG refresh
 
-Merge/current main: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1`.
+Merge: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1`.
 
 - reusable cancellable OkHttp await boundary shared with source refresh;
 - encrypted access through existing singleton `RemoteSourceAccessManager`;
@@ -99,6 +112,39 @@ Merge/current main: `27bb5bc49685779251b75c6e0aa134e4aaf4d3b1`.
 
 Exact-head Full: `30668000159`.
 
+### PR #74 — durable EPG persistence / Room v6
+
+Merge: `ab96f0fee5b80ebc8ae7f5a2cc23608ee5450030`.
+
+- EPG policy/state/attempt/validator persistence;
+- explicit Room v5→v6 migration and committed schema;
+- DB refresh lease, stale reclamation and old-token completion rejection;
+- separate `REFRESHED` and `NOT_MODIFIED` success semantics;
+- bounded attempt retention and validator ownership;
+- exact-head Full `30703994191`;
+- API26/API36 matrix `30703994190`.
+
+### PR #75 — durable orchestration + publication ownership
+
+Merge/current main: `c31b34d65ef90848bd907a521b9a0ba8860ed83a`.
+
+- EPG WorkManager scheduling remains in the existing `catalog:sync` architecture;
+- MANUAL/STARTUP have trigger-distinct deterministic one-shot identities; PERIODIC remains unique periodic work;
+- STARTUP/PERIODIC inherit durable unmetered/charging policy, MANUAL remains explicit CONNECTED override;
+- disabling policy cancels policy-owned STARTUP/PERIODIC without cancelling explicit MANUAL;
+- remote EPG import no longer rewrites source metadata from an in-flight request;
+- activation atomically proves current `accessRef` and current `RUNNING runToken` before publishing staging;
+- completion compares an explicit captured nullable access snapshot and cannot publish stale success/auth/failure/validators;
+- cancellation finalization cannot mask the original `CancellationException`;
+- state/attempt/validator diagnostics redact run token and validator/access values.
+
+Exact-head merge evidence:
+
+- Full `30708756373` — success;
+- API26/API36 database/device matrix `30708756357` — success;
+- focused entity-redaction GREEN `30708524223`;
+- lease-ownership GREEN `30705466205`.
+
 ## Measurement/corpus foundation
 
 Issue #27 остаётся открытой, но уже завершены:
@@ -109,7 +155,8 @@ Issue #27 остаётся открытой, но уже завершены:
 - immutable comparison/variance identity;
 - strict report adapters + exact-byte SHA-256 provenance;
 - sequential fresh-AVD measurement series orchestration;
-- current-profile two-run smoke.
+- current-profile two-run smoke;
+- XMLTV runtime-consumer fixture binding.
 
 Осталось по #27:
 
@@ -118,69 +165,80 @@ Issue #27 остаётся открытой, но уже завершены:
 3. five-run `current-low-ram`;
 4. separated cross-profile interpretation;
 5. per-operation `hard-gate` / `warning-only` / `descriptive-only` decision;
-6. HLS runtime fixture binding остаётся за issue #30.
+6. durable performance report/repository-truth sync.
 
-Эти измерения идут **параллельно** текущему EPG critical path и не требуют отката уже реализованного issue #28 foundation.
+HLS runtime fixture binding остаётся за #30, где появится реальный fallback consumer.
 
 ## Текущий critical path
 
-### P0 — repository truth sync
+### P1C — issue #76: source/M3U refresh ownership hardening
 
-Документация должна быть синхронизирована с Room v5, PR #63/#64/#68/#72 и текущим `main`. Активный план: `docs/superpowers/plans/2026-08-01-post-remote-epg-execution.md`.
+Без новой state framework и, если не обнаружится отдельная persisted потребность, без новой Room migration:
 
-### P1 — issue #70: durable EPG refresh scheduling/state
-
-Требуется:
-
-- EPG-specific policy/state/attempt contracts;
-- Room v5→v6 migration, если добавляются таблицы;
-- DB lease per EPG source, stale reclamation и old-token completion rejection;
-- manual/startup unique `KEEP`, periodic unique periodic `UPDATE`;
-- typed constraints connected/unmetered/charging;
-- timeout строго меньше lease staleness;
-- distinct success semantics for `REFRESHED` и `NOT_MODIFIED`;
-- validator values не должны попадать в public refresh state/history/diagnostics;
-- cancellation finalizes `CANCELLED` в `NonCancellable` и rethrows;
-- startup reconciliation;
-- API 26/API 36 migration/device coverage.
-
-Важно: существующий M3U `SourceRefreshCompletion` нельзя переиспользовать механически, потому что он требует `revisionNumber` на любом `SUCCEEDED`, а корректный EPG `304 Not Modified` не создаёт revision.
+- remote M3U import не переписывает mutable source metadata из in-flight snapshot;
+- propagate source refresh `runToken` worker → remote request → importer → Room;
+- activation atomically compares current credential binding + current `RUNNING runToken`;
+- stale/reclaimed/cancelled worker получает `SUPERSEDED` и не активирует staging;
+- completion compares captured nullable credential binding before publishing success/auth/failure state;
+- cancellation persistence best-effort в `NonCancellable`, original cancellation remains authoritative;
+- source refresh target/request/state/attempt diagnostic strings redact credential/run-token values;
+- previous-good active catalog остаётся reader boundary.
 
 ### P2 — issue #71: deterministic matching + now-next
 
-- exact external/tvg identity within provider relation;
+- exact normalized external/tvg identity within explicit provider relation;
 - exact normalized display name within provider/source;
 - constrained deterministic aliases;
 - otherwise unresolved/ambiguous, no weak fuzzy winner;
 - hidden/deleted channels excluded;
+- deterministic decision for equal catalog/EPG revisions;
 - bounded queries keyed by canonical channel ID;
 - `NowNext(current,next,nextBoundary)`;
 - open-ended programme effective boundary from next programme where possible;
-- invalidation only on EPG revision change/programme boundary, no full-guide polling.
-
-Если persistence matching требует новой схемы, она должна идти отдельной v6→v7 migration, а не смешиваться с #70.
+- invalidation only on active EPG revision/programme boundary, no full-guide polling;
+- если persistence matching требует storage, использовать отдельную Room v6→v7 migration, не возвращаться к #70 schema scope.
 
 ### P3 — close issue #28
 
-После #70/#71: Full, API 26/API 36 migration/device evidence, synthetic XMLTV→remote refresh→activation→matching→now-next integration, cancellation/failure previous-good preservation и redaction audit.
+После #76/#71:
+
+- synthetic remote XMLTV → decode → import → activate → match → now-next;
+- failure/cancellation/supersede previous-good preservation;
+- redaction audit;
+- Full + relevant API26/API36 device evidence;
+- acceptance reconciliation и закрытие umbrella issue.
 
 ### P4 — issue #29 daily-use discovery
 
-Channels now/next, Favorites, bounded Recent, bounded/debounced Search, bounded/lazy Guide и стабильный D-pad focus/Player Back.
+Channels real now/next → Favorites → bounded profile-scoped Recent → bounded/debounced Search → bounded/lazy Guide → stable D-pad/Player Back continuity.
 
-### P5/P6 — issue #33 и #30
+### P5 — issue #33 TV-first UX
 
-UX: dedicated channel rows → real now/next → hidden Player overlay → Sources simplification → real Guide/Search routes → light shell → credential-free logos → QA.
+Dedicated channel rows → real now/next visual integration → hidden-by-default Player overlay → Sources simplification → real Guide/Search routes → restrained light shell → credential-free logo loader → device/focus QA.
 
-Fallback/Doctor: bounded variant ladder, typed failure families, no retry storms, HLS fixture runtime binding, redacted TV Doctor export. Media3 остаётся единственным player engine без отдельного evidence-backed ADR.
+### P6 — issue #30 bounded fallback + TV Doctor Lite
+
+- bounded attempt/time ladder;
+- typed DNS/TLS/HTTP/auth/redirect/manifest/decoder/playback families;
+- auth is not generic retryable network failure;
+- temporary fallback does not overwrite preferred variant;
+- Activity recreation/WorkManager cannot multiply attempts;
+- bind HLS fixtures to the real consumer;
+- redacted local diagnostic export.
+
+Media3 remains the only player engine unless measured evidence requires an ADR.
 
 ### P7 — issue #31 alpha hardening
 
-R8/resource shrinking, Baseline Profile, measured startup/journey evidence, virtual old/mainstream/current/low-RAM matrix, physical Android/Google TV/constrained/Fire TV checks, signing, changelog, SBOM/licenses и release checklist.
+R8/resource shrinking, Baseline Profile, measured startup/journey evidence, virtual old/mainstream/current/low-RAM matrix, physical Android/Google TV/constrained/Fire TV checks, upgrade/Keystore/Room recovery, signing, changelog, SBOM/licenses и release checklist.
+
+## Native/Rust decision gate
+
+Rust/UniFFI, bundled SQLite, libmpv и второй player engine **не являются текущими correctness dependencies**. Их нельзя выбирать по предположению. Сначала #27 должен дать повторяемый bottleneck/variance evidence; затем отдельный ADR сравнивает выигрыш с FFI ownership, ABI packaging, crash/debugging и maintenance cost. До такого evidence оптимизируется существующий Kotlin/Room/Media3 путь.
 
 ## Android TV evidence limits
 
-Эмуляторные API 26/API 36 проверки доказывают Android API/lifecycle/Room/Keystore/focus/MediaSession/database contracts. Они не доказывают vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC, реальные сетевые zap timings или thermal behavior. До alpha обязательна физическая проверка.
+Эмуляторные API26/API36 проверки доказывают Android API/lifecycle/Room/Keystore/focus/MediaSession/database contracts. Они не доказывают vendor MediaCodec, HDR, passthrough, Fire OS, слабый ARM SoC, реальные сетевые zap timings или thermal behavior. До alpha обязательна физическая проверка.
 
 ## Сохраняемые архитектурные решения
 
@@ -190,6 +248,6 @@ R8/resource shrinking, Baseline Profile, measured startup/journey evidence, virt
 - Source/EPG updates используют immutable revisions, staging и atomic activation.
 - Provider data, canonical channels и profile overlays разделены.
 - Remote playlists/XML/images/provider endpoints считаются untrusted и bounded.
-- WorkManager scheduling переиспользует существующую архитектуру, но EPG semantic state не смешивается с M3U-specific completion fields.
+- WorkManager uniqueness — orchestration optimization; DB lease + transactional revision activation — authoritative publication boundary.
 - Testing/corpus utilities не становятся production runtime dependencies.
 - Rust/UniFFI, libmpv, bundled SQLite, Paging и второй engine требуют reproducible bottleneck/compatibility evidence и ADR.
