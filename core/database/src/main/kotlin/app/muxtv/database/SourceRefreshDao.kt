@@ -261,13 +261,11 @@ internal abstract class SourceRefreshDao {
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
         expectedCredentialRef: String?,
-    ) {
-        val startedAtEpochMillis = startedAt(sourceId, runToken) ?: return
-        val effectiveCompletion = if (currentCredentialRef(sourceId) == expectedCredentialRef) {
-            completion
-        } else {
-            completion.toSuperseded()
-        }
+    ): RefreshCompletionDisposition {
+        val startedAtEpochMillis = startedAt(sourceId, runToken)
+            ?: return RefreshCompletionDisposition.IGNORED
+        val superseded = currentCredentialRef(sourceId) != expectedCredentialRef
+        val effectiveCompletion = if (superseded) completion.toSuperseded() else completion
         val updated = finishState(
             sourceId = sourceId,
             runToken = runToken,
@@ -280,7 +278,7 @@ internal abstract class SourceRefreshDao {
             warningCount = effectiveCompletion.warningCount,
             httpStatus = effectiveCompletion.httpStatus,
         )
-        if (updated != 1) return
+        if (updated != 1) return RefreshCompletionDisposition.IGNORED
 
         insertAttempt(
             SourceRefreshAttemptEntity(
@@ -300,6 +298,11 @@ internal abstract class SourceRefreshDao {
             ),
         )
         pruneAttempts(sourceId, MAX_SOURCE_REFRESH_ATTEMPTS)
+        return if (superseded) {
+            RefreshCompletionDisposition.SUPERSEDED
+        } else {
+            RefreshCompletionDisposition.APPLIED
+        }
     }
 }
 
