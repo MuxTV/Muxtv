@@ -42,10 +42,11 @@ data class EpgRefreshAttemptEntity(
     init {
         require(sourceId.isNotBlank())
         require(runToken.isNotBlank())
-        require(trigger.isNotBlank())
+        require(trigger in EpgRefreshTrigger.entries.map { it.name })
         require(startedAtEpochMillis >= 0)
         require(completedAtEpochMillis >= startedAtEpochMillis)
-        require(resultState.isNotBlank())
+        require(resultState in EpgRefreshRunState.entries.map { it.name })
+        require(resultState !in setOf(EpgRefreshRunState.IDLE.name, EpgRefreshRunState.RUNNING.name))
         require(resultFamily.isNotBlank())
         require(resultCode == null || resultCode.isNotBlank())
         require(revisionNumber == null || revisionNumber > 0)
