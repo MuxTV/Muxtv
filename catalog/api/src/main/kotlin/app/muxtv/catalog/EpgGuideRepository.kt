@@ -1,5 +1,7 @@
 package app.muxtv.catalog
 
+import kotlinx.coroutines.flow.Flow
+
 class NowNextQuery(
     val profileId: String,
     canonicalChannelIds: List<String>,
@@ -70,4 +72,6 @@ data class ChannelNowNext(
 
 interface EpgGuideRepository {
     suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext>
+
+    fun observeDataChanges(): Flow<Unit>
 }
