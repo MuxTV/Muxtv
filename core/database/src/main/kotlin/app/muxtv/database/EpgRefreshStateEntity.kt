@@ -17,7 +17,7 @@ import androidx.room3.ForeignKey
 )
 data class EpgRefreshStateEntity(
     val sourceId: String,
-    val state: String,
+    val state: String = EpgRefreshRunState.IDLE.name,
     val runToken: String? = null,
     val startedAtEpochMillis: Long? = null,
     val completedAtEpochMillis: Long? = null,
@@ -29,7 +29,7 @@ data class EpgRefreshStateEntity(
 ) {
     init {
         require(sourceId.isNotBlank())
-        require(state.isNotBlank())
+        require(state in EpgRefreshRunState.entries.map { it.name })
         require(runToken == null || runToken.isNotBlank())
         require(startedAtEpochMillis == null || startedAtEpochMillis >= 0)
         require(completedAtEpochMillis == null || completedAtEpochMillis >= 0)
