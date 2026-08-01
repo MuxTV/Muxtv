@@ -7,6 +7,9 @@ import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -147,6 +150,27 @@ class EpgNowNextRepositoryTest {
         ).single()
 
         assertThat(projection.state).isEqualTo(GuideProjectionState.NO_GUIDE)
+    }
+
+    @Test
+    fun dataChangeSignalEmitsWhenActiveCatalogRevisionChanges() = runTest {
+        val emissions = async {
+            repository.observeDataChanges().take(2).toList()
+        }
+
+        database.sourceRevisionDao().insertRevision(
+            SourceRevisionEntity(
+                sourceId = SOURCE,
+                revisionNumber = 2,
+                status = SourceRevisionEntity.STATUS_ACTIVE,
+                startedAtEpochMillis = 30,
+                activatedAtEpochMillis = 40,
+                parsedEntries = 0,
+            ),
+        )
+        assertThat(database.sourceRevisionDao().updateActiveRevision(SOURCE, 2)).isEqualTo(1)
+
+        assertThat(emissions.await()).containsExactly(Unit, Unit).inOrder()
     }
 
     private fun query(now: Long) = NowNextQuery(
