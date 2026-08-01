@@ -25,5 +25,5 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Compile cancellation RED contract
-        run: ./gradlew :catalog:sync:compileDebugUnitTestKotlin --no-daemon --stacktrace --console=plain
+      - name: Run focused EPG P1B contracts
+        run: ./gradlew :catalog:sync:testDebugUnitTest :core:database:testDebugUnitTest --tests app.muxtv.database.EpgRefreshEntityRedactionTest --no-daemon --stacktrace --console=plain
