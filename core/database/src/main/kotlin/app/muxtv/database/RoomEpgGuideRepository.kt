@@ -42,7 +42,7 @@ internal class RoomEpgGuideRepository(
 
     override fun observeDataChanges(): Flow<Unit> = dao.observeDataVersion()
         .distinctUntilChanged()
-        .map { Unit }
+        .map { }
 
     private fun readyProjection(
         canonicalChannelId: String,
