@@ -102,6 +102,7 @@ class RemoteEpgRefresher(
                                 providerSourceId = request.providerSourceId,
                                 accessRef = request.accessCredentialId.value,
                                 defaultZoneId = request.defaultZoneId,
+                                refreshRunToken = request.refreshRunToken,
                                 parseLimits = request.parseLimits,
                                 sourceOwnership = EpgImportSourceOwnership.EXISTING_REMOTE_BINDING,
                             ),
