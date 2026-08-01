@@ -1,6 +1,10 @@
 package app.muxtv.catalog
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class EpgGuideRepositoryTest {
@@ -87,5 +91,16 @@ class EpgGuideRepositoryTest {
             next = null,
             nextBoundaryEpochMillis = 2_000,
         )
+    }
+
+    @Test
+    fun repositoryExposesPayloadFreeDataChangeSignal() = runBlocking {
+        val repository = object : EpgGuideRepository {
+            override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> = emptyList()
+
+            override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
+        }
+
+        assertThat(repository.observeDataChanges().first()).isEqualTo(Unit)
     }
 }
