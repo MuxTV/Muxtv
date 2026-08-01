@@ -1,0 +1,1725 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "1895ead26158ff3d087391ac3a929e5c",
+    "entities": [
+      {
+        "tableName": "installations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `primaryProfileId` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryProfileId",
+            "columnName": "primaryProfileId",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `isPrimary` INTEGER NOT NULL, `archivedAtEpochMillis` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPrimary",
+            "columnName": "isPrimary",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archivedAtEpochMillis",
+            "columnName": "archivedAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_profiles_isPrimary",
+            "unique": false,
+            "columnNames": [
+              "isPrimary"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_profiles_isPrimary` ON `${TABLE_NAME}` (`isPrimary`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sources",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `credentialRef` TEXT, `activeRevision` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credentialRef",
+            "columnName": "credentialRef",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "activeRevision",
+            "columnName": "activeRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "source_revisions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `revisionNumber` INTEGER NOT NULL, `status` TEXT NOT NULL, `startedAtEpochMillis` INTEGER NOT NULL, `activatedAtEpochMillis` INTEGER, `parsedEntries` INTEGER NOT NULL, `skippedEntries` INTEGER NOT NULL, `warningCount` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `revisionNumber`), FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activatedAtEpochMillis",
+            "columnName": "activatedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "parsedEntries",
+            "columnName": "parsedEntries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "skippedEntries",
+            "columnName": "skippedEntries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warningCount",
+            "columnName": "warningCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "revisionNumber"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_source_revisions_sourceId",
+            "unique": false,
+            "columnNames": [
+              "sourceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_revisions_sourceId` ON `${TABLE_NAME}` (`sourceId`)"
+          },
+          {
+            "name": "index_source_revisions_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_revisions_status` ON `${TABLE_NAME}` (`status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "source_refresh_policies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `intervalMinutes` INTEGER NOT NULL, `unmeteredOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`sourceId`), FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "intervalMinutes",
+            "columnName": "intervalMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unmeteredOnly",
+            "columnName": "unmeteredOnly",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requiresCharging",
+            "columnName": "requiresCharging",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "source_refresh_states",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `state` TEXT NOT NULL, `runToken` TEXT, `startedAtEpochMillis` INTEGER, `completedAtEpochMillis` INTEGER, `lastSuccessRevision` INTEGER, `lastSuccessAtEpochMillis` INTEGER, `failureFamily` TEXT, `failureCode` TEXT, `httpStatus` INTEGER, `skippedEntries` INTEGER NOT NULL, `warningCount` INTEGER NOT NULL, PRIMARY KEY(`sourceId`), FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runToken",
+            "columnName": "runToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessRevision",
+            "columnName": "lastSuccessRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessAtEpochMillis",
+            "columnName": "lastSuccessAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "failureFamily",
+            "columnName": "failureFamily",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failureCode",
+            "columnName": "failureCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "httpStatus",
+            "columnName": "httpStatus",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "skippedEntries",
+            "columnName": "skippedEntries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warningCount",
+            "columnName": "warningCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "source_refresh_attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceId` TEXT NOT NULL, `runToken` TEXT NOT NULL, `trigger` TEXT NOT NULL, `startedAtEpochMillis` INTEGER NOT NULL, `completedAtEpochMillis` INTEGER NOT NULL, `resultState` TEXT NOT NULL, `resultFamily` TEXT NOT NULL, `resultCode` TEXT, `revisionNumber` INTEGER, `parsedEntries` INTEGER, `skippedEntries` INTEGER NOT NULL, `warningCount` INTEGER NOT NULL, `httpStatus` INTEGER, FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runToken",
+            "columnName": "runToken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trigger",
+            "columnName": "trigger",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultState",
+            "columnName": "resultState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultFamily",
+            "columnName": "resultFamily",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultCode",
+            "columnName": "resultCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "parsedEntries",
+            "columnName": "parsedEntries",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "skippedEntries",
+            "columnName": "skippedEntries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warningCount",
+            "columnName": "warningCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "httpStatus",
+            "columnName": "httpStatus",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_source_refresh_attempts_sourceId",
+            "unique": false,
+            "columnNames": [
+              "sourceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_refresh_attempts_sourceId` ON `${TABLE_NAME}` (`sourceId`)"
+          },
+          {
+            "name": "index_source_refresh_attempts_sourceId_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_refresh_attempts_sourceId_startedAtEpochMillis` ON `${TABLE_NAME}` (`sourceId`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_source_refresh_attempts_runToken",
+            "unique": true,
+            "columnNames": [
+              "runToken"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_source_refresh_attempts_runToken` ON `${TABLE_NAME}` (`runToken`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "pending_source_preparations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`preparationId` TEXT NOT NULL, `scheme` TEXT NOT NULL, `host` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `expiresAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`preparationId`))",
+        "fields": [
+          {
+            "fieldPath": "preparationId",
+            "columnName": "preparationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheme",
+            "columnName": "scheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "host",
+            "columnName": "host",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtEpochMillis",
+            "columnName": "expiresAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "preparationId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pending_source_preparations_expiresAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "expiresAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pending_source_preparations_expiresAtEpochMillis` ON `${TABLE_NAME}` (`expiresAtEpochMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "provider_channels",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `revisionNumber` INTEGER NOT NULL DEFAULT 0, `providerKey` TEXT NOT NULL, `rawName` TEXT NOT NULL, `tvgId` TEXT, `tvgName` TEXT, `logoUrl` TEXT, `groupTitle` TEXT, `channelNumber` TEXT, `catchupMode` TEXT, `catchupSource` TEXT, `catchupDays` INTEGER, `catchupCorrection` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "providerKey",
+            "columnName": "providerKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawName",
+            "columnName": "rawName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tvgId",
+            "columnName": "tvgId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tvgName",
+            "columnName": "tvgName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "logoUrl",
+            "columnName": "logoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "groupTitle",
+            "columnName": "groupTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "channelNumber",
+            "columnName": "channelNumber",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "catchupMode",
+            "columnName": "catchupMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "catchupSource",
+            "columnName": "catchupSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "catchupDays",
+            "columnName": "catchupDays",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "catchupCorrection",
+            "columnName": "catchupCorrection",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_provider_channels_sourceId",
+            "unique": false,
+            "columnNames": [
+              "sourceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_provider_channels_sourceId` ON `${TABLE_NAME}` (`sourceId`)"
+          },
+          {
+            "name": "index_provider_channels_sourceId_revisionNumber",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "revisionNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_provider_channels_sourceId_revisionNumber` ON `${TABLE_NAME}` (`sourceId`, `revisionNumber`)"
+          },
+          {
+            "name": "index_provider_channels_sourceId_providerKey_revisionNumber",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "providerKey",
+              "revisionNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_provider_channels_sourceId_providerKey_revisionNumber` ON `${TABLE_NAME}` (`sourceId`, `providerKey`, `revisionNumber`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "canonical_channels",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `displayName` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "stream_variants",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `providerChannelId` TEXT NOT NULL, `canonicalChannelId` TEXT NOT NULL, `locator` TEXT NOT NULL, `userAgent` TEXT, `referrer` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`providerChannelId`) REFERENCES `provider_channels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`canonicalChannelId`) REFERENCES `canonical_channels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "providerChannelId",
+            "columnName": "providerChannelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalChannelId",
+            "columnName": "canonicalChannelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locator",
+            "columnName": "locator",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userAgent",
+            "columnName": "userAgent",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "referrer",
+            "columnName": "referrer",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_stream_variants_providerChannelId",
+            "unique": false,
+            "columnNames": [
+              "providerChannelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stream_variants_providerChannelId` ON `${TABLE_NAME}` (`providerChannelId`)"
+          },
+          {
+            "name": "index_stream_variants_canonicalChannelId",
+            "unique": false,
+            "columnNames": [
+              "canonicalChannelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_stream_variants_canonicalChannelId` ON `${TABLE_NAME}` (`canonicalChannelId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "provider_channels",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "providerChannelId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "canonical_channels",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "canonicalChannelId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "user_channel_overlays",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileId` TEXT NOT NULL, `canonicalChannelId` TEXT NOT NULL, `isFavorite` INTEGER NOT NULL, `customName` TEXT, `channelNumber` INTEGER, `isHidden` INTEGER NOT NULL, PRIMARY KEY(`profileId`, `canonicalChannelId`), FOREIGN KEY(`profileId`) REFERENCES `profiles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`canonicalChannelId`) REFERENCES `canonical_channels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "profileId",
+            "columnName": "profileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalChannelId",
+            "columnName": "canonicalChannelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customName",
+            "columnName": "customName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "channelNumber",
+            "columnName": "channelNumber",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isHidden",
+            "columnName": "isHidden",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileId",
+            "canonicalChannelId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_user_channel_overlays_canonicalChannelId",
+            "unique": false,
+            "columnNames": [
+              "canonicalChannelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_channel_overlays_canonicalChannelId` ON `${TABLE_NAME}` (`canonicalChannelId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "profiles",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "profileId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "canonical_channels",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "canonicalChannelId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_sources",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `providerSourceId` TEXT, `accessRef` TEXT, `defaultZoneId` TEXT, `activeRevision` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`providerSourceId`) REFERENCES `sources`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "providerSourceId",
+            "columnName": "providerSourceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "accessRef",
+            "columnName": "accessRef",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "defaultZoneId",
+            "columnName": "defaultZoneId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "activeRevision",
+            "columnName": "activeRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_sources_providerSourceId",
+            "unique": false,
+            "columnNames": [
+              "providerSourceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_sources_providerSourceId` ON `${TABLE_NAME}` (`providerSourceId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sources",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "providerSourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_revisions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `revisionNumber` INTEGER NOT NULL, `status` TEXT NOT NULL, `startedAtEpochMillis` INTEGER NOT NULL, `activatedAtEpochMillis` INTEGER, `acceptedChannels` INTEGER NOT NULL, `acceptedProgrammes` INTEGER NOT NULL, `skippedProgrammes` INTEGER NOT NULL, `warningCount` INTEGER NOT NULL, `unresolvedTimeCount` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `revisionNumber`), FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activatedAtEpochMillis",
+            "columnName": "activatedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "acceptedChannels",
+            "columnName": "acceptedChannels",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedProgrammes",
+            "columnName": "acceptedProgrammes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "skippedProgrammes",
+            "columnName": "skippedProgrammes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warningCount",
+            "columnName": "warningCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unresolvedTimeCount",
+            "columnName": "unresolvedTimeCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "revisionNumber"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_revisions_sourceId_status",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_revisions_sourceId_status` ON `${TABLE_NAME}` (`sourceId`, `status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "epg_sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_channels",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `revisionNumber` INTEGER NOT NULL, `externalId` TEXT NOT NULL, `primaryDisplayName` TEXT, `primaryLanguage` TEXT, `iconRef` TEXT, PRIMARY KEY(`sourceId`, `revisionNumber`, `externalId`), FOREIGN KEY(`sourceId`, `revisionNumber`) REFERENCES `epg_revisions`(`sourceId`, `revisionNumber`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "externalId",
+            "columnName": "externalId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryDisplayName",
+            "columnName": "primaryDisplayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "primaryLanguage",
+            "columnName": "primaryLanguage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "iconRef",
+            "columnName": "iconRef",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "revisionNumber",
+            "externalId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_channels_sourceId_revisionNumber",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "revisionNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_channels_sourceId_revisionNumber` ON `${TABLE_NAME}` (`sourceId`, `revisionNumber`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "epg_revisions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId",
+              "revisionNumber"
+            ],
+            "referencedColumns": [
+              "sourceId",
+              "revisionNumber"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_programmes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `revisionNumber` INTEGER NOT NULL, `sequenceNumber` INTEGER NOT NULL, `externalChannelId` TEXT NOT NULL, `startEpochMillis` INTEGER NOT NULL, `stopEpochMillis` INTEGER, `primaryTitle` TEXT, `primaryLanguage` TEXT, `subtitle` TEXT, `description` TEXT, `category` TEXT, `iconRef` TEXT, `episodeNumber` TEXT, `isNew` INTEGER NOT NULL, PRIMARY KEY(`sourceId`, `revisionNumber`, `sequenceNumber`), FOREIGN KEY(`sourceId`, `revisionNumber`) REFERENCES `epg_revisions`(`sourceId`, `revisionNumber`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequenceNumber",
+            "columnName": "sequenceNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "externalChannelId",
+            "columnName": "externalChannelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startEpochMillis",
+            "columnName": "startEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stopEpochMillis",
+            "columnName": "stopEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "primaryTitle",
+            "columnName": "primaryTitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "primaryLanguage",
+            "columnName": "primaryLanguage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "subtitle",
+            "columnName": "subtitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "iconRef",
+            "columnName": "iconRef",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "episodeNumber",
+            "columnName": "episodeNumber",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isNew",
+            "columnName": "isNew",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId",
+            "revisionNumber",
+            "sequenceNumber"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_programmes_sourceId_revisionNumber_externalChannelId_startEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "revisionNumber",
+              "externalChannelId",
+              "startEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_programmes_sourceId_revisionNumber_externalChannelId_startEpochMillis` ON `${TABLE_NAME}` (`sourceId`, `revisionNumber`, `externalChannelId`, `startEpochMillis`)"
+          },
+          {
+            "name": "index_epg_programmes_sourceId_revisionNumber_startEpochMillis_stopEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "revisionNumber",
+              "startEpochMillis",
+              "stopEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_programmes_sourceId_revisionNumber_startEpochMillis_stopEpochMillis` ON `${TABLE_NAME}` (`sourceId`, `revisionNumber`, `startEpochMillis`, `stopEpochMillis`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "epg_revisions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId",
+              "revisionNumber"
+            ],
+            "referencedColumns": [
+              "sourceId",
+              "revisionNumber"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_refresh_policies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `intervalMinutes` INTEGER NOT NULL, `unmeteredOnly` INTEGER NOT NULL, `requiresCharging` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`sourceId`), FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "intervalMinutes",
+            "columnName": "intervalMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unmeteredOnly",
+            "columnName": "unmeteredOnly",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requiresCharging",
+            "columnName": "requiresCharging",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "epg_sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_refresh_states",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `state` TEXT NOT NULL, `runToken` TEXT, `startedAtEpochMillis` INTEGER, `completedAtEpochMillis` INTEGER, `lastSuccessRevision` INTEGER, `lastSuccessAtEpochMillis` INTEGER, `resultFamily` TEXT, `resultCode` TEXT, `httpStatus` INTEGER, PRIMARY KEY(`sourceId`), FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runToken",
+            "columnName": "runToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessRevision",
+            "columnName": "lastSuccessRevision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSuccessAtEpochMillis",
+            "columnName": "lastSuccessAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resultFamily",
+            "columnName": "resultFamily",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultCode",
+            "columnName": "resultCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "httpStatus",
+            "columnName": "httpStatus",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "epg_sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_refresh_attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceId` TEXT NOT NULL, `runToken` TEXT NOT NULL, `trigger` TEXT NOT NULL, `startedAtEpochMillis` INTEGER NOT NULL, `completedAtEpochMillis` INTEGER NOT NULL, `resultState` TEXT NOT NULL, `resultFamily` TEXT NOT NULL, `resultCode` TEXT, `revisionNumber` INTEGER, `channelCount` INTEGER, `programmeCount` INTEGER, `skippedProgrammeCount` INTEGER, `warningCount` INTEGER, `unresolvedTimeCount` INTEGER, `httpStatus` INTEGER, FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runToken",
+            "columnName": "runToken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trigger",
+            "columnName": "trigger",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultState",
+            "columnName": "resultState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultFamily",
+            "columnName": "resultFamily",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resultCode",
+            "columnName": "resultCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "revisionNumber",
+            "columnName": "revisionNumber",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "channelCount",
+            "columnName": "channelCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "programmeCount",
+            "columnName": "programmeCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "skippedProgrammeCount",
+            "columnName": "skippedProgrammeCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "warningCount",
+            "columnName": "warningCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "unresolvedTimeCount",
+            "columnName": "unresolvedTimeCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "httpStatus",
+            "columnName": "httpStatus",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_refresh_attempts_sourceId",
+            "unique": false,
+            "columnNames": [
+              "sourceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_refresh_attempts_sourceId` ON `${TABLE_NAME}` (`sourceId`)"
+          },
+          {
+            "name": "index_epg_refresh_attempts_sourceId_startedAtEpochMillis",
+            "unique": false,
+            "columnNames": [
+              "sourceId",
+              "startedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_refresh_attempts_sourceId_startedAtEpochMillis` ON `${TABLE_NAME}` (`sourceId`, `startedAtEpochMillis`)"
+          },
+          {
+            "name": "index_epg_refresh_attempts_runToken",
+            "unique": true,
+            "columnNames": [
+              "runToken"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_epg_refresh_attempts_runToken` ON `${TABLE_NAME}` (`runToken`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "epg_sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_refresh_http_validators",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceId` TEXT NOT NULL, `accessRefBinding` TEXT NOT NULL, `etag` TEXT, `lastModified` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`sourceId`), FOREIGN KEY(`sourceId`) REFERENCES `epg_sources`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "sourceId",
+            "columnName": "sourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accessRefBinding",
+            "columnName": "accessRefBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "etag",
+            "columnName": "etag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModified",
+            "columnName": "lastModified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "epg_sources",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sourceId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "epg_channel_matches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`epgSourceId` TEXT NOT NULL, `epgRevisionNumber` INTEGER NOT NULL, `providerSourceId` TEXT NOT NULL, `catalogRevisionNumber` INTEGER NOT NULL, `epgExternalChannelId` TEXT NOT NULL, `decision` TEXT NOT NULL, `reasonCode` TEXT NOT NULL, `canonicalChannelId` TEXT, `candidateCount` INTEGER NOT NULL, PRIMARY KEY(`epgSourceId`, `epgRevisionNumber`, `providerSourceId`, `catalogRevisionNumber`, `epgExternalChannelId`), FOREIGN KEY(`epgSourceId`, `epgRevisionNumber`, `epgExternalChannelId`) REFERENCES `epg_channels`(`sourceId`, `revisionNumber`, `externalId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`providerSourceId`, `catalogRevisionNumber`) REFERENCES `source_revisions`(`sourceId`, `revisionNumber`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`canonicalChannelId`) REFERENCES `canonical_channels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "epgSourceId",
+            "columnName": "epgSourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epgRevisionNumber",
+            "columnName": "epgRevisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "providerSourceId",
+            "columnName": "providerSourceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "catalogRevisionNumber",
+            "columnName": "catalogRevisionNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epgExternalChannelId",
+            "columnName": "epgExternalChannelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "decision",
+            "columnName": "decision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reasonCode",
+            "columnName": "reasonCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalChannelId",
+            "columnName": "canonicalChannelId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "candidateCount",
+            "columnName": "candidateCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "epgSourceId",
+            "epgRevisionNumber",
+            "providerSourceId",
+            "catalogRevisionNumber",
+            "epgExternalChannelId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_epg_channel_matches_epgSourceId_epgRevisionNumber_epgExternalChannelId",
+            "unique": false,
+            "columnNames": [
+              "epgSourceId",
+              "epgRevisionNumber",
+              "epgExternalChannelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_channel_matches_epgSourceId_epgRevisionNumber_epgExternalChannelId` ON `${TABLE_NAME}` (`epgSourceId`, `epgRevisionNumber`, `epgExternalChannelId`)"
+          },
+          {
+            "name": "index_epg_channel_matches_providerSourceId_catalogRevisionNumber",
+            "unique": false,
+            "columnNames": [
+              "providerSourceId",
+              "catalogRevisionNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_channel_matches_providerSourceId_catalogRevisionNumber` ON `${TABLE_NAME}` (`providerSourceId`, `catalogRevisionNumber`)"
+          },
+          {
+            "name": "index_epg_channel_matches_canonicalChannelId",
+            "unique": false,
+            "columnNames": [
+              "canonicalChannelId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_epg_channel_matches_canonicalChannelId` ON `${TABLE_NAME}` (`canonicalChannelId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "epg_channels",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "epgSourceId",
+              "epgRevisionNumber",
+              "epgExternalChannelId"
+            ],
+            "referencedColumns": [
+              "sourceId",
+              "revisionNumber",
+              "externalId"
+            ]
+          },
+          {
+            "table": "source_revisions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "providerSourceId",
+              "catalogRevisionNumber"
+            ],
+            "referencedColumns": [
+              "sourceId",
+              "revisionNumber"
+            ]
+          },
+          {
+            "table": "canonical_channels",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "canonicalChannelId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1895ead26158ff3d087391ac3a929e5c')"
+    ]
+  }
+}
