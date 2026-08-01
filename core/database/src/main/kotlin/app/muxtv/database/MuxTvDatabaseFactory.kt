@@ -17,6 +17,7 @@ class MuxTvDatabaseComponents internal constructor(
     val playbackCatalog: PlaybackCatalog,
     val epgRevisionStore: EpgRevisionStore,
     val epgRefreshStore: EpgRefreshStore,
+    val epgMatchingStore: EpgMatchingStore,
     val epgGuideRepository: EpgGuideRepository,
 )
 
@@ -54,6 +55,7 @@ object MuxTvDatabaseFactory {
             ),
             epgRevisionStore = RoomEpgRevisionStore(database.epgRevisionDao()),
             epgRefreshStore = RoomEpgRefreshStore(database.epgRefreshDao()),
+            epgMatchingStore = RoomEpgMatchingStore(database.epgMatchingDao()),
             epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao()),
         )
     }
