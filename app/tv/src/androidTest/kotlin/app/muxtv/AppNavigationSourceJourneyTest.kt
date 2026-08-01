@@ -243,6 +243,7 @@ private class JourneySourceRefreshStore : SourceRefreshStore {
         runToken: String,
         trigger: SourceRefreshTrigger,
         completion: SourceRefreshCompletion,
+        expectedCredentialRef: String?,
     ) = Unit
 }
 
