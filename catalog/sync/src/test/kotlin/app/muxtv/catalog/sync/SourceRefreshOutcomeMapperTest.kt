@@ -24,10 +24,11 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.revisionNumber).isEqualTo(3)
         assertThat(decision.parsedEntries).isEqualTo(120)
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isTrue()
     }
 
     @Test
-    fun `superseded publication is terminal and never retried`() {
+    fun `superseded publication is successful terminal work and never retried`() {
         val decision = SourceRefreshOutcomeMapper.map(RemoteSourceRefreshResult.Superseded)
 
         assertThat(decision.state).isEqualTo(SourceRefreshRunState.CANCELLED)
@@ -36,6 +37,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.revisionNumber).isNull()
         assertThat(decision.parsedEntries).isNull()
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isTrue()
     }
 
     @Test
@@ -45,6 +47,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.state).isEqualTo(SourceRefreshRunState.FAILED)
         assertThat(decision.resultFamily).isEqualTo("HTTP")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -53,6 +56,7 @@ class SourceRefreshOutcomeMapperTest {
 
         assertThat(decision.state).isEqualTo(SourceRefreshRunState.NEEDS_AUTH)
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -64,6 +68,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.resultFamily).isEqualTo("NETWORK")
         assertThat(decision.resultCode).isEqualTo("TLS")
         assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -74,6 +79,7 @@ class SourceRefreshOutcomeMapperTest {
 
         assertThat(decision.resultCode).isEqualTo("IO")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test
@@ -84,6 +90,7 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.resultFamily).isEqualTo("WORK")
         assertThat(decision.resultCode).isEqualTo("TIMEOUT")
         assertThat(decision.retryable).isTrue()
+        assertThat(decision.workSucceeded).isFalse()
         assertThat(decision.httpStatus).isNull()
     }
 }
