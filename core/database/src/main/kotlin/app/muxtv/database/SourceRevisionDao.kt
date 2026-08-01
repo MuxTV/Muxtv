@@ -58,6 +58,24 @@ internal abstract class SourceRevisionDao {
     )
     abstract suspend fun sourceRemovalSnapshot(sourceId: String): SourceRemovalSnapshot?
 
+    @Query("SELECT credentialRef FROM sources WHERE id = :sourceId LIMIT 1")
+    protected abstract suspend fun sourceCredentialRef(sourceId: String): String?
+
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM source_refresh_states
+        WHERE sourceId = :sourceId
+          AND state = :runningState
+          AND runToken = :expectedRunToken
+        """,
+    )
+    protected abstract suspend fun refreshRunOwnerCount(
+        sourceId: String,
+        expectedRunToken: String,
+        runningState: String,
+    ): Int
+
     @Query(
         """
         DELETE FROM sources
@@ -231,6 +249,55 @@ internal abstract class SourceRevisionDao {
         revisionNumber: Long,
         stagingStatus: String = SourceRevisionEntity.STATUS_STAGING,
     )
+
+    @Transaction
+    open suspend fun activateRevisionIfCredentialMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult {
+        require(expectedCredentialRef.isNotBlank())
+        if (sourceCredentialRef(sourceId) != expectedCredentialRef) {
+            discardRevision(sourceId, revisionNumber)
+            return SourceRevisionActivationResult.Superseded
+        }
+        return activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        )
+    }
+
+    @Transaction
+    open suspend fun activateRevisionIfRefreshOwnerMatches(
+        sourceId: String,
+        revisionNumber: Long,
+        expectedCredentialRef: String,
+        expectedRunToken: String,
+        activatedAtEpochMillis: Long,
+        statistics: SourceRevisionStatistics,
+    ): SourceRevisionActivationResult {
+        require(expectedCredentialRef.isNotBlank())
+        require(expectedRunToken.isNotBlank())
+        val ownsRefresh = refreshRunOwnerCount(
+            sourceId = sourceId,
+            expectedRunToken = expectedRunToken,
+            runningState = SourceRefreshRunState.RUNNING.name,
+        ) == 1
+        if (sourceCredentialRef(sourceId) != expectedCredentialRef || !ownsRefresh) {
+            discardRevision(sourceId, revisionNumber)
+            return SourceRevisionActivationResult.Superseded
+        }
+        return activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        )
+    }
 
     @Transaction
     open suspend fun activateRevision(
