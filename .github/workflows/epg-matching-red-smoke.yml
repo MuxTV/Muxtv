@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - wip/epg-matching-now-next-71
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
