@@ -24,6 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -224,10 +225,5 @@ private class FakeGuideRepository : EpgGuideRepository {
 
 private class FakePlaybackSessionStateSource : PlaybackSessionStateSource {
     val state = MutableStateFlow(PlaybackSessionState.Idle)
-    override val playbackSessionState: FlowBackedStateFlow
-        get() = FlowBackedStateFlow(state)
+    override val playbackSessionState: StateFlow<PlaybackSessionState> = state
 }
-
-private class FlowBackedStateFlow(
-    private val delegate: MutableStateFlow<PlaybackSessionState>,
-) : kotlinx.coroutines.flow.StateFlow<PlaybackSessionState> by delegate
