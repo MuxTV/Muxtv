@@ -171,6 +171,7 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":player:media3:testDebugUnitTest"
 )
 Add-Step -Name "android-instrumentation-compile" -Arguments @(
+    ":benchmark:micro:assembleDebugAndroidTest",
     ":core:credentials:assembleDebugAndroidTest",
     ":core:database:assembleDebugAndroidTest",
     ":player:media3:assembleDebugAndroidTest",
