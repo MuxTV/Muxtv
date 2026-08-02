@@ -68,7 +68,45 @@ class EpgMatchingPolicyVersionTest {
         assertThat(row.canonicalChannelId).isEqualTo(CANONICAL_ID)
     }
 
+    @Test
+    fun guideProjectionIgnoresLegacyPolicyRowsUntilTheyAreRebuilt() = runTest {
+        val matchingDao = database.epgMatchingDao()
+        val relation = requireNotNull(matchingDao.relationSnapshot(EPG_SOURCE))
+        matchingDao.replaceIfCurrent(
+            snapshot = relation,
+            matches = listOf(
+                currentMatchEntity(matchPolicyVersion = LEGACY_UNVERSIONED_MATCH_POLICY_VERSION),
+            ),
+        )
+
+        val staleProjection = database.epgGuideDao().projectionSnapshot(
+            profileId = PROFILE_ID,
+            canonicalChannelIds = listOf(CANONICAL_ID),
+            nowEpochMillis = 1_000,
+        )
+        assertThat(staleProjection.matchCounts).isEmpty()
+        assertThat(staleProjection.programmeCandidates).isEmpty()
+
+        assertThat(store.reconcileIfStale(EPG_SOURCE))
+            .isInstanceOf(EpgMatchingReconcileResult.Applied::class.java)
+        val currentProjection = database.epgGuideDao().projectionSnapshot(
+            profileId = PROFILE_ID,
+            canonicalChannelIds = listOf(CANONICAL_ID),
+            nowEpochMillis = 1_000,
+        )
+        assertThat(currentProjection.matchCounts).containsExactly(
+            EpgGuideMatchCountRow(canonicalChannelId = CANONICAL_ID, matchCount = 1),
+        )
+    }
+
     private suspend fun insertProducerRelation() {
+        database.profileDao().insert(
+            ProfileEntity(
+                id = PROFILE_ID,
+                name = "Primary",
+                isPrimary = true,
+            ),
+        )
         database.sourceRevisionDao().insertSource(
             SourceEntity(
                 id = SOURCE_ID,
@@ -162,6 +200,7 @@ class EpgMatchingPolicyVersionTest {
         )
 
     private companion object {
+        const val PROFILE_ID = "profile-primary"
         const val SOURCE_ID = "source-a"
         const val EPG_SOURCE = "epg-a"
         const val PROVIDER_CHANNEL_ID = "provider-news"
