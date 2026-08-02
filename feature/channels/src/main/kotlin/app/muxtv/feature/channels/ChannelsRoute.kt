@@ -41,6 +41,7 @@ import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
+import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 
@@ -48,16 +49,23 @@ import kotlinx.coroutines.flow.first
 fun ChannelsRoute(
     playbackCatalog: PlaybackCatalog,
     epgGuideRepository: EpgGuideRepository,
+    playbackSessionStateSource: PlaybackSessionStateSource,
     profileId: String,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val factory = remember(playbackCatalog, epgGuideRepository, profileId) {
+    val factory = remember(
+        playbackCatalog,
+        epgGuideRepository,
+        playbackSessionStateSource,
+        profileId,
+    ) {
         viewModelFactory {
             initializer {
                 ChannelsViewModel(
                     playbackCatalog = playbackCatalog,
                     epgGuideRepository = epgGuideRepository,
+                    playbackSessionStateSource = playbackSessionStateSource,
                     profileId = profileId,
                 )
             }
@@ -223,7 +231,7 @@ private fun ChannelListItem(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = row.channel.primaryLabel(),
+                text = row.primaryLabel(),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -272,9 +280,12 @@ private fun MessageRoute(
     }
 }
 
-private fun PlayableChannelSummary.primaryLabel(): String = buildString {
-    channelNumber?.takeIf(String::isNotBlank)?.let { append(it).append("  ") }
-    append(displayName)
+private fun ChannelRowProjection.primaryLabel(): String = buildString {
+    if (isCurrentPlayback) {
+        append(if (isPlaying) "▶  " else "●  ")
+    }
+    channel.channelNumber?.takeIf(String::isNotBlank)?.let { append(it).append("  ") }
+    append(channel.displayName)
 }
 
 private fun PlayableChannelSummary.metadataLabel(): String = buildString {
