@@ -136,7 +136,8 @@ class StreamingXmltvParser(
             parser.setOptionalProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
 
             return parser.xmlReader.apply {
-                setRequiredFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+                // Secure processing is mandatory on the factory. Android's Expat XMLReader does not
+                // recognize the JAXP secure-processing feature even though the factory does.
                 setOptionalFeature(EXTERNAL_GENERAL_ENTITIES, false)
                 setOptionalFeature(EXTERNAL_PARAMETER_ENTITIES, false)
                 setOptionalFeature(LOAD_EXTERNAL_DTD, false)
@@ -659,14 +660,6 @@ private fun SAXParser.setOptionalProperty(name: String, value: String) {
         // DOCTYPE rejection and the entity resolver still deny external access.
     } catch (_: SAXNotSupportedException) {
         // DOCTYPE rejection and the entity resolver still deny external access.
-    }
-}
-
-private fun XMLReader.setRequiredFeature(name: String, value: Boolean) {
-    try {
-        setFeature(name, value)
-    } catch (failure: SAXException) {
-        throw XmltvSecureConfigurationException(failure)
     }
 }
 
