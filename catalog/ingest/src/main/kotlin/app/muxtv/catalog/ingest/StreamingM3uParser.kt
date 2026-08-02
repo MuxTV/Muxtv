@@ -454,21 +454,36 @@ class StreamingM3uParser {
                 .ifEmpty { "Unnamed channel" }
         }
 
-        private fun firstNonBlank(vararg values: String?): String? =
-            values.firstNotNullOfOrNull { it.nullIfBlank() }
+        private fun firstNonBlank(first: String?, second: String?): String? =
+            first.nullIfBlank() ?: second.nullIfBlank()
+
+        private fun firstNonBlank(first: String?, second: String?, third: String?): String? =
+            first.nullIfBlank() ?: second.nullIfBlank() ?: third.nullIfBlank()
+
+        private fun firstNonBlank(
+            first: String?,
+            second: String?,
+            third: String?,
+            fourth: String?,
+        ): String? =
+            first.nullIfBlank() ?: second.nullIfBlank() ?: third.nullIfBlank() ?: fourth.nullIfBlank()
 
         private fun String?.nullIfBlank(): String? = this?.trim()?.takeIf(String::isNotEmpty)
     }
 
     private class BoundedTextLineReader(
         input: InputStream,
-        private val charset: Charset,
+        charset: Charset,
         private val maxLineBytes: Int,
     ) {
         private val input = if (input is BufferedInputStream) input else BufferedInputStream(input)
+        private val bytes = ReusableByteArrayOutputStream(minOf(512, maxLineBytes))
+        private val decoder = charset.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
 
         fun readLine(lineNumber: Long): String? {
-            val bytes = ByteArrayOutputStream(minOf(512, maxLineBytes))
+            bytes.reset()
             var sawInput = false
 
             while (true) {
@@ -491,15 +506,16 @@ class StreamingM3uParser {
             if (!sawInput && bytes.size() == 0) return null
 
             return try {
-                charset.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes.toByteArray()))
-                    .toString()
+                decoder.reset()
+                decoder.decode(bytes.asByteBuffer()).toString()
             } catch (error: CharacterCodingException) {
                 throw M3uEncodingException(lineNumber, error)
             }
         }
+    }
+
+    private class ReusableByteArrayOutputStream(initialSize: Int) : ByteArrayOutputStream(initialSize) {
+        fun asByteBuffer(): ByteBuffer = ByteBuffer.wrap(buf, 0, count)
     }
 
     private companion object {
