@@ -67,7 +67,9 @@ internal class ChannelsViewModel(
                     currentGuide = emptyList()
                     mutableUiState.value = ChannelsUiState.Failed
                 }
-                .collect(::acceptChannels)
+                .collect { channels ->
+                    acceptChannels(channels)
+                }
         }
     }
 
