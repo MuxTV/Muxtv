@@ -109,15 +109,11 @@ class ChannelRowProjectionTest {
     }
 
     @Test
-    fun `idle media identity is not presented as current playback`() {
+    fun `idle playback does not mark any current channel`() {
         val row = projectChannelRows(
             channels = listOf(channel("channel-a", "Alpha")),
             guide = emptyList(),
-            playbackSessionState = PlaybackSessionState(
-                channelId = "channel-a",
-                phase = PlaybackSessionPhase.IDLE,
-                isPlaying = false,
-            ),
+            playbackSessionState = PlaybackSessionState.Idle,
         ).single()
 
         assertThat(row.isCurrentPlayback).isFalse()
