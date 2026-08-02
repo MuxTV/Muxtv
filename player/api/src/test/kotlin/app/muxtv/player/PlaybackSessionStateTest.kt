@@ -26,10 +26,28 @@ class PlaybackSessionStateTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `playing state requires channel identity`() {
+    fun `non idle state requires channel identity`() {
         PlaybackSessionState(
             channelId = null,
             phase = PlaybackSessionPhase.READY,
+            isPlaying = false,
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `idle state rejects stale channel identity`() {
+        PlaybackSessionState(
+            channelId = "channel-a",
+            phase = PlaybackSessionPhase.IDLE,
+            isPlaying = false,
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `playing state must be ready`() {
+        PlaybackSessionState(
+            channelId = "channel-a",
+            phase = PlaybackSessionPhase.BUFFERING,
             isPlaying = true,
         )
     }
