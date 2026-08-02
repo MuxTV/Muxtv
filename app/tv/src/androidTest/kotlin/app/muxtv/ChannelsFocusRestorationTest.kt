@@ -166,6 +166,30 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
+    fun emptyFavoritesRecoveryActionReceivesFocus() {
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = MutablePlaybackCatalog(),
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channels-filter-favorites").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Показать все каналы").assertIsFocused()
+    }
+
+    @Test
     fun guideProjectionAppearsWithoutChangingInitialFocus() {
         composeRule.setContent {
             MuxTvTheme {
