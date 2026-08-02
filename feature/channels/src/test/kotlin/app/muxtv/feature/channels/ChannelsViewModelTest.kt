@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.EpgGuideRepository
@@ -315,12 +314,6 @@ private class FakePlaybackCatalog(
 
     override suspend fun getChannel(profileId: String, channelId: String): PlayableChannel? =
         error("Not used by ChannelsViewModelTest")
-
-    override suspend fun setFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): ChannelFavoriteMutationResult = error("Not used by ChannelsViewModelTest")
 
     override suspend fun resolveVariant(
         profileId: String,
