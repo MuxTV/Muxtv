@@ -161,16 +161,24 @@ class MuxTvMediaControllerConnector(
     }
 
     private fun publishPlaybackSessionState(player: Player) {
-        val channelId = player.currentMediaItem?.mediaId?.takeIf(String::isNotBlank)
+        val rawPhase = when (player.playbackState) {
+            Player.STATE_BUFFERING -> PlaybackSessionPhase.BUFFERING
+            Player.STATE_READY -> PlaybackSessionPhase.READY
+            Player.STATE_ENDED -> PlaybackSessionPhase.ENDED
+            else -> PlaybackSessionPhase.IDLE
+        }
+        val mediaId = player.currentMediaItem?.mediaId?.takeIf(String::isNotBlank)
+        val phase = if (rawPhase == PlaybackSessionPhase.IDLE || mediaId == null) {
+            PlaybackSessionPhase.IDLE
+        } else {
+            rawPhase
+        }
+        val channelId = mediaId.takeIf { phase != PlaybackSessionPhase.IDLE }
+
         mutablePlaybackSessionState.value = PlaybackSessionState(
             channelId = channelId,
-            phase = when (player.playbackState) {
-                Player.STATE_BUFFERING -> PlaybackSessionPhase.BUFFERING
-                Player.STATE_READY -> PlaybackSessionPhase.READY
-                Player.STATE_ENDED -> PlaybackSessionPhase.ENDED
-                else -> PlaybackSessionPhase.IDLE
-            },
-            isPlaying = channelId != null && player.isPlaying,
+            phase = phase,
+            isPlaying = phase == PlaybackSessionPhase.READY && player.isPlaying,
         )
     }
 
