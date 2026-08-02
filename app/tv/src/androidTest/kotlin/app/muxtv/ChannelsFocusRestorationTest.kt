@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -278,12 +277,6 @@ private object StaticPlaybackCatalog : PlaybackCatalog {
         channelId: String,
     ): PlayableChannel? = null
 
-    override suspend fun setFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): ChannelFavoriteMutationResult = ChannelFavoriteMutationResult.NotFound
-
     override suspend fun resolveVariant(
         profileId: String,
         channelId: String,
@@ -319,21 +312,6 @@ private class MutablePlaybackCatalog(
         profileId: String,
         channelId: String,
     ): PlayableChannel? = null
-
-    override suspend fun setFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): ChannelFavoriteMutationResult {
-        val rows = channels.value
-        val index = rows.indexOfFirst { it.channelId == channelId }
-        if (index < 0) return ChannelFavoriteMutationResult.NotFound
-        if (rows[index].isFavorite == isFavorite) return ChannelFavoriteMutationResult.Unchanged
-        channels.value = rows.toMutableList().apply {
-            this[index] = this[index].copy(isFavorite = isFavorite)
-        }
-        return ChannelFavoriteMutationResult.Applied
-    }
 
     override suspend fun resolveVariant(
         profileId: String,
