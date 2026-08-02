@@ -53,7 +53,7 @@ data class EpgChannelMatchEntity(
     val catalogRevisionNumber: Long,
     val epgExternalChannelId: String,
     @ColumnInfo(defaultValue = "0")
-    val matchPolicyVersion: Int,
+    val matchPolicyVersion: Int = CURRENT_EPG_MATCH_POLICY_VERSION,
     val decision: String,
     val reasonCode: String,
     val canonicalChannelId: String?,
