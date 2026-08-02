@@ -8,10 +8,6 @@ android {
     defaultConfig {
         testInstrumentationRunner = "androidx.benchmark.junit4.AndroidBenchmarkRunner"
     }
-    buildTypes {
-        debug { isDebuggable = false }
-        release { isDebuggable = false }
-    }
 }
 
 dependencies {
