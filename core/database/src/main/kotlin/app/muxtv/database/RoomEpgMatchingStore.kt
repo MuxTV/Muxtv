@@ -1,9 +1,13 @@
 package app.muxtv.database
 
+import kotlinx.coroutines.CancellationException
+
 interface EpgMatchingStore {
     suspend fun reconcile(epgSourceId: String): EpgMatchingReconcileResult
 
     suspend fun reconcileIfStale(epgSourceId: String): EpgMatchingReconcileResult
+
+    suspend fun reconcileAllIfStale()
 
     suspend fun reconcileProviderSource(
         providerSourceId: String,
@@ -71,6 +75,18 @@ internal class RoomEpgMatchingStore(
             return EpgMatchingReconcileResult.Current
         }
         return reconcileSnapshot(snapshot)
+    }
+
+    override suspend fun reconcileAllIfStale() {
+        dao.activeLinkedEpgSourceIds().forEach { epgSourceId ->
+            try {
+                reconcileIfStale(epgSourceId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Startup repair is best effort per source. Refresh publication can retry derived state later.
+            }
+        }
     }
 
     private suspend fun reconcileSnapshot(
