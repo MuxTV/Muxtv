@@ -5,7 +5,11 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
+import app.muxtv.player.PlaybackSessionState
+import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 
 internal object NoGuideEpgGuideRepository : EpgGuideRepository {
@@ -21,6 +25,11 @@ internal object NoGuideEpgGuideRepository : EpgGuideRepository {
         }
 
     override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
+}
+
+internal object NoPlaybackSessionStateSource : PlaybackSessionStateSource {
+    override val playbackSessionState: StateFlow<PlaybackSessionState> =
+        MutableStateFlow(PlaybackSessionState.Idle)
 }
 
 internal class StaticNowNextEpgGuideRepository(
