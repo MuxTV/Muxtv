@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -53,12 +52,13 @@ internal class ChannelsViewModel(
     private var currentGuide: List<ChannelNowNext> = emptyList()
     private var currentPlaybackSessionState: PlaybackSessionState = PlaybackSessionState.Idle
     private var guideGeneration: Long = 0
+    private var catalogObserverJob: Job? = null
     private var guideObserverJob: Job? = null
     private var boundaryJob: Job? = null
 
     init {
         require(profileId.isNotBlank())
-        observeChannels()
+        observeChannels(favoritesOnly = false)
         observePlaybackSession()
     }
 
@@ -69,20 +69,19 @@ internal class ChannelsViewModel(
         currentGuide = emptyList()
         mutableUiState.value = ChannelsUiState.Loading
         mutableFavoritesOnly.value = favoritesOnly
+        observeChannels(favoritesOnly)
     }
 
-    private fun observeChannels() {
-        viewModelScope.launch {
-            mutableFavoritesOnly
-                .flatMapLatest { favoritesOnly ->
-                    playbackCatalog.observeChannels(
-                        ChannelQuery(
-                            profileId = profileId,
-                            favoritesOnly = favoritesOnly,
-                            limit = CHANNEL_LIMIT,
-                        ),
-                    )
-                }
+    private fun observeChannels(favoritesOnly: Boolean) {
+        catalogObserverJob?.cancel()
+        catalogObserverJob = viewModelScope.launch {
+            playbackCatalog.observeChannels(
+                ChannelQuery(
+                    profileId = profileId,
+                    favoritesOnly = favoritesOnly,
+                    limit = CHANNEL_LIMIT,
+                ),
+            )
                 .catch {
                     invalidateGuideGeneration()
                     currentChannels = emptyList()
