@@ -15,10 +15,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class PlaybackCatalogFavoriteMutationTest {
+class ChannelPreferencesRepositoryTest {
     private lateinit var database: MuxTvDatabase
     private lateinit var revisionStore: SourceRevisionStore
     private lateinit var playbackCatalog: RoomPlaybackCatalog
+    private lateinit var channelPreferences: RoomChannelPreferencesRepository
 
     @Before
     fun setUp() = runTest {
@@ -31,6 +32,7 @@ class PlaybackCatalogFavoriteMutationTest {
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = RejectAllPlaybackAccessPolicyResolver,
         )
+        channelPreferences = RoomChannelPreferencesRepository(database.channelPreferencesDao())
         insertProfile()
         activateChannel()
     }
@@ -48,7 +50,7 @@ class PlaybackCatalogFavoriteMutationTest {
         assertThat(initial.isFavorite).isFalse()
 
         assertThat(
-            playbackCatalog.setFavorite(PROFILE_ID, CHANNEL_ID, true),
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
         ).isEqualTo(ChannelFavoriteMutationResult.Applied)
 
         val favorites = playbackCatalog.observeChannels(
@@ -59,11 +61,11 @@ class PlaybackCatalogFavoriteMutationTest {
         assertThat(favorites.single().isFavorite).isTrue()
 
         assertThat(
-            playbackCatalog.setFavorite(PROFILE_ID, CHANNEL_ID, true),
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
         ).isEqualTo(ChannelFavoriteMutationResult.Unchanged)
 
         assertThat(
-            playbackCatalog.setFavorite(PROFILE_ID, CHANNEL_ID, false),
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, false),
         ).isEqualTo(ChannelFavoriteMutationResult.Applied)
         assertThat(
             playbackCatalog.observeChannels(
@@ -85,7 +87,7 @@ class PlaybackCatalogFavoriteMutationTest {
         )
 
         assertThat(
-            playbackCatalog.setFavorite(PROFILE_ID, CHANNEL_ID, true),
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
         ).isEqualTo(ChannelFavoriteMutationResult.Applied)
 
         val channel = requireNotNull(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID))
@@ -97,7 +99,7 @@ class PlaybackCatalogFavoriteMutationTest {
     @Test
     fun missingChannelReturnsNotFoundWithoutCreatingOverlay() = runTest {
         assertThat(
-            playbackCatalog.setFavorite(PROFILE_ID, "missing-channel", true),
+            channelPreferences.setFavorite(PROFILE_ID, "missing-channel", true),
         ).isEqualTo(ChannelFavoriteMutationResult.NotFound)
         assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
     }
