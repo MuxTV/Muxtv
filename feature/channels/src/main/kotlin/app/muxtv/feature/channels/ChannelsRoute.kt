@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,32 +29,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import app.muxtv.catalog.ChannelNowNext
-import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
-import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onStart
-
-sealed interface ChannelsUiState {
-    data object Loading : ChannelsUiState
-    data object Empty : ChannelsUiState
-    data object Failed : ChannelsUiState
-    data class Content(val channels: List<PlayableChannelSummary>) : ChannelsUiState
-}
 
 @Composable
 fun ChannelsRoute(
@@ -65,66 +52,24 @@ fun ChannelsRoute(
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val factory = remember(playbackCatalog, epgGuideRepository, profileId) {
+        viewModelFactory {
+            initializer {
+                ChannelsViewModel(
+                    playbackCatalog = playbackCatalog,
+                    epgGuideRepository = epgGuideRepository,
+                    profileId = profileId,
+                )
+            }
+        }
+    }
+    val screenViewModel: ChannelsViewModel = viewModel(factory = factory)
+    val state by screenViewModel.uiState.collectAsStateWithLifecycle()
+
     val listState = rememberLazyListState()
     var focusedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedChannelIndex by rememberSaveable { mutableIntStateOf(0) }
     var focusedChannelScrollOffset by rememberSaveable { mutableIntStateOf(0) }
-    val state by produceState<ChannelsUiState>(
-        initialValue = ChannelsUiState.Loading,
-        playbackCatalog,
-        profileId,
-    ) {
-        playbackCatalog.observeChannels(
-            ChannelQuery(
-                profileId = profileId,
-                limit = CHANNEL_LIMIT,
-            ),
-        )
-            .catch { value = ChannelsUiState.Failed }
-            .collect { channels ->
-                value = if (channels.isEmpty()) {
-                    ChannelsUiState.Empty
-                } else {
-                    ChannelsUiState.Content(channels)
-                }
-            }
-    }
-
-    val channels = (state as? ChannelsUiState.Content)?.channels.orEmpty()
-    val channelIds = remember(channels) { channels.map(PlayableChannelSummary::channelId) }
-    var guide by remember(epgGuideRepository, profileId) {
-        mutableStateOf<List<ChannelNowNext>>(emptyList())
-    }
-
-    LaunchedEffect(epgGuideRepository, profileId, channelIds) {
-        if (channelIds.isEmpty()) {
-            guide = emptyList()
-            return@LaunchedEffect
-        }
-        epgGuideRepository.observeDataChanges()
-            .onStart { emit(Unit) }
-            .conflate()
-            .catch {
-                guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
-            }
-            .collect {
-                guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
-            }
-    }
-
-    val rows = remember(channels, guide) { projectChannelRows(channels, guide) }
-    val nextBoundaryEpochMillis = earliestFutureGuideBoundary(
-        rows = rows,
-        nowEpochMillis = System.currentTimeMillis(),
-    )
-
-    LaunchedEffect(epgGuideRepository, profileId, channelIds, nextBoundaryEpochMillis) {
-        val boundary = nextBoundaryEpochMillis ?: return@LaunchedEffect
-        if (channelIds.isEmpty()) return@LaunchedEffect
-        val delayMillis = boundary - System.currentTimeMillis()
-        if (delayMillis > 0) delay(delayMillis)
-        guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
-    }
 
     val focusAnchor = focusedChannelId?.let { channelId ->
         FocusAnchor(
@@ -154,7 +99,7 @@ fun ChannelsRoute(
         )
 
         is ChannelsUiState.Content -> ChannelsContent(
-            rows = rows,
+            rows = current.rows,
             listState = listState,
             focusAnchor = focusAnchor,
             onFocusAnchorChanged = { anchor ->
@@ -327,24 +272,6 @@ private fun MessageRoute(
     }
 }
 
-private suspend fun loadGuideOrEmpty(
-    repository: EpgGuideRepository,
-    profileId: String,
-    channelIds: List<String>,
-): List<ChannelNowNext> = try {
-    repository.getNowNext(
-        NowNextQuery(
-            profileId = profileId,
-            canonicalChannelIds = channelIds,
-            nowEpochMillis = System.currentTimeMillis(),
-        ),
-    )
-} catch (cancelled: CancellationException) {
-    throw cancelled
-} catch (_: Exception) {
-    emptyList()
-}
-
 private fun PlayableChannelSummary.primaryLabel(): String = buildString {
     channelNumber?.takeIf(String::isNotBlank)?.let { append(it).append("  ") }
     append(displayName)
@@ -378,4 +305,3 @@ private fun ChannelRowProjection.nextProgrammeLabel(): String = when (guideState
 }
 
 private const val CHANNEL_ROW_TEST_TAG_PREFIX = "channel-row-"
-private const val CHANNEL_LIMIT = 200
