@@ -110,5 +110,8 @@ sealed interface PlaybackState {
     data class Failed(val error: PlaybackError) : PlaybackState
 }
 
-private fun Map<String, String>.immutableSnapshot(): Map<String, String> =
-    Collections.unmodifiableMap(LinkedHashMap(this))
+private fun Map<String, String>.immutableSnapshot(): Map<String, String> = when (size) {
+    0 -> Collections.emptyMap()
+    1 -> entries.first().let { entry -> Collections.singletonMap(entry.key, entry.value) }
+    else -> Collections.unmodifiableMap(LinkedHashMap(this))
+}
