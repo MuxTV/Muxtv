@@ -3,6 +3,7 @@ package app.muxtv.feature.channels
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
+import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 
 internal data class ChannelRowProjection(
@@ -26,7 +27,9 @@ internal fun projectChannelRows(
     val guideByChannelId = guide.associateBy(ChannelNowNext::canonicalChannelId)
     return channels.map { channel ->
         val projection = guideByChannelId[channel.channelId]
-        val isCurrentPlayback = playbackSessionState.channelId == channel.channelId
+        val isCurrentPlayback =
+            playbackSessionState.phase != PlaybackSessionPhase.IDLE &&
+                playbackSessionState.channelId == channel.channelId
         val isPlaying = isCurrentPlayback && playbackSessionState.isPlaying
         if (projection == null) {
             ChannelRowProjection(
