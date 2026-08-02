@@ -142,8 +142,10 @@ class StreamingXmltvParser(
                 setOptionalFeature(LOAD_EXTERNAL_DTD, false)
                 try {
                     setProperty(LEXICAL_HANDLER, handler)
-                } catch (failure: SAXException) {
-                    throw XmltvSecureConfigurationException(failure)
+                } catch (_: SAXNotRecognizedException) {
+                    // GuardedXmltvInputStream rejects DOCTYPE before SAX; lexical callbacks are defense in depth.
+                } catch (_: SAXNotSupportedException) {
+                    // Older Android SAX readers may not expose lexical callbacks.
                 }
                 contentHandler = handler
                 errorHandler = handler
