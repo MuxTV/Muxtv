@@ -44,7 +44,7 @@ internal class StaticNowNextEpgGuideRepository(
                         endEpochMillis = query.nowEpochMillis + 120_000,
                         title = nextTitle,
                     ),
-                    nextBoundaryEpochMillis = query.nowEpochMillis + 60_000,
+                    nextBoundaryEpochMillis = null,
                 )
             } else {
                 ChannelNowNext(
