@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -306,6 +307,14 @@ private fun MessageRoute(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
+    val actionFocusRequester = remember(actionLabel) { FocusRequester() }
+    LaunchedEffect(actionLabel, onAction) {
+        if (actionLabel != null && onAction != null) {
+            withFrameNanos { }
+            actionFocusRequester.requestFocus()
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxSize().padding(56.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
@@ -320,6 +329,7 @@ private fun MessageRoute(
             MuxTvActionButton(
                 text = actionLabel,
                 onClick = onAction,
+                modifier = Modifier.focusRequester(actionFocusRequester),
             )
         }
     }
