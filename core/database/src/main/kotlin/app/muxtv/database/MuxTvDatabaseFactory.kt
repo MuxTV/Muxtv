@@ -3,6 +3,7 @@ package app.muxtv.database
 import android.content.Context
 import androidx.room3.Room
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
@@ -15,6 +16,7 @@ class MuxTvDatabaseComponents internal constructor(
     val pendingSourcePreparationStore: PendingSourcePreparationStore,
     val catalogRepository: CatalogRepository,
     val playbackCatalog: PlaybackCatalog,
+    val channelPreferencesRepository: ChannelPreferencesRepository,
     val epgRevisionStore: EpgRevisionStore,
     val epgRefreshStore: EpgRefreshStore,
     val epgMatchingStore: EpgMatchingStore,
@@ -52,6 +54,9 @@ object MuxTvDatabaseFactory {
             playbackCatalog = RoomPlaybackCatalog(
                 dao = database.playbackCatalogDao(),
                 accessPolicyResolver = playbackAccessPolicyResolver,
+            ),
+            channelPreferencesRepository = RoomChannelPreferencesRepository(
+                database.channelPreferencesDao(),
             ),
             epgRevisionStore = RoomEpgRevisionStore(database.epgRevisionDao()),
             epgRefreshStore = RoomEpgRefreshStore(database.epgRefreshDao()),
