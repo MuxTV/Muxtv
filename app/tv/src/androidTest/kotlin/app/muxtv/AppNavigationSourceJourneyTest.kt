@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -70,6 +71,7 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
                         sourceRefreshScheduler = scheduler,
@@ -134,7 +136,7 @@ class AppNavigationSourceJourneyTest {
                 composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-            composeRule.onNodeWithText("Первый канал", substring = true).assertExists()
+            composeRule.onNodeWithText("1  Первый канал", substring = false).assertExists()
         } finally {
             controllerConnector.close()
         }
