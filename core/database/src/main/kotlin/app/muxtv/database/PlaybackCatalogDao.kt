@@ -25,7 +25,7 @@ internal data class ActiveVariantRow(
 )
 
 @Dao
-internal abstract class PlaybackCatalogDao {
+internal interface PlaybackCatalogDao {
     @Query(
         """
         SELECT canonical_channels.id AS channelId,
@@ -65,7 +65,7 @@ internal abstract class PlaybackCatalogDao {
         LIMIT :limit
         """,
     )
-    abstract fun observeActiveChannels(
+    fun observeActiveChannels(
         profileId: String,
         searchPattern: String?,
         favoritesOnly: Boolean,
@@ -102,7 +102,7 @@ internal abstract class PlaybackCatalogDao {
         LIMIT 1
         """,
     )
-    abstract suspend fun findActiveChannel(
+    suspend fun findActiveChannel(
         profileId: String,
         channelId: String,
     ): ActiveChannelSummaryRow?
@@ -128,5 +128,5 @@ internal abstract class PlaybackCatalogDao {
                  stream_variants.id
         """,
     )
-    abstract suspend fun getActiveVariants(channelId: String): List<ActiveVariantRow>
+    suspend fun getActiveVariants(channelId: String): List<ActiveVariantRow>
 }
