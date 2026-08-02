@@ -8,6 +8,8 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.player.PlaybackSessionState
+import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,6 +37,7 @@ internal sealed interface ChannelsUiState {
 internal class ChannelsViewModel(
     private val playbackCatalog: PlaybackCatalog,
     private val epgGuideRepository: EpgGuideRepository,
+    private val playbackSessionStateSource: PlaybackSessionStateSource,
     private val profileId: String,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
@@ -44,6 +47,7 @@ internal class ChannelsViewModel(
     private val guideReloadMutex = Mutex()
     private var currentChannels: List<PlayableChannelSummary> = emptyList()
     private var currentGuide: List<ChannelNowNext> = emptyList()
+    private var currentPlaybackSessionState: PlaybackSessionState = PlaybackSessionState.Idle
     private var guideGeneration: Long = 0
     private var guideObserverJob: Job? = null
     private var boundaryJob: Job? = null
@@ -51,6 +55,7 @@ internal class ChannelsViewModel(
     init {
         require(profileId.isNotBlank())
         observeChannels()
+        observePlaybackSession()
     }
 
     private fun observeChannels() {
@@ -70,6 +75,15 @@ internal class ChannelsViewModel(
                 .collect { channels ->
                     acceptChannels(channels)
                 }
+        }
+    }
+
+    private fun observePlaybackSession() {
+        viewModelScope.launch {
+            playbackSessionStateSource.playbackSessionState.collect { state ->
+                currentPlaybackSessionState = state
+                if (currentChannels.isNotEmpty()) publishRows()
+            }
         }
     }
 
@@ -161,7 +175,11 @@ internal class ChannelsViewModel(
             ChannelsUiState.Empty
         } else {
             ChannelsUiState.Content(
-                rows = projectChannelRows(channels, currentGuide),
+                rows = projectChannelRows(
+                    channels = channels,
+                    guide = currentGuide,
+                    playbackSessionState = currentPlaybackSessionState,
+                ),
             )
         }
     }
@@ -175,7 +193,11 @@ internal class ChannelsViewModel(
 
         val now = nowEpochMillis()
         val boundary = earliestFutureGuideBoundary(
-            rows = projectChannelRows(currentChannels, currentGuide),
+            rows = projectChannelRows(
+                channels = currentChannels,
+                guide = currentGuide,
+                playbackSessionState = currentPlaybackSessionState,
+            ),
             nowEpochMillis = now,
         ) ?: return
 
