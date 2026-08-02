@@ -4,6 +4,8 @@ import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
+import app.muxtv.player.PlaybackSessionPhase
+import app.muxtv.player.PlaybackSessionState
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -86,6 +88,43 @@ class ChannelRowProjectionTest {
     }
 
     @Test
+    fun `active playback is joined by canonical channel identity`() {
+        val rows = projectChannelRows(
+            channels = listOf(
+                channel("channel-a", "Alpha"),
+                channel("channel-b", "Beta"),
+            ),
+            guide = emptyList(),
+            playbackSessionState = PlaybackSessionState(
+                channelId = "channel-b",
+                phase = PlaybackSessionPhase.READY,
+                isPlaying = true,
+            ),
+        )
+
+        assertThat(rows[0].isCurrentPlayback).isFalse()
+        assertThat(rows[0].isPlaying).isFalse()
+        assertThat(rows[1].isCurrentPlayback).isTrue()
+        assertThat(rows[1].isPlaying).isTrue()
+    }
+
+    @Test
+    fun `idle media identity is not presented as current playback`() {
+        val row = projectChannelRows(
+            channels = listOf(channel("channel-a", "Alpha")),
+            guide = emptyList(),
+            playbackSessionState = PlaybackSessionState(
+                channelId = "channel-a",
+                phase = PlaybackSessionPhase.IDLE,
+                isPlaying = false,
+            ),
+        ).single()
+
+        assertThat(row.isCurrentPlayback).isFalse()
+        assertThat(row.isPlaying).isFalse()
+    }
+
+    @Test
     fun `earliest future boundary ignores past and null boundaries`() {
         val rows = listOf(
             row("past", boundary = 900),
@@ -152,5 +191,7 @@ class ChannelRowProjectionTest {
             currentTitle = null,
             nextTitle = null,
             nextBoundaryEpochMillis = boundary,
+            isCurrentPlayback = false,
+            isPlaying = false,
         )
 }
