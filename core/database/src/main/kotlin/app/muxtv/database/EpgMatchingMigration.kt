@@ -51,3 +51,14 @@ internal val MIGRATION_6_7 = Migration(6, 7) { connection ->
             "ON `epg_channel_matches` (`canonicalChannelId`)",
     )
 }
+
+/**
+ * Rows from v7 have no matching-policy provenance. They are deliberately marked policy 0 so guide
+ * readers ignore them and [EpgMatchingStore.reconcileIfStale] rebuilds them under the current policy.
+ */
+internal val MIGRATION_7_8 = Migration(7, 8) { connection ->
+    connection.execSQL(
+        "ALTER TABLE `epg_channel_matches` " +
+            "ADD COLUMN `matchPolicyVersion` INTEGER NOT NULL DEFAULT 0",
+    )
+}
