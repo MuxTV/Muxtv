@@ -2,6 +2,7 @@ package app.muxtv.feature.channels
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,18 +27,28 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.ChannelQuery
+import app.muxtv.catalog.EpgGuideRepository
+import app.muxtv.catalog.GuideProjectionState
+import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
-import app.muxtv.designsystem.component.MuxTvActionButton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 
 sealed interface ChannelsUiState {
     data object Loading : ChannelsUiState
@@ -49,6 +60,7 @@ sealed interface ChannelsUiState {
 @Composable
 fun ChannelsRoute(
     playbackCatalog: PlaybackCatalog,
+    epgGuideRepository: EpgGuideRepository,
     profileId: String,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -76,6 +88,42 @@ fun ChannelsRoute(
                     ChannelsUiState.Content(channels)
                 }
             }
+    }
+
+    val channels = (state as? ChannelsUiState.Content)?.channels.orEmpty()
+    val channelIds = remember(channels) { channels.map(PlayableChannelSummary::channelId) }
+    var guide by remember(epgGuideRepository, profileId) {
+        mutableStateOf<List<ChannelNowNext>>(emptyList())
+    }
+
+    LaunchedEffect(epgGuideRepository, profileId, channelIds) {
+        if (channelIds.isEmpty()) {
+            guide = emptyList()
+            return@LaunchedEffect
+        }
+        epgGuideRepository.observeDataChanges()
+            .onStart { emit(Unit) }
+            .conflate()
+            .catch {
+                guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
+            }
+            .collect {
+                guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
+            }
+    }
+
+    val rows = remember(channels, guide) { projectChannelRows(channels, guide) }
+    val nextBoundaryEpochMillis = earliestFutureGuideBoundary(
+        rows = rows,
+        nowEpochMillis = System.currentTimeMillis(),
+    )
+
+    LaunchedEffect(epgGuideRepository, profileId, channelIds, nextBoundaryEpochMillis) {
+        val boundary = nextBoundaryEpochMillis ?: return@LaunchedEffect
+        if (channelIds.isEmpty()) return@LaunchedEffect
+        val delayMillis = boundary - System.currentTimeMillis()
+        if (delayMillis > 0) delay(delayMillis)
+        guide = loadGuideOrEmpty(epgGuideRepository, profileId, channelIds)
     }
 
     val focusAnchor = focusedChannelId?.let { channelId ->
@@ -106,7 +154,7 @@ fun ChannelsRoute(
         )
 
         is ChannelsUiState.Content -> ChannelsContent(
-            channels = current.channels,
+            rows = rows,
             listState = listState,
             focusAnchor = focusAnchor,
             onFocusAnchorChanged = { anchor ->
@@ -122,7 +170,7 @@ fun ChannelsRoute(
 
 @Composable
 private fun ChannelsContent(
-    channels: List<PlayableChannelSummary>,
+    rows: List<ChannelRowProjection>,
     listState: LazyListState,
     focusAnchor: FocusAnchor?,
     onFocusAnchorChanged: (FocusAnchor) -> Unit,
@@ -133,10 +181,10 @@ private fun ChannelsContent(
     val restorationAnchor = remember { focusAnchor }
     var restorationCompleted by remember { mutableStateOf(false) }
 
-    LaunchedEffect(channels, restorationAnchor, restorationCompleted) {
-        if (restorationCompleted || channels.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(rows, restorationAnchor, restorationCompleted) {
+        if (restorationCompleted || rows.isEmpty()) return@LaunchedEffect
 
-        val itemKeys = channels.map(PlayableChannelSummary::channelId)
+        val itemKeys = rows.map(ChannelRowProjection::channelId)
         val target = restorationAnchor?.resolveAgainst(itemKeys) ?: FocusTarget(
             itemKey = itemKeys.first(),
             index = 0,
@@ -162,7 +210,7 @@ private fun ChannelsContent(
     ) {
         Text("Каналы", style = MaterialTheme.typography.displaySmall)
         Text(
-            text = "Активных каналов: ${channels.size}",
+            text = "Активных каналов: ${rows.size}",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -172,15 +220,15 @@ private fun ChannelsContent(
             verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
         ) {
             itemsIndexed(
-                items = channels,
-                key = { _, channel -> channel.channelId },
-            ) { index, channel ->
-                val focusRequester = remember(channel.channelId) { FocusRequester() }
-                DisposableEffect(channel.channelId, focusRequester) {
-                    focusRequesters[channel.channelId] = focusRequester
+                items = rows,
+                key = { _, row -> row.channelId },
+            ) { index, row ->
+                val focusRequester = remember(row.channelId) { FocusRequester() }
+                DisposableEffect(row.channelId, focusRequester) {
+                    focusRequesters[row.channelId] = focusRequester
                     onDispose {
-                        if (focusRequesters[channel.channelId] === focusRequester) {
-                            focusRequesters.remove(channel.channelId)
+                        if (focusRequesters[row.channelId] === focusRequester) {
+                            focusRequesters.remove(row.channelId)
                         }
                     }
                 }
@@ -188,18 +236,18 @@ private fun ChannelsContent(
                 fun captureFocusAnchor() {
                     onFocusAnchorChanged(
                         FocusAnchor(
-                            itemKey = channel.channelId,
+                            itemKey = row.channelId,
                             previousIndex = index,
                             scrollOffset = listState.firstVisibleItemScrollOffset,
                         ),
                     )
                 }
 
-                MuxTvActionButton(
-                    text = channel.buttonLabel(),
+                ChannelListItem(
+                    row = row,
                     onClick = {
                         captureFocusAnchor()
-                        onOpenChannel(channel.channelId)
+                        onOpenChannel(row.channelId)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -210,6 +258,52 @@ private fun ChannelsContent(
                         },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ChannelListItem(
+    row: ChannelRowProjection,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = row.channel.primaryLabel(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = row.channel.metadataLabel().ifEmpty { " " },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = row.currentProgrammeLabel(),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = row.nextProgrammeLabel(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -233,11 +327,54 @@ private fun MessageRoute(
     }
 }
 
-private fun PlayableChannelSummary.buttonLabel(): String = buildString {
+private suspend fun loadGuideOrEmpty(
+    repository: EpgGuideRepository,
+    profileId: String,
+    channelIds: List<String>,
+): List<ChannelNowNext> = try {
+    repository.getNowNext(
+        NowNextQuery(
+            profileId = profileId,
+            canonicalChannelIds = channelIds,
+            nowEpochMillis = System.currentTimeMillis(),
+        ),
+    )
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (_: Exception) {
+    emptyList()
+}
+
+private fun PlayableChannelSummary.primaryLabel(): String = buildString {
     channelNumber?.takeIf(String::isNotBlank)?.let { append(it).append("  ") }
     append(displayName)
-    groupTitle?.takeIf(String::isNotBlank)?.let { append("  ·  ").append(it) }
-    if (variantCount > 1) append("  ·  $variantCount источника")
+}
+
+private fun PlayableChannelSummary.metadataLabel(): String = buildString {
+    groupTitle?.takeIf(String::isNotBlank)?.let(::append)
+    if (variantCount > 1) {
+        if (isNotEmpty()) append("  ·  ")
+        append(variantCount).append(" источника")
+    }
+}
+
+private fun ChannelRowProjection.currentProgrammeLabel(): String = when (guideState) {
+    GuideProjectionState.READY -> currentTitle
+        ?.takeIf(String::isNotBlank)
+        ?.let { title -> "Сейчас: $title" }
+        ?: " "
+    GuideProjectionState.SOURCE_CONFLICT -> "Программа недоступна"
+    GuideProjectionState.NO_GUIDE -> " "
+}
+
+private fun ChannelRowProjection.nextProgrammeLabel(): String = when (guideState) {
+    GuideProjectionState.READY -> nextTitle
+        ?.takeIf(String::isNotBlank)
+        ?.let { title -> "Далее: $title" }
+        ?: " "
+    GuideProjectionState.SOURCE_CONFLICT,
+    GuideProjectionState.NO_GUIDE,
+    -> " "
 }
 
 private const val CHANNEL_ROW_TEST_TAG_PREFIX = "channel-row-"
