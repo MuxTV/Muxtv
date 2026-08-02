@@ -70,6 +70,7 @@ internal abstract class EpgGuideDao {
            AND epg_channel_matches.epgRevisionNumber = epg_sources.activeRevision
            AND epg_channel_matches.providerSourceId = epg_sources.providerSourceId
            AND epg_channel_matches.catalogRevisionNumber = sources.activeRevision
+           AND epg_channel_matches.matchPolicyVersion = :matchPolicyVersion
         WHERE epg_sources.providerSourceId IS NOT NULL
           AND epg_sources.activeRevision > 0
           AND sources.activeRevision > 0
@@ -80,7 +81,9 @@ internal abstract class EpgGuideDao {
         ORDER BY epg_sources.id COLLATE BINARY ASC
         """,
     )
-    abstract fun observeDataVersion(): Flow<List<EpgGuideDataVersionRow>>
+    abstract fun observeDataVersion(
+        matchPolicyVersion: Int,
+    ): Flow<List<EpgGuideDataVersionRow>>
 
     @Query(
         """
@@ -97,7 +100,8 @@ internal abstract class EpgGuideDao {
         LEFT JOIN user_channel_overlays
             ON user_channel_overlays.profileId = :profileId
            AND user_channel_overlays.canonicalChannelId = epg_channel_matches.canonicalChannelId
-        WHERE epg_channel_matches.decision = 'MATCHED'
+        WHERE epg_channel_matches.matchPolicyVersion = :matchPolicyVersion
+          AND epg_channel_matches.decision = 'MATCHED'
           AND epg_channel_matches.canonicalChannelId IS NOT NULL
           AND epg_channel_matches.canonicalChannelId IN (:canonicalChannelIds)
           AND COALESCE(user_channel_overlays.isHidden, 0) = 0
@@ -107,6 +111,7 @@ internal abstract class EpgGuideDao {
     protected abstract suspend fun activeMatchCounts(
         profileId: String,
         canonicalChannelIds: List<String>,
+        matchPolicyVersion: Int,
     ): List<EpgGuideMatchCountRow>
 
     @Query(
@@ -130,7 +135,8 @@ internal abstract class EpgGuideDao {
         LEFT JOIN user_channel_overlays
             ON user_channel_overlays.profileId = :profileId
            AND user_channel_overlays.canonicalChannelId = epg_channel_matches.canonicalChannelId
-        WHERE epg_channel_matches.decision = 'MATCHED'
+        WHERE epg_channel_matches.matchPolicyVersion = :matchPolicyVersion
+          AND epg_channel_matches.decision = 'MATCHED'
           AND epg_channel_matches.canonicalChannelId IS NOT NULL
           AND epg_channel_matches.canonicalChannelId IN (:canonicalChannelIds)
           AND COALESCE(user_channel_overlays.isHidden, 0) = 0
@@ -166,6 +172,7 @@ internal abstract class EpgGuideDao {
         profileId: String,
         canonicalChannelIds: List<String>,
         nowEpochMillis: Long,
+        matchPolicyVersion: Int,
     ): List<EpgGuideProgrammeCandidateRow>
 
     @Transaction
@@ -183,7 +190,11 @@ internal abstract class EpgGuideDao {
             return EpgGuideProjectionSnapshot(emptyList(), emptyList())
         }
 
-        val counts = activeMatchCounts(profileId, canonicalChannelIds)
+        val counts = activeMatchCounts(
+            profileId = profileId,
+            canonicalChannelIds = canonicalChannelIds,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
+        )
         val singleMatchIds = counts
             .asSequence()
             .filter { it.matchCount == 1L }
@@ -195,6 +206,7 @@ internal abstract class EpgGuideDao {
                 profileId = profileId,
                 canonicalChannelIds = singleMatchIds,
                 nowEpochMillis = nowEpochMillis,
+                matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             )
         }
         return EpgGuideProjectionSnapshot(
