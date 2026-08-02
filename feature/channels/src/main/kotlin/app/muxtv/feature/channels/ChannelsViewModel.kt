@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +45,9 @@ internal class ChannelsViewModel(
     private val mutableUiState = MutableStateFlow<ChannelsUiState>(ChannelsUiState.Loading)
     val uiState: StateFlow<ChannelsUiState> = mutableUiState.asStateFlow()
 
+    private val mutableFavoritesOnly = MutableStateFlow(false)
+    val favoritesOnly: StateFlow<Boolean> = mutableFavoritesOnly.asStateFlow()
+
     private val guideReloadMutex = Mutex()
     private var currentChannels: List<PlayableChannelSummary> = emptyList()
     private var currentGuide: List<ChannelNowNext> = emptyList()
@@ -58,14 +62,27 @@ internal class ChannelsViewModel(
         observePlaybackSession()
     }
 
+    fun setFavoritesOnly(favoritesOnly: Boolean) {
+        if (mutableFavoritesOnly.value == favoritesOnly) return
+        invalidateGuideGeneration()
+        currentChannels = emptyList()
+        currentGuide = emptyList()
+        mutableUiState.value = ChannelsUiState.Loading
+        mutableFavoritesOnly.value = favoritesOnly
+    }
+
     private fun observeChannels() {
         viewModelScope.launch {
-            playbackCatalog.observeChannels(
-                ChannelQuery(
-                    profileId = profileId,
-                    limit = CHANNEL_LIMIT,
-                ),
-            )
+            mutableFavoritesOnly
+                .flatMapLatest { favoritesOnly ->
+                    playbackCatalog.observeChannels(
+                        ChannelQuery(
+                            profileId = profileId,
+                            favoritesOnly = favoritesOnly,
+                            limit = CHANNEL_LIMIT,
+                        ),
+                    )
+                }
                 .catch {
                     invalidateGuideGeneration()
                     currentChannels = emptyList()
