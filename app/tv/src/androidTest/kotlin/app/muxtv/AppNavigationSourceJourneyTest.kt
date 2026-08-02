@@ -17,7 +17,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
-import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -72,6 +71,7 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        channelPreferencesRepository = NoChannelPreferencesRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
@@ -281,12 +281,6 @@ private class JourneyPlaybackCatalog : PlaybackCatalog {
     } else {
         null
     }
-
-    override suspend fun setFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): ChannelFavoriteMutationResult = ChannelFavoriteMutationResult.NotFound
 
     override suspend fun resolveVariant(
         profileId: String,
