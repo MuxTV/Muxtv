@@ -2,6 +2,9 @@ package app.muxtv.catalog.ingest
 
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayInputStream
+import java.nio.charset.Charset
+import java.nio.charset.CharsetDecoder
+import java.nio.charset.CharsetEncoder
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -64,6 +67,27 @@ class StreamingM3uParserTest {
     }
 
     @Test
+    fun `reuses one configured decoder across playlist lines`() = runTest {
+        val charset = CountingUtf8Charset()
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="one",One
+            https://stream.example/one.m3u8
+            #EXTINF:-1 tvg-id="two",Two
+            https://stream.example/two.m3u8
+        """.trimIndent()
+
+        val report = StreamingM3uParser().parse(
+            input = ByteArrayInputStream(playlist.toByteArray(Charsets.UTF_8)),
+            sink = RecordingSink(),
+            options = M3uParseOptions(charset = charset),
+        )
+
+        assertThat(report.parsedEntries).isEqualTo(2)
+        assertThat(charset.decoderCreations).isEqualTo(1)
+    }
+
+    @Test
     fun `rejects overlong lines before unbounded allocation`() {
         val parser = StreamingM3uParser()
         val input = ByteArrayInputStream(ByteArray(257) { 'a'.code.toByte() })
@@ -81,6 +105,20 @@ class StreamingM3uParserTest {
         assertThat(error.reason).isEqualTo(M3uLimitReason.LineTooLong)
         assertThat(error.lineNumber).isEqualTo(1)
     }
+}
+
+private class CountingUtf8Charset : Charset("x-muxtv-counting-utf8", emptyArray()) {
+    var decoderCreations: Int = 0
+        private set
+
+    override fun contains(charset: Charset): Boolean = Charsets.UTF_8.contains(charset)
+
+    override fun newDecoder(): CharsetDecoder {
+        decoderCreations++
+        return Charsets.UTF_8.newDecoder()
+    }
+
+    override fun newEncoder(): CharsetEncoder = Charsets.UTF_8.newEncoder()
 }
 
 private class RecordingSink : M3uParseSink {
