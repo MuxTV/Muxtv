@@ -31,7 +31,6 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.home.HomeRoute
-import app.muxtv.feature.player.PlayerRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
@@ -119,7 +118,7 @@ fun AppNavigation(
                             onBack = ::goBack,
                         )
 
-                        is AppDestination.Player -> PlayerRoute(
+                        is AppDestination.Player -> PlayerFavoriteRoute(
                             playbackCatalog = playbackCatalog,
                             controllerConnector = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
@@ -154,7 +153,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
+                Modifier.focusRequester(initialNavigationFocusRequester)
             } else {
                 Modifier
             }
