@@ -149,15 +149,15 @@ private fun ChannelsContent(
     modifier: Modifier,
 ) {
     val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
-    val restorationAnchor = remember(favoritesOnly) { focusAnchor }
-    var restorationCompleted by remember(favoritesOnly) { mutableStateOf(false) }
+    val channelIds = rows.map(ChannelRowProjection::channelId)
+    val restorationAnchor = remember(favoritesOnly, channelIds) { focusAnchor }
+    var restorationCompleted by remember(favoritesOnly, channelIds) { mutableStateOf(false) }
 
-    LaunchedEffect(rows, restorationAnchor, restorationCompleted, favoritesOnly) {
-        if (restorationCompleted || rows.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(channelIds, restorationAnchor, restorationCompleted, favoritesOnly) {
+        if (restorationCompleted || channelIds.isEmpty()) return@LaunchedEffect
 
-        val itemKeys = rows.map(ChannelRowProjection::channelId)
-        val target = restorationAnchor?.resolveAgainst(itemKeys) ?: FocusTarget(
-            itemKey = itemKeys.first(),
+        val target = restorationAnchor?.resolveAgainst(channelIds) ?: FocusTarget(
+            itemKey = channelIds.first(),
             index = 0,
             scrollOffset = 0,
         )
