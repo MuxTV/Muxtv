@@ -106,6 +106,12 @@ enum class PlaybackAccessUnavailableReason {
     CredentialUnavailable,
 }
 
+enum class ChannelFavoriteMutationResult {
+    Applied,
+    Unchanged,
+    NotFound,
+}
+
 sealed interface PlaybackVariantResolution {
     data class Ready(
         val request: ResolvedPlaybackRequest,
@@ -139,6 +145,12 @@ interface PlaybackCatalog {
         profileId: String,
         channelId: String,
     ): PlayableChannel?
+
+    suspend fun setFavorite(
+        profileId: String,
+        channelId: String,
+        isFavorite: Boolean,
+    ): ChannelFavoriteMutationResult
 
     suspend fun resolveVariant(
         profileId: String,
