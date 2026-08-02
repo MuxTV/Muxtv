@@ -38,7 +38,7 @@ internal class PlaybackMediaSourceFactory(
                 insecureHttpApproved = request.insecureHttpApproved,
             )
         } ?: httpClients.playback
-        val headers = if (rootUrl == null) emptyMap() else request.requestHeaders.toMap()
+        val headers = if (rootUrl == null) emptyMap() else request.requestHeaders
         return OkHttpDataSource.Factory(callFactory)
             .setDefaultRequestProperties(headers)
     }
