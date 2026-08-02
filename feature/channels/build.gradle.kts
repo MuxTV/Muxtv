@@ -15,7 +15,10 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.tv.material)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.coroutines.android)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    testImplementation(libs.coroutines.test)
 }
