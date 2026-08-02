@@ -42,15 +42,13 @@ sealed interface EpgProviderMatchingReconcileResult {
         val appliedCount: Int,
         val notReadyCount: Int,
         val supersededCount: Int,
-        val currentCount: Int = 0,
     ) : EpgProviderMatchingReconcileResult {
         init {
             require(processedCount >= 0)
             require(appliedCount >= 0)
             require(notReadyCount >= 0)
             require(supersededCount >= 0)
-            require(currentCount >= 0)
-            require(appliedCount + currentCount + notReadyCount + supersededCount == processedCount)
+            require(appliedCount + notReadyCount + supersededCount == processedCount)
         }
     }
 }
@@ -166,13 +164,12 @@ internal class RoomEpgMatchingStore(
         val linkedSourceIds = dao.linkedActiveEpgSourceIds(providerSourceId)
 
         var appliedCount = 0
-        var currentCount = 0
         var notReadyCount = 0
         var supersededCount = 0
         linkedSourceIds.forEach { epgSourceId ->
-            when (reconcileIfStale(epgSourceId)) {
+            when (reconcile(epgSourceId)) {
                 is EpgMatchingReconcileResult.Applied -> appliedCount++
-                EpgMatchingReconcileResult.Current -> currentCount++
+                EpgMatchingReconcileResult.Current -> error("Forced provider reconcile cannot be current")
                 EpgMatchingReconcileResult.NotReady -> notReadyCount++
                 EpgMatchingReconcileResult.Superseded -> supersededCount++
             }
@@ -182,7 +179,6 @@ internal class RoomEpgMatchingStore(
             appliedCount = appliedCount,
             notReadyCount = notReadyCount,
             supersededCount = supersededCount,
-            currentCount = currentCount,
         )
     }
 
