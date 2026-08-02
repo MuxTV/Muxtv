@@ -44,6 +44,7 @@ class ChannelsFocusRestorationTest {
                 ChannelsRoute(
                     playbackCatalog = StaticPlaybackCatalog,
                     epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
                     profileId = "profile-main",
                     onOpenChannel = {},
                 )
@@ -72,6 +73,7 @@ class ChannelsFocusRestorationTest {
                         ChannelsRoute(
                             playbackCatalog = StaticPlaybackCatalog,
                             epgGuideRepository = NoGuideEpgGuideRepository,
+                            playbackSessionStateSource = NoPlaybackSessionStateSource,
                             profileId = "profile-main",
                             onOpenChannel = { playerOpen.value = true },
                         )
@@ -107,6 +109,7 @@ class ChannelsFocusRestorationTest {
                         ChannelsRoute(
                             playbackCatalog = catalog,
                             epgGuideRepository = NoGuideEpgGuideRepository,
+                            playbackSessionStateSource = NoPlaybackSessionStateSource,
                             profileId = "profile-main",
                             onOpenChannel = { playerOpen.value = true },
                         )
@@ -141,6 +144,7 @@ class ChannelsFocusRestorationTest {
                         currentTitle = "В эфире",
                         nextTitle = "Следом",
                     ),
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
                     profileId = "profile-main",
                     onOpenChannel = {},
                 )
