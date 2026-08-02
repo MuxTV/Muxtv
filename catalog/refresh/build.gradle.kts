@@ -2,6 +2,9 @@ plugins { id("muxtv.android.library") }
 
 android {
     namespace = "app.muxtv.catalog.refresh"
+    defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 }
 
 dependencies {
@@ -19,4 +22,11 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.mockwebserver3)
+
+    androidTestImplementation(project(":core:database"))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.mockwebserver3)
 }
