@@ -1,5 +1,6 @@
 package app.muxtv.database
 
+import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -39,6 +40,16 @@ internal class RoomPlaybackCatalog(
             summary = summary.copy(variantCount = variants.size),
             variants = variants,
         )
+    }
+
+    override suspend fun setFavorite(
+        profileId: String,
+        channelId: String,
+        isFavorite: Boolean,
+    ): ChannelFavoriteMutationResult = when (dao.setFavorite(profileId, channelId, isFavorite)) {
+        FavoriteWriteResult.Applied -> ChannelFavoriteMutationResult.Applied
+        FavoriteWriteResult.Unchanged -> ChannelFavoriteMutationResult.Unchanged
+        FavoriteWriteResult.NotFound -> ChannelFavoriteMutationResult.NotFound
     }
 
     override suspend fun resolveVariant(
