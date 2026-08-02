@@ -220,5 +220,8 @@ interface XmltvParseSink {
     suspend fun onWarning(warning: XmltvWarning)
 }
 
-private fun <T> List<T>.immutableSnapshot(): List<T> =
-    Collections.unmodifiableList(ArrayList(this))
+private fun <T> List<T>.immutableSnapshot(): List<T> = when (size) {
+    0 -> Collections.emptyList()
+    1 -> Collections.singletonList(this[0])
+    else -> Collections.unmodifiableList(ArrayList(this))
+}
