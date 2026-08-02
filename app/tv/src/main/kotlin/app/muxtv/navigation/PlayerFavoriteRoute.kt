@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelFavoriteMutationResult
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun PlayerFavoriteRoute(
     playbackCatalog: PlaybackCatalog,
+    channelPreferencesRepository: ChannelPreferencesRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     profileId: String,
     channelId: String,
@@ -90,7 +92,7 @@ internal fun PlayerFavoriteRoute(
                             scope.launch {
                                 try {
                                     when (
-                                        playbackCatalog.setFavorite(
+                                        channelPreferencesRepository.setFavorite(
                                             profileId = profileId,
                                             channelId = channelId,
                                             isFavorite = requestedFavorite,
