@@ -15,6 +15,9 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
+import app.muxtv.player.PlaybackSessionPhase
+import app.muxtv.player.PlaybackSessionState
+import app.muxtv.player.PlaybackSessionStateSource
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -102,9 +105,36 @@ class ChannelsViewModelTest {
         assertThat(guide.queryCount).isEqualTo(2)
     }
 
+    @Test
+    fun `playback session updates current channel without reloading guide`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(
+                channel("channel-a", "Alpha"),
+                channel("channel-b", "Beta"),
+            ),
+        )
+        val guide = FakeGuideRepository()
+        val playback = FakePlaybackSessionStateSource()
+        val viewModel = createViewModel(catalog, guide, playback)
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        playback.state.value = PlaybackSessionState(
+            channelId = "channel-b",
+            phase = PlaybackSessionPhase.READY,
+            isPlaying = true,
+        )
+
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows[0].isCurrentPlayback).isFalse()
+        assertThat(rows[1].isCurrentPlayback).isTrue()
+        assertThat(rows[1].isPlaying).isTrue()
+        assertThat(guide.queryCount).isEqualTo(1)
+    }
+
     private fun createViewModel(
         catalog: PlaybackCatalog,
         guide: EpgGuideRepository,
+        playback: PlaybackSessionStateSource = FakePlaybackSessionStateSource(),
     ): ChannelsViewModel {
         val store = ViewModelStore().also(viewModelStores::add)
         val factory = viewModelFactory {
@@ -112,6 +142,7 @@ class ChannelsViewModelTest {
                 ChannelsViewModel(
                     playbackCatalog = catalog,
                     epgGuideRepository = guide,
+                    playbackSessionStateSource = playback,
                     profileId = "profile-main",
                     nowEpochMillis = { 1_000L },
                 )
@@ -190,3 +221,13 @@ private class FakeGuideRepository : EpgGuideRepository {
 
     override fun observeDataChanges(): Flow<Unit> = changes
 }
+
+private class FakePlaybackSessionStateSource : PlaybackSessionStateSource {
+    val state = MutableStateFlow(PlaybackSessionState.Idle)
+    override val playbackSessionState: FlowBackedStateFlow
+        get() = FlowBackedStateFlow(state)
+}
+
+private class FlowBackedStateFlow(
+    private val delegate: MutableStateFlow<PlaybackSessionState>,
+) : kotlinx.coroutines.flow.StateFlow<PlaybackSessionState> by delegate
