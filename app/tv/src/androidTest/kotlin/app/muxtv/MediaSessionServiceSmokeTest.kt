@@ -191,7 +191,9 @@ class MediaSessionServiceSmokeTest {
                 assertThat(activeState.isPlaying).isFalse()
                 assertThat(activeState.toString()).doesNotContain("tracked-channel")
 
-                instrumentation.runOnMainSync(controller::stop)
+                instrumentation.runOnMainSync {
+                    controller.stop()
+                }
                 awaitPlaybackSessionIdle(connector)
             } finally {
                 connector.close()
