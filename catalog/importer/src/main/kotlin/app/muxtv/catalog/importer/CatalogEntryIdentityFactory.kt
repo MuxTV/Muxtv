@@ -15,12 +15,15 @@ internal data class CatalogEntryIdentity(
 /**
  * Generates the existing stable catalog identifiers while reusing one digest inside one import.
  *
- * Instances are deliberately scoped to a single import. [MessageDigest] is mutable and must not be
- * shared between concurrent imports.
+ * Instances are deliberately scoped to a single import. [MessageDigest] and the reusable output
+ * buffers are mutable and must not be shared between concurrent imports.
  */
 internal class CatalogEntryIdentityFactory(
     private val messageDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
 ) {
+    private val digestOutput = ByteArray(SHA_256_BYTES)
+    private val hexOutput = CharArray(SHA_256_HEX_CHARACTERS)
+
     fun create(
         entry: M3uEntry,
         sourceId: String,
@@ -44,21 +47,24 @@ internal class CatalogEntryIdentityFactory(
 
     private fun stableId(value: String): String {
         messageDigest.reset()
-        val digest = messageDigest.digest(value.toByteArray(StandardCharsets.UTF_8))
-        val output = CharArray(digest.size * 2)
-        var outputIndex = 0
+        messageDigest.update(value.toByteArray(StandardCharsets.UTF_8))
+        val digestSize = messageDigest.digest(digestOutput, 0, digestOutput.size)
+        check(digestSize == SHA_256_BYTES) { "Unexpected SHA-256 digest length." }
 
-        digest.forEach { byte ->
-            val unsigned = byte.toInt() and 0xff
-            output[outputIndex++] = HEX[unsigned ushr 4]
-            output[outputIndex++] = HEX[unsigned and 0x0f]
+        var outputIndex = 0
+        for (index in 0 until digestSize) {
+            val unsigned = digestOutput[index].toInt() and 0xff
+            hexOutput[outputIndex++] = HEX[unsigned ushr 4]
+            hexOutput[outputIndex++] = HEX[unsigned and 0x0f]
         }
 
-        return output.concatToString()
+        return hexOutput.concatToString()
     }
 
     private companion object {
         const val SHA_256 = "SHA-256"
+        const val SHA_256_BYTES = 32
+        const val SHA_256_HEX_CHARACTERS = SHA_256_BYTES * 2
         val HEX = "0123456789abcdef".toCharArray()
     }
 }
