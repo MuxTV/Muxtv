@@ -40,16 +40,16 @@ sealed interface EpgProviderMatchingReconcileResult {
     data class Applied(
         val processedCount: Int,
         val appliedCount: Int,
-        val currentCount: Int = 0,
         val notReadyCount: Int,
         val supersededCount: Int,
+        val currentCount: Int = 0,
     ) : EpgProviderMatchingReconcileResult {
         init {
             require(processedCount >= 0)
             require(appliedCount >= 0)
-            require(currentCount >= 0)
             require(notReadyCount >= 0)
             require(supersededCount >= 0)
+            require(currentCount >= 0)
             require(appliedCount + currentCount + notReadyCount + supersededCount == processedCount)
         }
     }
@@ -180,9 +180,9 @@ internal class RoomEpgMatchingStore(
         return EpgProviderMatchingReconcileResult.Applied(
             processedCount = linkedSourceIds.size,
             appliedCount = appliedCount,
-            currentCount = currentCount,
             notReadyCount = notReadyCount,
             supersededCount = supersededCount,
+            currentCount = currentCount,
         )
     }
 
