@@ -16,8 +16,13 @@ data class PlaybackSessionState(
 ) {
     init {
         require(channelId == null || channelId.isNotBlank())
-        if (channelId == null) {
-            require(!isPlaying)
+        if (phase == PlaybackSessionPhase.IDLE) {
+            require(channelId == null)
+        } else {
+            require(channelId != null)
+        }
+        if (isPlaying) {
+            require(phase == PlaybackSessionPhase.READY)
         }
     }
 
