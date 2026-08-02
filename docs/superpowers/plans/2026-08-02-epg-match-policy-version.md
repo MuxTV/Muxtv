@@ -16,6 +16,8 @@ Make derived EPG matches explicitly versioned and cheaply self-healing so a futu
 - Guide/NowNext consume only current-policy rows.
 - HTTP 304 may perform a cheap freshness check, but must not trigger a full rematch when derived state is current.
 - Missing/legacy derived state after 304 is rebuilt from previous-good producer revisions.
+- Successful application startup performs one stale-aware repair pass so a schema/policy upgrade does not wait for a later network refresh.
+- Startup repair is best-effort for ordinary derived-state failures and must not prevent cleanup/scheduler reconciliation.
 - Cancellation remains authoritative; ordinary derived-state failures remain best-effort after durable refresh publication.
 - Snapshot → compute outside transaction → replace-if-current publication remains unchanged.
 - No fuzzy/manual/ML matching, new scheduler or second state framework.
@@ -27,6 +29,7 @@ Make derived EPG matches explicitly versioned and cheaply self-healing so a futu
 - [x] Default newly constructed match entities to the current policy while keeping the database column migration default at `0`.
 - [x] Add cheap freshness coverage check for current producer tuple + current policy.
 - [x] Add `EpgMatchingStore.reconcileIfStale` with explicit `Current` result.
+- [x] Add one startup `reconcileAllIfStale` pass over active linked EPG relations immediately after database initialization, with per-source best effort and authoritative cancellation.
 - [x] Keep provider-source fanout authoritative after a newly published catalog revision; freshness skipping is used where it has value instead of changing existing fanout semantics.
 - [x] Filter Guide match counts, programme candidates and invalidation-version projection to the current policy.
 - [x] Change successful EPG `NotModified` publication to call the cheap stale-aware reconciliation path, allowing migration repair without rematching every 304.
