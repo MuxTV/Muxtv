@@ -286,13 +286,20 @@ try {
         }
     }
 
-    $roomSchemaPath = Join-Path $repositoryRoot `
-        "core\database\schemas\app.muxtv.database.MuxTvDatabase\4.json"
-    if (Test-Path $roomSchemaPath -PathType Leaf) {
-        Copy-Item `
-            -Path $roomSchemaPath `
-            -Destination (Join-Path $evidenceDirectory "room-schema-4.json") `
-            -Force
+    $roomSchemaDirectory = Join-Path $repositoryRoot `
+        "core\database\schemas\app.muxtv.database.MuxTvDatabase"
+    if (Test-Path $roomSchemaDirectory -PathType Container) {
+        $latestRoomSchema = @(
+            Get-ChildItem -Path $roomSchemaDirectory -File -Filter "*.json" |
+                Where-Object { $_.BaseName -match '^\d+$' } |
+                Sort-Object { [int]$_.BaseName }
+        ) | Select-Object -Last 1
+        if ($null -ne $latestRoomSchema) {
+            Copy-Item `
+                -Path $latestRoomSchema.FullName `
+                -Destination (Join-Path $evidenceDirectory "room-schema-$($latestRoomSchema.BaseName).json") `
+                -Force
+        }
     }
 
     if ($Mode -eq "Device") {
