@@ -3,6 +3,7 @@ package app.muxtv.feature.channels
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
+import app.muxtv.player.PlaybackSessionState
 
 internal data class ChannelRowProjection(
     val channel: PlayableChannelSummary,
@@ -10,6 +11,8 @@ internal data class ChannelRowProjection(
     val currentTitle: String?,
     val nextTitle: String?,
     val nextBoundaryEpochMillis: Long?,
+    val isCurrentPlayback: Boolean,
+    val isPlaying: Boolean,
 ) {
     val channelId: String
         get() = channel.channelId
@@ -18,10 +21,13 @@ internal data class ChannelRowProjection(
 internal fun projectChannelRows(
     channels: List<PlayableChannelSummary>,
     guide: List<ChannelNowNext>,
+    playbackSessionState: PlaybackSessionState = PlaybackSessionState.Idle,
 ): List<ChannelRowProjection> {
     val guideByChannelId = guide.associateBy(ChannelNowNext::canonicalChannelId)
     return channels.map { channel ->
         val projection = guideByChannelId[channel.channelId]
+        val isCurrentPlayback = playbackSessionState.channelId == channel.channelId
+        val isPlaying = isCurrentPlayback && playbackSessionState.isPlaying
         if (projection == null) {
             ChannelRowProjection(
                 channel = channel,
@@ -29,9 +35,15 @@ internal fun projectChannelRows(
                 currentTitle = null,
                 nextTitle = null,
                 nextBoundaryEpochMillis = null,
+                isCurrentPlayback = isCurrentPlayback,
+                isPlaying = isPlaying,
             )
         } else {
-            projection.toRow(channel)
+            projection.toRow(
+                channel = channel,
+                isCurrentPlayback = isCurrentPlayback,
+                isPlaying = isPlaying,
+            )
         }
     }
 }
@@ -47,7 +59,11 @@ internal fun earliestFutureGuideBoundary(
         .minOrNull()
 }
 
-private fun ChannelNowNext.toRow(channel: PlayableChannelSummary): ChannelRowProjection =
+private fun ChannelNowNext.toRow(
+    channel: PlayableChannelSummary,
+    isCurrentPlayback: Boolean,
+    isPlaying: Boolean,
+): ChannelRowProjection =
     if (state == GuideProjectionState.READY) {
         ChannelRowProjection(
             channel = channel,
@@ -55,6 +71,8 @@ private fun ChannelNowNext.toRow(channel: PlayableChannelSummary): ChannelRowPro
             currentTitle = current?.title,
             nextTitle = next?.title,
             nextBoundaryEpochMillis = nextBoundaryEpochMillis,
+            isCurrentPlayback = isCurrentPlayback,
+            isPlaying = isPlaying,
         )
     } else {
         ChannelRowProjection(
@@ -63,5 +81,7 @@ private fun ChannelNowNext.toRow(channel: PlayableChannelSummary): ChannelRowPro
             currentTitle = null,
             nextTitle = null,
             nextBoundaryEpochMillis = null,
+            isCurrentPlayback = isCurrentPlayback,
+            isPlaying = isPlaying,
         )
     }
