@@ -73,7 +73,7 @@ class EpgRefreshWorker @AssistedInject constructor(
             val decision = refresh(target, runToken)
             val disposition = complete(target, runToken, trigger, decision)
             reconcileEpgAfterPublication(decision, disposition) {
-                matchingStore.reconcile(target.sourceId)
+                matchingStore.reconcileIfStale(target.sourceId)
             }
             decision.toWorkResult(disposition)
         } catch (cancelled: CancellationException) {
