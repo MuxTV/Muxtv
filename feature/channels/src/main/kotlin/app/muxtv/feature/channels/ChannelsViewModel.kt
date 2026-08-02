@@ -164,40 +164,38 @@ internal class ChannelsViewModel(
 
             if (!isCurrentGuideRequest(generation, channelIds)) return
             currentGuide = guide
-            publishRows()
-            scheduleNextBoundary(generation, channelIds)
+            val rows = publishRows()
+            scheduleNextBoundary(generation, channelIds, rows)
         }
     }
 
-    private fun publishRows() {
+    private fun publishRows(): List<ChannelRowProjection> {
         val channels = currentChannels
-        mutableUiState.value = if (channels.isEmpty()) {
-            ChannelsUiState.Empty
-        } else {
-            ChannelsUiState.Content(
-                rows = projectChannelRows(
-                    channels = channels,
-                    guide = currentGuide,
-                    playbackSessionState = currentPlaybackSessionState,
-                ),
-            )
+        if (channels.isEmpty()) {
+            mutableUiState.value = ChannelsUiState.Empty
+            return emptyList()
         }
+
+        val rows = projectChannelRows(
+            channels = channels,
+            guide = currentGuide,
+            playbackSessionState = currentPlaybackSessionState,
+        )
+        mutableUiState.value = ChannelsUiState.Content(rows = rows)
+        return rows
     }
 
     private fun scheduleNextBoundary(
         generation: Long,
         channelIds: List<String>,
+        rows: List<ChannelRowProjection>,
     ) {
         boundaryJob?.cancel()
         boundaryJob = null
 
         val now = nowEpochMillis()
         val boundary = earliestFutureGuideBoundary(
-            rows = projectChannelRows(
-                channels = currentChannels,
-                guide = currentGuide,
-                playbackSessionState = currentPlaybackSessionState,
-            ),
+            rows = rows,
             nowEpochMillis = now,
         ) ?: return
 
