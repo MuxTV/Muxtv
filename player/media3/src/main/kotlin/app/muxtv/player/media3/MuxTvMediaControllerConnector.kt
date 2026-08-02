@@ -52,6 +52,7 @@ class MuxTvMediaControllerConnector(
         override fun onDisconnected(controller: MediaController) {
             if (connections.disconnected(controller)) {
                 if (observedController === controller) {
+                    controller.removeListener(playerListener)
                     observedController = null
                     mutablePlaybackSessionState.value = PlaybackSessionState.Idle
                 }
