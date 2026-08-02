@@ -3,6 +3,8 @@ package app.muxtv.database
 interface EpgMatchingStore {
     suspend fun reconcile(epgSourceId: String): EpgMatchingReconcileResult
 
+    suspend fun reconcileIfStale(epgSourceId: String): EpgMatchingReconcileResult
+
     suspend fun reconcileProviderSource(
         providerSourceId: String,
     ): EpgProviderMatchingReconcileResult
@@ -29,6 +31,7 @@ sealed interface EpgMatchingReconcileResult {
         val summary: EpgMatchingSummary,
     ) : EpgMatchingReconcileResult
 
+    data object Current : EpgMatchingReconcileResult
     data object NotReady : EpgMatchingReconcileResult
     data object Superseded : EpgMatchingReconcileResult
 }
@@ -37,15 +40,17 @@ sealed interface EpgProviderMatchingReconcileResult {
     data class Applied(
         val processedCount: Int,
         val appliedCount: Int,
+        val currentCount: Int = 0,
         val notReadyCount: Int,
         val supersededCount: Int,
     ) : EpgProviderMatchingReconcileResult {
         init {
             require(processedCount >= 0)
             require(appliedCount >= 0)
+            require(currentCount >= 0)
             require(notReadyCount >= 0)
             require(supersededCount >= 0)
-            require(appliedCount + notReadyCount + supersededCount == processedCount)
+            require(appliedCount + currentCount + notReadyCount + supersededCount == processedCount)
         }
     }
 }
@@ -57,6 +62,22 @@ internal class RoomEpgMatchingStore(
         require(epgSourceId.isNotBlank())
         val snapshot = dao.relationSnapshot(epgSourceId)
             ?: return EpgMatchingReconcileResult.NotReady
+        return reconcileSnapshot(snapshot)
+    }
+
+    override suspend fun reconcileIfStale(epgSourceId: String): EpgMatchingReconcileResult {
+        require(epgSourceId.isNotBlank())
+        val snapshot = dao.relationSnapshot(epgSourceId)
+            ?: return EpgMatchingReconcileResult.NotReady
+        if (dao.isFresh(snapshot, CURRENT_EPG_MATCH_POLICY_VERSION)) {
+            return EpgMatchingReconcileResult.Current
+        }
+        return reconcileSnapshot(snapshot)
+    }
+
+    private suspend fun reconcileSnapshot(
+        snapshot: EpgMatchingRelationSnapshot,
+    ): EpgMatchingReconcileResult {
         val channels = dao.epgChannels(
             epgSourceId = snapshot.epgSourceId,
             epgRevisionNumber = snapshot.epgRevisionNumber,
@@ -145,11 +166,13 @@ internal class RoomEpgMatchingStore(
         val linkedSourceIds = dao.linkedActiveEpgSourceIds(providerSourceId)
 
         var appliedCount = 0
+        var currentCount = 0
         var notReadyCount = 0
         var supersededCount = 0
         linkedSourceIds.forEach { epgSourceId ->
-            when (reconcile(epgSourceId)) {
+            when (reconcileIfStale(epgSourceId)) {
                 is EpgMatchingReconcileResult.Applied -> appliedCount++
+                EpgMatchingReconcileResult.Current -> currentCount++
                 EpgMatchingReconcileResult.NotReady -> notReadyCount++
                 EpgMatchingReconcileResult.Superseded -> supersededCount++
             }
@@ -157,6 +180,7 @@ internal class RoomEpgMatchingStore(
         return EpgProviderMatchingReconcileResult.Applied(
             processedCount = linkedSourceIds.size,
             appliedCount = appliedCount,
+            currentCount = currentCount,
             notReadyCount = notReadyCount,
             supersededCount = supersededCount,
         )
@@ -185,6 +209,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.MATCHED.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = resolution.canonicalChannelId,
@@ -197,6 +222,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.AMBIGUOUS.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = null,
@@ -209,6 +235,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.UNRESOLVED.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = null,
