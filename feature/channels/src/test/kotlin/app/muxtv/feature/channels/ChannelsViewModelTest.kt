@@ -1,5 +1,9 @@
 package app.muxtv.feature.channels
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.EpgGuideRepository
@@ -28,6 +32,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChannelsViewModelTest {
     private val mainDispatcher = UnconfinedTestDispatcher()
+    private val viewModelStores = mutableListOf<ViewModelStore>()
 
     @Before
     fun setUp() {
@@ -36,6 +41,8 @@ class ChannelsViewModelTest {
 
     @After
     fun tearDown() {
+        viewModelStores.forEach(ViewModelStore::clear)
+        viewModelStores.clear()
         Dispatchers.resetMain()
     }
 
@@ -47,12 +54,7 @@ class ChannelsViewModelTest {
         val guide = FakeGuideRepository().apply {
             currentTitle = "Новости"
         }
-        val viewModel = ChannelsViewModel(
-            playbackCatalog = catalog,
-            epgGuideRepository = guide,
-            profileId = "profile-main",
-            nowEpochMillis = { 1_000L },
-        )
+        val viewModel = createViewModel(catalog, guide)
 
         val state = viewModel.uiState.value as ChannelsUiState.Content
 
@@ -70,12 +72,7 @@ class ChannelsViewModelTest {
         val guide = FakeGuideRepository().apply {
             failure = IllegalStateException("synthetic guide failure")
         }
-        val viewModel = ChannelsViewModel(
-            playbackCatalog = catalog,
-            epgGuideRepository = guide,
-            profileId = "profile-main",
-            nowEpochMillis = { 1_000L },
-        )
+        val viewModel = createViewModel(catalog, guide)
 
         val state = viewModel.uiState.value as ChannelsUiState.Content
 
@@ -91,12 +88,7 @@ class ChannelsViewModelTest {
         val guide = FakeGuideRepository().apply {
             currentTitle = "Первая программа"
         }
-        val viewModel = ChannelsViewModel(
-            playbackCatalog = catalog,
-            epgGuideRepository = guide,
-            profileId = "profile-main",
-            nowEpochMillis = { 1_000L },
-        )
+        val viewModel = createViewModel(catalog, guide)
         assertThat(
             (viewModel.uiState.value as ChannelsUiState.Content).rows.single().currentTitle,
         ).isEqualTo("Первая программа")
@@ -108,6 +100,24 @@ class ChannelsViewModelTest {
             (viewModel.uiState.value as ChannelsUiState.Content).rows.single().currentTitle,
         ).isEqualTo("Обновлённая программа")
         assertThat(guide.queryCount).isEqualTo(2)
+    }
+
+    private fun createViewModel(
+        catalog: PlaybackCatalog,
+        guide: EpgGuideRepository,
+    ): ChannelsViewModel {
+        val store = ViewModelStore().also(viewModelStores::add)
+        val factory = viewModelFactory {
+            initializer {
+                ChannelsViewModel(
+                    playbackCatalog = catalog,
+                    epgGuideRepository = guide,
+                    profileId = "profile-main",
+                    nowEpochMillis = { 1_000L },
+                )
+            }
+        }
+        return ViewModelProvider.create(store, factory)[ChannelsViewModel::class]
     }
 
     private fun channel(id: String, name: String): PlayableChannelSummary =
