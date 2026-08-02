@@ -22,6 +22,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.sync.SourceRefreshScheduler
@@ -40,6 +41,7 @@ import app.muxtv.player.media3.MuxTvMediaControllerConnector
 @Composable
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
+    channelPreferencesRepository: ChannelPreferencesRepository,
     epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
@@ -120,6 +122,7 @@ fun AppNavigation(
 
                         is AppDestination.Player -> PlayerFavoriteRoute(
                             playbackCatalog = playbackCatalog,
+                            channelPreferencesRepository = channelPreferencesRepository,
                             controllerConnector = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             channelId = destination.channelId,
