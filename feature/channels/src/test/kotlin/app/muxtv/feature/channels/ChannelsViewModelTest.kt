@@ -26,7 +26,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -107,6 +109,91 @@ class ChannelsViewModelTest {
     }
 
     @Test
+    fun `metadata and order changes reuse guide snapshot`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(
+                channel("channel-a", "Alpha"),
+                channel("channel-b", "Beta"),
+            ),
+        )
+        val guide = FakeGuideRepository().apply {
+            currentTitle = "Программа"
+        }
+        val viewModel = createViewModel(catalog, guide)
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        catalog.replaceChannels(
+            listOf(
+                channel("channel-b", "Beta updated"),
+                channel("channel-a", "Alpha updated"),
+            ),
+        )
+
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows.map(ChannelRowProjection::channelId))
+            .containsExactly("channel-b", "channel-a").inOrder()
+        assertThat(rows.map { row -> row.channel.displayName })
+            .containsExactly("Beta updated", "Alpha updated").inOrder()
+        assertThat(rows.map(ChannelRowProjection::currentTitle))
+            .containsExactly("Программа", "Программа").inOrder()
+        assertThat(guide.queryCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `channel membership change reloads guide for the new bounded set`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(channel("channel-a", "Alpha")),
+        )
+        val guide = FakeGuideRepository().apply {
+            currentTitle = "Программа"
+        }
+        val viewModel = createViewModel(catalog, guide)
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        catalog.replaceChannels(
+            listOf(
+                channel("channel-a", "Alpha"),
+                channel("channel-b", "Beta"),
+            ),
+        )
+
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows.map(ChannelRowProjection::channelId))
+            .containsExactly("channel-a", "channel-b").inOrder()
+        assertThat(guide.queryCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `programme boundary reloads guide once when the boundary is reached`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(channel("channel-a", "Alpha")),
+        )
+        val guide = FakeGuideRepository().apply {
+            currentTitle = "Первая программа"
+            nextBoundaryEpochMillis = 1_100L
+        }
+        val viewModel = createViewModel(
+            catalog = catalog,
+            guide = guide,
+            nowEpochMillis = { 1_000L + testScheduler.currentTime },
+        )
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        guide.currentTitle = "Вторая программа"
+        advanceTimeBy(99L)
+        runCurrent()
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        advanceTimeBy(2L)
+        runCurrent()
+
+        assertThat(guide.queryCount).isEqualTo(2)
+        assertThat(
+            (viewModel.uiState.value as ChannelsUiState.Content).rows.single().currentTitle,
+        ).isEqualTo("Вторая программа")
+    }
+
+    @Test
     fun `playback session updates current channel without reloading guide`() = runTest {
         val catalog = FakePlaybackCatalog(
             listOf(
@@ -136,6 +223,7 @@ class ChannelsViewModelTest {
         catalog: PlaybackCatalog,
         guide: EpgGuideRepository,
         playback: PlaybackSessionStateSource = FakePlaybackSessionStateSource(),
+        nowEpochMillis: () -> Long = { 1_000L },
     ): ChannelsViewModel {
         val store = ViewModelStore().also(viewModelStores::add)
         val factory = viewModelFactory {
@@ -145,7 +233,7 @@ class ChannelsViewModelTest {
                     epgGuideRepository = guide,
                     playbackSessionStateSource = playback,
                     profileId = "profile-main",
-                    nowEpochMillis = { 1_000L },
+                    nowEpochMillis = nowEpochMillis,
                 )
             }
         }
@@ -168,6 +256,10 @@ private class FakePlaybackCatalog(
     initialChannels: List<PlayableChannelSummary>,
 ) : PlaybackCatalog {
     private val channels = MutableStateFlow(initialChannels)
+
+    fun replaceChannels(value: List<PlayableChannelSummary>) {
+        channels.value = value
+    }
 
     override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> = channels
 
@@ -196,6 +288,7 @@ private class FakePlaybackCatalog(
 private class FakeGuideRepository : EpgGuideRepository {
     val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     var currentTitle: String? = null
+    var nextBoundaryEpochMillis: Long? = null
     var failure: Exception? = null
     var queryCount: Int = 0
         private set
@@ -210,12 +303,12 @@ private class FakeGuideRepository : EpgGuideRepository {
                 current = currentTitle?.let { title ->
                     GuideProgramme(
                         startEpochMillis = 900,
-                        endEpochMillis = 1_100,
+                        endEpochMillis = nextBoundaryEpochMillis ?: 1_100,
                         title = title,
                     )
                 },
                 next = null,
-                nextBoundaryEpochMillis = null,
+                nextBoundaryEpochMillis = nextBoundaryEpochMillis,
             )
         }
     }
