@@ -1,10 +1,7 @@
 package app.muxtv.database
 
 import androidx.room3.Dao
-import androidx.room3.Insert
-import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
-import androidx.room3.Transaction
 import kotlinx.coroutines.flow.Flow
 
 internal data class ActiveChannelSummaryRow(
@@ -26,12 +23,6 @@ internal data class ActiveVariantRow(
     val userAgent: String?,
     val referrer: String?,
 )
-
-internal enum class FavoriteWriteResult {
-    Applied,
-    Unchanged,
-    NotFound,
-}
 
 @Dao
 internal abstract class PlaybackCatalogDao {
@@ -138,48 +129,4 @@ internal abstract class PlaybackCatalogDao {
         """,
     )
     abstract suspend fun getActiveVariants(channelId: String): List<ActiveVariantRow>
-
-    @Query(
-        """
-        UPDATE user_channel_overlays
-        SET isFavorite = :isFavorite
-        WHERE profileId = :profileId
-          AND canonicalChannelId = :channelId
-        """,
-    )
-    protected abstract suspend fun updateFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): Int
-
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insertOverlay(overlay: UserChannelOverlayEntity)
-
-    @Transaction
-    open suspend fun setFavorite(
-        profileId: String,
-        channelId: String,
-        isFavorite: Boolean,
-    ): FavoriteWriteResult {
-        require(profileId.isNotBlank())
-        require(channelId.isNotBlank())
-
-        val channel = findActiveChannel(profileId, channelId)
-            ?: return FavoriteWriteResult.NotFound
-        if (channel.isFavorite == isFavorite) {
-            return FavoriteWriteResult.Unchanged
-        }
-
-        if (updateFavorite(profileId, channelId, isFavorite) == 0) {
-            insertOverlay(
-                UserChannelOverlayEntity(
-                    profileId = profileId,
-                    canonicalChannelId = channelId,
-                    isFavorite = isFavorite,
-                ),
-            )
-        }
-        return FavoriteWriteResult.Applied
-    }
 }
