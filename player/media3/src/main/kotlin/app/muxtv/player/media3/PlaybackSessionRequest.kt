@@ -84,12 +84,14 @@ class PlaybackSessionRequest(
         displayName?.let { putString(KEY_DISPLAY_NAME, it) }
         artworkUri?.let { putString(KEY_ARTWORK_URI, it) }
         putBoolean(KEY_INSECURE_HTTP_APPROVED, insecureHttpApproved)
-        putBundle(
-            KEY_HEADERS,
-            Bundle().apply {
-                requestHeaders.forEach { (name, value) -> putString(name, value) }
-            },
-        )
+        if (requestHeaders.isNotEmpty()) {
+            putBundle(
+                KEY_HEADERS,
+                Bundle().apply {
+                    requestHeaders.forEach { (name, value) -> putString(name, value) }
+                },
+            )
+        }
     }
 
     override fun toString(): String =
@@ -149,5 +151,8 @@ fun PlaybackRequest.toPlaybackSessionRequest(): PlaybackSessionRequest = Playbac
 private fun String.isValidField(maxLength: Int): Boolean =
     isNotBlank() && length <= maxLength && !contains('\r') && !contains('\n')
 
-private fun Map<String, String>.immutableSnapshot(): Map<String, String> =
-    Collections.unmodifiableMap(LinkedHashMap(this))
+private fun Map<String, String>.immutableSnapshot(): Map<String, String> = when (size) {
+    0 -> Collections.emptyMap()
+    1 -> entries.first().let { entry -> Collections.singletonMap(entry.key, entry.value) }
+    else -> Collections.unmodifiableMap(LinkedHashMap(this))
+}
