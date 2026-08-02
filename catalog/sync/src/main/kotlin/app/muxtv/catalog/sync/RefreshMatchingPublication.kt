@@ -9,9 +9,10 @@ internal suspend fun reconcileEpgAfterPublication(
     disposition: RefreshCompletionDisposition,
     reconcile: suspend () -> Unit,
 ) {
-    if (disposition != RefreshCompletionDisposition.APPLIED || decision !is EpgRefreshDecision.Refreshed) {
-        return
-    }
+    val successfulGuidePublication =
+        disposition == RefreshCompletionDisposition.APPLIED &&
+            (decision is EpgRefreshDecision.Refreshed || decision is EpgRefreshDecision.NotModified)
+    if (!successfulGuidePublication) return
     reconcileBestEffort(reconcile)
 }
 
