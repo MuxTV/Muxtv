@@ -96,6 +96,19 @@ internal abstract class EpgMatchingDao {
 
     @Query(
         """
+        SELECT epg_sources.id
+        FROM epg_sources
+        INNER JOIN sources ON sources.id = epg_sources.providerSourceId
+        WHERE epg_sources.providerSourceId IS NOT NULL
+          AND epg_sources.activeRevision > 0
+          AND sources.activeRevision > 0
+        ORDER BY epg_sources.id COLLATE BINARY ASC
+        """,
+    )
+    abstract suspend fun activeLinkedEpgSourceIds(): List<String>
+
+    @Query(
+        """
         SELECT
             (
                 SELECT COUNT(*)
