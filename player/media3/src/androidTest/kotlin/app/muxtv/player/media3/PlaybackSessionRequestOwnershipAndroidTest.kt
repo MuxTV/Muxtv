@@ -1,8 +1,8 @@
 package app.muxtv.player.media3
 
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.player.PlaybackRequest
 import app.muxtv.player.StreamVariantId
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,5 +26,20 @@ class PlaybackSessionRequestOwnershipAndroidTest {
 
         assertThat(decoded.requestHeaders)
             .containsExactly("Referer", "https://portal.example/player")
+    }
+
+    @Test
+    fun EmptyHeadersDoNotAllocateNestedBundleAndStillRoundTrip() {
+        val request = PlaybackSessionRequest(
+            mediaId = "channel-empty",
+            variantId = "variant-empty",
+            locator = "https://stream.example/empty.m3u8",
+        )
+
+        val bundle = request.toBundle()
+        val decoded = requireNotNull(PlaybackSessionRequest.fromBundle(bundle))
+
+        assertThat(bundle.containsKey("headers")).isFalse()
+        assertThat(decoded.requestHeaders).isEmpty()
     }
 }
