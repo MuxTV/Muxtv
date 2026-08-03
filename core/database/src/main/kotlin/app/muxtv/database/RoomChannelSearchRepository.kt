@@ -31,85 +31,84 @@ internal class RoomChannelSearchRepository(
         query: ChannelSearchQuery,
         tokens: List<SearchQueryToken>,
     ): ChannelSearchSnapshot {
-        var truncated = false
-        var intersection: MutableMap<String, Int>? = null
-
-        tokens.forEach { token ->
+        val probes = tokens.map { token ->
             val fetched = dataSource.searchCandidates(
                 profileId = query.profileId,
                 ftsExpression = token.ftsExpression,
                 nowEpochMillis = query.nowEpochMillis,
                 fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
             )
-            if (fetched.size > ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN) {
-                truncated = true
-            }
-            val bounded = fetched.take(ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN)
-            if (bounded.isEmpty()) {
-                return ChannelSearchSnapshot(
-                    results = emptyList(),
-                    isTruncated = truncated,
-                    nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
-                        profileId = query.profileId,
-                        nowEpochMillis = query.nowEpochMillis,
-                    ),
-                )
-            }
+            TokenProbe(
+                token = token,
+                rows = fetched.take(ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN),
+                overflow = fetched.size > ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN,
+            )
+        }
 
-            val tokenRanks = bounded.associate { row ->
+        // An unrestricted empty token proves the complete AND-query is empty, even if another
+        // broad token overflowed its probe. Do not report a false truncation in that case.
+        if (probes.any { probe -> probe.rows.isEmpty() }) {
+            return emptySnapshot(query = query, truncated = false)
+        }
+
+        val seed = probes.minWithOrNull(
+            compareBy<TokenProbe> { probe -> probe.rows.size }
+                .thenBy { probe -> if (probe.overflow) 1 else 0 },
+        ) ?: return emptySnapshot(query = query, truncated = false)
+
+        var truncated = seed.overflow
+        val intersection = seed.rows.associateTo(mutableMapOf()) { row ->
+            row.canonicalChannelId to row.bestMatchRank
+        }
+
+        probes.forEach { probe ->
+            if (probe === seed || intersection.isEmpty()) return@forEach
+
+            val rows = if (probe.overflow) {
+                // The broad unrestricted probe is intentionally incomplete. Re-check that token
+                // only inside the already bounded seed set, so a precise query such as
+                // `канал 999` cannot lose channel 999 merely because `канал*` has >800 hits.
+                dataSource.searchCandidates(
+                    profileId = query.profileId,
+                    ftsExpression = probe.token.ftsExpression,
+                    nowEpochMillis = query.nowEpochMillis,
+                    fetchLimit = intersection.size,
+                    restrictToCanonicalIds = intersection.keys.sorted(),
+                )
+            } else {
+                probe.rows
+            }
+            val tokenRanks = rows.associate { row ->
                 row.canonicalChannelId to row.bestMatchRank
             }
-            val current = intersection
-            if (current == null) {
-                intersection = tokenRanks.toMutableMap()
-            } else {
-                val iterator = current.iterator()
-                while (iterator.hasNext()) {
-                    val entry = iterator.next()
-                    val tokenRank = tokenRanks[entry.key]
-                    if (tokenRank == null) {
-                        iterator.remove()
-                    } else {
-                        // Every token is required. Rank the combined match by its weakest
-                        // required origin so name+programme cannot masquerade as a pure name hit.
-                        entry.setValue(maxOf(entry.value, tokenRank))
-                    }
-                }
-                if (current.isEmpty()) {
-                    return ChannelSearchSnapshot(
-                        results = emptyList(),
-                        isTruncated = truncated,
-                        nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
-                            profileId = query.profileId,
-                            nowEpochMillis = query.nowEpochMillis,
-                        ),
-                    )
+            val iterator = intersection.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val tokenRank = tokenRanks[entry.key]
+                if (tokenRank == null) {
+                    iterator.remove()
+                } else {
+                    // Every token is required. Rank by the weakest required origin so
+                    // name+programme cannot masquerade as a pure name hit.
+                    entry.setValue(maxOf(entry.value, tokenRank))
                 }
             }
         }
 
-        val requiredRanks = intersection.orEmpty()
-        if (requiredRanks.isEmpty()) {
-            return ChannelSearchSnapshot(
-                results = emptyList(),
-                isTruncated = truncated,
-                nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
-                    profileId = query.profileId,
-                    nowEpochMillis = query.nowEpochMillis,
-                ),
-            )
+        if (intersection.isEmpty()) {
+            return emptySnapshot(query = query, truncated = truncated)
         }
 
         val summaries = dataSource.activeChannelSummaries(
             profileId = query.profileId,
-            canonicalChannelIds = requiredRanks.keys.sorted(),
+            canonicalChannelIds = intersection.keys.sorted(),
         )
         val sorted = summaries.sortedWith(
             compareBy<PlayableChannelSummary> { summary ->
                 structuredRank(
                     summary = summary,
                     normalizedQuery = query.normalizedText,
-                    requiredOriginRank = requiredRanks.getValue(summary.channelId),
+                    requiredOriginRank = intersection.getValue(summary.channelId),
                 )
             }
                 .thenBy { summary -> summary.channelNumber?.toLongOrNull() ?: Long.MAX_VALUE }
@@ -153,6 +152,18 @@ internal class RoomChannelSearchRepository(
         )
     }
 
+    private suspend fun emptySnapshot(
+        query: ChannelSearchQuery,
+        truncated: Boolean,
+    ): ChannelSearchSnapshot = ChannelSearchSnapshot(
+        results = emptyList(),
+        isTruncated = truncated,
+        nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
+            profileId = query.profileId,
+            nowEpochMillis = query.nowEpochMillis,
+        ),
+    )
+
     private fun structuredRank(
         summary: PlayableChannelSummary,
         normalizedQuery: String,
@@ -164,6 +175,12 @@ internal class RoomChannelSearchRepository(
         requiredOriginRank == ChannelSearchMatchRank.NAME -> RANK_PROVIDER_OR_NAME_TOKEN
         else -> requiredOriginRank
     }
+
+    private data class TokenProbe(
+        val token: SearchQueryToken,
+        val rows: List<ChannelSearchCandidateRow>,
+        val overflow: Boolean,
+    )
 
     private companion object {
         const val RANK_EXACT_NUMBER = 1
