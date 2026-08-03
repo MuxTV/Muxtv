@@ -12,6 +12,7 @@ class SearchQueryEncoderTest {
         assertThat(tokens.map(SearchQueryToken::ftsExpression))
             .containsExactly("\"Россия*\"", "\"1*\"", "\"HD*\"")
             .inOrder()
+        assertThat(SearchQueryEncoder.hasTokenOverflow("Россия 1 HD")).isFalse()
     }
 
     @Test
@@ -43,18 +44,21 @@ class SearchQueryEncoderTest {
     }
 
     @Test
-    fun capsTokensDeterministicallyAtPublicMaximum() {
-        val tokens = SearchQueryEncoder.encode("one two three four five six seven eight")
+    fun capsTokensDeterministicallyAndReportsOverflow() {
+        val text = "one two three four five six seven eight"
+        val tokens = SearchQueryEncoder.encode(text)
 
         assertThat(tokens).hasSize(6)
         assertThat(tokens.map(SearchQueryToken::value))
             .containsExactly("one", "two", "three", "four", "five", "six")
             .inOrder()
+        assertThat(SearchQueryEncoder.hasTokenOverflow(text)).isTrue()
     }
 
     @Test
     fun blankOrPunctuationOnlyQueryHasNoTokens() {
         assertThat(SearchQueryEncoder.encode("   ---___%%%   ")).isEmpty()
+        assertThat(SearchQueryEncoder.hasTokenOverflow("   ---___%%%   ")).isFalse()
     }
 
     @Test
