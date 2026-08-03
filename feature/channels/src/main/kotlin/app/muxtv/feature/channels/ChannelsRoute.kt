@@ -160,7 +160,6 @@ private fun ChannelsContent(
     LaunchedEffect(channelIds, restorationAnchor, restorationCompleted, favoritesOnly) {
         if (restorationCompleted || channelIds.isEmpty()) return@LaunchedEffect
 
-        withFrameNanos { }
         val target = restorationAnchor?.resolveAgainst(channelIds) ?: FocusTarget(
             itemKey = channelIds.first(),
             index = 0,

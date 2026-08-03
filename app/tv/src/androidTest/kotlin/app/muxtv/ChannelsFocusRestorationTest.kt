@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -157,7 +158,7 @@ class ChannelsFocusRestorationTest {
 
         moveFocusToSecondChannel()
         composeRule.onNodeWithTag("channels-filter-favorites").performClick()
-        composeRule.waitUntilChannelRow(index = 0)
+        composeRule.waitUntilText("★  Второй")
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
@@ -185,7 +186,7 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         openFavoritesFromFirstRowWithDpad()
-        composeRule.waitUntilChannelRow(index = 0)
+        composeRule.waitUntilText("★  Первый")
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
@@ -280,6 +281,12 @@ class ChannelsFocusRestorationTest {
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilChannelRow(index: Int) {
         waitUntil(timeoutMillis = 5_000) {
             onAllNodesWithTag("channel-row-$index").fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilText(text: String) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithText(text, substring = false).fetchSemanticsNodes().size == 1
         }
     }
 }
