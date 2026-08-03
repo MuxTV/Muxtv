@@ -257,7 +257,9 @@ private fun ChannelsContent(
                         .fillMaxWidth()
                         .testTag("$CHANNEL_ROW_TEST_TAG_PREFIX$index")
                         .focusProperties {
-                            up = allFilterFocusRequester
+                            if (index == 0) {
+                                up = allFilterFocusRequester
+                            }
                         }
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
