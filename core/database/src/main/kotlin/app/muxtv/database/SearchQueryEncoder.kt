@@ -48,4 +48,21 @@ internal object SearchQueryEncoder {
 
         return result
     }
+
+    fun hasTokenOverflow(text: String): Boolean {
+        var tokenCount = 0
+        var insideToken = false
+        var offset = 0
+        while (offset < text.length) {
+            val codePoint = text.codePointAt(offset)
+            val isTokenCodePoint = Character.isLetterOrDigit(codePoint)
+            if (isTokenCodePoint && !insideToken) {
+                tokenCount += 1
+                if (tokenCount > ChannelSearchQuery.MAX_TOKENS) return true
+            }
+            insideToken = isTokenCodePoint
+            offset += Character.charCount(codePoint)
+        }
+        return false
+    }
 }
