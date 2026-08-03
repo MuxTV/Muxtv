@@ -1,5 +1,6 @@
 package app.muxtv.database
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -51,6 +52,8 @@ data class EpgChannelMatchEntity(
     val providerSourceId: String,
     val catalogRevisionNumber: Long,
     val epgExternalChannelId: String,
+    @ColumnInfo(defaultValue = "0")
+    val matchPolicyVersion: Int = CURRENT_EPG_MATCH_POLICY_VERSION,
     val decision: String,
     val reasonCode: String,
     val canonicalChannelId: String?,
@@ -62,6 +65,7 @@ data class EpgChannelMatchEntity(
         require(providerSourceId.isNotBlank())
         require(catalogRevisionNumber > 0)
         require(epgExternalChannelId.isNotBlank())
+        require(matchPolicyVersion >= LEGACY_UNVERSIONED_MATCH_POLICY_VERSION)
         require(decision in VALID_DECISIONS)
         require(reasonCode.isNotBlank())
         require(candidateCount >= 0)
@@ -85,8 +89,9 @@ data class EpgChannelMatchEntity(
     }
 
     override fun toString(): String =
-        "EpgChannelMatchEntity(decision=$decision, reasonCode=$reasonCode, " +
-            "canonicalChannelPresent=${canonicalChannelId != null}, candidateCount=$candidateCount)"
+        "EpgChannelMatchEntity(matchPolicyVersion=$matchPolicyVersion, decision=$decision, " +
+            "reasonCode=$reasonCode, canonicalChannelPresent=${canonicalChannelId != null}, " +
+            "candidateCount=$candidateCount)"
 
     private companion object {
         val VALID_DECISIONS = EpgChannelMatchDecision.entries.mapTo(mutableSetOf()) { it.name }

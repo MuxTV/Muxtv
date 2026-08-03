@@ -1,7 +1,13 @@
 package app.muxtv.database
 
+import kotlinx.coroutines.CancellationException
+
 interface EpgMatchingStore {
     suspend fun reconcile(epgSourceId: String): EpgMatchingReconcileResult
+
+    suspend fun reconcileIfStale(epgSourceId: String): EpgMatchingReconcileResult
+
+    suspend fun reconcileAllIfStale()
 
     suspend fun reconcileProviderSource(
         providerSourceId: String,
@@ -29,6 +35,7 @@ sealed interface EpgMatchingReconcileResult {
         val summary: EpgMatchingSummary,
     ) : EpgMatchingReconcileResult
 
+    data object Current : EpgMatchingReconcileResult
     data object NotReady : EpgMatchingReconcileResult
     data object Superseded : EpgMatchingReconcileResult
 }
@@ -57,6 +64,34 @@ internal class RoomEpgMatchingStore(
         require(epgSourceId.isNotBlank())
         val snapshot = dao.relationSnapshot(epgSourceId)
             ?: return EpgMatchingReconcileResult.NotReady
+        return reconcileSnapshot(snapshot)
+    }
+
+    override suspend fun reconcileIfStale(epgSourceId: String): EpgMatchingReconcileResult {
+        require(epgSourceId.isNotBlank())
+        val snapshot = dao.relationSnapshot(epgSourceId)
+            ?: return EpgMatchingReconcileResult.NotReady
+        if (dao.isFresh(snapshot, CURRENT_EPG_MATCH_POLICY_VERSION)) {
+            return EpgMatchingReconcileResult.Current
+        }
+        return reconcileSnapshot(snapshot)
+    }
+
+    override suspend fun reconcileAllIfStale() {
+        dao.activeLinkedEpgSourceIds().forEach { epgSourceId ->
+            try {
+                reconcileIfStale(epgSourceId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Startup repair is best effort per source. Refresh publication can retry derived state later.
+            }
+        }
+    }
+
+    private suspend fun reconcileSnapshot(
+        snapshot: EpgMatchingRelationSnapshot,
+    ): EpgMatchingReconcileResult {
         val channels = dao.epgChannels(
             epgSourceId = snapshot.epgSourceId,
             epgRevisionNumber = snapshot.epgRevisionNumber,
@@ -150,6 +185,7 @@ internal class RoomEpgMatchingStore(
         linkedSourceIds.forEach { epgSourceId ->
             when (reconcile(epgSourceId)) {
                 is EpgMatchingReconcileResult.Applied -> appliedCount++
+                EpgMatchingReconcileResult.Current -> error("Forced provider reconcile cannot be current")
                 EpgMatchingReconcileResult.NotReady -> notReadyCount++
                 EpgMatchingReconcileResult.Superseded -> supersededCount++
             }
@@ -185,6 +221,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.MATCHED.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = resolution.canonicalChannelId,
@@ -197,6 +234,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.AMBIGUOUS.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = null,
@@ -209,6 +247,7 @@ internal class RoomEpgMatchingStore(
             providerSourceId = snapshot.providerSourceId,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
             epgExternalChannelId = externalId,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
             decision = EpgChannelMatchDecision.UNRESOLVED.name,
             reasonCode = resolution.reasonCode.name,
             canonicalChannelId = null,

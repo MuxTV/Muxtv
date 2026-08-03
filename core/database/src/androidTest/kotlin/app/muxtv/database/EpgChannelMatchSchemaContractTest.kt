@@ -29,9 +29,23 @@ class EpgChannelMatchSchemaContractTest {
     }
 
     @Test
-    fun currentSchemaProvidesRevisionPairMatchTableAndIndices() = runTest {
+    fun currentSchemaProvidesRevisionPairMatchTablePolicyProvenanceAndIndices() = runTest {
         database.useReaderConnection { connection ->
             assertSchemaObjectExists(connection, "table", "epg_channel_matches")
+            connection.usePrepared(
+                """
+                SELECT COUNT(*)
+                FROM pragma_table_info('epg_channel_matches')
+                WHERE name = 'matchPolicyVersion'
+                  AND type = 'INTEGER'
+                  AND `notnull` = 1
+                  AND dflt_value = '0'
+                """.trimIndent(),
+            ) { statement ->
+                assertThat(statement.step()).isTrue()
+                assertThat(statement.getLong(0)).isEqualTo(1)
+                assertThat(statement.step()).isFalse()
+            }
             assertSchemaObjectExists(
                 connection,
                 "index",

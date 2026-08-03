@@ -31,17 +31,30 @@ class EpgMatchGuideInvalidationYagniTest {
     private class FakeGuideDao(
         private val versions: Flow<List<EpgGuideDataVersionRow>>,
     ) : EpgGuideDao() {
-        override fun observeDataVersion(): Flow<List<EpgGuideDataVersionRow>> = versions
+        override fun observeDataVersion(
+            matchPolicyVersion: Int,
+        ): Flow<List<EpgGuideDataVersionRow>> {
+            require(matchPolicyVersion == CURRENT_EPG_MATCH_POLICY_VERSION)
+            return versions
+        }
 
         override suspend fun activeMatchCounts(
             profileId: String,
             canonicalChannelIds: List<String>,
-        ): List<EpgGuideMatchCountRow> = emptyList()
+            matchPolicyVersion: Int,
+        ): List<EpgGuideMatchCountRow> {
+            require(matchPolicyVersion == CURRENT_EPG_MATCH_POLICY_VERSION)
+            return emptyList()
+        }
 
         override suspend fun programmeCandidates(
             profileId: String,
             canonicalChannelIds: List<String>,
             nowEpochMillis: Long,
-        ): List<EpgGuideProgrammeCandidateRow> = emptyList()
+            matchPolicyVersion: Int,
+        ): List<EpgGuideProgrammeCandidateRow> {
+            require(matchPolicyVersion == CURRENT_EPG_MATCH_POLICY_VERSION)
+            return emptyList()
+        }
     }
 }
