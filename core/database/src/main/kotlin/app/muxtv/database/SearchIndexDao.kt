@@ -34,6 +34,22 @@ internal interface SearchIndexDao {
         """
         SELECT text
         FROM search_documents
+        WHERE profileId = :profileId
+          AND canonicalChannelId = :canonicalChannelId
+          AND kind IN (:kinds)
+        ORDER BY documentKey COLLATE BINARY
+        """,
+    )
+    suspend fun textsForProfileCanonicalKinds(
+        profileId: String,
+        canonicalChannelId: String,
+        kinds: List<String>,
+    ): List<String>
+
+    @Query(
+        """
+        SELECT text
+        FROM search_documents
         WHERE epgSourceId = :sourceId
           AND epgRevisionNumber = :revisionNumber
           AND kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
