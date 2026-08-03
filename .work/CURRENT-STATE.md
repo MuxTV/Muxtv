@@ -9,31 +9,31 @@ implementation_source_commit: 9325e0b4b124402a8eb5b1731442bce40a5404a8
 
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Рабочий Android TV контур уже проходит source onboarding → immutable catalog → Channels → process-owned Media3 Player, а EPG-контур проходит bounded XMLTV → secure remote refresh → immutable EPG revision → deterministic versioned channel matching → bounded Now/Next.
+MuxTV находится в стадии **functional pre-alpha**. Принятый `main` уже имеет рабочий Android TV путь source onboarding → immutable catalog → Channels → process-owned Media3 Player и EPG путь bounded XMLTV → secure refresh → immutable EPG revision → deterministic versioned matching → bounded Now/Next.
 
-После merge PR #84 correctness foundation включает producer-revision provenance, explicit matching-policy provenance и stale-aware repair. Следующий продуктовый приоритет — daily-use TV UI (#29), параллельно с reproducible performance evidence (#27), а не новый storage/runtime/native framework.
+После PR #84 correctness foundation включает producer-revision provenance, explicit matching-policy provenance, stale-aware repair и Room schema **v8**. Следующий product critical path — issue #29 daily-use TV UI. Reproducible performance evidence из #27 идёт параллельно, а не заменяет продуктовую работу.
 
 ## Проверенные факты
 
 - Репозиторий: `MuxTV/Muxtv`, default branch `main`, BSD 3-Clause.
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
-- Baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp, Media3.
+- Baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Room 3, WorkManager, OkHttp, Media3.
 - Room schema на принятом `main`: **v8**.
 - PR #80 → `12dce1ac95b5a2215c53f485bf70ffd13fad46b3`: deterministic EPG matching + bounded Now/Next.
 - PR #84 → `9325e0b4b124402a8eb5b1731442bce40a5404a8`: matching-policy provenance, stale repair, Room v8.
 - #71, #28 и #82 закрыты как completed.
-- Exact-head #84 evidence: Full `30783348416` — success; API26/current database/device matrix `30783348361` — success.
-- #84 matrix: по 118 instrumentation tests на API 26 и API 36, 0 failures/errors/skips; `core:database` — 88/88 на каждом профиле.
-- Self-hosted Android TV runner/matrix — постоянная evidence-инфраструктура, а не отдельный product milestone.
+- Exact-head #84 evidence: Full `30783348416` — success; API26/API36 database/device matrix `30783348361` — success.
+- #84 matrix: 118 instrumentation tests на API26 и API36, 0 failures/errors/skips; `core:database` 88/88 на каждом профиле.
+- Self-hosted Android TV runner/matrix — постоянная evidence infrastructure, не отдельный product milestone.
 
-## Что уже закрыто в production foundation
+## Закрытый production foundation
 
 ### Source/catalog/playback
 
 - URL/access policy и credential isolation через Keystore-backed storage.
 - Bounded streaming M3U ingest.
 - Immutable source revisions, staging, atomic activation и previous-good preservation.
-- Durable source refresh ownership/lease/run-token protection; stale worker не может опубликовать устаревший результат.
+- Durable source refresh ownership/lease/run-token protection.
 - Stable canonical channel identity + profile overlays.
 - `PlaybackCatalog` остаётся read/playback boundary.
 - Exact-origin HTTP approval и sensitive-header isolation.
@@ -42,152 +42,145 @@ MuxTV находится в стадии **functional pre-alpha**. Рабочи�
 ### EPG
 
 - Bounded SAX/streaming XMLTV parser без DOM.
-- Independent input/depth/element/attribute/text/channel/programme/collection limits.
-- Byte-level DOCTYPE rejection + rejecting entity resolver + Android-compatible SAX hardening.
+- Independent parser limits и XXE/DTD hardening.
 - Plain/gzip/ZIP bounded payload decode.
-- Secure conditional remote acquisition (`ETag`/`Last-Modified`, correct `304` semantics).
-- Immutable EPG revisions, current + previous-good retention.
-- Durable EPG policy/state/attempt/validator persistence и DB lease ownership.
-- Deterministic matching: exact external/tvg identity → exact `tvgName` → exact `rawName`; ambiguity не превращается в weak winner.
-- Persisted `epg_channel_matches` keyed by immutable EPG/catalog producer revisions **and current matching-policy provenance**.
-- Room v7→v8 migration marks pre-versioned rows policy `0`/stale; current policy is `1`.
-- Cheap freshness check + `reconcileIfStale`; `304 Not Modified` не вызывает full rematch, если derived state current.
-- Guide/NowNext readers потребляют только current-policy rows.
+- Secure conditional remote acquisition (`ETag`/`Last-Modified`, correct `304`).
+- Immutable EPG revisions и previous-good retention.
+- Durable EPG policy/state/attempt/validator persistence + DB lease ownership.
+- Deterministic exact-ID → exact `tvgName` → exact `rawName` matching; ambiguity не превращается в weak winner.
+- Persisted producer-revision + matching-policy provenance.
+- v7→v8 migration marks old unversioned match rows stale; current policy is version 1.
+- Cheap freshness check + `reconcileIfStale`; current-policy-only Guide/NowNext reads.
 - Bounded Now/Next with `READY | NO_GUIDE | SOURCE_CONFLICT` and open-ended programme handling.
-- Reconciliation after accepted catalog/EPG publication и startup best-effort stale repair.
 
-## Уже реализовано в открытых PR
+## Активный product graph
 
-### PR #81 — Channels Now/Next / issue #29
+### PR #90 — Channels Now/Next / issue #29
 
-Clean-rebuilt на current post-#80 foundation; exact-head Full `30781623927` — success.
+Clean Room-v8 rebuild прежнего #81. Current head `0675015e7ba8c588c62be5f40927cbd466fc2338`, mergeable, draft.
 
 Реализовано:
 
 - destination/back-stack-scoped `ChannelsViewModel`;
 - immutable `StateFlow<ChannelsUiState>`;
-- bounded Now/Next loading и programme-boundary reload;
-- stale guide rejection on membership changes;
-- metadata/order-only updates reuse the guide snapshot;
-- Media3-backed playback-session projection без EPG reload на playback-only changes;
+- bounded catalog + Now/Next reads;
+- programme-boundary reload и stale guide generation rejection;
+- metadata/order-only catalog updates reuse current guide snapshot;
+- Media3-backed playback-session state source;
+- playback-only changes re-project rows without EPG reload;
 - dedicated TV channel rows;
-- Navigation 3 saveable/ViewModel-store state;
-- Player→Back focus continuity в unit/instrumentation contracts.
+- Navigation 3 saveable/ViewModel-store ownership;
+- Player→Back stable focus restoration + nearest-previous fallback.
 
-До merge не хватает exact-head TV/device acceptance: Channels focus → Player → Back и playback-session/MediaSession smoke. Green Full в одиночку этот gate не заменяет.
+Exact-head Full `30785039850` — **success**. Artifact содержит unit/lint/build/instrumentation-compile evidence, но не фактический API26/API36 runtime journey. Remaining gate: product DeviceMatrix with Channels focus → Player → Back and MediaSession/playback-session evidence, then final review/head check and SHA-guarded merge.
 
-### PR #86 — Favorites / issue #29
+PR #81 закрыт как superseded.
 
-Stacked on #81 and implemented:
+### PR #91 — Favorites / issue #29
 
-- dedicated `ChannelPreferencesRepository`, не mutation через `PlaybackCatalog`;
-- transactional Room preference write boundary через существующий `user_channel_overlays`;
+Clean Favorites slice stacked on #90. Current head `3826443ec6bbf6ca2bd1bead8f2947378961f0bd`, verified parent→head **4 commits / 16 files**, no Room schema bump.
+
+Реализовано:
+
+- dedicated `ChannelPreferencesRepository`;
+- transactional Room write через существующий `user_channel_overlays.isFavorite`;
 - `Applied | Unchanged | NotFound`;
+- active-visible canonical target verification и orphan-overlay prevention;
 - Player favorite action;
-- `Все каналы / Избранное` filter;
-- Room-side filtering, empty-state recovery и filter-aware focus restoration.
+- `Все каналы / Избранное` with Room-side filtering;
+- empty-state recovery и filter/membership-keyed focus restoration;
+- corrected historical #86 `initialFocusRequester` navigation regression.
 
-После merge #81 ветку надо clean rebuild/retarget на accepted `main`, затем заново пройти Full + TV device journeys.
+Fresh PR workflow evidence на current #91 head пока отсутствует. После merge #90 надо clean-rebuild Favorites delta на accepted `main`, получить независимый review surface, затем exact-head Full + product DeviceMatrix и SHA-guarded merge.
+
+PR #86 закрыт как superseded.
+
+## Performance graph / issue #27
 
 ### PR #89 — EPG matching/Guide allocation Stage 2
 
-PR #85 закрыт как superseded после того, как post-#84 retarget показал diverged 99-commit / 38-file review surface. Его intended allocation delta clean-rebuilt на accepted Room v8 `main` в PR #89.
+Clean Room-v8 replacement прежнего #85: **2 commits / 2 files**.
 
-Verified base→head #89: **2 commits / 2 files**:
+Exact-head evidence:
 
-- `RoomEpgMatchingStore.kt` — collision-on-demand ambiguity sets + single-pass matching summary;
-- `RoomEpgGuideRepository.kt` — direct bounded Now/Next loops.
+- Full `30784628497` — success;
+- API26/API36 database/device matrix `30784628471` — success.
 
-PR #89 остаётся draft: exact-head correctness и comparable allocation evidence обязательны до любого performance/merge claim.
+Correctness gate green, но PR остаётся draft до comparable same-corpus/same-profile/same-environment before/after allocation evidence. Compilation/device green не является performance proof.
 
 ### PR #83 — Core allocation Stage 1
 
-Реализованы reusable M3U buffers/decoder, reusable SHA-256 state, playback-header fast paths, direct XMLTV timestamp scanner и Android microbenchmark module.
-
-Предыдущий Full `30757037017` падал на configuration phase: AndroidX Benchmark 1.4.1 использовал legacy AGP `TestedExtension`, отсутствующий на AGP 9.3. В ветке Benchmark pin обновлён до `1.5.0-alpha07`; current exact head `9ac00e9a3f24cadffa24ea1d125a2080c3527972`. PR остаётся draft до нового exact-head Full, clean retarget/rebuild и comparable before/after measurements.
+Reusable M3U buffers/decoder, reusable SHA-256 state, playback-header fast paths, direct XMLTV timestamp scanner и Android microbenchmark module. AndroidX Benchmark обновлён до `1.5.0-alpha07` после AGP9 `TestedExtension` incompatibility. Current head `9ac00e9a3f24cadffa24ea1d125a2080c3527972`; fresh PR workflow runs на этом SHA не обнаружены. Нужны fresh exact-head Full, clean rebuild/retarget и comparable A/B evidence.
 
 ### PR #87 — XMLTV allocation Stage 2
 
-Clean one-commit/one-file branch:
+Clean one-commit/one-file parser slice. Current head `e617bb9c4198758aa7873a802c7b98bc089a627b`; fresh PR workflow runs на этом SHA не обнаружены. Correctness + allocation evidence обязательны до merge/performance claim.
 
-- reuse already-normalized captured XMLTV text вместо повторного `toString().trim()`;
-- lazy reusable guarded `skip()` scratch buffer.
+### Measurement foundation
 
-Correctness validation + allocation evidence ещё не получены; lazy metadata collections остаются measurement-gated.
+Уже доступны deterministic M3U corpora 1k/10k/50k, bounded HLS/XMLTV fixtures, M3U/Room/Player adapters, repository-owned `current-normal`, `old-edge-normal`, `current-low-ram` profiles и fresh-AVD sequential orchestration.
 
-## Measurement foundation / #27
+Remaining #27 acceptance:
 
-Уже доступно:
-
-- deterministic provider-neutral M3U corpora 1k/10k/50k;
-- canonical manifests и repository generation entry point;
-- bounded HLS/XMLTV fixtures и production XMLTV consumer binding;
-- descriptive M3U/Room/Player measurement adapters;
-- repository-owned `current-normal`, `old-edge-normal`, `current-low-ram` profiles;
-- fresh-AVD sequential series orchestration и audit manifests.
-
-Remaining acceptance:
-
-1. five-run `current-normal`;
-2. five-run `old-edge-normal`;
-3. five-run `current-low-ram`;
+1. 5× `current-normal`;
+2. 5× `old-edge-normal`;
+3. 5× `current-low-ram`;
 4. separated cross-profile interpretation;
-5. per-operation `hard-gate` / `warning-only` / `descriptive-only` decision;
-6. durable performance report and truth sync.
+5. per-operation `hard-gate | warning-only | descriptive-only` decisions;
+6. durable performance report.
 
-No structural optimization or native rewrite выбирается по one/two-run smoke evidence.
+## Critical path
 
-## Текущий critical path
+### P0 — converge current graph
 
-### P0 — закрыть текущий stacked graph
-
-1. **#81:** получить exact-head TV/device playback/focus evidence → merge.
-2. **#86:** после #81 clean rebuild/retarget → Full + TV matrix → merge.
-3. **#89:** exact-head correctness + comparable EPG matching/NowNext allocation evidence; merge только при измеримом выигрыше без semantic drift.
-4. **#83:** подтвердить AGP9-compatible benchmark toolchain новым Full, затем clean rebuild/retarget + before/after M3U/XMLTV measurements.
-5. **#87:** exact-head correctness + XMLTV allocation evidence; merge только при измеримом выигрыше без semantic drift.
-
-Независимые evidence lanes (#81 device, #83/#87/#89 perf, #27 profiles) можно выполнять параллельно; зависимые feature branches не следует постоянно ребейзить до стабилизации parent.
+1. Add product Android-TV DeviceMatrix trigger/lane for UI/player changes.
+2. Run exact-head product device acceptance for #90; if green and review-clean, merge #90 with exact SHA guard.
+3. Clean-rebuild #91 Favorites delta on post-#90 `main`; validate independently and merge.
+4. Keep #89/#83/#87 in parallel measurement lanes; do not block user-visible progress on unproven micro-optimizations.
+5. Merge repository truth only after its own exact-head validation.
 
 ### P1 — issue #29 daily-use discovery
 
-После принятия #81/#86:
+After #90/Favorites acceptance:
 
-1. bounded/debounced Search через отдельный query boundary по channel name/number/group + active programme metadata;
-2. profile-scoped bounded Recent, обновляемый только после successful playback, не при Player open/failed resolve;
-3. bounded/lazy TV Guide viewport;
+1. bounded/debounced Search through a dedicated query boundary covering effective channel name/number/group + active programme metadata;
+2. profile-scoped bounded Recent written only after confirmed successful playback;
+3. bounded/lazy TV Guide viewport keyed by channel IDs + time window + explicit limits;
 4. D-pad/focus/Player Back continuity across filters/routes/restored state.
 
-FTS не вводится заранее: сначала bounded Room query и measurements. Recent, если потребует новую Room schema, должен строиться уже поверх принятой v8.
+FTS is not introduced until bounded Room queries are measured inadequate. Recent history should be its own durable profile-scoped model rather than overloading `user_channel_overlays`; any migration starts from accepted Room v8.
 
-### P2 — issue #30 bounded fallback + TV Doctor Lite
+### P2 — issue #30
 
-- bounded attempt/time fallback ladder;
+- bounded variant fallback attempt/time ladder;
 - typed DNS/TLS/HTTP/auth/redirect/manifest/decoder/playback failure families;
-- no retry storms и no mutation of preferred variant от temporary fallback;
-- bind HLS fixtures to real fallback consumer;
-- redacted local diagnostics/export.
+- no retry storms;
+- temporary fallback never mutates preferred variant implicitly;
+- production-bound HLS fixtures;
+- redacted TV Doctor Lite diagnostics/export.
 
-Media3 остаётся sole player engine, пока measured compatibility evidence не потребует отдельного ADR.
-
-### P3 — issue #31 alpha hardening
+### P3 — issue #31
 
 - R8/resource shrinking;
 - Compose compiler metrics;
 - Macrobenchmark + Baseline/Startup Profiles;
-- process/native memory evidence и API37 memory-limiter stress;
-- physical Android/Google TV + constrained/Fire TV checks;
-- upgrade/Keystore/Room recovery;
-- signing, changelog, SBOM/licenses и release checklist.
+- process/native-memory evidence и API37 limiter stress;
+- physical Android/Google TV + constrained/Fire TV evidence;
+- install/upgrade, Keystore and Room recovery;
+- signing, changelog, SBOM/licenses and release checklist.
 
 ## Branch hygiene
 
-В репозитории остаётся заметное число старых `feat/docs/wip/rebuild` refs. Пока #81/#86 и performance rebuilds используют recovery context, массово удалять их не следует. После стабилизации graph — отдельный branch-hygiene pass: оставить `main`, реально активные feature/perf branches и нужные release refs; merged/replaced branches удалить после проверки PR/commit reachability.
+Не удалять массово recovery refs, пока #90/#91 и performance rebuilds не стабилизированы. После принятия активного graph выполнить отдельный branch-hygiene pass и удалить только merged/replaced branches после проверки reachability.
 
 ## Native/Rust decision gate
 
-Rust/UniFFI, bundled SQLite, libmpv и второй playback engine **не являются текущими correctness dependencies**. Kotlin/Room/Media3 остаётся preferred path, пока repeated #27/#31 measurements не покажут residual hotspot/compatibility gap, достаточный для оправдания FFI/ABI/packaging/debugging/maintenance cost отдельным ADR.
+Rust/UniFFI, bundled SQLite, libmpv и второй playback engine **deferred**. Kotlin/Room/Media3 остаётся preferred path, пока repeated #27/#31 evidence не покажет residual hotspot/compatibility gap, оправдывающий FFI/ABI/packaging/debugging/maintenance cost отдельным ADR.
+
+## Execution plan
+
+Текущий подробный checkpoint: `docs/superpowers/plans/2026-08-03-repository-convergence-and-daily-use.md`.
 
 ## Evidence limits
 
-API26/current emulator checks валидируют Android API, lifecycle, Room, focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough behavior, Fire OS, weak ARM SoCs, real network zap latency или thermal throttling; physical-device validation остаётся mandatory before alpha.
+API26/API36 emulator checks валидируют Android API, lifecycle, Room, focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM SoCs, реальную zapping/network latency или thermal throttling; physical-device validation остаётся mandatory before alpha compatibility claims.
