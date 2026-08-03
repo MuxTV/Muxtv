@@ -71,7 +71,7 @@ next_milestone:
   immediate_sequence:
     - validate_and_merge_channels_now_next_pr_81
     - rebuild_and_merge_favorites_pr_86_after_81
-    - clean_rebuild_and_measure_epg_allocation_pr_85
+    - validate_and_measure_clean_epg_allocation_pr_89
     - validate_rebuild_and_measure_core_allocation_pr_83
     - validate_and_measure_xmltv_allocation_pr_87
   daily_use_after_stack:
@@ -89,7 +89,7 @@ next_milestone:
 known_gaps:
   - channels_now_next_exact_head_tv_device_and_focus_playback_evidence
   - favorites_rebuild_after_channels_now_next
-  - clean_post_room_v8_allocation_pr_diffs
+  - exact_head_correctness_and_allocation_evidence_for_pr_89
   - comparable_allocation_evidence_for_open_performance_prs
   - five_run_multi_profile_measurement_variance
   - bounded_search
