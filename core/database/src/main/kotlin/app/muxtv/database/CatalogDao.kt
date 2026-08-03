@@ -15,7 +15,7 @@ abstract class CatalogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     protected abstract suspend fun insertOverlayRow(overlay: UserChannelOverlayEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
 
     @Query(
