@@ -3,20 +3,20 @@
 **Status:** design review required before production implementation  
 **Date:** 2026-08-03  
 **Issue:** #29  
-**Accepted base:** `main@7e1f18f31ab8628a104f2668d87e6478d7559242` (post-PR #90)  
-**Expected implementation base:** accepted post-Favorites `main`
+**Accepted design base:** `main@7e1f18f31ab8628a104f2668d87e6478d7559242` (post-PR #90)  
+**Implementation base:** accepted post-Favorites `main`
 
 ## 1. Goal
 
-Replace the current Search placeholder with a TV-first, profile-scoped search that can find an active visible channel by:
+Replace the current Search placeholder with a TV-first, profile-scoped search that finds active visible channels by:
 
 - effective channel name;
 - provider/raw channel name;
 - effective channel number;
 - group title;
-- title of the programme that is active at the query time.
+- title of the programme that is **currently active under the accepted Now/Next semantics**.
 
-The implementation must remain bounded at the API/UI boundary, must not materialize the complete catalog or guide in Compose, and must preserve the existing canonical channel identity and Player ownership.
+The feature must remain bounded at the API/UI boundary, must not materialize the whole catalog or guide in Compose, and must preserve canonical channel identity and the existing process-owned Player.
 
 ## 2. Non-goals
 
@@ -29,34 +29,35 @@ This slice does **not** introduce:
 - provider-specific search APIs;
 - a second catalog or EPG state owner;
 - Paging solely for Search;
-- a new global focus engine;
-- Room schema changes unless measurement proves the bounded SQL design inadequate;
+- a global/custom focus engine;
+- a Room migration unless measurement later proves the initial relational design inadequate;
 - Rust/UniFFI/native search.
 
 ## 3. Existing contracts to preserve
 
 ### Playback catalog
 
-`PlaybackCatalog` remains the read/playback boundary for active canonical channels and variants. Its existing `ChannelQuery` already supports bounded text filtering for effective name, provider raw name and group, but it does not cover effective channel number or active programme metadata.
+`PlaybackCatalog` remains the active-channel/playback boundary. `ChannelQuery` already supports bounded text filtering for effective name, provider raw name and group, but does not cover effective channel number or active programme metadata.
 
-Search must not silently turn `PlaybackCatalog.observeChannels()` into an EPG-dependent API. Doing so would couple the catalog boundary to programme-time invalidation and duplicate guide ownership.
+Search must **not** turn `PlaybackCatalog.observeChannels()` into an EPG-dependent API. That would make the catalog boundary time-dependent on programme transitions and duplicate guide ownership.
 
 ### EPG guide
 
-`EpgGuideRepository` remains the Now/Next guide projection boundary. Existing Room guide queries already enforce:
+Search must inherit the accepted `EpgGuideRepository` / `RoomEpgGuideRepository` semantics:
 
-- active EPG revision;
-- active provider/catalog revision;
-- current `CURRENT_EPG_MATCH_POLICY_VERSION`;
-- `decision = MATCHED`;
-- hidden-channel exclusion;
-- conflict semantics where multiple active matches are not treated as a weak winner.
+- EPG source revision equals `epg_sources.activeRevision`;
+- provider/catalog revision equals `sources.activeRevision`;
+- match policy equals `CURRENT_EPG_MATCH_POLICY_VERSION`;
+- only `decision = MATCHED` rows participate;
+- hidden channels remain excluded;
+- multiple active matches produce conflict semantics, never a weak winner;
+- an open-ended previous programme is current only when its effective end is known from the next programme.
 
-Search must use the same provenance/freshness semantics.
+The final point is important: `stop == null` does **not** mean “current forever”.
 
 ### Navigation and playback
 
-`AppDestination.Search` already exists. Player remains process-owned Media3. Search opens the existing `AppDestination.Player(channelId)` and never resolves/installs media itself.
+`AppDestination.Search` already exists. Search opens the existing `AppDestination.Player(channelId)`. Search never resolves or installs media itself.
 
 ## 4. Chosen architecture
 
@@ -68,20 +69,20 @@ interface ChannelSearchRepository {
 }
 ```
 
-This is intentionally separate from both `PlaybackCatalog` and `EpgGuideRepository` because Search combines catalog metadata and active programme metadata for one read-only use case.
+This repository is intentionally separate from both `PlaybackCatalog` and `EpgGuideRepository`: Search combines canonical catalog metadata and current EPG metadata for a single read-only use case.
 
-No write APIs are added.
+No write API is added.
 
-### 4.1 Public query
+### 4.1 Query contract
 
 ```kotlin
 class ChannelSearchQuery(
     val profileId: String,
-    val text: String,
+    text: String,
     val nowEpochMillis: Long,
     val limit: Int = DEFAULT_LIMIT,
 ) {
-    val normalizedText: String
+    val normalizedText: String = text.trim()
 
     companion object {
         const val DEFAULT_LIMIT = 100
@@ -92,23 +93,22 @@ class ChannelSearchQuery(
 
 Rules:
 
-- `profileId` must be nonblank;
+- `profileId` is nonblank;
 - `nowEpochMillis >= 0`;
 - `limit in 1..200`;
-- `text.trim()` is the normalized query;
-- blank normalized text produces an empty snapshot and does not run an unfiltered catalog search;
-- one-character queries are allowed, but output remains hard-bounded;
-- `toString()` redacts profile ID and search text and reports only `hasText`, length class and limit.
+- blank normalized text returns an empty snapshot and never becomes an unfiltered catalog query;
+- one-character queries are allowed, but output is still hard-bounded;
+- public `toString()` redacts both profile ID and query text;
+- diagnostics may expose only safe metadata such as text-length bucket and limit.
 
-The DAO receives a bound, escaped LIKE pattern. `%`, `_` and `\` from user input are escaped; SQL injection through query text is impossible because values remain bound parameters.
+The repository converts the normalized text into a bound LIKE pattern. Literal `%`, `_` and `\` are escaped. User text is never interpolated into SQL.
 
-### 4.2 Public result
+### 4.2 Result contract
 
 ```kotlin
 data class ChannelSearchResult(
     val channel: PlayableChannelSummary,
     val currentProgrammeTitle: String?,
-    val currentProgrammeEndEpochMillis: Long?,
 )
 
 data class ChannelSearchSnapshot(
@@ -117,106 +117,135 @@ data class ChannelSearchSnapshot(
 )
 ```
 
-`currentProgrammeEndEpochMillis` is projection metadata needed for correct time-based invalidation; it is not persisted as Search state.
+`nextBoundaryEpochMillis` is the earliest future programme-time boundary that can change Search membership or displayed programme metadata for the profile. It is null when no such active guide boundary exists.
 
-`nextBoundaryEpochMillis` is the earliest EPG time boundary that can change Search membership or displayed active-programme metadata for the current profile. It may be null when no active guide boundary exists.
-
-Public `toString()` implementations must not expose channel/programme/user query text.
+The result contract intentionally does not publish locators, source identifiers, match evidence, query text or raw failure information.
 
 ## 5. Room projection
 
-Add a dedicated Search DAO/repository implementation in `core:database`. Do not reuse Compose-side filtering.
+Implement a dedicated Search DAO/repository in `core:database`. Do not perform catalog/EPG joins in Compose or the ViewModel.
 
-### 5.1 Channel projection CTE
+### 5.1 Active channel projection
 
-First project active visible canonical channels from the existing source/catalog tables:
+Project active visible canonical channels from the existing source/catalog tables:
 
 - canonical channel ID;
 - effective display name = overlay custom name or canonical display name;
-- representative logo/group;
+- representative logo;
+- representative group title;
 - effective channel number = overlay number or provider number;
 - favorite bit;
 - active variant count.
 
 Required predicates:
 
-- provider channel revision equals `sources.activeRevision`;
+- provider row belongs to `sources.activeRevision`;
 - hidden overlay is false/missing;
-- at least one active stream variant exists.
+- at least one active stream variant exists;
+- projection is profile-scoped.
 
-The projection is profile-scoped.
+No new persisted Search table is introduced.
 
-### 5.2 Unambiguous active EPG projection
+### 5.2 Current-policy unambiguous EPG projection
 
-Build a second CTE from current EPG match provenance:
+Build EPG candidates only from match rows satisfying all accepted provenance constraints:
 
-- EPG source revision equals `epg_sources.activeRevision`;
-- provider/catalog revision equals `sources.activeRevision`;
-- matching policy equals `CURRENT_EPG_MATCH_POLICY_VERSION`;
-- decision is `MATCHED`;
-- canonical channel ID is non-null.
+- active EPG revision;
+- active provider/catalog revision;
+- current matching-policy version;
+- `decision = MATCHED`;
+- non-null canonical channel ID.
 
-Group active match evidence per canonical channel and expose programme data only where the effective match count is exactly one. Multiple active matches preserve existing `SOURCE_CONFLICT` semantics and do **not** contribute programme text to Search.
+Group match evidence per canonical channel. Programme metadata contributes to Search only where the effective active match count is exactly one. Two or more active matches preserve `SOURCE_CONFLICT` behavior and supply **no** programme text.
 
-For the single unambiguous mapping, project the programme active at `nowEpochMillis`:
+For that single mapping, derive `previous` and `next` candidates exactly like the accepted Now/Next projection:
 
 ```text
-start <= now && (stop is null || now < stop)
+previous = latest programme where start <= now
+next     = earliest programme where start > now
 ```
 
-If malformed/overlapping programme rows can produce more than one active candidate, select deterministically using the same ordering rules as the accepted guide projection rather than returning duplicate Search rows.
+Then derive current programme with the same effective-end rules:
+
+```text
+if previous.stop != null && previous.stop > now:
+    effectiveEnd = previous.stop
+else if previous.stop == null && next != null && next.start > now:
+    effectiveEnd = next.start
+else:
+    effectiveEnd = null
+
+current = previous only when effectiveEnd != null && effectiveEnd > previous.start
+```
+
+Consequences:
+
+- a stopped programme is not current;
+- a future programme is not current;
+- an open-ended programme with a following programme is bounded by that next start;
+- an open-ended programme with no following programme is **not** treated as current forever;
+- overlapping data follows the same deterministic previous/next ordering as Now/Next.
+
+Search must be characterized against the accepted `RoomEpgGuideRepository` behavior so these semantics cannot drift independently later.
 
 ### 5.3 Search predicate
 
 A channel matches if normalized text occurs in any of:
 
 1. effective display name;
-2. provider/raw name;
+2. provider/raw channel name;
 3. effective channel number;
 4. group title;
-5. current unambiguous programme title.
+5. current programme title from the unambiguous projection above.
 
-All textual LIKE terms use the same escaped pattern. Hidden and inactive channels never enter the candidate projection.
+All LIKE terms use the same escaped bound pattern. Hidden/inactive channels never enter the candidate set.
 
 ### 5.4 Deterministic ordering
 
-Search ranking is private implementation detail, not a public API enum. Initial ordering:
+Ranking is a private DAO concern, not a public relevance-score API.
+
+Initial ordering:
 
 1. exact effective channel-number match;
-2. exact effective display-name match (case-insensitive);
-3. effective display-name prefix match;
-4. provider/raw-name prefix match;
-5. remaining name/group/programme contains matches;
+2. exact effective display-name match (`NOCASE`);
+3. effective display-name prefix;
+4. provider/raw-name prefix;
+5. remaining name/group/current-programme contains matches;
 6. stable tie-break by effective numeric channel number where parseable, display name `NOCASE`, then canonical channel ID.
 
-The first implementation may simplify ranks 2–5 if SQLite expression complexity becomes excessive, but ordering must remain deterministic and tested. No relevance score is persisted.
+If ranks 2–5 make the SQL disproportionately complex, the first implementation may collapse them into fewer deterministic classes. The public API must not depend on the internal rank representation.
 
-### 5.5 Hard bound
+### 5.5 Hard output bound
 
-The final row query always has `LIMIT :limit`, with API max 200.
+Every row query has `LIMIT :limit`; the public maximum is 200.
 
-A bounded result does not imply bounded SQLite scan cost for `%contains%`. That is accepted for the first implementation and is the reason measurement is required before deciding on FTS.
+This bounds materialized results, not the cost of a `%contains%` scan. Scan cost is measured before any FTS decision.
 
-## 6. Time and invalidation semantics
+## 6. Programme-time invalidation
 
-Search must not become stale when the clock crosses a programme boundary without a DB write.
+Search cannot rely only on Room writes: a programme can become current or cease to be current when time crosses a boundary with no database mutation.
 
-The repository snapshot therefore contains `nextBoundaryEpochMillis` computed as a scalar aggregate over current-policy, active-revision, unambiguous EPG mappings for the profile. The boundary is the minimum future value that can change the active programme projection, including:
+The repository therefore combines:
 
-- end of the current programme;
-- start of the next programme where no bounded current end exists.
+1. a Room-invalidated Search-row flow;
+2. a Room-invalidated scalar `nextBoundaryEpochMillis` flow.
 
-Implementation may expose two Room invalidation flows internally (search rows + next boundary) and combine them into one snapshot.
+The boundary aggregate uses the **same previous/next/effective-end semantics** as section 5.2 across active, current-policy, unambiguous mappings for the profile. Candidate boundaries are:
 
-The Search ViewModel owns the wall clock and schedules one cancellable reload for the published boundary, following the same generation/staleness discipline already used by Channels Now/Next. A new query cancels the old boundary job.
+- effective end of the current programme;
+- start of the next programme.
 
-EPG/catalog Room invalidation naturally re-emits the repository flow. No polling loop is required.
+Only future boundaries (`> now`) participate; take the minimum.
 
-## 7. ViewModel state
+The Search ViewModel owns the clock. When a snapshot publishes a boundary, it schedules exactly one cancellable wake-up, rebuilds the query with the new `nowEpochMillis`, and cancels that job whenever query generation changes. No periodic polling loop is required.
+
+Catalog/EPG database changes naturally re-emit the Room flows.
+
+## 7. Search ViewModel
 
 Add a destination/back-stack-scoped `SearchViewModel` in a new `feature:search` module.
 
-Suggested immutable state:
+Suggested immutable UI state:
 
 ```kotlin
 sealed interface SearchUiState {
@@ -228,166 +257,180 @@ sealed interface SearchUiState {
 }
 ```
 
-Separate durable screen inputs:
+Separate screen inputs/state:
 
 - `queryText: StateFlow<String>`;
-- focused canonical channel ID / previous index as saveable route state, not repository state.
+- focused canonical channel ID + previous index as route/saveable state;
+- query generation counter/token internal to the ViewModel.
 
 Behavior:
 
 - initial query is blank;
-- normalize/debounce nonblank text by **300 ms** before creating `ChannelSearchQuery`;
-- a new normalized query cancels the previous repository collection and boundary job;
-- blank query immediately returns to `EmptyQuery`;
-- do not publish raw exceptions or query text through failure objects;
-- preserve current Content during a same-query boundary/data refresh when possible instead of flashing Loading.
+- nonblank normalized input is debounced by **300 ms**;
+- a newer normalized query cancels the previous repository collection and boundary job;
+- blank input immediately returns to `EmptyQuery`;
+- stale results from an older generation cannot overwrite a newer query;
+- same-query data/boundary refresh should preserve existing Content while replacement data loads, avoiding a focus-tree flash;
+- failures expose typed/payload-free state, never raw exception/query text.
 
-The 300 ms debounce is a product default, not a storage contract, and can be tuned later without schema/API changes.
+The 300 ms debounce is a UI default, not a storage contract.
 
 ## 8. TV UI and focus contract
 
-Replace the Search placeholder with one restrained TV screen:
+Replace the Search placeholder with one restrained screen:
 
 - title `Поиск`;
 - one text-entry control;
 - result count/status copy;
-- one lazy vertical result list;
-- each row displays existing data only: number, name, group/favorite marker and current programme title when available.
+- one lazy vertical results list;
+- rows show existing data only: number, favorite marker, channel name, group and current programme title when available.
 
-Do not add preview panes, programme artwork or a second column in this slice.
+No preview pane, programme artwork, recommendation rail or second content column is part of this slice.
 
-### Focus rules
+Focus rules:
 
-1. Initial Search entry focuses the query field.
-2. `Down` from the query field moves to the first result when results exist.
-3. `Up` from the first result returns to the query field.
-4. Ordinary rows keep default vertical traversal.
+1. Search opens with the query field focused.
+2. `Down` from the query field goes to the first result when results exist.
+3. `Up` from the first result goes back to the query field.
+4. Lower rows keep standard vertical D-pad traversal.
 5. `OK` on a result opens the existing Player directly.
-6. Player → Back restores the query and the same surviving canonical channel.
-7. If the focused channel disappears from results after a refresh, fall back to nearest previous result; if no result remains, focus the query field.
-8. Recomposition/query refresh must not introduce a new global focus owner or custom focus engine.
+6. Player → Back restores query text and the same surviving canonical channel.
+7. If that channel disappears, focus falls back to the nearest previous result.
+8. If no result survives, focus returns to the query field.
+9. Recomposition/query refresh must not create another global focus owner or focus engine.
 
-A small Search-local stable-ID focus anchor is acceptable. Do not generalize it into a framework until a second distinct screen proves a reusable abstraction is needed.
+A Search-local stable-ID focus anchor is acceptable. Do not generalize it into a framework until another distinct screen proves the abstraction useful.
 
-## 9. Module/wiring changes expected after approval
+## 9. Expected module/wiring changes after approval
 
-Expected production files/modules:
-
-- add `feature:search` to `settings.gradle.kts`;
+- add `:feature:search` in `settings.gradle.kts`;
 - `catalog/api/.../ChannelSearchRepository.kt`;
 - `core/database/.../ChannelSearchDao.kt`;
 - `core/database/.../RoomChannelSearchRepository.kt`;
-- database component wiring (no schema version change expected);
+- existing database component wiring, with no schema bump expected;
 - `feature/search/.../SearchViewModel.kt`;
 - `feature/search/.../SearchRoute.kt`;
-- app DI module/wiring;
+- app DI wiring;
 - replace `AppDestination.Search -> PlaceholderRoute("Поиск")` with `SearchRoute`.
 
-Tests live adjacent to the relevant modules. Do not put Search logic into `MainActivity` or navigation lambdas.
+Search logic does not belong in `MainActivity` or navigation lambdas.
 
 ## 10. Correctness tests
 
-### API/query tests
+### API/query
 
-- normalization/blank behavior;
-- limit min/max;
+- trim/blank normalization;
+- min/max limit;
 - redacted `toString()`;
-- LIKE escaping for `%`, `_`, `\`.
+- literal escaping of `%`, `_`, `\`.
 
-### Room tests
+### Room
 
 At minimum:
 
-- effective custom name match;
-- provider/raw name match;
+- effective custom-name match;
+- provider/raw-name match;
 - group match;
 - overlay channel-number match;
 - provider channel-number match;
-- active current-programme title match;
-- future/past programme does not match as current;
+- current programme-title match;
+- past/future programme excluded;
+- explicit-stop current programme behavior matches Now/Next;
+- open-ended + next programme behavior matches Now/Next;
+- open-ended + no next programme does not become infinite current;
 - stale EPG revision excluded;
 - stale matching-policy rows excluded;
-- ambiguous/current `SOURCE_CONFLICT` mapping does not supply programme text;
-- hidden channel excluded even when programme matches;
+- ambiguous/source-conflict mapping supplies no programme text;
+- hidden channel excluded even when programme text matches;
 - inactive catalog revision excluded;
+- profile-overlay isolation;
 - deterministic ordering and hard limit;
-- profile overlay isolation;
-- escaped wildcard characters are literal.
+- escaped wildcard characters remain literal;
+- next-boundary aggregate follows the accepted Now/Next boundary semantics.
 
-### ViewModel tests
+### ViewModel
 
-- blank query does not hit repository;
+- blank query does not execute an unfiltered repository search;
 - 300 ms debounce coalesces rapid input;
 - newer query cancels older generation;
-- repository/data refresh cannot overwrite newer query results;
-- EPG boundary schedules one reload and cancellation is clean;
+- stale repository/data result cannot overwrite newer query;
+- one boundary reload is scheduled and cancelled correctly;
 - blanking query cancels pending work;
+- same-query refresh does not flash through destructive Loading;
 - failure state is payload-free.
 
 ### TV instrumentation
 
 - initial query focus;
 - type/search → Down → first result;
-- result Up → query;
+- first result Up → query;
 - OK → Player → Back restores query + same result;
-- result removal uses nearest-previous fallback;
+- removed focused result falls back deterministically;
 - no-results returns focus to query;
-- active-programme match appears/disappears after controlled boundary refresh;
-- API26 and API36 product journey once implementation is complete.
+- active-programme search membership changes at a controlled boundary;
+- API26/API36 product journey after implementation.
 
-## 11. Performance acceptance
+## 11. Performance acceptance and FTS gate
 
-The first implementation uses ordinary indexed/relational Room SQL plus bounded result output. Before introducing FTS5:
+Initial implementation uses ordinary Room/SQLite relational queries with hard-bounded output.
 
-1. measure representative Search queries against deterministic 1k/10k/50k catalog fixtures with EPG where available;
-2. record wall time, allocations where meaningful, result count and SQLite query-plan/index usage;
-3. include worst useful patterns (number exact, name prefix, contains, programme contains, no-match);
-4. keep measurements descriptive until variance is known.
+Before introducing FTS5, measure representative Search queries against deterministic 1k/10k/50k catalog profiles and bounded EPG fixtures where applicable. Record:
 
-FTS becomes eligible only if repeated evidence shows the bounded relational query is a material daily-use latency/CPU problem. If FTS is adopted later, it requires its own migration/index-consistency design and must remain derived from canonical Room truth.
+- wall time;
+- result count;
+- allocations where meaningful;
+- query-plan/index usage;
+- exact number, name prefix, contains, programme contains and no-match patterns.
+
+Measurements are descriptive until variance is understood.
+
+FTS5 becomes eligible only if repeated evidence shows the relational query is a material daily-use latency/CPU bottleneck. A later FTS implementation requires a separate migration/index-consistency design and remains derived from canonical Room truth.
 
 ## 12. Security/privacy
 
-Search must never expose in state/logs/semantics:
+Search state, logs, diagnostics and semantics must never expose:
 
-- playlist or stream locators;
-- query tokens/cookies/Authorization values;
+- playlist/stream locators;
+- query tokens, cookies or Authorization values;
 - source credentials;
-- provider/source identifiers not already part of an intentional visible label;
 - raw exception messages;
-- the user's search text in diagnostics.
+- user search text in diagnostics.
 
-Search SQL uses bound parameters only. Diagnostic state may record query length bucket, result count, duration and typed failure category.
+SQL uses bound parameters only. Safe diagnostics may record query-length bucket, result count, duration and typed failure category.
 
 ## 13. Alternatives rejected
 
-### A. Extend `PlaybackCatalog.observeChannels()` to join EPG
+### Extend `PlaybackCatalog.observeChannels()` with EPG joins
 
-Rejected. It makes a catalog/playback boundary time-dependent on EPG programme transitions and duplicates guide ownership.
+Rejected: it makes a catalog/playback boundary time-dependent on EPG and duplicates guide ownership.
 
-### B. Run separate catalog and EPG searches and merge in ViewModel
+### Run separate catalog and EPG searches and merge in the ViewModel
 
-Rejected. It over-fetches, makes the global result limit/ranking ambiguous, duplicates canonical IDs and moves database join semantics into presentation code.
+Rejected: it over-fetches, makes global limits/ranking ambiguous and moves database join semantics into presentation code.
 
-### C. FTS5 immediately
+### FTS5 immediately
 
-Rejected until repeated evidence shows ordinary bounded SQL is insufficient. FTS adds schema/migration/index-consistency ownership before a bottleneck is proven.
+Rejected until repeated evidence proves ordinary bounded SQL inadequate.
 
-### D. Load all channels/guide rows and filter in Compose
+### Full catalog/guide filtering in Compose
 
-Rejected. Violates the existing bounded architecture and issue #29 acceptance criteria.
+Rejected because it violates issue #29 bounded-memory architecture.
 
-## 14. Self-review
+## 14. Self-review result
 
-- The design adds one read-only projection, not a second source of truth.
-- Canonical channel identity, overlays, current EPG provenance and process-owned Player remain unchanged.
-- No Room migration is required by the initial design.
-- Search result output is hard-bounded; full catalog/guide materialization is prohibited.
-- Time-based programme search has an explicit boundary invalidation mechanism rather than a stale static `now`.
-- Hidden/inactive/stale-policy/ambiguous guide data cannot leak into programme search.
-- TV focus is local and stable-ID based without adding a framework.
+The initial draft incorrectly treated `stop == null` as sufficient for a programme to remain current. Review against accepted `RoomEpgGuideRepository` found the divergence and this revision removes it.
+
+After correction:
+
+- Search adds one read-only projection, not a new source of truth;
+- canonical channel identity, overlays, current EPG provenance and Player ownership remain unchanged;
+- no initial Room migration is required;
+- output is hard-bounded and full materialization is prohibited;
+- programme search and boundary scheduling explicitly inherit accepted Now/Next semantics, including open-ended data;
+- hidden/inactive/stale-policy/ambiguous guide data cannot leak into programme search;
+- focus remains local and stable-ID based;
 - FTS and native/Rust work remain evidence-gated.
 
 ## 15. Approval gate
 
-Production implementation must not begin until this design is reviewed and approved. After approval, write a task-level implementation plan and implement Search on a fresh branch from the then-accepted `main`.
+Production implementation must not begin until this corrected design is reviewed and approved. After approval, write a task-level implementation plan and implement Search from the then-accepted `main` on a fresh branch.
