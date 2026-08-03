@@ -94,15 +94,22 @@ internal fun overlaySearchDocuments(
 
 internal fun epgProgrammeSearchDocuments(
     programmes: List<EpgProgrammeEntity>,
-): List<SearchDocumentEntity> = programmes.mapNotNull { programme ->
-    programme.primaryTitle.nonBlankOrNull()?.let { title ->
+): List<SearchDocumentEntity> {
+    if (programmes.isEmpty()) return emptyList()
+
+    val firstProgrammeByTitle = LinkedHashMap<String, EpgProgrammeEntity>()
+    programmes.forEach { programme ->
+        programme.primaryTitle.nonBlankOrNull()?.let { title ->
+            firstProgrammeByTitle.putIfAbsent(title, programme)
+        }
+    }
+    return firstProgrammeByTitle.map { (title, programme) ->
         SearchDocumentEntity(
+            // The key only needs to be stable for this first insertion. Programme Search truth is
+            // later resolved by title against active EPG rows; the derived vocabulary row does not
+            // own an EPG revision/channel identity.
             documentKey = "epg-title:${programme.sourceId}:${programme.revisionNumber}:${programme.sequenceNumber}",
             kind = SearchDocumentKind.EPG_PROGRAMME_TITLE,
-            epgSourceId = programme.sourceId,
-            epgRevisionNumber = programme.revisionNumber,
-            epgExternalChannelId = programme.externalChannelId,
-            epgProgrammeSequence = programme.sequenceNumber,
             text = title,
         )
     }
