@@ -1,1 +1,0 @@
-The execution issue for the Lounge Light design will link to this directory.
