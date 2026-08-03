@@ -19,6 +19,9 @@ internal interface SearchIndexDao {
         kind: String,
     ): List<String>
 
+    @Query("SELECT rowid FROM search_documents WHERE documentKey = :documentKey LIMIT 1")
+    suspend fun rowIdForDocumentKey(documentKey: String): Long?
+
     @Query(
         """
         SELECT text
