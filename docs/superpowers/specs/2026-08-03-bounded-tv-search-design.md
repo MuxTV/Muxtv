@@ -1,6 +1,6 @@
 # Bounded TV Search Design
 
-**Status:** design review required before production implementation  
+**Status:** written design review required before production implementation  
 **Date:** 2026-08-03  
 **Issue:** #29  
 **Accepted design base:** `main@7e1f18f31ab8628a104f2668d87e6478d7559242` (post-PR #90)  
@@ -16,30 +16,105 @@ Replace the current Search placeholder with a TV-first, profile-scoped search th
 - group title;
 - title of the programme that is **currently active under the accepted Now/Next semantics**.
 
-The feature must remain bounded at the API/UI boundary, must not materialize the whole catalog or guide in Compose, and must preserve canonical channel identity and the existing process-owned Player.
+Search must work correctly for non-ASCII channel/programme names, including Cyrillic, remain bounded at every API/UI boundary, avoid whole-catalog/whole-guide materialization, preserve canonical channel identity, and reuse the process-owned Player.
 
-## 2. Non-goals
+## 2. Comparative research conclusions
+
+The design was re-reviewed against current implementations and failure reports from multiple search-heavy projects. The useful lesson is not to copy one project wholesale, but to combine the parts that match MuxTV's local-first Android TV constraints.
+
+### TV/media clients
+
+**Jellyfin Android TV** is the closest TV interaction reference. Its current Search implementation uses a dedicated ViewModel/repository, trims and deduplicates queries, cancels the previous search job, debounces ordinary text changes, provides an immediate-submit path, preserves the text field with saveable state, and explicitly moves focus away from text input on submit because Amazon devices may otherwise retain a fullscreen keyboard. Its current Compose/Leanback bridge also uses explicit focus boundaries rather than relying on geometric focus alone.
+
+Adopt:
+
+- separate debounced-change and immediate-submit paths;
+- normalized-query deduplication;
+- cancellation/generation ownership;
+- explicit text-input/results focus graph;
+- explicit focus escape on IME submit for Fire TV/Amazon safety.
+
+Do not copy:
+
+- parallel per-media-type network searches; MuxTV has one local canonical channel identity and should produce one globally bounded/ranked result set.
+
+**IPTVnator** is the strongest IPTV-domain reference. Recent releases added global search, category search, lazy loading for large playlists, channel-number navigation, and explicitly preserve the search phrase/results when navigating back from a result.
+
+Adopt:
+
+- query/result continuity across Player → Back;
+- channel-number-first intent;
+- hard/lazy bounds for large playlists;
+- hidden content remains an explicit policy, not an accidental search leak.
+
+Do not copy:
+
+- a global Live/VOD/Series scope in this slice; MuxTV currently has only the accepted live-channel/catalog/EPG product boundary.
+
+**VLC Android / NOVA Video Player / Jellyfin Web / Findroid** were surveyed as additional media-client references. They reinforce that Search must stay a client/domain feature rather than become playback ownership, but they do not provide stronger directly transferable Android-TV Search contracts than Jellyfin Android TV for this slice.
+
+### IPTV/EPG/query systems
+
+**Tvheadend** exposes EPG search/filtering with explicit current-time mode, field filters, deterministic sorting and backend limits. This validates modeling current-programme search as a time-dependent query rather than copying programme text into UI state and filtering it there.
+
+Adopt:
+
+- explicit `nowEpochMillis` query semantics;
+- backend filtering and hard limits;
+- deterministic sorting;
+- keep future filter dimensions separate from the default free-text contract.
+
+**Threadfin** strongly separates active/inactive channels, group filtering and channel numbering. For MuxTV this reinforces that Search candidates must still pass the active/visible canonical-channel boundary; search indexing must never make an inactive provider row visible.
+
+### Large local/self-hosted libraries
+
+**Navidrome** rebuilt Search on SQLite FTS5 with two-phase BM25 ranking for large libraries. The transferable lesson is that SQLite full-text indexing is a valid derived-index architecture when ordinary scans stop being sufficient. MuxTV should not copy FTS5/BM25 directly because Android driver compatibility and our ranking problem differ.
+
+**PhotoPrism** demonstrates a mature filter vocabulary and has had to harden escaping/parsing of search operators. The lesson for MuxTV is to keep the first public query language intentionally small: plain user text only. Do not expose FTS operators or advanced Boolean syntax in the first TV slice.
+
+**ErsatzTV** distinguishes the default free-text field from many explicit searchable fields. The lesson is to keep MuxTV's default fields curated (channel name/number/group/current programme), rather than silently making every provider/EPG attribute part of broad search.
+
+**Immich** provides two useful negative lessons. First, an INNER JOIN to optional search enrichment caused ordinary metadata search to disappear when that enrichment was absent; therefore optional EPG must never be required for a channel result. Second, hard-capped semantic result sets without clear pagination/truncation semantics created confusing UX. MuxTV will report truncation explicitly rather than pretending a bounded page is the whole result universe.
+
+**NewPipe** shows why query cost must shape interaction design: remote searches download/provider-query data and therefore filters are selected before expensive searches. MuxTV Search is local Room data, so debounced live search is appropriate. If remote provider search is ever added later, it must be a separate cost/ownership path and must not inherit the local-per-keystroke behavior automatically.
+
+**Kvaesitso** and **Lawnchair** demonstrate provider/backend abstractions for products whose purpose is federated search. That abstraction is deliberately rejected for MuxTV now: there is one local canonical search boundary. A plugin/provider framework would be speculative architecture.
+
+**Audiobookshelf** has had real user demand for diacritic-insensitive search. Combined with SQLite's documented behavior, this reinforces that international text handling is a correctness requirement rather than a cosmetic follow-up.
+
+### Critical SQLite finding
+
+The original design used ordinary `LIKE ... COLLATE NOCASE`. That is insufficient for MuxTV's Russian/non-ASCII data. Default SQLite case-insensitive comparisons fold ASCII only; ordinary `LIKE` does not provide full Unicode case folding. A query such as a lower-case Cyrillic channel name therefore cannot be assumed to match an upper-case stored value.
+
+This changes the architecture decision: **the initial Search needs a Unicode-aware derived text index for correctness, not only for performance.**
+
+Room 3 supports both FTS4 and FTS5. FTS5 availability on Android is driver-dependent and is guaranteed by `BundledSQLiteDriver`; MuxTV currently uses the platform/default Room driver and has intentionally deferred a bundled-SQLite runtime change. Android's platform SQLite includes FTS4, Room 3 supports `@Fts4`, and `unicode61` provides Unicode-aware tokenization/case folding.
+
+Therefore the initial design uses **FTS4 + `unicode61`**, not FTS5 and not ordinary Unicode-broken `LIKE` as the primary text matcher.
+
+## 3. Non-goals
 
 This slice does **not** introduce:
 
-- FTS5 or another search index;
-- fuzzy/transliteration/ML ranking;
+- bundled SQLite or a database-driver migration;
+- FTS5/BM25;
+- arbitrary substring/trigram search;
+- fuzzy spelling correction, transliteration or ML/vector ranking;
 - recommendations;
-- programme-detail search outside the active programme;
-- provider-specific search APIs;
-- a second catalog or EPG state owner;
-- Paging solely for Search;
+- programme-detail search outside the current programme;
+- provider-specific remote search APIs;
+- Live/VOD/Series federated search;
+- user-visible Boolean/field query syntax;
+- a second catalog or EPG source of truth;
+- Paging solely for this first TV Search screen;
 - a global/custom focus engine;
-- a Room migration unless measurement later proves the initial relational design inadequate;
 - Rust/UniFFI/native search.
 
-## 3. Existing contracts to preserve
+## 4. Existing contracts to preserve
 
 ### Playback catalog
 
-`PlaybackCatalog` remains the active-channel/playback boundary. `ChannelQuery` already supports bounded text filtering for effective name, provider raw name and group, but does not cover effective channel number or active programme metadata.
-
-Search must **not** turn `PlaybackCatalog.observeChannels()` into an EPG-dependent API. That would make the catalog boundary time-dependent on programme transitions and duplicate guide ownership.
+`PlaybackCatalog` remains the active-channel/playback boundary. Search must not turn `PlaybackCatalog.observeChannels()` into an EPG-dependent API. Search opens the existing `AppDestination.Player(channelId)` and never resolves or installs media itself.
 
 ### EPG guide
 
@@ -53,15 +128,15 @@ Search must inherit the accepted `EpgGuideRepository` / `RoomEpgGuideRepository`
 - multiple active matches produce conflict semantics, never a weak winner;
 - an open-ended previous programme is current only when its effective end is known from the next programme.
 
-The final point is important: `stop == null` does **not** mean “current forever”.
+`stop == null` never means "current forever".
 
-### Navigation and playback
+### Derived-index rule
 
-`AppDestination.Search` already exists. Search opens the existing `AppDestination.Player(channelId)`. Search never resolves or installs media itself.
+The Search FTS/content tables are **derived acceleration/correctness structures**, never publication truth. A result is returned only after joining back through current canonical catalog and current-policy EPG provenance. Stale FTS documents cannot make stale provider/EPG rows active.
 
-## 4. Chosen architecture
+## 5. Chosen architecture
 
-Add one explicit cross-cutting read projection:
+Add one read-only public boundary:
 
 ```kotlin
 interface ChannelSearchRepository {
@@ -69,11 +144,9 @@ interface ChannelSearchRepository {
 }
 ```
 
-This repository is intentionally separate from both `PlaybackCatalog` and `EpgGuideRepository`: Search combines canonical catalog metadata and current EPG metadata for a single read-only use case.
+Search combines catalog metadata and current EPG metadata behind one bounded query but does not change either owner.
 
-No write API is added.
-
-### 4.1 Query contract
+### 5.1 Query contract
 
 ```kotlin
 class ChannelSearchQuery(
@@ -82,7 +155,7 @@ class ChannelSearchQuery(
     val nowEpochMillis: Long,
     val limit: Int = DEFAULT_LIMIT,
 ) {
-    val normalizedText: String = text.trim()
+    val normalizedText: String
 
     companion object {
         const val DEFAULT_LIMIT = 100
@@ -93,17 +166,30 @@ class ChannelSearchQuery(
 
 Rules:
 
-- `profileId` is nonblank;
+- profile ID is nonblank;
 - `nowEpochMillis >= 0`;
 - `limit in 1..200`;
-- blank normalized text returns an empty snapshot and never becomes an unfiltered catalog query;
-- one-character queries are allowed, but output is still hard-bounded;
-- public `toString()` redacts both profile ID and query text;
-- diagnostics may expose only safe metadata such as text-length bucket and limit.
+- normalize surrounding whitespace and Unicode compatibility form before query-token encoding;
+- blank text returns an empty snapshot and never becomes an unfiltered catalog query;
+- public `toString()` redacts profile and query text;
+- diagnostics expose only safe length buckets/counts/timing/failure category.
 
-The repository converts the normalized text into a bound LIKE pattern. Literal `%`, `_` and `\` are escaped. User text is never interpolated into SQL.
+### 5.2 Query language
 
-### 4.2 Result contract
+The public first-slice query is plain text only.
+
+Internally, a `SearchQueryEncoder` extracts Unicode letter/number tokens, quotes them as FTS literals and builds **AND + token-prefix** semantics. User text is bound as a parameter and never concatenated as raw FTS syntax.
+
+Examples of intended semantics:
+
+- `рос` matches a token beginning with `рос…` regardless of Cyrillic case;
+- `рос 1` requires both token prefixes in the matched document/candidate path;
+- `%`, `_`, `"`, `AND`, `OR`, `NEAR` in user text are treated as user text, not an exposed query language;
+- arbitrary middle-of-token substring (`осс` → `Россия`) is not guaranteed in v1.
+
+Token-prefix semantics are chosen because they are indexable, predictable on TV and Unicode-correct. Trigram/contains search is a separate future decision.
+
+### 5.3 Public result
 
 ```kotlin
 data class ChannelSearchResult(
@@ -113,61 +199,112 @@ data class ChannelSearchResult(
 
 data class ChannelSearchSnapshot(
     val results: List<ChannelSearchResult>,
+    val isTruncated: Boolean,
     val nextBoundaryEpochMillis: Long?,
 )
 ```
 
-`nextBoundaryEpochMillis` is the earliest future programme-time boundary that can change Search membership or displayed programme metadata for the profile. It is null when no such active guide boundary exists.
+`isTruncated` is required. The UI must never imply that a hard-bounded result set is exhaustive when more matching channels exist.
 
-The result contract intentionally does not publish locators, source identifiers, match evidence, query text or raw failure information.
+The result does not expose provider IDs, raw FTS documents, locators, match evidence, query text or raw failures.
 
-## 5. Room projection
+## 6. Room v9 derived Search index
 
-Implement a dedicated Search DAO/repository in `core:database`. Do not perform catalog/EPG joins in Compose or the ViewModel.
+The initial Search is expected to require **Room v9** because Unicode-correct full-text indexing is a correctness requirement.
 
-### 5.1 Active channel projection
+### 6.1 Search document content table
 
-Project active visible canonical channels from the existing source/catalog tables:
+Add a normal Room content table with an integer primary key and typed origin metadata, conceptually:
 
-- canonical channel ID;
-- effective display name = overlay custom name or canonical display name;
-- representative logo;
-- representative group title;
-- effective channel number = overlay number or provider number;
-- favorite bit;
-- active variant count.
+```text
+search_documents
+- rowId INTEGER PRIMARY KEY
+- documentKey TEXT UNIQUE
+- kind TEXT
+- canonicalChannelId TEXT nullable
+- profileId TEXT nullable
+- providerChannelId TEXT nullable
+- epgSourceId TEXT nullable
+- epgRevisionNumber INTEGER nullable
+- epgExternalChannelId TEXT nullable
+- epgProgrammeSequence INTEGER nullable
+- text TEXT
+```
 
-Required predicates:
+Kinds are internal constants, initially:
 
-- provider row belongs to `sources.activeRevision`;
-- hidden overlay is false/missing;
-- at least one active stream variant exists;
-- projection is profile-scoped.
+- `CANONICAL_NAME`;
+- `PROVIDER_RAW_NAME`;
+- `PROVIDER_GROUP`;
+- `PROVIDER_NUMBER`;
+- `OVERLAY_CUSTOM_NAME`;
+- `OVERLAY_NUMBER`;
+- `EPG_PROGRAMME_TITLE`.
 
-No new persisted Search table is introduced.
+Origin columns used only for joining/validation are not public Search state.
 
-### 5.2 Current-policy unambiguous EPG projection
+### 6.2 External-content FTS4 table
 
-Build EPG candidates only from match rows satisfying all accepted provenance constraints:
+Back the searchable text with Room 3 `@Fts4` using:
 
-- active EPG revision;
-- active provider/catalog revision;
-- current matching-policy version;
-- `decision = MATCHED`;
-- non-null canonical channel ID.
+- `contentEntity = SearchDocumentEntity`;
+- tokenizer `unicode61`;
+- only `text` indexed;
+- origin/profile/kind fields remain in the content table and are joined through rowid.
 
-Group match evidence per canonical channel. Programme metadata contributes to Search only where the effective active match count is exactly one. Two or more active matches preserve `SOURCE_CONFLICT` behavior and supply **no** programme text.
+Do not expose FTS operators to UI text.
 
-For that single mapping, derive `previous` and `next` candidates exactly like the accepted Now/Next projection:
+Prefix indexes may be added only after the API26/API36 compatibility spike and size/query-plan measurement. FTS prefix matching itself is part of the contract; specific auxiliary prefix-index sizes are an implementation/performance detail.
+
+### 6.3 Population and lifecycle
+
+Search documents are maintained alongside the existing immutable data lifecycle:
+
+- canonical channel creation/name mutation → canonical-name document;
+- provider-channel staging/import → raw-name/group/number documents;
+- profile overlay mutation → custom-name/number documents;
+- EPG programme staging/import → programme-title document when nonblank;
+- revision cleanup → delete matching derived documents in the same cleanup ownership boundary;
+- hidden/favorite mutations do not need indexed text changes unless custom name/number changes.
+
+The v8→v9 migration creates the content + FTS tables and backfills currently retained catalog/overlay/EPG text with SQL `INSERT ... SELECT`. Unicode normalization is performed by the FTS tokenizer, so migration does not depend on SQLite `lower()`.
+
+Migration acceptance includes non-zero backfilled Cyrillic examples and exact schema export.
+
+### 6.4 Why not FTS5 now
+
+Room 3 exposes `@Fts5`, but Android availability is driver-dependent and documented as guaranteed with `BundledSQLiteDriver`. Adopting that driver would change the accepted database runtime/packaging boundary. Search does not justify that unrelated architecture change.
+
+FTS5/BM25 remains a future option if later evidence justifies bundled SQLite for broader reasons.
+
+## 7. Candidate query and active-truth validation
+
+FTS finds **candidate documents**, not final channels.
+
+The DAO must convert those documents into distinct canonical-channel candidates and then validate them against current truth.
+
+### 7.1 Channel metadata candidates
+
+- canonical-name document maps directly to canonical channel ID;
+- provider documents map through the referenced provider channel/active stream variant;
+- overlay documents apply only to the requested profile.
+
+Final candidates must still satisfy:
+
+- provider row is in `sources.activeRevision`;
+- at least one active variant exists;
+- requested profile does not hide the canonical channel.
+
+### 7.2 Programme candidates
+
+An EPG title FTS hit contributes only when its exact programme row participates in the **current unambiguous current-policy mapping**.
+
+Derive accepted Now/Next semantics:
 
 ```text
 previous = latest programme where start <= now
 next     = earliest programme where start > now
-```
 
-Then derive current programme with the same effective-end rules:
-
-```text
 if previous.stop != null && previous.stop > now:
     effectiveEnd = previous.stop
 else if previous.stop == null && next != null && next.start > now:
@@ -178,259 +315,318 @@ else:
 current = previous only when effectiveEnd != null && effectiveEnd > previous.start
 ```
 
+Then require the FTS-hit programme to be that current programme.
+
 Consequences:
 
-- a stopped programme is not current;
-- a future programme is not current;
-- an open-ended programme with a following programme is bounded by that next start;
-- an open-ended programme with no following programme is **not** treated as current forever;
-- overlapping data follows the same deterministic previous/next ordering as Now/Next.
+- missing EPG never removes an otherwise matching channel;
+- future/past/stale programme hits do not leak into results;
+- ambiguous `SOURCE_CONFLICT` mappings contribute no programme text;
+- stale revision/policy index rows remain harmless because final joins reject them.
 
-Search must be characterized against the accepted `RoomEpgGuideRepository` behavior so these semantics cannot drift independently later.
+This is intentionally unlike the Immich optional-enrichment INNER JOIN failure mode.
 
-### 5.3 Search predicate
+### 7.3 Bounded candidate set
 
-A channel matches if normalized text occurs in any of:
+The database produces distinct canonical candidates with an internal origin priority and a hard candidate cap derived from the public limit. The implementation may over-fetch a bounded multiple (for example `limit * 4`, capped at an explicit constant) so the repository can apply final Unicode-aware exact/prefix ranking without loading the full catalog.
 
-1. effective display name;
-2. provider/raw channel name;
-3. effective channel number;
-4. group title;
-5. current programme title from the unambiguous projection above.
+The final public list never exceeds `limit`.
 
-All LIKE terms use the same escaped bound pattern. Hidden/inactive channels never enter the candidate set.
+Fetch at least one extra candidate or otherwise expose candidate-cap exhaustion so `isTruncated` is conservative: if the system cannot prove there are no more results, it reports truncation rather than claiming completeness.
 
-### 5.4 Deterministic ordering
+## 8. Ranking
 
-Ranking is a private DAO concern, not a public relevance-score API.
+Do not copy Navidrome's BM25 blindly; MuxTV has a small structured channel result domain where field intent matters more than generic document relevance.
 
-Initial ordering:
+Final ranking is deterministic and applied to a **bounded candidate set**.
 
-1. exact effective channel-number match;
-2. exact effective display-name match (`NOCASE`);
-3. effective display-name prefix;
-4. provider/raw-name prefix;
-5. remaining name/group/current-programme contains matches;
-6. stable tie-break by effective numeric channel number where parseable, display name `NOCASE`, then canonical channel ID.
+Initial priority:
 
-If ranks 2–5 make the SQL disproportionately complex, the first implementation may collapse them into fewer deterministic classes. The public API must not depend on the internal rank representation.
+1. exact effective channel number;
+2. exact effective display/custom name;
+3. effective display/custom-name prefix;
+4. provider raw-name prefix;
+5. provider group match;
+6. current-programme title match;
+7. stable tie-break by numeric channel number when parseable, display name, canonical channel ID.
 
-### 5.5 Hard output bound
+Kotlin may perform final exact/prefix comparisons with Unicode-aware JVM string operations on the bounded candidate set. The public API does not expose scores or depend on a BM25 implementation.
 
-Every row query has `LIMIT :limit`; the public maximum is 200.
+A current programme title may be displayed for every result when available, even if the channel matched on name/number/group; match origin remains an internal ranking detail.
 
-This bounds materialized results, not the cost of a `%contains%` scan. Scan cost is measured before any FTS decision.
+## 9. Programme-time invalidation
 
-## 6. Programme-time invalidation
+Search cannot rely only on Room writes because current-programme membership changes as wall time advances.
 
-Search cannot rely only on Room writes: a programme can become current or cease to be current when time crosses a boundary with no database mutation.
+`ChannelSearchSnapshot.nextBoundaryEpochMillis` is the earliest future boundary that can change the current-programme projection for returned/candidate active mappings.
 
-The repository therefore combines:
+Candidate boundaries follow the same Now/Next rules:
 
-1. a Room-invalidated Search-row flow;
-2. a Room-invalidated scalar `nextBoundaryEpochMillis` flow.
+- effective end of current programme;
+- next programme start.
 
-The boundary aggregate uses the **same previous/next/effective-end semantics** as section 5.2 across active, current-policy, unambiguous mappings for the profile. Candidate boundaries are:
+The Search ViewModel owns the clock and schedules exactly one cancellable wake-up for the published boundary. A new query generation cancels the old boundary job. No polling loop is introduced.
 
-- effective end of the current programme;
-- start of the next programme.
+Catalog/EPG/derived-index changes naturally invalidate the Room query.
 
-Only future boundaries (`> now`) participate; take the minimum.
+## 10. Search ViewModel
 
-The Search ViewModel owns the clock. When a snapshot publishes a boundary, it schedules exactly one cancellable wake-up, rebuilds the query with the new `nowEpochMillis`, and cancels that job whenever query generation changes. No periodic polling loop is required.
+Add a destination/back-stack-scoped `SearchViewModel` in `:feature:search`.
 
-Catalog/EPG database changes naturally re-emit the Room flows.
+Required behavior:
 
-## 7. Search ViewModel
+- initial query blank;
+- normalize and deduplicate query generations;
+- ordinary typing path debounced by **300 ms** initially;
+- explicit IME Search/Done/submit path executes immediately and bypasses the debounce;
+- a new normalized query cancels prior repository collection + boundary work;
+- stale generations cannot publish over newer queries;
+- blank query returns immediately to EmptyQuery;
+- same-query Room/time refresh preserves current Content while refreshing rather than flashing through destructive Loading;
+- query text + focus anchor survive Search → Player → Back through the existing Navigation3 destination ViewModel/saveable-state ownership;
+- process-death restoration needs only query + anchor; results are re-derived from Room rather than serialized into navigation state;
+- payload-free typed failures only.
 
-Add a destination/back-stack-scoped `SearchViewModel` in a new `feature:search` module.
+The 300 ms value is a tunable UI default. Jellyfin Android TV currently uses a longer debounce for server-backed multi-group search; MuxTV is local Room and should measure rather than cargo-cult that network-oriented duration.
 
-Suggested immutable UI state:
+## 11. TV UI and focus contract
 
-```kotlin
-sealed interface SearchUiState {
-    data object EmptyQuery : SearchUiState
-    data object Loading : SearchUiState
-    data class Content(val rows: List<SearchRowProjection>) : SearchUiState
-    data object NoResults : SearchUiState
-    data object Failed : SearchUiState
-}
-```
-
-Separate screen inputs/state:
-
-- `queryText: StateFlow<String>`;
-- focused canonical channel ID + previous index as route/saveable state;
-- query generation counter/token internal to the ViewModel.
-
-Behavior:
-
-- initial query is blank;
-- nonblank normalized input is debounced by **300 ms**;
-- a newer normalized query cancels the previous repository collection and boundary job;
-- blank input immediately returns to `EmptyQuery`;
-- stale results from an older generation cannot overwrite a newer query;
-- same-query data/boundary refresh should preserve existing Content while replacement data loads, avoiding a focus-tree flash;
-- failures expose typed/payload-free state, never raw exception/query text.
-
-The 300 ms debounce is a UI default, not a storage contract.
-
-## 8. TV UI and focus contract
-
-Replace the Search placeholder with one restrained screen:
+Replace `AppDestination.Search -> PlaceholderRoute("Поиск")` with one restrained TV screen:
 
 - title `Поиск`;
-- one text-entry control;
-- result count/status copy;
-- one lazy vertical results list;
-- rows show existing data only: number, favorite marker, channel name, group and current programme title when available.
+- single-line search text input;
+- status/result count;
+- one lazy vertical result list;
+- row data: number, favorite marker, channel name, group and current programme when available;
+- when `isTruncated`, visible copy such as `Показаны первые N — уточните запрос` rather than a fake total count.
 
-No preview pane, programme artwork, recommendation rail or second content column is part of this slice.
+No preview pane, artwork rail, recommendations or second content column in this slice.
 
-Focus rules:
+### Focus rules
 
-1. Search opens with the query field focused.
-2. `Down` from the query field goes to the first result when results exist.
-3. `Up` from the first result goes back to the query field.
-4. Lower rows keep standard vertical D-pad traversal.
-5. `OK` on a result opens the existing Player directly.
-6. Player → Back restores query text and the same surviving canonical channel.
-7. If that channel disappears, focus falls back to the nearest previous result.
-8. If no result survives, focus returns to the query field.
-9. Recomposition/query refresh must not create another global focus owner or focus engine.
+1. Search opens with text input focused.
+2. `Down` from input enters the first result when results exist.
+3. `Up` from first result returns to input.
+4. Lower rows keep ordinary vertical traversal.
+5. `OK` opens existing Player directly.
+6. Player → Back restores query and same surviving canonical channel.
+7. Removed result falls back to nearest previous result.
+8. No results returns focus to input.
+9. Query/data refresh cannot create a global focus owner.
 
-A Search-local stable-ID focus anchor is acceptable. Do not generalize it into a framework until another distinct screen proves the abstraction useful.
+### IME submit / Fire TV safety
 
-## 9. Expected module/wiring changes after approval
+On explicit keyboard submit, Search must move focus **off the text field**, mirroring the real Amazon fullscreen-keyboard failure avoided by Jellyfin Android TV.
 
-- add `:feature:search` in `settings.gradle.kts`;
+Implementation requirement:
+
+- if results already exist, focus first result;
+- otherwise focus a visible results/status host and mark a one-generation `focusFirstResultWhenReady` intent;
+- when matching-generation results arrive, move to first result exactly once;
+- if no result arrives, keep a visible focus target and allow `Up` back to the input;
+- clearing/changing the query cancels the pending focus intent.
+
+Do not use arbitrary delays to hide IME/focus races.
+
+## 12. Expected production/module changes after approval
+
+- `settings.gradle.kts`: add `:feature:search`;
+- Room schema v9 + exported schema/migration;
 - `catalog/api/.../ChannelSearchRepository.kt`;
+- `core/database/.../SearchDocumentEntity.kt`;
+- `core/database/.../SearchDocumentFtsEntity.kt`;
 - `core/database/.../ChannelSearchDao.kt`;
 - `core/database/.../RoomChannelSearchRepository.kt`;
-- existing database component wiring, with no schema bump expected;
+- search-document population/cleanup hooks at existing catalog/overlay/EPG ownership boundaries;
+- database component wiring;
 - `feature/search/.../SearchViewModel.kt`;
 - `feature/search/.../SearchRoute.kt`;
 - app DI wiring;
-- replace `AppDestination.Search -> PlaceholderRoute("Поиск")` with `SearchRoute`.
+- replace Search placeholder with `SearchRoute`.
 
-Search logic does not belong in `MainActivity` or navigation lambdas.
+Do not put Search business logic in `MainActivity`, navigation lambdas or Compose list filtering.
 
-## 10. Correctness tests
+## 13. Correctness tests
 
-### API/query
+### Query encoder/API
 
-- trim/blank normalization;
+- whitespace/Unicode normalization;
+- blank behavior;
 - min/max limit;
 - redacted `toString()`;
-- literal escaping of `%`, `_`, `\`.
+- FTS syntax characters are literals, not operators;
+- multi-token AND-prefix encoding;
+- Cyrillic upper/lower query equivalence.
 
-### Room
+### FTS/platform compatibility
+
+On API26 and API36:
+
+- FTS4 table creation succeeds with the platform/default driver;
+- `unicode61` is available;
+- `РОССИЯ` matches lower-case `рос*`;
+- Latin case behavior remains correct;
+- no bundled SQLite dependency appears accidentally.
+
+### Migration/index lifecycle
+
+- v8→v9 creates content + FTS tables;
+- active retained canonical/provider/overlay/EPG text backfills;
+- source import/staging inserts expected documents;
+- EPG import inserts nonblank programme-title docs;
+- overlay custom name/number mutation updates its documents;
+- revision cleanup removes associated derived docs;
+- FTS/content triggers remain consistent after migration.
+
+### Final Room Search
 
 At minimum:
 
 - effective custom-name match;
-- provider/raw-name match;
+- canonical/provider raw-name match;
 - group match;
-- overlay channel-number match;
-- provider channel-number match;
+- overlay/provider channel-number match;
+- lower-case Cyrillic query matches upper/mixed-case data;
 - current programme-title match;
+- missing EPG does not remove channel-name result;
 - past/future programme excluded;
-- explicit-stop current programme behavior matches Now/Next;
-- open-ended + next programme behavior matches Now/Next;
-- open-ended + no next programme does not become infinite current;
+- explicit-stop current behavior matches Now/Next;
+- open-ended + next behavior matches Now/Next;
+- open-ended + no next is not infinite-current;
 - stale EPG revision excluded;
-- stale matching-policy rows excluded;
-- ambiguous/source-conflict mapping supplies no programme text;
-- hidden channel excluded even when programme text matches;
+- stale match-policy rows excluded;
+- ambiguous/source-conflict mapping contributes no programme text;
+- hidden channel excluded even when FTS matches;
 - inactive catalog revision excluded;
-- profile-overlay isolation;
-- deterministic ordering and hard limit;
-- escaped wildcard characters remain literal;
-- next-boundary aggregate follows the accepted Now/Next boundary semantics.
+- profile overlay isolation;
+- deterministic ranking;
+- hard result/candidate bounds and conservative `isTruncated`;
+- programme boundary semantics match accepted guide projection.
 
 ### ViewModel
 
-- blank query does not execute an unfiltered repository search;
-- 300 ms debounce coalesces rapid input;
-- newer query cancels older generation;
-- stale repository/data result cannot overwrite newer query;
-- one boundary reload is scheduled and cancelled correctly;
-- blanking query cancels pending work;
-- same-query refresh does not flash through destructive Loading;
-- failure state is payload-free.
+- blank query runs no unfiltered search;
+- 300 ms typing debounce coalesces rapid input;
+- immediate submit bypasses debounce;
+- duplicate normalized query does not restart work unnecessarily;
+- newer generation cancels older work;
+- stale result cannot overwrite newer query;
+- same-query refresh preserves Content;
+- one programme-boundary reload is scheduled/cancelled correctly;
+- query + anchor survive Player/Back;
+- pending submit-focus intent belongs to one generation only;
+- failures reveal no query/provider payload.
 
 ### TV instrumentation
 
-- initial query focus;
-- type/search → Down → first result;
-- first result Up → query;
+- initial input focus;
+- type → debounced result → Down → first row;
+- IME submit → focus leaves input;
+- first row Up → input;
 - OK → Player → Back restores query + same result;
-- removed focused result falls back deterministically;
-- no-results returns focus to query;
-- active-programme search membership changes at a controlled boundary;
-- API26/API36 product journey after implementation.
+- removed focused result falls back;
+- no-results returns/focuses input appropriately;
+- truncation copy is visible when candidate set exceeds limit;
+- Cyrillic mixed-case search journey;
+- active-programme membership changes at a controlled boundary;
+- API26/API36 product journey.
 
-## 11. Performance acceptance and FTS gate
+Physical Fire TV/Amazon keyboard behavior remains an alpha device acceptance item but the focus contract is implemented and emulator-testable before that.
 
-Initial implementation uses ordinary Room/SQLite relational queries with hard-bounded output.
+## 14. Performance acceptance
 
-Before introducing FTS5, measure representative Search queries against deterministic 1k/10k/50k catalog profiles and bounded EPG fixtures where applicable. Record:
+Search indexing is now justified first by Unicode correctness. Performance still must be measured before tuning index topology/ranking.
 
-- wall time;
-- result count;
+Use deterministic 1k/10k/50k catalog profiles plus bounded EPG fixtures and record:
+
+- FTS candidate query wall time;
+- final active/current-policy join wall time;
+- result/candidate counts;
 - allocations where meaningful;
+- DB size delta from Search content + FTS tables;
+- migration/backfill duration and peak memory;
 - query-plan/index usage;
-- exact number, name prefix, contains, programme contains and no-match patterns.
+- exact-number, name prefix, group, programme, multi-token and no-match cases.
 
-Measurements are descriptive until variance is understood.
+Run the same Search set on current-normal, old-edge-normal and current-low-ram evidence profiles where practical.
 
-FTS5 becomes eligible only if repeated evidence shows the relational query is a material daily-use latency/CPU bottleneck. A later FTS implementation requires a separate migration/index-consistency design and remains derived from canonical Room truth.
+Performance tuning order:
 
-## 12. Security/privacy
+1. query/index-plan correction;
+2. bounded candidate cap tuning;
+3. measured FTS4 prefix indexes;
+4. only then consider a broader driver/index architecture.
+
+FTS5/BM25/trigram becomes eligible only under a separate ADR that also addresses bundled-SQLite cost, APK/ABI/runtime compatibility and measured benefit. Navidrome demonstrates that FTS5/BM25 can be worthwhile for large libraries; it does not prove that MuxTV should pay that cost now.
+
+## 15. Security/privacy
 
 Search state, logs, diagnostics and semantics must never expose:
 
 - playlist/stream locators;
-- query tokens, cookies or Authorization values;
+- URL query tokens, cookies or Authorization values;
 - source credentials;
+- provider/source identifiers not intentionally visible to users;
+- raw FTS document/origin metadata;
 - raw exception messages;
-- user search text in diagnostics.
+- the user's search text in diagnostics.
 
-SQL uses bound parameters only. Safe diagnostics may record query-length bucket, result count, duration and typed failure category.
+All SQL/FTS queries use bound parameters. The query encoder never forwards raw user syntax as an FTS expression.
 
-## 13. Alternatives rejected
+Search documents index only already-approved searchable display metadata; credentials, locators, headers and access references are never indexed.
+
+## 16. Alternatives rejected
+
+### Ordinary `LIKE ... NOCASE` as primary Search
+
+Rejected for correctness: stock SQLite does not provide full Unicode case folding, so Cyrillic case-insensitive search is not reliable.
+
+### FTS5 + BundledSQLiteDriver immediately
+
+Rejected: FTS5 is attractive but would force a broader database-runtime/packaging decision unrelated to the first Search need. FTS4 + unicode61 satisfies the current Unicode/token-prefix requirement on the accepted platform boundary.
 
 ### Extend `PlaybackCatalog.observeChannels()` with EPG joins
 
-Rejected: it makes a catalog/playback boundary time-dependent on EPG and duplicates guide ownership.
+Rejected: it makes the catalog/playback boundary programme-time dependent and duplicates guide ownership.
 
-### Run separate catalog and EPG searches and merge in the ViewModel
+### Separate catalog and EPG searches merged in ViewModel
 
-Rejected: it over-fetches, makes global limits/ranking ambiguous and moves database join semantics into presentation code.
+Rejected: it over-fetches, makes one global limit/ranking/truncation contract ambiguous and moves database identity joins into presentation code.
 
-### FTS5 immediately
+### Search-provider/plugin framework
 
-Rejected until repeated evidence proves ordinary bounded SQL inadequate.
+Rejected: Kvaesitso/Lawnchair need providers because federated search is their product. MuxTV has one local canonical search source today.
+
+### Semantic/vector search
+
+Rejected: Immich's relevance/cap behavior demonstrates the product complexity of semantic top-N results. Channel lookup has strong deterministic identifiers and does not need ML ranking.
 
 ### Full catalog/guide filtering in Compose
 
-Rejected because it violates issue #29 bounded-memory architecture.
+Rejected: violates issue #29 bounded-memory architecture.
 
-## 14. Self-review result
+## 17. Self-review result
 
-The initial draft incorrectly treated `stop == null` as sufficient for a programme to remain current. Review against accepted `RoomEpgGuideRepository` found the divergence and this revision removes it.
+The earlier design had two material weaknesses that this revision corrects:
 
-After correction:
+1. it originally used ordinary SQLite LIKE as the primary text matcher, which is not sufficient for Unicode/Cyrillic case-insensitive Search;
+2. before the prior correction it also treated open-ended EPG too loosely; the current design explicitly inherits accepted Now/Next effective-end semantics.
 
-- Search adds one read-only projection, not a new source of truth;
-- canonical channel identity, overlays, current EPG provenance and Player ownership remain unchanged;
-- no initial Room migration is required;
-- output is hard-bounded and full materialization is prohibited;
-- programme search and boundary scheduling explicitly inherit accepted Now/Next semantics, including open-ended data;
-- hidden/inactive/stale-policy/ambiguous guide data cannot leak into programme search;
-- focus remains local and stable-ID based;
-- FTS and native/Rust work remain evidence-gated.
+After comparative review:
 
-## 15. Approval gate
+- Search has one read-only public boundary;
+- FTS is a derived index, not source of truth;
+- platform-compatible FTS4/unicode61 is chosen for Unicode correctness without bundled SQLite;
+- output and candidate sets are hard-bounded;
+- truncation is explicit;
+- current programme is optional enrichment and can never remove channel metadata matches;
+- query changes use debounce + immediate-submit dual paths;
+- query/focus continuity is preserved over Player/Back;
+- Fire TV fullscreen-keyboard focus escape is part of the contract;
+- ranking is structured and deterministic rather than speculative BM25/ML;
+- current-policy/active-revision/hidden semantics are revalidated after every FTS candidate hit;
+- Rust/native, FTS5/trigram and provider frameworks remain deferred behind evidence/ADR.
 
-Production implementation must not begin until this corrected design is reviewed and approved. After approval, write a task-level implementation plan and implement Search from the then-accepted `main` on a fresh branch.
+## 18. Approval gate
+
+Production implementation must not begin until this revised written design is reviewed and approved. After approval, create a task-level implementation plan and implement Search from the then-accepted `main` on a fresh branch.
