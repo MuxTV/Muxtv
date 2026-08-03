@@ -49,21 +49,42 @@ class RoomChannelSearchRepositoryTest {
     }
 
     @Test
-    fun intermediateCandidateOverflowMarksSmallFinalIntersectionTruncated() = runTest {
-        val broad = (0..800).map { index -> candidate("channel-$index", ChannelSearchMatchRank.NAME) }
-        val target = "channel-799"
+    fun broadTokenIsRecheckedInsideSelectiveSeedWithoutFalseNegative() = runTest {
+        val target = "channel-1200"
+        val broad = (0..1_200).map { index -> candidate("channel-$index", ChannelSearchMatchRank.NAME) }
         val dataSource = FakeSearchDataSource(
             candidates = mapOf(
                 "\"канал*\"" to broad,
-                "\"точный*\"" to listOf(candidate(target, ChannelSearchMatchRank.PROVIDER)),
+                "\"1200*\"" to listOf(candidate(target, ChannelSearchMatchRank.PROVIDER)),
             ),
-            summaries = listOf(summary(target, "Канал точный", "799")),
+            summaries = listOf(summary(target, "Канал точный", "1200")),
         )
         val repository = RoomChannelSearchRepository(dataSource, FakeGuideRepository())
 
-        val snapshot = repository.observe(query("канал точный")).first()
+        val snapshot = repository.observe(query("канал 1200")).first()
 
         assertThat(snapshot.results.map { it.channel.channelId }).containsExactly(target)
+        assertThat(snapshot.isTruncated).isFalse()
+        assertThat(dataSource.restrictedCandidateExpressions).containsExactly("\"канал*\"")
+    }
+
+    @Test
+    fun overflowingMostSelectiveSeedKeepsHonestTruncation() = runTest {
+        val broadA = (0..900).map { index -> candidate("channel-$index", ChannelSearchMatchRank.NAME) }
+        val broadB = (0..900).map { index -> candidate("channel-$index", ChannelSearchMatchRank.PROVIDER) }
+        val summaries = (0..799).map { index -> summary("channel-$index", "Канал $index", index.toString()) }
+        val dataSource = FakeSearchDataSource(
+            candidates = mapOf(
+                "\"канал*\"" to broadA,
+                "\"общий*\"" to broadB,
+            ),
+            summaries = summaries,
+        )
+        val repository = RoomChannelSearchRepository(dataSource, FakeGuideRepository())
+
+        val snapshot = repository.observe(query("канал общий", limit = 10)).first()
+
+        assertThat(snapshot.results).hasSize(10)
         assertThat(snapshot.isTruncated).isTrue()
     }
 
@@ -183,6 +204,7 @@ private class FakeSearchDataSource(
     private val nextBoundary: Long? = null,
 ) : ChannelSearchDataSource {
     val candidateExpressions = mutableListOf<String>()
+    val restrictedCandidateExpressions = mutableListOf<String>()
 
     override fun observeChanges(): Flow<Unit> = flowOf(Unit)
 
@@ -191,9 +213,17 @@ private class FakeSearchDataSource(
         ftsExpression: String,
         nowEpochMillis: Long,
         fetchLimit: Int,
+        restrictToCanonicalIds: List<String>?,
     ): List<ChannelSearchCandidateRow> {
         candidateExpressions += ftsExpression
-        return candidates[ftsExpression].orEmpty().take(fetchLimit)
+        if (restrictToCanonicalIds != null) restrictedCandidateExpressions += ftsExpression
+        val allowed = restrictToCanonicalIds?.toSet()
+        return candidates[ftsExpression]
+            .orEmpty()
+            .asSequence()
+            .filter { row -> allowed == null || row.canonicalChannelId in allowed }
+            .take(fetchLimit)
+            .toList()
     }
 
     override suspend fun activeChannelSummaries(
