@@ -6,9 +6,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. На `main` (`c31b34d65ef90848bd907a521b9a0ba8860ed83a`) реализованы source onboarding, immutable M3U catalog, Channels, process-owned Media3 Player и EPG foundation вплоть до durable WorkManager scheduling/state, DB lease и transactional publication ownership.
+Проект находится в стадии **functional pre-alpha**. Repository truth синхронизирован на `main` commit `c38b3c04d8e4229dd1fb8a8ec40d60d18bb0b2fa`; принятый implementation foundation проходит через merge PR #80 (`12dce1ac95b5a2215c53f485bf70ffd13fad46b3`).
 
-Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3. Room schema — **v6**. `minSdk = 26`.
+Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3. Принятая Room schema на `main` — **v7**. `minSdk = 26`.
 
 ### Рабочий IPTV путь
 
@@ -20,42 +20,80 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManage
 6. Player заново разрешает active variant и устанавливает request в process-owned MediaSession/ExoPlayer;
 7. Player → Back восстанавливает stable channel focus.
 
-### Реализованный EPG foundation
+### Принятый EPG/source correctness foundation
 
-- PR #63 — secure bounded streaming XMLTV parser без DOM, с independent limits, XXE/DTD protection и typed timestamp handling;
-- PR #64 — Room v5 `epg_sources` / `epg_revisions` / `epg_channels` / `epg_programmes`, immutable staging, monotonic atomic activation, previous-good retention, bounded queries и migration/device contracts;
-- PR #68 — bounded magic-first plain/gzip/ZIP EPG payload decoder с post-decompression limits;
-- PR #72 — secure conditional remote EPG refresh через существующий encrypted access/network boundary, `If-None-Match` / `If-Modified-Since`, safe `304`, bounded `200` decode/import и cancellation preserving previous-good guide;
-- PR #74 — Room v6 durable EPG refresh policies/state/attempts/validators, DB lease, stale reclaim и old-token completion rejection;
-- PR #75 — durable WorkManager orchestration, startup policy constraints, trigger-distinct work identities, access+run-token activation ownership, nullable completion ownership, cancellation authority и diagnostic redaction.
+- PR #63 — bounded streaming XMLTV parser без DOM, с independent limits, XXE/DTD protection и typed timestamp handling;
+- PR #64 — immutable EPG Room foundation, monotonic atomic activation, previous-good retention и bounded queries;
+- PR #68 — bounded magic-first plain/gzip/ZIP EPG payload decoder;
+- PR #72 — secure conditional remote EPG refresh, корректный `304`, bounded decode/import и cancellation preserving previous-good guide;
+- PR #74/#75 — durable EPG policies/state/attempts/validators, DB lease, stale reclaim, WorkManager orchestration и access/run-token publication ownership;
+- PR #78 — source refresh publication ownership hardened по тем же captured-binding/run-token/cancellation/redaction guarantees;
+- PR #80 — Room v7 deterministic explainable channel matching, persisted match provenance по immutable producer revisions, bounded Now/Next и end-to-end integration path.
 
-Последние проверочные evidence:
+Последнее принятое exact-head evidence для PR #80:
 
-- XMLTV parser Full: `30576931624`;
-- immutable EPG Full: `30663759211`;
-- Room v4→v5 migration API26/API36 matrix: `30663759884`;
-- payload decoder Full: `30666205286`;
-- remote EPG refresh Full: `30668000159`;
-- durable EPG state Full: `30703994191`;
-- Room v5→v6/API26/API36 matrix: `30703994190`;
-- durable EPG orchestration exact-head Full: `30708756373`;
-- durable EPG orchestration exact-head API26/API36 matrix: `30708756357`.
+- Full: `30766566746` — success;
+- API26/current database/device matrix: `30766566756` — success.
 
 ## Что ещё не завершено
 
-Текущий critical path:
+### P0 — распрямить открытый stacked graph
 
-1. **issue #76** — harden существующий M3U/source refresh publication boundary: remote refresh не должен возвращать stale credential metadata, activation/completion должны доказывать captured credential binding + durable run token; cancellation и diagnostics должны иметь те же ownership/redaction guarantees, что EPG;
-2. **issue #71** — deterministic explainable channel matching + bounded now/next projections;
-3. закрытие **issue #28** после интеграционного evidence XMLTV → remote refresh → activation → matching → now-next;
-4. **issue #29** — real now/next, Guide, Search, Favorites и Recent;
-5. **issue #33** — TV-first visual modernization без новой state architecture;
-6. **issue #30** — bounded variant fallback + TV Doctor Lite + HLS runtime fixture binding;
-7. **issue #31** — R8, Baseline Profile, signed alpha, SBOM/release checklist и physical TV evidence.
+1. **PR #81 / issue #29** — Channels Now/Next + destination-scoped state: код clean-rebuilt на current `main`, exact-head Full уже green; перед merge ещё требуется exact-head TV/device, playback-session и focus/Player-back acceptance evidence.
+2. **PR #86 / issue #29** — Favorites: rebuild/retarget после merge #81, затем Full + TV/device validation.
+3. **PR #84 / issue #82** — matching policy provenance / Room v8: versioned matching policy, stale-aware repair и migration contract; перед merge обязателен committed generated v8 schema и green exact-head API26/current migration matrix.
+4. **PR #85** — EPG allocation Stage 2: retarget только после #84; claims принимаются только с allocation evidence.
+5. **PR #83 и PR #87** — allocation-only Core/XMLTV stages: rebase/retarget на принятую correctness-базу и сравнивать только на сопоставимых measurement profiles.
 
-Параллельно остаётся **issue #27**: пять независимых repetitions для `current-normal`, `old-edge-normal`, `current-low-ram`, затем cross-profile interpretation и per-operation hard-gate/warning/descriptive decision. Эти измерения не блокируют correctness critical path.
+Независимые ветки не следует искусственно сериализовать: device evidence для #81, correctness work в #84 и performance evidence для #87 могут идти параллельно. Зависимые #86/#85 не следует постоянно ребейзить до стабилизации их parent PR.
 
-**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence из #27 и отдельного ADR, который оправдывает FFI/ABI/packaging/debugging complexity измеримым выигрышем.
+### P1 — issue #29 daily-use discovery
+
+После принятия #81/#86:
+
+1. bounded/debounced Search по channel name/number/group и active programme metadata через отдельный query boundary;
+2. profile-scoped bounded Recent, который обновляется только после successful playback, а не при открытии Player/failed resolve;
+3. bounded/lazy TV Guide viewport;
+4. D-pad/focus/Player Back continuity между routes, filters и restored state.
+
+FTS не вводится заранее: сначала нужны bounded Room queries и измерения.
+
+### P2 — issue #30
+
+Bounded variant fallback + TV Doctor Lite:
+
+- bounded attempt/time ladder без retry storms;
+- typed DNS/TLS/HTTP/auth/redirect/manifest/decoder/playback failure families;
+- temporary fallback не меняет preferred variant;
+- реальные HLS fixtures привязываются к production fallback consumer;
+- diagnostics/export остаются redacted.
+
+### P3 — issue #31
+
+Alpha hardening:
+
+- R8/resource shrinking;
+- Compose compiler metrics;
+- Macrobenchmark + Baseline/Startup Profiles;
+- process/native memory evidence и API37 memory-limiter stress;
+- physical Android/Google TV, constrained hardware и Fire TV evidence;
+- upgrade/Keystore/Room recovery;
+- signing, changelog, SBOM/licenses и release checklist.
+
+## Performance / issue #27
+
+Measurement foundation уже существует: deterministic M3U corpora, bounded HLS/XMLTV fixtures, M3U/Room/Player adapters, immutable report identity, `current-normal` / `old-edge-normal` / `current-low-ram`, fresh-AVD sequential orchestration.
+
+Осталось получить и зафиксировать:
+
+1. пять независимых repetitions `current-normal`;
+2. пять `old-edge-normal`;
+3. пять `current-low-ram`;
+4. separated cross-profile interpretation;
+5. per-operation classification: `hard-gate` / `warning-only` / `descriptive-only`;
+6. durable performance report и repository truth sync.
+
+**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими correctness-задачами.** Они допускаются только после reproducible bottleneck/compatibility evidence из #27/#31 и отдельного ADR, который оправдывает FFI/ABI/packaging/debugging complexity измеримым выигрышем.
 
 ## Архитектурные принципы
 
@@ -118,10 +156,9 @@ pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
 
 - текущая repository truth: [`.work/CURRENT-STATE.md`](.work/CURRENT-STATE.md);
 - machine-readable status: [`.work/meta/status.yaml`](.work/meta/status.yaml);
-- активный EPG/source ownership plan: [`docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md`](docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md);
 - benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md);
 - current-profile variance smoke: [`docs/performance/2026-07-30-current-variance-smoke.md`](docs/performance/2026-07-30-current-variance-smoke.md);
-- открытые функциональные packages ведутся через GitHub Issues и отдельные reviewable PR.
+- открытые functional/performance packages ведутся через GitHub Issues и отдельные reviewable PR.
 
 ## Лицензия
 
