@@ -53,14 +53,9 @@ internal interface SearchIndexDao {
         """
         SELECT text
         FROM search_documents
-        WHERE epgSourceId = :sourceId
-          AND epgRevisionNumber = :revisionNumber
-          AND kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
-        ORDER BY documentKey COLLATE BINARY
+        WHERE kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
+        ORDER BY text COLLATE BINARY
         """,
     )
-    suspend fun textsForEpgRevision(
-        sourceId: String,
-        revisionNumber: Long,
-    ): List<String>
+    suspend fun programmeTitleTexts(): List<String>
 }
