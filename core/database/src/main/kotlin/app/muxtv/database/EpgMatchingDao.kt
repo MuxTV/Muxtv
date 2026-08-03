@@ -40,6 +40,16 @@ internal data class EpgMatchEvidenceRow(
         "EpgMatchEvidenceRow(providerValuePresent=${providerValue != null})"
 }
 
+internal data class EpgMatchFreshnessCounts(
+    val epgChannelCount: Long,
+    val currentPolicyMatchCount: Long,
+) {
+    init {
+        require(epgChannelCount >= 0)
+        require(currentPolicyMatchCount >= 0)
+    }
+}
+
 internal sealed interface EpgMatchPublicationResult {
     data object Applied : EpgMatchPublicationResult
     data object Superseded : EpgMatchPublicationResult
@@ -82,6 +92,64 @@ internal abstract class EpgMatchingDao {
             providerSourceId = providerSourceId,
             catalogRevisionNumber = projection.catalogRevisionNumber,
         )
+    }
+
+    @Query(
+        """
+        SELECT epg_sources.id
+        FROM epg_sources
+        INNER JOIN sources ON sources.id = epg_sources.providerSourceId
+        WHERE epg_sources.providerSourceId IS NOT NULL
+          AND epg_sources.activeRevision > 0
+          AND sources.activeRevision > 0
+        ORDER BY epg_sources.id COLLATE BINARY ASC
+        """,
+    )
+    abstract suspend fun activeLinkedEpgSourceIds(): List<String>
+
+    @Query(
+        """
+        SELECT
+            (
+                SELECT COUNT(*)
+                FROM epg_channels
+                WHERE sourceId = :epgSourceId
+                  AND revisionNumber = :epgRevisionNumber
+            ) AS epgChannelCount,
+            (
+                SELECT COUNT(*)
+                FROM epg_channel_matches
+                WHERE epgSourceId = :epgSourceId
+                  AND epgRevisionNumber = :epgRevisionNumber
+                  AND providerSourceId = :providerSourceId
+                  AND catalogRevisionNumber = :catalogRevisionNumber
+                  AND matchPolicyVersion = :matchPolicyVersion
+            ) AS currentPolicyMatchCount
+        """,
+    )
+    protected abstract suspend fun freshnessCounts(
+        epgSourceId: String,
+        epgRevisionNumber: Long,
+        providerSourceId: String,
+        catalogRevisionNumber: Long,
+        matchPolicyVersion: Int,
+    ): EpgMatchFreshnessCounts
+
+    @Transaction
+    open suspend fun isFresh(
+        snapshot: EpgMatchingRelationSnapshot,
+        matchPolicyVersion: Int,
+    ): Boolean {
+        require(matchPolicyVersion > LEGACY_UNVERSIONED_MATCH_POLICY_VERSION)
+        if (relationSnapshot(snapshot.epgSourceId) != snapshot) return false
+        val counts = freshnessCounts(
+            epgSourceId = snapshot.epgSourceId,
+            epgRevisionNumber = snapshot.epgRevisionNumber,
+            providerSourceId = snapshot.providerSourceId,
+            catalogRevisionNumber = snapshot.catalogRevisionNumber,
+            matchPolicyVersion = matchPolicyVersion,
+        )
+        return counts.epgChannelCount == counts.currentPolicyMatchCount
     }
 
     @Query(

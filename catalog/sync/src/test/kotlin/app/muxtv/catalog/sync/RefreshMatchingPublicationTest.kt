@@ -22,7 +22,7 @@ class RefreshMatchingPublicationTest {
     }
 
     @Test
-    fun epgNotModifiedDoesNotReconcileMatching() = runBlocking {
+    fun epgNotModifiedChecksMatchingFreshnessWithoutForcingRematch() = runBlocking {
         var calls = 0
 
         reconcileEpgAfterPublication(
@@ -30,7 +30,9 @@ class RefreshMatchingPublicationTest {
             disposition = RefreshCompletionDisposition.APPLIED,
         ) { calls++ }
 
-        assertThat(calls).isEqualTo(0)
+        // The worker callback is reconcileIfStale: a 304 performs only the cheap freshness check when
+        // current, but still repairs legacy/missing derived state after a policy migration.
+        assertThat(calls).isEqualTo(1)
     }
 
     @Test

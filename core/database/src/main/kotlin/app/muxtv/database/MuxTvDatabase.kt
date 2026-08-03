@@ -27,7 +27,7 @@ import androidx.room3.RoomDatabase
         EpgRefreshHttpValidatorEntity::class,
         EpgChannelMatchEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {

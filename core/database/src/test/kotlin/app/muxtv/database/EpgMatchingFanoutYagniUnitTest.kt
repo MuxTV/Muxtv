@@ -34,6 +34,19 @@ class EpgMatchingFanoutYagniUnitTest {
                 catalogRevisionNumber = 1,
             )
 
+        override suspend fun activeLinkedEpgSourceIds(): List<String> = linkedIds
+
+        override suspend fun freshnessCounts(
+            epgSourceId: String,
+            epgRevisionNumber: Long,
+            providerSourceId: String,
+            catalogRevisionNumber: Long,
+            matchPolicyVersion: Int,
+        ): EpgMatchFreshnessCounts = EpgMatchFreshnessCounts(
+            epgChannelCount = 0,
+            currentPolicyMatchCount = 0,
+        )
+
         override suspend fun linkedActiveEpgSourceIds(
             providerSourceId: String,
         ): List<String> {
