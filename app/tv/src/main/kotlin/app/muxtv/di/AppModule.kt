@@ -2,6 +2,7 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
@@ -93,6 +94,11 @@ object AppModule {
     fun provideEpgMatchingStore(
         components: MuxTvDatabaseComponents,
     ): EpgMatchingStore = components.epgMatchingStore
+
+    @Provides
+    fun provideEpgGuideRepository(
+        components: MuxTvDatabaseComponents,
+    ): EpgGuideRepository = components.epgGuideRepository
 
     @Provides
     fun provideSourceRefreshStore(
