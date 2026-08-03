@@ -92,6 +92,10 @@ Provider/plugin abstractions make sense when federated search is the product. Th
 
 Active/inactive channel separation, groups and channel numbers remain part of canonical visibility policy. A derived index must never bypass active-revision/hidden-channel truth.
 
+### Supplementary projects surveyed
+
+VLC Android, NOVA Video Player, Jellyfin Web, Findroid, SmartTube, Lampa and Ente were also inspected for media/TV/search product patterns. They were useful as cross-checks, but did not provide stronger directly transferable contracts for this specific local Android-TV channel/EPG slice than the sources above. In particular, no Lampa-specific Search mechanism is treated as authoritative where only plugin/fork behavior was available.
+
 ## 3. Critical SQLite/Unicode decision
 
 The earlier LIKE-based design was rejected during research.
@@ -186,7 +190,7 @@ Rules:
 - `limit in 1..200`;
 - trim and collapse user whitespace only; do **not** apply NFKC/NFKD to the query unless the indexed text is normalized identically;
 - blank => empty snapshot and no unfiltered catalog query;
-- at most six searchable tokens; extra tokens are rejected/ignored deterministically by the encoder according to one tested rule;
+- at most six searchable tokens; extra tokens are ignored deterministically after the first six in input order;
 - public diagnostics redact profile and text.
 
 ```kotlin
@@ -485,7 +489,7 @@ Search logic does not belong in `MainActivity`, navigation lambdas or Compose-si
 ### Query encoder/API
 
 - blank/whitespace behavior;
-- token cap;
+- token cap and deterministic first-six rule;
 - punctuation/operator text cannot become FTS syntax;
 - token-prefix encoding;
 - Cyrillic upper/lower equivalence;
@@ -548,7 +552,7 @@ Search logic does not belong in `MainActivity`, navigation lambdas or Compose-si
 - IME submit -> focus leaves input;
 - first row Up -> input;
 - Player -> Back restores query/result;
-- removed result fallback;
+- removed focused result fallback;
 - no-results recovery;
 - explicit truncation UI;
 - Cyrillic mixed-case journey;
@@ -645,6 +649,28 @@ The current design therefore uses platform-compatible FTS4/unicode61, exact acce
 
 It also preserves optional EPG behavior, explicit truncation, TV/IME focus ownership, query continuity and a hard separation between derived index and active truth.
 
-## 21. Approval gate
+## 21. Research references used for design review
+
+Primary references included:
+
+- Jellyfin Android TV current Search ViewModel/fragment and 2025-2026 Search release history;
+- IPTVnator recent releases and global/category/lazy/search-state behavior;
+- Tvheadend EPG API search/filter/limit semantics;
+- Kodi PVR/EPG search history and current PVR fixes;
+- MythTV Program Search/Finder/Stored Searches behavior;
+- Navidrome FTS5/BM25 Search rebuild;
+- Immich metadata-search join and bounded semantic-search failure reports;
+- NewPipe search/filter cost design;
+- ErsatzTV search-field model;
+- PhotoPrism query escaping/filter behavior;
+- Audiobookshelf international search requests;
+- Threadfin active/group/channel-number model;
+- Kvaesitso and Lawnchair federated/provider search architectures;
+- SQLite official FTS3/FTS4, `unicode61`, prefix-query and prefix-index documentation;
+- AndroidX Room 3 FTS4/FTS5 documentation and Android platform FTS support.
+
+Supplementary survey: VLC Android, NOVA Video Player, Jellyfin Web, Findroid, SmartTube, Lampa and Ente.
+
+## 22. Approval gate
 
 Production Search implementation must not begin until this revised written design is reviewed and approved. After approval, create a task-level implementation plan and implement from the then-accepted `main` on a fresh branch.
