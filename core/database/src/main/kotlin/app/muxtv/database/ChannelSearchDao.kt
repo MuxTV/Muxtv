@@ -2,6 +2,9 @@ package app.muxtv.database
 
 import androidx.room3.Dao
 import androidx.room3.Query
+import app.muxtv.catalog.PlayableChannelSummary
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 internal data class ChannelSearchCandidateRow(
     val canonicalChannelId: String,
@@ -24,27 +27,70 @@ internal object ChannelSearchMatchRank {
 }
 
 @Dao
-internal abstract class ChannelSearchDao {
-    suspend fun searchCandidates(
+internal abstract class ChannelSearchDao : ChannelSearchDataSource {
+    override fun observeChanges(): Flow<Unit> = observeChangeToken().map { }
+
+    override suspend fun searchCandidates(
         profileId: String,
         ftsExpression: String,
         nowEpochMillis: Long,
         fetchLimit: Int,
-        matchPolicyVersion: Int = CURRENT_EPG_MATCH_POLICY_VERSION,
     ): List<ChannelSearchCandidateRow> {
         require(profileId.isNotBlank())
         require(ftsExpression.isNotBlank())
         require(nowEpochMillis >= 0)
         require(fetchLimit in 1..MAX_CANDIDATE_FETCH_LIMIT)
-        require(matchPolicyVersion >= LEGACY_UNVERSIONED_MATCH_POLICY_VERSION)
         return selectCandidates(
             profileId = profileId,
             ftsExpression = ftsExpression,
             nowEpochMillis = nowEpochMillis,
             fetchLimit = fetchLimit,
-            matchPolicyVersion = matchPolicyVersion,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
         )
     }
+
+    override suspend fun activeChannelSummaries(
+        profileId: String,
+        canonicalChannelIds: List<String>,
+    ): List<PlayableChannelSummary> {
+        require(profileId.isNotBlank())
+        require(canonicalChannelIds.size <= MAX_CANDIDATES_PER_TOKEN)
+        require(canonicalChannelIds.none(String::isBlank))
+        if (canonicalChannelIds.isEmpty()) return emptyList()
+        return selectActiveChannelSummaries(
+            profileId = profileId,
+            canonicalChannelIds = canonicalChannelIds.distinct(),
+        )
+    }
+
+    override suspend fun nextProgrammeBoundary(
+        profileId: String,
+        nowEpochMillis: Long,
+    ): Long? {
+        require(profileId.isNotBlank())
+        require(nowEpochMillis >= 0)
+        return selectNextProgrammeBoundary(
+            profileId = profileId,
+            nowEpochMillis = nowEpochMillis,
+            matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
+        )
+    }
+
+    @Query(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM search_documents)
+          + (SELECT COUNT(*) FROM canonical_channels)
+          + (SELECT COUNT(*) FROM provider_channels)
+          + (SELECT COUNT(*) FROM stream_variants)
+          + (SELECT COUNT(*) FROM user_channel_overlays)
+          + (SELECT COUNT(*) FROM sources)
+          + (SELECT COUNT(*) FROM epg_sources)
+          + (SELECT COUNT(*) FROM epg_channel_matches)
+          + (SELECT COUNT(*) FROM epg_programmes)
+        """,
+    )
+    protected abstract fun observeChangeToken(): Flow<Long>
 
     @Query(
         """
@@ -212,7 +258,138 @@ internal abstract class ChannelSearchDao {
         matchPolicyVersion: Int,
     ): List<ChannelSearchCandidateRow>
 
+    @Query(
+        """
+        SELECT canonical_channels.id AS channelId,
+               COALESCE(user_channel_overlays.customName, canonical_channels.displayName) AS displayName,
+               MIN(provider_channels.logoUrl) AS logoUrl,
+               MIN(provider_channels.groupTitle) AS groupTitle,
+               COALESCE(CAST(user_channel_overlays.channelNumber AS TEXT), MIN(provider_channels.channelNumber)) AS channelNumber,
+               COALESCE(user_channel_overlays.isFavorite, 0) AS isFavorite,
+               COUNT(DISTINCT stream_variants.id) AS variantCount
+        FROM canonical_channels
+        INNER JOIN stream_variants
+            ON stream_variants.canonicalChannelId = canonical_channels.id
+        INNER JOIN provider_channels
+            ON provider_channels.id = stream_variants.providerChannelId
+        INNER JOIN sources
+            ON sources.id = provider_channels.sourceId
+        LEFT JOIN user_channel_overlays
+            ON user_channel_overlays.profileId = :profileId
+           AND user_channel_overlays.canonicalChannelId = canonical_channels.id
+        WHERE canonical_channels.id IN (:canonicalChannelIds)
+          AND provider_channels.revisionNumber = sources.activeRevision
+          AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+        GROUP BY canonical_channels.id,
+                 canonical_channels.displayName,
+                 user_channel_overlays.customName,
+                 user_channel_overlays.channelNumber,
+                 user_channel_overlays.isFavorite
+        ORDER BY canonical_channels.id COLLATE BINARY
+        """,
+    )
+    protected abstract suspend fun selectActiveChannelSummaries(
+        profileId: String,
+        canonicalChannelIds: List<String>,
+    ): List<PlayableChannelSummary>
+
+    @Query(
+        """
+        WITH active_matches AS (
+            SELECT matches.epgSourceId,
+                   matches.epgRevisionNumber,
+                   matches.epgExternalChannelId,
+                   matches.canonicalChannelId
+            FROM epg_channel_matches AS matches
+            INNER JOIN epg_sources
+                ON epg_sources.id = matches.epgSourceId
+               AND epg_sources.activeRevision = matches.epgRevisionNumber
+               AND epg_sources.providerSourceId = matches.providerSourceId
+            INNER JOIN sources
+                ON sources.id = matches.providerSourceId
+               AND sources.activeRevision = matches.catalogRevisionNumber
+            WHERE matches.matchPolicyVersion = :matchPolicyVersion
+              AND matches.decision = 'MATCHED'
+              AND matches.canonicalChannelId IS NOT NULL
+        ),
+        match_counts AS (
+            SELECT canonicalChannelId, COUNT(*) AS matchCount
+            FROM active_matches
+            GROUP BY canonicalChannelId
+        ),
+        unambiguous_matches AS (
+            SELECT active_matches.*
+            FROM active_matches
+            INNER JOIN match_counts
+                ON match_counts.canonicalChannelId = active_matches.canonicalChannelId
+               AND match_counts.matchCount = 1
+            LEFT JOIN user_channel_overlays
+                ON user_channel_overlays.profileId = :profileId
+               AND user_channel_overlays.canonicalChannelId = active_matches.canonicalChannelId
+            WHERE COALESCE(user_channel_overlays.isHidden, 0) = 0
+        ),
+        boundary_candidates AS (
+            SELECT CASE
+                WHEN previous_programme.stopEpochMillis IS NOT NULL
+                 AND previous_programme.stopEpochMillis > :nowEpochMillis
+                    THEN previous_programme.stopEpochMillis
+                WHEN previous_programme.stopEpochMillis IS NULL
+                    THEN (
+                        SELECT next_programme.startEpochMillis
+                        FROM epg_programmes AS next_programme
+                        WHERE next_programme.sourceId = unambiguous_matches.epgSourceId
+                          AND next_programme.revisionNumber = unambiguous_matches.epgRevisionNumber
+                          AND next_programme.externalChannelId = unambiguous_matches.epgExternalChannelId
+                          AND next_programme.startEpochMillis > :nowEpochMillis
+                        ORDER BY next_programme.startEpochMillis ASC,
+                                 next_programme.sequenceNumber ASC
+                        LIMIT 1
+                    )
+                ELSE NULL
+            END AS boundaryEpochMillis
+            FROM unambiguous_matches
+            LEFT JOIN epg_programmes AS previous_programme
+                ON previous_programme.sourceId = unambiguous_matches.epgSourceId
+               AND previous_programme.revisionNumber = unambiguous_matches.epgRevisionNumber
+               AND previous_programme.externalChannelId = unambiguous_matches.epgExternalChannelId
+               AND previous_programme.sequenceNumber = (
+                   SELECT previous_candidate.sequenceNumber
+                   FROM epg_programmes AS previous_candidate
+                   WHERE previous_candidate.sourceId = unambiguous_matches.epgSourceId
+                     AND previous_candidate.revisionNumber = unambiguous_matches.epgRevisionNumber
+                     AND previous_candidate.externalChannelId = unambiguous_matches.epgExternalChannelId
+                     AND previous_candidate.startEpochMillis <= :nowEpochMillis
+                   ORDER BY previous_candidate.startEpochMillis DESC,
+                            previous_candidate.sequenceNumber DESC
+                   LIMIT 1
+               )
+            UNION ALL
+            SELECT (
+                SELECT next_programme.startEpochMillis
+                FROM epg_programmes AS next_programme
+                WHERE next_programme.sourceId = unambiguous_matches.epgSourceId
+                  AND next_programme.revisionNumber = unambiguous_matches.epgRevisionNumber
+                  AND next_programme.externalChannelId = unambiguous_matches.epgExternalChannelId
+                  AND next_programme.startEpochMillis > :nowEpochMillis
+                ORDER BY next_programme.startEpochMillis ASC,
+                         next_programme.sequenceNumber ASC
+                LIMIT 1
+            ) AS boundaryEpochMillis
+            FROM unambiguous_matches
+        )
+        SELECT MIN(boundaryEpochMillis)
+        FROM boundary_candidates
+        WHERE boundaryEpochMillis > :nowEpochMillis
+        """,
+    )
+    protected abstract suspend fun selectNextProgrammeBoundary(
+        profileId: String,
+        nowEpochMillis: Long,
+        matchPolicyVersion: Int,
+    ): Long?
+
     private companion object {
-        const val MAX_CANDIDATE_FETCH_LIMIT = 801
+        const val MAX_CANDIDATES_PER_TOKEN = 800
+        const val MAX_CANDIDATE_FETCH_LIMIT = MAX_CANDIDATES_PER_TOKEN + 1
     }
 }
