@@ -12,14 +12,7 @@ import androidx.room3.PrimaryKey
         Index(value = ["canonicalChannelId"]),
         Index(value = ["profileId", "canonicalChannelId"]),
         Index(value = ["providerChannelId"]),
-        Index(
-            value = [
-                "epgSourceId",
-                "epgRevisionNumber",
-                "epgExternalChannelId",
-                "epgProgrammeSequence",
-            ],
-        ),
+        Index(value = ["kind"]),
     ],
 )
 data class SearchDocumentEntity(
@@ -31,24 +24,18 @@ data class SearchDocumentEntity(
     val canonicalChannelId: String? = null,
     val profileId: String? = null,
     val providerChannelId: String? = null,
-    val epgSourceId: String? = null,
-    val epgRevisionNumber: Long? = null,
-    val epgExternalChannelId: String? = null,
-    val epgProgrammeSequence: Long? = null,
     val text: String,
 ) {
     init {
         require(documentKey.isNotBlank())
         require(kind in SearchDocumentKind.ALL)
-        require(epgRevisionNumber == null || epgRevisionNumber > 0)
-        require(epgProgrammeSequence == null || epgProgrammeSequence > 0)
         require(text.isNotBlank())
     }
 
     override fun toString(): String =
         "SearchDocumentEntity(kind=$kind, hasCanonical=${canonicalChannelId != null}, " +
             "hasProfile=${profileId != null}, hasProvider=${providerChannelId != null}, " +
-            "hasEpgOrigin=${epgSourceId != null}, text=<redacted>)"
+            "text=<redacted>)"
 }
 
 internal object SearchDocumentKind {
