@@ -109,10 +109,8 @@ internal class RoomEpgMatchingStore(
             )
             channels.forEach { channel ->
                 val key = normalizeEpgProviderId(channel.externalId) ?: return@forEach
-                collapseEpgMatchCandidates(
-                    canonicalChannelIds = index[key].orEmpty(),
-                    reasonCode = EpgMatchReasonCode.EXACT_ID,
-                )?.let { resolution -> resolutions[channel.externalId] = resolution }
+                index.resolve(key, EpgMatchReasonCode.EXACT_ID)
+                    ?.let { resolution -> resolutions[channel.externalId] = resolution }
             }
         }
 
@@ -127,10 +125,8 @@ internal class RoomEpgMatchingStore(
             channels.forEach { channel ->
                 if (channel.externalId in resolutions) return@forEach
                 val key = normalizeEpgDisplayName(channel.primaryDisplayName) ?: return@forEach
-                collapseEpgMatchCandidates(
-                    canonicalChannelIds = index[key].orEmpty(),
-                    reasonCode = EpgMatchReasonCode.EXACT_TVG_NAME,
-                )?.let { resolution -> resolutions[channel.externalId] = resolution }
+                index.resolve(key, EpgMatchReasonCode.EXACT_TVG_NAME)
+                    ?.let { resolution -> resolutions[channel.externalId] = resolution }
             }
         }
 
@@ -145,26 +141,34 @@ internal class RoomEpgMatchingStore(
             channels.forEach { channel ->
                 if (channel.externalId in resolutions) return@forEach
                 val key = normalizeEpgDisplayName(channel.primaryDisplayName) ?: return@forEach
-                collapseEpgMatchCandidates(
-                    canonicalChannelIds = index[key].orEmpty(),
-                    reasonCode = EpgMatchReasonCode.EXACT_RAW_NAME,
-                )?.let { resolution -> resolutions[channel.externalId] = resolution }
+                index.resolve(key, EpgMatchReasonCode.EXACT_RAW_NAME)
+                    ?.let { resolution -> resolutions[channel.externalId] = resolution }
             }
         }
 
-        val matches = channels.map { channel ->
-            resolutionToEntity(
+        val matches = ArrayList<EpgChannelMatchEntity>(channels.size)
+        var matchedCount = 0
+        var ambiguousCount = 0
+        var unresolvedCount = 0
+        channels.forEach { channel ->
+            val match = resolutionToEntity(
                 snapshot = snapshot,
                 externalId = channel.externalId,
                 resolution = resolutions[channel.externalId] ?: unresolvedEpgMatch(),
             )
+            when (EpgChannelMatchDecision.valueOf(match.decision)) {
+                EpgChannelMatchDecision.MATCHED -> matchedCount++
+                EpgChannelMatchDecision.AMBIGUOUS -> ambiguousCount++
+                EpgChannelMatchDecision.UNRESOLVED -> unresolvedCount++
+            }
+            matches += match
         }
         val summary = EpgMatchingSummary(
             epgRevisionNumber = snapshot.epgRevisionNumber,
             catalogRevisionNumber = snapshot.catalogRevisionNumber,
-            matchedCount = matches.count { it.decision == EpgChannelMatchDecision.MATCHED.name },
-            ambiguousCount = matches.count { it.decision == EpgChannelMatchDecision.AMBIGUOUS.name },
-            unresolvedCount = matches.count { it.decision == EpgChannelMatchDecision.UNRESOLVED.name },
+            matchedCount = matchedCount,
+            ambiguousCount = ambiguousCount,
+            unresolvedCount = unresolvedCount,
         )
 
         return when (dao.replaceIfCurrent(snapshot, matches)) {
@@ -201,11 +205,11 @@ internal class RoomEpgMatchingStore(
     private fun buildEvidenceIndex(
         rows: List<EpgMatchEvidenceRow>,
         normalize: (String?) -> String?,
-    ): Map<String, Set<String>> {
-        val index = LinkedHashMap<String, MutableSet<String>>()
+    ): EpgMatchCandidateIndex {
+        val index = EpgMatchCandidateIndex()
         rows.forEach { row ->
             val key = normalize(row.providerValue) ?: return@forEach
-            index.getOrPut(key) { linkedSetOf() } += row.canonicalChannelId
+            index.add(key, row.canonicalChannelId)
         }
         return index
     }
@@ -253,5 +257,51 @@ internal class RoomEpgMatchingStore(
             canonicalChannelId = null,
             candidateCount = 0,
         )
+    }
+}
+
+private class EpgMatchCandidateIndex {
+    private val uniqueCanonicalIdByKey = LinkedHashMap<String, String>()
+    private val collisionsByKey = LinkedHashMap<String, MutableSet<String>>()
+
+    fun add(key: String, canonicalChannelId: String) {
+        require(key.isNotBlank())
+        require(canonicalChannelId.isNotBlank())
+
+        val collision = collisionsByKey[key]
+        if (collision != null) {
+            collision += canonicalChannelId
+            return
+        }
+
+        val existing = uniqueCanonicalIdByKey[key]
+        when {
+            existing == null -> uniqueCanonicalIdByKey[key] = canonicalChannelId
+            existing == canonicalChannelId -> Unit
+            else -> {
+                uniqueCanonicalIdByKey.remove(key)
+                collisionsByKey[key] = linkedSetOf(existing, canonicalChannelId)
+            }
+        }
+    }
+
+    fun resolve(
+        key: String,
+        reasonCode: EpgMatchReasonCode,
+    ): EpgMatchResolution? {
+        require(reasonCode != EpgMatchReasonCode.NO_MATCH)
+
+        collisionsByKey[key]?.let { canonicalChannelIds ->
+            return EpgMatchResolution.Ambiguous(
+                reasonCode = reasonCode,
+                candidateCount = canonicalChannelIds.size,
+            )
+        }
+        return uniqueCanonicalIdByKey[key]?.let { canonicalChannelId ->
+            EpgMatchResolution.Matched(
+                canonicalChannelId = canonicalChannelId,
+                reasonCode = reasonCode,
+            )
+        }
     }
 }
