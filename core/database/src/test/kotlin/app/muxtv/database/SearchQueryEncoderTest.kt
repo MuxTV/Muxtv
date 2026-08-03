@@ -5,29 +5,29 @@ import org.junit.Test
 
 class SearchQueryEncoderTest {
     @Test
-    fun encodesUnicodeLetterNumberRunsAsIndependentPrefixes() {
+    fun encodesUnicodeLetterNumberRunsAsIndependentQuotedPrefixes() {
         val tokens = SearchQueryEncoder.encode("Россия 1 HD")
 
         assertThat(tokens.map(SearchQueryToken::value)).containsExactly("Россия", "1", "HD").inOrder()
         assertThat(tokens.map(SearchQueryToken::ftsExpression))
-            .containsExactly("Россия*", "1*", "HD*")
+            .containsExactly("\"Россия*\"", "\"1*\"", "\"HD*\"")
             .inOrder()
     }
 
     @Test
-    fun punctuationAndRawFtsSyntaxBecomeSeparators() {
+    fun punctuationAndRawFtsSyntaxBecomeSeparatorsAndOperatorsBecomeQuotedTerms() {
         val tokens = SearchQueryEncoder.encode("  foo:OR \"bar\" -baz_near%  ")
 
         assertThat(tokens.map(SearchQueryToken::value))
             .containsExactly("foo", "OR", "bar", "baz", "near")
             .inOrder()
-        tokens.forEach { token ->
-            assertThat(token.ftsExpression).doesNotContain(":")
-            assertThat(token.ftsExpression).doesNotContain("\"")
-            assertThat(token.ftsExpression).doesNotContain("-")
-            assertThat(token.ftsExpression).doesNotContain("%")
-            assertThat(token.ftsExpression).endsWith("*")
-        }
+        assertThat(tokens.map(SearchQueryToken::ftsExpression)).containsExactly(
+            "\"foo*\"",
+            "\"OR*\"",
+            "\"bar*\"",
+            "\"baz*\"",
+            "\"near*\"",
+        ).inOrder()
     }
 
     @Test
@@ -38,6 +38,8 @@ class SearchQueryEncoderTest {
         assertThat(tokens.map(SearchQueryToken::value))
             .containsExactly("$deseretLetter$deseretLetter", "7")
             .inOrder()
+        assertThat(tokens.first().ftsExpression).startsWith("\"")
+        assertThat(tokens.first().ftsExpression).endsWith("*\"")
     }
 
     @Test
