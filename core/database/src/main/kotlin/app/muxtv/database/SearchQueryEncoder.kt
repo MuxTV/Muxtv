@@ -10,7 +10,10 @@ data class SearchQueryToken internal constructor(
         require(value.codePoints().allMatch(Character::isLetterOrDigit))
     }
 
-    val ftsExpression: String = "$value*"
+    // A single quoted phrase containing one term-prefix keeps words such as OR, AND and NEAR
+    // in term position instead of exposing FTS4 operator grammar. User punctuation never reaches
+    // this string because the encoder accepts Unicode letters/numbers only.
+    val ftsExpression: String = "\"$value*\""
 
     override fun toString(): String = "SearchQueryToken(length=${value.codePointCount(0, value.length)})"
 }
