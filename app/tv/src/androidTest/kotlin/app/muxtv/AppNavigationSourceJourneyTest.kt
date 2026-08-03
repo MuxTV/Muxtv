@@ -70,6 +70,7 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
                         sourceRefreshScheduler = scheduler,
@@ -134,7 +135,7 @@ class AppNavigationSourceJourneyTest {
                 composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-            composeRule.onNodeWithText("Первый канал", substring = true).assertExists()
+            composeRule.onNodeWithText("1  Первый канал", substring = false).assertExists()
         } finally {
             controllerConnector.close()
         }
