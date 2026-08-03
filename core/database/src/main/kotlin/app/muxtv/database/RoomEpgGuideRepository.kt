@@ -48,21 +48,24 @@ internal class RoomEpgGuideRepository(
         rows: List<EpgGuideProgrammeCandidateRow>,
         nowEpochMillis: Long,
     ): ChannelNowNext {
-        val previous = rows
-            .asSequence()
-            .filter { it.startEpochMillis <= nowEpochMillis }
-            .maxByOrNull { it.startEpochMillis }
-        val next = rows
-            .asSequence()
-            .filter { it.startEpochMillis > nowEpochMillis }
-            .minByOrNull { it.startEpochMillis }
+        var previous: EpgGuideProgrammeCandidateRow? = null
+        var next: EpgGuideProgrammeCandidateRow? = null
+        rows.forEach { row ->
+            if (row.startEpochMillis <= nowEpochMillis) {
+                if (previous == null || row.startEpochMillis > previous!!.startEpochMillis) {
+                    previous = row
+                }
+            } else if (next == null || row.startEpochMillis < next!!.startEpochMillis) {
+                next = row
+            }
+        }
 
         val current = previous?.let { candidate ->
             val effectiveEnd = when {
                 candidate.stopEpochMillis != null && candidate.stopEpochMillis > nowEpochMillis ->
                     candidate.stopEpochMillis
-                candidate.stopEpochMillis == null && next != null && next.startEpochMillis > nowEpochMillis ->
-                    next.startEpochMillis
+                candidate.stopEpochMillis == null && next != null && next!!.startEpochMillis > nowEpochMillis ->
+                    next!!.startEpochMillis
                 else -> null
             }
             effectiveEnd
@@ -70,15 +73,14 @@ internal class RoomEpgGuideRepository(
                 ?.let { endEpochMillis -> candidate.toGuideProgramme(endEpochMillis) }
         }
         val nextProgramme = next?.toGuideProgramme(
-            endEpochMillis = next.stopEpochMillis?.takeIf { it > next.startEpochMillis },
+            endEpochMillis = next!!.stopEpochMillis?.takeIf { it > next!!.startEpochMillis },
         )
-        val nextBoundary = sequenceOf(
-            current?.endEpochMillis,
-            nextProgramme?.startEpochMillis,
-        )
-            .filterNotNull()
-            .filter { it > nowEpochMillis }
-            .minOrNull()
+
+        var nextBoundary = current?.endEpochMillis?.takeIf { it > nowEpochMillis }
+        val nextStart = nextProgramme?.startEpochMillis?.takeIf { it > nowEpochMillis }
+        if (nextStart != null && (nextBoundary == null || nextStart < nextBoundary)) {
+            nextBoundary = nextStart
+        }
 
         return ChannelNowNext(
             canonicalChannelId = canonicalChannelId,
