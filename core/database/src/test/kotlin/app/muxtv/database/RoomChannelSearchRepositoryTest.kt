@@ -30,8 +30,11 @@ class RoomChannelSearchRepositoryTest {
     fun intersectsCanonicalIdsAcrossDifferentTokenFields() = runTest {
         val dataSource = FakeSearchDataSource(
             candidates = mapOf(
-                "Россия*" to listOf(candidate("a", ChannelSearchMatchRank.NAME), candidate("b", ChannelSearchMatchRank.NAME)),
-                "1*" to listOf(candidate("a", ChannelSearchMatchRank.PROVIDER)),
+                "\"Россия*\"" to listOf(
+                    candidate("a", ChannelSearchMatchRank.NAME),
+                    candidate("b", ChannelSearchMatchRank.NAME),
+                ),
+                "\"1*\"" to listOf(candidate("a", ChannelSearchMatchRank.PROVIDER)),
             ),
             summaries = listOf(summary("a", "Россия", "1"), summary("b", "Россия 24", "24")),
         )
@@ -40,7 +43,9 @@ class RoomChannelSearchRepositoryTest {
         val snapshot = repository.observe(query("Россия 1")).first()
 
         assertThat(snapshot.results.map { it.channel.channelId }).containsExactly("a")
-        assertThat(dataSource.candidateExpressions).containsExactly("Россия*", "1*").inOrder()
+        assertThat(dataSource.candidateExpressions)
+            .containsExactly("\"Россия*\"", "\"1*\"")
+            .inOrder()
     }
 
     @Test
@@ -49,8 +54,8 @@ class RoomChannelSearchRepositoryTest {
         val target = "channel-799"
         val dataSource = FakeSearchDataSource(
             candidates = mapOf(
-                "канал*" to broad,
-                "точный*" to listOf(candidate(target, ChannelSearchMatchRank.PROVIDER)),
+                "\"канал*\"" to broad,
+                "\"точный*\"" to listOf(candidate(target, ChannelSearchMatchRank.PROVIDER)),
             ),
             summaries = listOf(summary(target, "Канал точный", "799")),
         )
@@ -77,7 +82,7 @@ class RoomChannelSearchRepositoryTest {
             )
         }
         val dataSource = FakeSearchDataSource(
-            candidates = mapOf("спорт*" to candidates),
+            candidates = mapOf("\"спорт*\"" to candidates),
             summaries = listOf(
                 summary("programme", "Шестой", "6"),
                 summary("group", "Пятый", "5"),
@@ -105,11 +110,11 @@ class RoomChannelSearchRepositoryTest {
     fun multiTokenOriginUsesWeakestRequiredMatchForRanking() = runTest {
         val dataSource = FakeSearchDataSource(
             candidates = mapOf(
-                "новости*" to listOf(
+                "\"новости*\"" to listOf(
                     candidate("mixed", ChannelSearchMatchRank.NAME),
                     candidate("metadata", ChannelSearchMatchRank.PROVIDER),
                 ),
-                "вечер*" to listOf(
+                "\"вечер*\"" to listOf(
                     candidate("mixed", ChannelSearchMatchRank.PROGRAMME),
                     candidate("metadata", ChannelSearchMatchRank.PROVIDER),
                 ),
@@ -134,7 +139,7 @@ class RoomChannelSearchRepositoryTest {
         val summaries = (1..5).map { index -> summary("c$index", "Канал $index", index.toString()) }
         val guide = FakeGuideRepository(currentTitles = mapOf("c1" to "Сейчас 1", "c2" to "Сейчас 2"))
         val dataSource = FakeSearchDataSource(
-            candidates = mapOf("канал*" to candidates),
+            candidates = mapOf("\"канал*\"" to candidates),
             summaries = summaries,
             nextBoundary = 9_000,
         )
