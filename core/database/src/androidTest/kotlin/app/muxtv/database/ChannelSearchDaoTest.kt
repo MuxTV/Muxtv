@@ -45,7 +45,8 @@ class ChannelSearchDaoTest {
 
     @Test
     fun unicodePrefixFindsActiveMetadataAcrossFields() = runTest {
-        assertThat(candidateIds("рос*")).containsExactly(CHANNEL)
+        assertThat(candidateIds(SearchQueryEncoder.encode("Россия").single().ftsExpression))
+            .containsExactly(CHANNEL)
         assertThat(candidateIds("нов*")).containsExactly(CHANNEL)
         assertThat(candidateIds("001*")).containsExactly(CHANNEL)
 
@@ -60,6 +61,27 @@ class ChannelSearchDaoTest {
 
         assertThat(candidateIds("мой*")).containsExactly(CHANNEL)
         assertThat(candidateIds("77*")).containsExactly(CHANNEL)
+    }
+
+    @Test
+    fun overlayDocumentsAreIsolatedToRequestedProfile() = runTest {
+        val secondaryProfile = "profile-secondary"
+        database.profileDao().insert(
+            ProfileEntity(id = secondaryProfile, name = "Secondary", isPrimary = false),
+        )
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                canonicalChannelId = CHANNEL,
+                customName = "Профильное имя",
+                channelNumber = 77,
+            ),
+        )
+
+        assertThat(candidateIds("проф*", profileId = DatabaseDefaults.PRIMARY_PROFILE_ID))
+            .containsExactly(CHANNEL)
+        assertThat(candidateIds("проф*", profileId = secondaryProfile)).isEmpty()
+        assertThat(candidateIds("77*", profileId = secondaryProfile)).isEmpty()
     }
 
     @Test
@@ -155,6 +177,26 @@ class ChannelSearchDaoTest {
     }
 
     @Test
+    fun staleCatalogRelationCannotPublishProgrammeCandidate() = runTest {
+        val epgRevision = stageAndActivateEpg(
+            sourceId = EPG_A,
+            programmes = listOf(programme(1, 1_000, 2_000, "Старая связь")),
+        )
+        publishMatch(EPG_A, epgRevision, CURRENT_EPG_MATCH_POLICY_VERSION)
+
+        stageCatalogRevision(
+            revision = 2,
+            rawName = "Россия Новый",
+            displayName = "Россия 1",
+            group = "Новости",
+            number = "001",
+        )
+        sourceStore.activate(SOURCE, 2, 30, sourceStatistics())
+
+        assertThat(candidateIds("связ*", now = 1_500)).isEmpty()
+    }
+
+    @Test
     fun multipleCurrentMappingsAreConflictAndCannotPublishProgrammeCandidate() = runTest {
         val revisionA = stageAndActivateEpg(
             sourceId = EPG_A,
@@ -170,13 +212,16 @@ class ChannelSearchDaoTest {
         assertThat(candidateIds("конф*", now = 1_500)).isEmpty()
     }
 
-    private suspend fun candidateIds(expression: String, now: Long = 1_500): List<String> =
-        dao.searchCandidates(
-            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
-            ftsExpression = expression,
-            nowEpochMillis = now,
-            fetchLimit = 801,
-        ).map(ChannelSearchCandidateRow::canonicalChannelId)
+    private suspend fun candidateIds(
+        expression: String,
+        now: Long = 1_500,
+        profileId: String = DatabaseDefaults.PRIMARY_PROFILE_ID,
+    ): List<String> = dao.searchCandidates(
+        profileId = profileId,
+        ftsExpression = expression,
+        nowEpochMillis = now,
+        fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
+    ).map(ChannelSearchCandidateRow::canonicalChannelId)
 
     private suspend fun stageCatalogRevision(
         revision: Long,
