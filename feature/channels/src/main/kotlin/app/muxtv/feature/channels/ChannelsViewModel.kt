@@ -64,8 +64,6 @@ internal class ChannelsViewModel(
 
     fun setFavoritesOnly(favoritesOnly: Boolean) {
         if (mutableFavoritesOnly.value == favoritesOnly) return
-        invalidateGuideGeneration()
-        currentGuide = emptyList()
         mutableFavoritesOnly.value = favoritesOnly
         observeChannels(favoritesOnly)
     }
