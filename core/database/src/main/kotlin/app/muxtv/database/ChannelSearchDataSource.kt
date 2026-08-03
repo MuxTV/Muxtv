@@ -16,6 +16,7 @@ internal interface ChannelSearchDataSource {
         ftsExpression: String,
         nowEpochMillis: Long,
         fetchLimit: Int,
+        restrictToCanonicalIds: List<String>? = null,
     ): List<ChannelSearchCandidateRow>
 
     suspend fun activeChannelSummaries(
