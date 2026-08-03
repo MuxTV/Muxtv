@@ -73,34 +73,63 @@ class SearchDocumentFactoryTest {
     }
 
     @Test
-    fun programmeDocumentsCarryExactImmutableOrigin() {
-        val programme = EpgProgrammeEntity(
+    fun programmeDocumentsCollapseRepeatedTitlesIntoVocabularyRows() {
+        val first = programme(
             sourceId = "epg-a",
             revisionNumber = 7,
             sequenceNumber = 12,
             externalChannelId = "external-a",
-            startEpochMillis = 1_000,
-            stopEpochMillis = 2_000,
-            primaryTitle = "Вести",
-            primaryLanguage = "ru",
-            subtitle = null,
+            title = "Вести",
             description = "not indexed",
             category = "not indexed",
-            iconRef = null,
-            episodeNumber = null,
-            isNew = false,
+        )
+        val repeated = programme(
+            sourceId = "epg-a",
+            revisionNumber = 7,
+            sequenceNumber = 13,
+            externalChannelId = "external-b",
+            title = "Вести",
+        )
+        val secondTitle = programme(
+            sourceId = "epg-a",
+            revisionNumber = 7,
+            sequenceNumber = 14,
+            externalChannelId = "external-a",
+            title = "Новости",
         )
 
-        val document = epgProgrammeSearchDocuments(listOf(programme)).single()
+        val documents = epgProgrammeSearchDocuments(listOf(first, repeated, secondTitle))
 
-        assertThat(document.kind).isEqualTo(SearchDocumentKind.EPG_PROGRAMME_TITLE)
-        assertThat(document.epgSourceId).isEqualTo("epg-a")
-        assertThat(document.epgRevisionNumber).isEqualTo(7)
-        assertThat(document.epgExternalChannelId).isEqualTo("external-a")
-        assertThat(document.epgProgrammeSequence).isEqualTo(12)
-        assertThat(document.text).isEqualTo("Вести")
-        assertThat(document.toString()).doesNotContain("Вести")
-        assertThat(document.toString()).doesNotContain("not indexed")
+        assertThat(documents.map(SearchDocumentEntity::text))
+            .containsExactly("Вести", "Новости")
+            .inOrder()
+        assertThat(documents.map(SearchDocumentEntity::kind).distinct())
+            .containsExactly(SearchDocumentKind.EPG_PROGRAMME_TITLE)
+        assertThat(documents.first().documentKey).contains("epg-a:7:12")
+        documents.forEach { document ->
+            assertThat(document.canonicalChannelId).isNull()
+            assertThat(document.providerChannelId).isNull()
+            assertThat(document.profileId).isNull()
+            assertThat(document.toString()).doesNotContain("Вести")
+            assertThat(document.toString()).doesNotContain("not indexed")
+        }
+    }
+
+    @Test
+    fun blankProgrammeTitlesDoNotCreateVocabularyRows() {
+        val documents = epgProgrammeSearchDocuments(
+            listOf(
+                programme(
+                    sourceId = "epg-a",
+                    revisionNumber = 1,
+                    sequenceNumber = 1,
+                    externalChannelId = "external-a",
+                    title = null,
+                ),
+            ),
+        )
+
+        assertThat(documents).isEmpty()
     }
 
     @Test
@@ -113,4 +142,29 @@ class SearchDocumentFactoryTest {
         assertThat(document.canonicalChannelId).isEqualTo("channel-a")
         assertThat(document.text).isEqualTo("Россия 1")
     }
+
+    private fun programme(
+        sourceId: String,
+        revisionNumber: Long,
+        sequenceNumber: Long,
+        externalChannelId: String,
+        title: String?,
+        description: String? = null,
+        category: String? = null,
+    ) = EpgProgrammeEntity(
+        sourceId = sourceId,
+        revisionNumber = revisionNumber,
+        sequenceNumber = sequenceNumber,
+        externalChannelId = externalChannelId,
+        startEpochMillis = 1_000,
+        stopEpochMillis = 2_000,
+        primaryTitle = title,
+        primaryLanguage = "ru",
+        subtitle = null,
+        description = description,
+        category = category,
+        iconRef = null,
+        episodeNumber = null,
+        isNew = false,
+    )
 }
