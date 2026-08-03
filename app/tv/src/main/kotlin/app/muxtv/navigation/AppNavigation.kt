@@ -15,11 +15,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
@@ -38,6 +41,7 @@ import app.muxtv.player.media3.MuxTvMediaControllerConnector
 @Composable
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
+    epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
@@ -76,6 +80,10 @@ fun AppNavigation(
             modifier = Modifier.fillMaxWidth().weight(1f),
             backStack = backStack,
             onBack = ::goBack,
+            entryDecorators = listOf(
+                rememberSaveableStateHolderNavEntryDecorator(),
+                rememberViewModelStoreNavEntryDecorator(),
+            ),
             entryProvider = { key ->
                 val destination = key as AppDestination
                 NavEntry(key) {
@@ -88,6 +96,8 @@ fun AppNavigation(
 
                         AppDestination.Channels -> ChannelsRoute(
                             playbackCatalog = playbackCatalog,
+                            epgGuideRepository = epgGuideRepository,
+                            playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
@@ -144,7 +154,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
+                Modifier.focusRequester(initialNavigationFocusRequester)
             } else {
                 Modifier
             }
