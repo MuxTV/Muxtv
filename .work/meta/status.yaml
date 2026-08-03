@@ -1,6 +1,6 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-08-01
+updated_at: 2026-08-03
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
@@ -8,16 +8,17 @@ repository_state:
   ci: present_self_hosted_full_device_matrix_focused_measurements_and_variance_smoke
   tests: present_unit_android_instrumentation_migration_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_durable_epg_refresh
+  documentation: synchronized_after_epg_matching_now_next
   architecture_version: 3
 active_branch_after_merge: main
-implementation_source_commit: c31b34d65ef90848bd907a521b9a0ba8860ed83a
-room_schema: 6
+implementation_source_commit: 12dce1ac95b5a2215c53f485bf70ffd13fad46b3
+repository_truth_commit: c38b3c04d8e4229dd1fb8a8ec40d60d18bb0b2fa
+room_schema: 7
 implemented:
   - android_tv_application_shell
   - navigation3_top_level_routes
   - deterministic_dpad_focus
-  - room_schema_v6_and_migrations
+  - room_schema_v7_and_migrations
   - android_keystore_credentials
   - bounded_secure_network_foundation
   - bounded_streaming_m3u_parser
@@ -26,6 +27,9 @@ implemented:
   - secure_remote_source_onboarding
   - durable_pending_source_registry
   - source_refresh_and_scheduling
+  - source_refresh_publication_binding_and_run_token_ownership
+  - source_refresh_completion_binding_guard
+  - source_refresh_cancellation_authority_and_diagnostic_redaction
   - source_management_ui
   - channels_browser
   - media3_session_and_basic_player
@@ -87,6 +91,10 @@ implemented:
   - epg_nullable_access_completion_ownership
   - epg_cancellation_authority_preservation
   - epg_refresh_diagnostic_redaction
+  - deterministic_epg_channel_matching
+  - persisted_epg_match_producer_revision_provenance
+  - bounded_now_next_projection
+  - epg_matching_reconciliation_after_publication
 accepted_specifications:
   - profiles
   - domain_model
@@ -114,6 +122,7 @@ accepted_specifications:
   - immutable_epg_revisions
   - secure_remote_epg_refresh
   - durable_epg_refresh
+  - deterministic_epg_matching_and_now_next
 verified_evidence:
   source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
   media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
@@ -136,6 +145,8 @@ verified_evidence:
   secure_remote_epg_refresh_merge: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
   durable_epg_refresh_state_merge: ab96f0fee5b80ebc8ae7f5a2cc23608ee5450030
   durable_epg_refresh_orchestration_merge: c31b34d65ef90848bd907a521b9a0ba8860ed83a
+  source_refresh_ownership_merge: 6be1f3f4d9c42727043dc1cb9c80f48ad7c0c53f
+  epg_matching_now_next_merge: 12dce1ac95b5a2215c53f485bf70ffd13fad46b3
   measurement_series_final_full_run: 30568786155
   measurement_series_current_smoke_run: 30568786175
   xmltv_parser_final_full_run: 30576931624
@@ -147,6 +158,8 @@ verified_evidence:
   durable_epg_state_matrix_run: 30703994190
   durable_epg_orchestration_final_full_run: 30708756373
   durable_epg_orchestration_matrix_run: 30708756357
+  epg_matching_now_next_final_full_run: 30766566746
+  epg_matching_now_next_matrix_run: 30766566756
   current_variance_smoke:
     source_head: 5091d3a1bdc005a5682b5d0915c617f7491885eb
     profile: current-normal
@@ -169,21 +182,28 @@ verified_evidence:
       ram_mb: 2048
       cpu_cores: 2
 next_milestone:
-  id: phase-01-source-refresh-ownership-hardening
-  issue: 76
-  plan: docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md
+  id: phase-01-stacked-graph-and-daily-use
+  issue: 29
   completed_packages:
     - deterministic_corpus_and_measurement_foundation
     - bounded_xmltv_streaming_parser
-    - immutable_epg_room_v5
+    - immutable_epg_room_foundation
     - bounded_epg_payload_decoder
     - secure_conditional_remote_epg_refresh
-    - durable_epg_refresh_persistence_room_v6
-    - durable_epg_workmanager_orchestration_and_publication_ownership
+    - durable_epg_refresh_persistence_and_orchestration
+    - source_refresh_publication_ownership
+    - deterministic_epg_matching_and_now_next
   immediate_sequence:
-    - source_refresh_publication_ownership_issue_76
-    - deterministic_epg_channel_matching_and_now_next_issue_71
-    - close_issue_28_after_integration_evidence
+    - validate_and_merge_channels_now_next_pr_81
+    - rebuild_and_merge_favorites_pr_86_after_81
+    - validate_and_merge_matching_policy_room_v8_pr_84_issue_82
+    - retarget_epg_allocation_pr_85_after_84
+    - retarget_and_measure_pr_83_pr_87
+  daily_use_after_stacked_graph:
+    - bounded_debounced_search
+    - successful_playback_recent
+    - bounded_lazy_tv_guide
+    - dpad_focus_and_player_back_continuity
   parallel_work:
     - issue_27_five_run_current_normal
     - issue_27_five_run_old_edge_normal
@@ -191,13 +211,14 @@ next_milestone:
     - issue_27_cross_profile_interpretation
     - issue_27_per_operation_threshold_decisions
 known_gaps:
-  - source_refresh_binding_and_run_token_publication_ownership
-  - source_refresh_completion_binding_guard
-  - source_refresh_cancellation_authority_and_entity_redaction
-  - deterministic_epg_channel_matching
-  - bounded_now_next_projection
+  - channels_now_next_exact_head_tv_device_and_focus_playback_evidence
+  - favorites_rebuild_after_channels_now_next
+  - matching_policy_version_room_v8_acceptance
+  - comparable_allocation_evidence_for_open_performance_prs
   - five_run_multi_profile_measurement_variance
-  - guide_search_favorites_recent_product_flows
+  - bounded_search
+  - successful_playback_recent
+  - bounded_lazy_tv_guide
   - playback_variant_fallback
   - tv_doctor_lite
   - light_tv_first_visual_modernization
