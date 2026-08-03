@@ -7,7 +7,7 @@ data class SearchQueryToken internal constructor(
 ) {
     init {
         require(value.isNotEmpty())
-        require(value.codePoints().allMatch(Character::isLetterOrDigit))
+        require(value.codePoints().allMatch { codePoint -> Character.isLetterOrDigit(codePoint) })
     }
 
     // A single quoted phrase containing one term-prefix keeps words such as OR, AND and NEAR
