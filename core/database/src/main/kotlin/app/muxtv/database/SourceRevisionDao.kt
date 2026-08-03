@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.Update
 
 internal data class SourceRemovalSnapshot(
     val activeRevision: Long,
@@ -145,8 +146,38 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertStreamVariants(variants: List<StreamVariantEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
+
+    @Update(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun updateSearchDocuments(documents: List<SearchDocumentEntity>): Int
+
+    @Query(
+        """
+        SELECT *
+        FROM search_documents
+        WHERE documentKey IN (:documentKeys)
+        """,
+    )
+    protected abstract suspend fun searchDocumentsByKeys(
+        documentKeys: List<String>,
+    ): List<SearchDocumentEntity>
+
+    protected suspend fun upsertCanonicalSearchDocuments(documents: List<SearchDocumentEntity>) {
+        documents.chunked(SEARCH_DOCUMENT_LOOKUP_BATCH_SIZE).forEach { chunk ->
+            val existing = searchDocumentsByKeys(chunk.map(SearchDocumentEntity::documentKey))
+            val plan = planSearchDocumentWrites(
+                desired = chunk,
+                existing = existing,
+            )
+            if (plan.inserts.isNotEmpty()) insertSearchDocuments(plan.inserts)
+            if (plan.updates.isNotEmpty()) {
+                check(updateSearchDocuments(plan.updates) == plan.updates.size) {
+                    "Unable to refresh canonical Search metadata."
+                }
+            }
+        }
+    }
 
     @Transaction
     open suspend fun stageCatalogBatch(
@@ -498,7 +529,7 @@ internal abstract class SourceRevisionDao {
                 previousRevision = previousRevision,
             ),
         )
-        if (canonicalDocuments.isNotEmpty()) insertSearchDocuments(canonicalDocuments)
+        if (canonicalDocuments.isNotEmpty()) upsertCanonicalSearchDocuments(canonicalDocuments)
 
         deleteProviderSearchDocumentsExcept(
             sourceId = sourceId,
