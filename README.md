@@ -6,9 +6,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Repository truth синхронизирован на `main` commit `c38b3c04d8e4229dd1fb8a8ec40d60d18bb0b2fa`; принятый implementation foundation проходит через merge PR #80 (`12dce1ac95b5a2215c53f485bf70ffd13fad46b3`).
+Проект находится в стадии **functional pre-alpha**. Текущий принятый implementation foundation проходит через PR #84, squash merge `9325e0b4b124402a8eb5b1731442bce40a5404a8`.
 
-Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3. Принятая Room schema на `main` — **v7**. `minSdk = 26`.
+Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3. Принятая Room schema на `main` — **v8**. `minSdk = 26`.
 
 ### Рабочий IPTV путь
 
@@ -28,24 +28,26 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManage
 - PR #72 — secure conditional remote EPG refresh, корректный `304`, bounded decode/import и cancellation preserving previous-good guide;
 - PR #74/#75 — durable EPG policies/state/attempts/validators, DB lease, stale reclaim, WorkManager orchestration и access/run-token publication ownership;
 - PR #78 — source refresh publication ownership hardened по тем же captured-binding/run-token/cancellation/redaction guarantees;
-- PR #80 — Room v7 deterministic explainable channel matching, persisted match provenance по immutable producer revisions, bounded Now/Next и end-to-end integration path.
+- PR #80 — Room v7 deterministic explainable channel matching, persisted producer-revision provenance, bounded Now/Next и end-to-end integration path;
+- PR #84 — Room v8 matching-policy provenance, stale-aware derived-match repair, current-policy Guide filtering и API26/API36 migration coverage.
 
-Последнее принятое exact-head evidence для PR #80:
+Последнее принятое exact-head evidence для PR #84:
 
-- Full: `30766566746` — success;
-- API26/current database/device matrix: `30766566756` — success.
+- Full: `30783348416` — success;
+- API26/current database/device matrix: `30783348361` — success;
+- на каждом TV-профиле: 118 instrumentation tests, 0 failures/errors/skips; database 88/88.
 
 ## Что ещё не завершено
 
-### P0 — распрямить открытый stacked graph
+### P0 — закрыть открытый stacked graph
 
-1. **PR #81 / issue #29** — Channels Now/Next + destination-scoped state: код clean-rebuilt на current `main`, exact-head Full уже green; перед merge ещё требуется exact-head TV/device, playback-session и focus/Player-back acceptance evidence.
-2. **PR #86 / issue #29** — Favorites: rebuild/retarget после merge #81, затем Full + TV/device validation.
-3. **PR #84 / issue #82** — matching policy provenance / Room v8: versioned matching policy, stale-aware repair и migration contract; перед merge обязателен committed generated v8 schema и green exact-head API26/current migration matrix.
-4. **PR #85** — EPG allocation Stage 2: retarget только после #84; claims принимаются только с allocation evidence.
-5. **PR #83 и PR #87** — allocation-only Core/XMLTV stages: rebase/retarget на принятую correctness-базу и сравнивать только на сопоставимых measurement profiles.
+1. **PR #81 / issue #29** — Channels Now/Next + destination-scoped state: clean-rebuilt, exact-head Full `30781623927` green; перед merge ещё требуется exact-head TV/device, playback-session и focus → Player → Back evidence.
+2. **PR #86 / issue #29** — Favorites: после merge #81 clean rebuild/retarget на accepted `main`, затем Full + TV/device validation.
+3. **PR #85** — EPG allocation Stage 2: #84 уже merged и PR retargeted to `main`, но inherited ancestry загрязняет diff; нужен clean rebuild и comparable allocation evidence.
+4. **PR #83** — Core allocation Stage 1: AndroidX Benchmark 1.4.1 оказался несовместим с AGP 9.3 legacy `TestedExtension`; branch-local pin обновлён до 1.5.0-alpha07. Нужны новый exact-head Full, clean rebuild/retarget и comparable before/after evidence.
+5. **PR #87** — XMLTV allocation Stage 2: clean 1-commit/1-file slice; нужны correctness + allocation evidence.
 
-Независимые ветки не следует искусственно сериализовать: device evidence для #81, correctness work в #84 и performance evidence для #87 могут идти параллельно. Зависимые #86/#85 не следует постоянно ребейзить до стабилизации их parent PR.
+Независимые evidence lanes можно выполнять параллельно. Performance PR не считается готовым по одному факту компиляции: нужен сопоставимый A/B profile/corpus/environment.
 
 ### P1 — issue #29 daily-use discovery
 
@@ -56,7 +58,7 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManage
 3. bounded/lazy TV Guide viewport;
 4. D-pad/focus/Player Back continuity между routes, filters и restored state.
 
-FTS не вводится заранее: сначала нужны bounded Room queries и измерения.
+FTS не вводится заранее: сначала bounded Room queries и измерения. Если Recent потребует новую Room schema, migration строится уже поверх принятой v8.
 
 ### P2 — issue #30
 
@@ -130,15 +132,6 @@ pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
   -SourceBranch local `
   -SourceCommit <full-lowercase-40-character-git-sha> `
   -NoDaemon
-```
-
-Deterministic M3U corpus:
-
-```powershell
-.\gradlew.bat :core:testing:generateM3uCorpus `
-  -PcorpusProfile=small-1k `
-  -PcorpusSeed=20260728 `
-  -PcorpusSourceCommit=<full-lowercase-40-character-git-sha>
 ```
 
 Measurement series example:
