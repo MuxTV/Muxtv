@@ -80,13 +80,20 @@ internal abstract class EpgRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertProgrammes(programmes: List<EpgProgrammeEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
+
     @Transaction
     open suspend fun stageBatch(
         channels: List<EpgChannelEntity>,
         programmes: List<EpgProgrammeEntity>,
     ) {
         if (channels.isNotEmpty()) insertChannels(channels)
-        if (programmes.isNotEmpty()) insertProgrammes(programmes)
+        if (programmes.isNotEmpty()) {
+            insertProgrammes(programmes)
+            val searchDocuments = epgProgrammeSearchDocuments(programmes)
+            if (searchDocuments.isNotEmpty()) insertSearchDocuments(searchDocuments)
+        }
     }
 
     open suspend fun activeProgrammes(
@@ -235,6 +242,20 @@ internal abstract class EpgRevisionDao {
 
     @Query(
         """
+        DELETE FROM search_documents
+        WHERE epgSourceId = :sourceId
+          AND epgRevisionNumber != :currentRevision
+          AND epgRevisionNumber != :previousRevision
+        """,
+    )
+    protected abstract suspend fun deleteEpgSearchDocumentsExcept(
+        sourceId: String,
+        currentRevision: Long,
+        previousRevision: Long,
+    ): Int
+
+    @Query(
+        """
         DELETE FROM epg_channels
         WHERE sourceId = :sourceId
           AND revisionNumber != :currentRevision
@@ -277,6 +298,18 @@ internal abstract class EpgRevisionDao {
 
     @Query(
         """
+        DELETE FROM search_documents
+        WHERE epgSourceId = :sourceId
+          AND epgRevisionNumber = :revisionNumber
+        """,
+    )
+    protected abstract suspend fun deleteEpgSearchDocumentsForRevision(
+        sourceId: String,
+        revisionNumber: Long,
+    ): Int
+
+    @Query(
+        """
         DELETE FROM epg_revisions
         WHERE sourceId = :sourceId
           AND revisionNumber = :revisionNumber
@@ -299,7 +332,7 @@ internal abstract class EpgRevisionDao {
     ): EpgRevisionActivationResult {
         require(expectedAccessRef.isNotBlank())
         if (sourceAccessRef(sourceId) != expectedAccessRef) {
-            deleteStagingRevision(sourceId, revisionNumber)
+            discardRevision(sourceId, revisionNumber)
             return EpgRevisionActivationResult.Superseded
         }
         return activateRevision(
@@ -327,7 +360,7 @@ internal abstract class EpgRevisionDao {
             runningState = EpgRefreshRunState.RUNNING.name,
         ) == 1
         if (sourceAccessRef(sourceId) != expectedAccessRef || !ownsRefresh) {
-            deleteStagingRevision(sourceId, revisionNumber)
+            discardRevision(sourceId, revisionNumber)
             return EpgRevisionActivationResult.Superseded
         }
         return activateRevision(
@@ -375,6 +408,7 @@ internal abstract class EpgRevisionDao {
             "EPG source does not exist."
         }
 
+        deleteEpgSearchDocumentsExcept(sourceId, revisionNumber, previousRevision)
         deleteChannelsExcept(sourceId, revisionNumber, previousRevision)
         deleteProgrammesExcept(sourceId, revisionNumber, previousRevision)
         deleteRevisionsExcept(sourceId, revisionNumber, previousRevision)
@@ -388,6 +422,7 @@ internal abstract class EpgRevisionDao {
 
     @Transaction
     open suspend fun discardRevision(sourceId: String, revisionNumber: Long) {
+        deleteEpgSearchDocumentsForRevision(sourceId, revisionNumber)
         deleteStagingRevision(sourceId, revisionNumber)
     }
 
