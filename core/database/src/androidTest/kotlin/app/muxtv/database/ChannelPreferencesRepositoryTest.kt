@@ -104,6 +104,37 @@ class ChannelPreferencesRepositoryTest {
         assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
     }
 
+    @Test
+    fun hiddenChannelReturnsNotFoundWithoutChangingExistingOverlay() = runTest {
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = CHANNEL_ID,
+                isFavorite = false,
+                isHidden = true,
+                customName = "Hidden News",
+                channelNumber = 77,
+            ),
+        )
+
+        assertThat(
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
+        ).isEqualTo(ChannelFavoriteMutationResult.NotFound)
+        assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(1)
+        assertThat(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).isNull()
+    }
+
+    @Test
+    fun inactiveChannelReturnsNotFoundWithoutCreatingOverlay() = runTest {
+        activateReplacementRevision()
+
+        assertThat(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).isNull()
+        assertThat(
+            channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
+        ).isEqualTo(ChannelFavoriteMutationResult.NotFound)
+        assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
+    }
+
     private suspend fun insertProfile() {
         database.profileDao().insert(
             ProfileEntity(
@@ -130,24 +161,52 @@ class ChannelPreferencesRepositoryTest {
             sourceId = SOURCE_ID,
             revisionNumber = 1,
             entries = listOf(
-                StagedCatalogEntry(
+                stagedEntry(
                     providerChannelId = PROVIDER_CHANNEL_ID,
+                    canonicalChannelId = CHANNEL_ID,
+                    streamVariantId = VARIANT_ID,
                     providerKey = "tvg:news",
                     rawName = "News",
-                    canonicalChannelId = CHANNEL_ID,
                     canonicalDisplayName = "News",
-                    streamVariantId = VARIANT_ID,
                     locator = "https://example.invalid/news.m3u8",
-                    tvgId = "news",
-                    groupTitle = "Information",
-                    channelNumber = "10",
                 ),
             ),
         )
+        activateRevision(revisionNumber = 1, activatedAtEpochMillis = 2_000)
+    }
+
+    private suspend fun activateReplacementRevision() {
+        revisionStore.beginRevision(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            startedAtEpochMillis = 3_000,
+        )
+        revisionStore.stageBatch(
+            sourceId = SOURCE_ID,
+            revisionNumber = 2,
+            entries = listOf(
+                stagedEntry(
+                    providerChannelId = "provider-replacement",
+                    canonicalChannelId = "canonical-replacement",
+                    streamVariantId = "variant-replacement",
+                    providerKey = "tvg:replacement",
+                    rawName = "Replacement",
+                    canonicalDisplayName = "Replacement",
+                    locator = "https://example.invalid/replacement.m3u8",
+                ),
+            ),
+        )
+        activateRevision(revisionNumber = 2, activatedAtEpochMillis = 4_000)
+    }
+
+    private suspend fun activateRevision(
+        revisionNumber: Long,
+        activatedAtEpochMillis: Long,
+    ) {
         val activation = revisionStore.activate(
             sourceId = SOURCE_ID,
-            revisionNumber = 1,
-            activatedAtEpochMillis = 2_000,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
             statistics = SourceRevisionStatistics(
                 parsedEntries = 1,
                 skippedEntries = 0,
@@ -156,6 +215,27 @@ class ChannelPreferencesRepositoryTest {
         )
         assertThat(activation).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
     }
+
+    private fun stagedEntry(
+        providerChannelId: String,
+        canonicalChannelId: String,
+        streamVariantId: String,
+        providerKey: String,
+        rawName: String,
+        canonicalDisplayName: String,
+        locator: String,
+    ) = StagedCatalogEntry(
+        providerChannelId = providerChannelId,
+        providerKey = providerKey,
+        rawName = rawName,
+        canonicalChannelId = canonicalChannelId,
+        canonicalDisplayName = canonicalDisplayName,
+        streamVariantId = streamVariantId,
+        locator = locator,
+        tvgId = providerKey.removePrefix("tvg:"),
+        groupTitle = "Information",
+        channelNumber = "10",
+    )
 
     private companion object {
         const val PROFILE_ID = "profile-primary"
