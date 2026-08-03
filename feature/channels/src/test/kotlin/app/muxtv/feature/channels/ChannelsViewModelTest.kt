@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
@@ -164,6 +165,47 @@ class ChannelsViewModelTest {
     }
 
     @Test
+    fun `favorites filter switches catalog query and guide membership`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(
+                channel("channel-a", "Alpha"),
+                channel("channel-b", "Beta", isFavorite = true),
+            ),
+        )
+        val guide = FakeGuideRepository()
+        val viewModel = createViewModel(catalog, guide)
+        assertThat((viewModel.uiState.value as ChannelsUiState.Content).rows).hasSize(2)
+        assertThat(guide.queryCount).isEqualTo(1)
+
+        viewModel.setFavoritesOnly(true)
+        runCurrent()
+
+        assertThat(viewModel.favoritesOnly.value).isTrue()
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows.map(ChannelRowProjection::channelId)).containsExactly("channel-b")
+        assertThat(guide.queryCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `empty favorites can switch back to all channels`() = runTest {
+        val catalog = FakePlaybackCatalog(
+            listOf(channel("channel-a", "Alpha")),
+        )
+        val viewModel = createViewModel(catalog, FakeGuideRepository())
+
+        viewModel.setFavoritesOnly(true)
+        runCurrent()
+        assertThat(viewModel.uiState.value).isEqualTo(ChannelsUiState.Empty)
+
+        viewModel.setFavoritesOnly(false)
+        runCurrent()
+
+        assertThat(viewModel.favoritesOnly.value).isFalse()
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows.map(ChannelRowProjection::channelId)).containsExactly("channel-a")
+    }
+
+    @Test
     fun `programme boundary reloads guide once when the boundary is reached`() = runTest {
         val catalog = FakePlaybackCatalog(
             listOf(channel("channel-a", "Alpha")),
@@ -240,14 +282,18 @@ class ChannelsViewModelTest {
         return ViewModelProvider.create(store, factory)[ChannelsViewModel::class]
     }
 
-    private fun channel(id: String, name: String): PlayableChannelSummary =
+    private fun channel(
+        id: String,
+        name: String,
+        isFavorite: Boolean = false,
+    ): PlayableChannelSummary =
         PlayableChannelSummary(
             channelId = id,
             displayName = name,
             logoUrl = null,
             groupTitle = null,
             channelNumber = null,
-            isFavorite = false,
+            isFavorite = isFavorite,
             variantCount = 1,
         )
 }
@@ -261,7 +307,10 @@ private class FakePlaybackCatalog(
         channels.value = value
     }
 
-    override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> = channels
+    override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
+        channels.map { rows ->
+            if (query.favoritesOnly) rows.filter(PlayableChannelSummary::isFavorite) else rows
+        }
 
     override suspend fun getChannel(profileId: String, channelId: String): PlayableChannel? =
         error("Not used by ChannelsViewModelTest")
