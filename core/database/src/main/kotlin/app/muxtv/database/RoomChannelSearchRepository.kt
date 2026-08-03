@@ -21,15 +21,21 @@ internal class RoomChannelSearchRepository(
 
         val tokens = SearchQueryEncoder.encode(query.normalizedText)
         if (tokens.isEmpty()) return flowOf(ChannelSearchSnapshot.EMPTY)
+        val queryTokenOverflow = SearchQueryEncoder.hasTokenOverflow(query.normalizedText)
 
         return dataSource.observeChanges().mapLatest {
-            buildSnapshot(query = query, tokens = tokens)
+            buildSnapshot(
+                query = query,
+                tokens = tokens,
+                queryTokenOverflow = queryTokenOverflow,
+            )
         }
     }
 
     private suspend fun buildSnapshot(
         query: ChannelSearchQuery,
         tokens: List<SearchQueryToken>,
+        queryTokenOverflow: Boolean,
     ): ChannelSearchSnapshot {
         val probes = tokens.map { token ->
             val fetched = dataSource.searchCandidates(
@@ -46,7 +52,7 @@ internal class RoomChannelSearchRepository(
         }
 
         // An unrestricted empty token proves the complete AND-query is empty, even if another
-        // broad token overflowed its probe. Do not report a false truncation in that case.
+        // broad token overflowed its probe or the UI text contained additional ignored tokens.
         if (probes.any { probe -> probe.rows.isEmpty() }) {
             return emptySnapshot(query = query, truncated = false)
         }
@@ -56,7 +62,7 @@ internal class RoomChannelSearchRepository(
                 .thenBy { probe -> if (probe.overflow) 1 else 0 },
         ) ?: return emptySnapshot(query = query, truncated = false)
 
-        var truncated = seed.overflow
+        var truncated = queryTokenOverflow || seed.overflow
         val intersection = seed.rows.associateTo(mutableMapOf()) { row ->
             row.canonicalChannelId to row.bestMatchRank
         }
