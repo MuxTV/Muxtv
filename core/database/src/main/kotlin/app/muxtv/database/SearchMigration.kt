@@ -13,10 +13,6 @@ internal val MIGRATION_8_9 = Migration(8, 9) { connection ->
             `canonicalChannelId` TEXT,
             `profileId` TEXT,
             `providerChannelId` TEXT,
-            `epgSourceId` TEXT,
-            `epgRevisionNumber` INTEGER,
-            `epgExternalChannelId` TEXT,
-            `epgProgrammeSequence` INTEGER,
             `text` TEXT NOT NULL
         )
         """.trimIndent(),
@@ -38,8 +34,8 @@ internal val MIGRATION_8_9 = Migration(8, 9) { connection ->
             "ON `search_documents` (`providerChannelId`)",
     )
     connection.execSQL(
-        "CREATE INDEX IF NOT EXISTS `index_search_documents_epgSourceId_epgRevisionNumber_epgExternalChannelId_epgProgrammeSequence` " +
-            "ON `search_documents` (`epgSourceId`, `epgRevisionNumber`, `epgExternalChannelId`, `epgProgrammeSequence`)",
+        "CREATE INDEX IF NOT EXISTS `index_search_documents_kind` " +
+            "ON `search_documents` (`kind`)",
     )
     connection.execSQL(
         """
@@ -143,25 +139,14 @@ internal val MIGRATION_8_9 = Migration(8, 9) { connection ->
     )
     connection.execSQL(
         """
-        INSERT INTO search_documents(
-            documentKey,
-            kind,
-            epgSourceId,
-            epgRevisionNumber,
-            epgExternalChannelId,
-            epgProgrammeSequence,
-            text
-        )
-        SELECT 'epg-title:' || sourceId || ':' || revisionNumber || ':' || sequenceNumber,
+        INSERT INTO search_documents(documentKey, kind, text)
+        SELECT 'epg-title:' || MIN(sourceId || ':' || revisionNumber || ':' || sequenceNumber),
                '${SearchDocumentKind.EPG_PROGRAMME_TITLE}',
-               sourceId,
-               revisionNumber,
-               externalChannelId,
-               sequenceNumber,
                primaryTitle
         FROM epg_programmes
         WHERE primaryTitle IS NOT NULL
           AND TRIM(primaryTitle) <> ''
+        GROUP BY primaryTitle
         """.trimIndent(),
     )
 
