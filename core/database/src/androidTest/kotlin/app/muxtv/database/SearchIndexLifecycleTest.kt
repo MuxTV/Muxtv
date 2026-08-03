@@ -22,6 +22,7 @@ class SearchIndexLifecycleTest {
             ApplicationProvider.getApplicationContext(),
             MuxTvDatabase::class.java,
         ).build()
+        DatabaseInitializer(database).initialize()
         sourceStore = RoomSourceRevisionStore(database.sourceRevisionDao())
         epgStore = RoomEpgRevisionStore(database.epgRevisionDao())
         sourceStore.upsertSource(
@@ -94,6 +95,33 @@ class SearchIndexLifecycleTest {
         assertThat(providerTexts()).doesNotContain("Первое имя")
         assertThat(providerTexts()).doesNotContain("101")
         assertThat(providerTexts()).containsAtLeast("Второе имя", "Третье имя", "102", "103")
+    }
+
+    @Test
+    fun overlayWriteReplacesProfileScopedNameAndNumberDocuments() = runTest {
+        stageCatalogRevision(1, displayName = "Канал")
+        sourceStore.activate(SOURCE_ID, 1, 20, sourceStatistics())
+
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                canonicalChannelId = CHANNEL_ID,
+                customName = "Мой канал",
+                channelNumber = 77,
+            ),
+        )
+        assertThat(overlayTexts()).containsExactly("Мой канал", "77")
+
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                canonicalChannelId = CHANNEL_ID,
+                customName = "Новое имя",
+                channelNumber = null,
+            ),
+        )
+
+        assertThat(overlayTexts()).containsExactly("Новое имя")
     }
 
     @Test
@@ -182,6 +210,16 @@ class SearchIndexLifecycleTest {
                 SearchDocumentKind.PROVIDER_RAW_NAME,
                 SearchDocumentKind.PROVIDER_GROUP,
                 SearchDocumentKind.PROVIDER_NUMBER,
+            ),
+        )
+
+    private suspend fun overlayTexts(): List<String> =
+        database.searchIndexDao().textsForProfileCanonicalKinds(
+            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+            canonicalChannelId = CHANNEL_ID,
+            kinds = listOf(
+                SearchDocumentKind.OVERLAY_CUSTOM_NAME,
+                SearchDocumentKind.OVERLAY_NUMBER,
             ),
         )
 
