@@ -43,7 +43,7 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManage
 
 1. **PR #81 / issue #29** — Channels Now/Next + destination-scoped state: clean-rebuilt, exact-head Full `30781623927` green; перед merge ещё требуется exact-head TV/device, playback-session и focus → Player → Back evidence.
 2. **PR #86 / issue #29** — Favorites: после merge #81 clean rebuild/retarget на accepted `main`, затем Full + TV/device validation.
-3. **PR #85** — EPG allocation Stage 2: #84 уже merged и PR retargeted to `main`, но inherited ancestry загрязняет diff; нужен clean rebuild и comparable allocation evidence.
+3. **PR #89** — clean Room v8 rebuild EPG allocation Stage 2: ровно 2 commits/2 runtime files; нужны exact-head correctness и comparable matching/NowNext allocation evidence. Старый polluted PR #85 закрыт как superseded.
 4. **PR #83** — Core allocation Stage 1: AndroidX Benchmark 1.4.1 оказался несовместим с AGP 9.3 legacy `TestedExtension`; branch-local pin обновлён до 1.5.0-alpha07. Нужны новый exact-head Full, clean rebuild/retarget и comparable before/after evidence.
 5. **PR #87** — XMLTV allocation Stage 2: clean 1-commit/1-file slice; нужны correctness + allocation evidence.
 
