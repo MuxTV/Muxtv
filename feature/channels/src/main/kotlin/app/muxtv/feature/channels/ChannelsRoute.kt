@@ -25,6 +25,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -150,6 +151,8 @@ private fun ChannelsContent(
     modifier: Modifier,
 ) {
     val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
+    val allFilterFocusRequester = remember { FocusRequester() }
+    val favoritesFilterFocusRequester = remember { FocusRequester() }
     val channelIds = rows.map(ChannelRowProjection::channelId)
     val restorationAnchor = remember(favoritesOnly, channelIds) { focusAnchor }
     var restorationCompleted by remember(favoritesOnly, channelIds) { mutableStateOf(false) }
@@ -188,12 +191,22 @@ private fun ChannelsContent(
             MuxTvActionButton(
                 text = if (favoritesOnly) "Все каналы" else "• Все каналы",
                 onClick = { onFavoritesOnlyChanged(false) },
-                modifier = Modifier.testTag(CHANNELS_ALL_FILTER_TEST_TAG),
+                modifier = Modifier
+                    .testTag(CHANNELS_ALL_FILTER_TEST_TAG)
+                    .focusProperties {
+                        right = favoritesFilterFocusRequester
+                    }
+                    .focusRequester(allFilterFocusRequester),
             )
             MuxTvActionButton(
                 text = if (favoritesOnly) "• Избранное" else "Избранное",
                 onClick = { onFavoritesOnlyChanged(true) },
-                modifier = Modifier.testTag(CHANNELS_FAVORITES_FILTER_TEST_TAG),
+                modifier = Modifier
+                    .testTag(CHANNELS_FAVORITES_FILTER_TEST_TAG)
+                    .focusProperties {
+                        left = allFilterFocusRequester
+                    }
+                    .focusRequester(favoritesFilterFocusRequester),
             )
         }
         Text(
@@ -243,6 +256,9 @@ private fun ChannelsContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("$CHANNEL_ROW_TEST_TAG_PREFIX$index")
+                        .focusProperties {
+                            up = allFilterFocusRequester
+                        }
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) captureFocusAnchor()
