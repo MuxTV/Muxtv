@@ -165,12 +165,20 @@ private fun ChannelsContent(
             index = 0,
             scrollOffset = 0,
         )
-        val targetIsVisible = listState.layoutInfo.visibleItemsInfo.any { item ->
-            item.index == target.index
-        }
-        if (!targetIsVisible) {
+        fun targetIsPlacedInCurrentLayout(): Boolean =
+            listState.layoutInfo.visibleItemsInfo.any { item ->
+                item.index == target.index && item.key == target.itemKey
+            }
+
+        if (!targetIsPlacedInCurrentLayout()) {
             listState.scrollToItem(target.index)
         }
+        // `channelIds` can change while LazyColumn still exposes the previous layout. Index-only
+        // visibility is therefore insufficient when a surviving stable key moves (for example
+        // channel-b from row 1 to row 0 after enabling Favorites). Wait for the exact key/index
+        // pair from the new layout instead of guessing with a frame delay.
+        snapshotFlow { targetIsPlacedInCurrentLayout() }
+            .first { isPlaced -> isPlaced }
 
         val requester = snapshotFlow { focusRequesters[target.itemKey] }
             .filterNotNull()
