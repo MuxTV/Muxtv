@@ -347,10 +347,26 @@ private class XmltvHandler(
         }
         programme?.let { builder ->
             when (active.elementName) {
-                "title" -> addBounded(builder.titles, active.asText(), limits.maxCategoriesPerProgramme)
-                "sub-title" -> addBounded(builder.subTitles, active.asText(), limits.maxCategoriesPerProgramme)
-                "desc" -> addBounded(builder.descriptions, active.asText(), limits.maxCategoriesPerProgramme)
-                "category" -> addBounded(builder.categories, active.asText(), limits.maxCategoriesPerProgramme)
+                "title" -> addBounded(
+                    builder.titles,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "sub-title" -> addBounded(
+                    builder.subTitles,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "desc" -> addBounded(
+                    builder.descriptions,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
+                "category" -> addBounded(
+                    builder.categories,
+                    XmltvText(value, active.language.normalizedOptional()),
+                    limits.maxCategoriesPerProgramme,
+                )
                 "keyword" -> addBounded(builder.keywords, value, limits.maxKeywordsPerProgramme)
                 "country" -> addBounded(builder.countries, value, limits.maxCountriesPerProgramme)
                 "url" -> addBounded(builder.urls, value, limits.maxUrlsPerRecord)
@@ -365,9 +381,6 @@ private class XmltvHandler(
             }
         }
     }
-
-    private fun TextCapture.asText(): XmltvText =
-        XmltvText(text.toString().trim(), language.normalizedOptional())
 
     private fun finishChannel() {
         val builder = channel ?: return
@@ -573,6 +586,7 @@ private class GuardedXmltvInputStream(
     var consumedBytes: Long = 0L
         private set
     private var doctypeMarkerIndex = 0
+    private var skipBuffer: ByteArray? = null
 
     override fun read(): Int {
         val value = super.read()
@@ -596,7 +610,10 @@ private class GuardedXmltvInputStream(
 
     override fun skip(byteCount: Long): Long {
         if (byteCount <= 0L) return 0L
-        val buffer = ByteArray(minOf(byteCount, 8192L).toInt())
+        val requestedSize = minOf(byteCount, 8192L).toInt()
+        val buffer = skipBuffer
+            ?.takeIf { it.size >= requestedSize }
+            ?: ByteArray(requestedSize).also { skipBuffer = it }
         var remaining = byteCount
         var skipped = 0L
         while (remaining > 0L) {
