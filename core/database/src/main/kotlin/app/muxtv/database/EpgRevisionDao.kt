@@ -80,8 +80,32 @@ internal abstract class EpgRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertProgrammes(programmes: List<EpgProgrammeEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
+
+    @Query(
+        """
+        SELECT text
+        FROM search_documents
+        WHERE kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
+          AND text IN (:titles)
+        """,
+    )
+    protected abstract suspend fun existingProgrammeTitleSearchDocuments(
+        titles: List<String>,
+    ): List<String>
+
+    protected suspend fun insertMissingProgrammeTitleSearchDocuments(
+        documents: List<SearchDocumentEntity>,
+    ) {
+        documents.chunked(EPG_SEARCH_TITLE_LOOKUP_BATCH_SIZE).forEach { chunk ->
+            val existing = existingProgrammeTitleSearchDocuments(
+                chunk.map(SearchDocumentEntity::text),
+            ).toHashSet()
+            val missing = chunk.filterNot { document -> document.text in existing }
+            if (missing.isNotEmpty()) insertSearchDocuments(missing)
+        }
+    }
 
     @Transaction
     open suspend fun stageBatch(
@@ -92,7 +116,9 @@ internal abstract class EpgRevisionDao {
         if (programmes.isNotEmpty()) {
             insertProgrammes(programmes)
             val searchDocuments = epgProgrammeSearchDocuments(programmes)
-            if (searchDocuments.isNotEmpty()) insertSearchDocuments(searchDocuments)
+            if (searchDocuments.isNotEmpty()) {
+                insertMissingProgrammeTitleSearchDocuments(searchDocuments)
+            }
         }
     }
 
@@ -242,20 +268,6 @@ internal abstract class EpgRevisionDao {
 
     @Query(
         """
-        DELETE FROM search_documents
-        WHERE epgSourceId = :sourceId
-          AND epgRevisionNumber != :currentRevision
-          AND epgRevisionNumber != :previousRevision
-        """,
-    )
-    protected abstract suspend fun deleteEpgSearchDocumentsExcept(
-        sourceId: String,
-        currentRevision: Long,
-        previousRevision: Long,
-    ): Int
-
-    @Query(
-        """
         DELETE FROM epg_channels
         WHERE sourceId = :sourceId
           AND revisionNumber != :currentRevision
@@ -299,14 +311,15 @@ internal abstract class EpgRevisionDao {
     @Query(
         """
         DELETE FROM search_documents
-        WHERE epgSourceId = :sourceId
-          AND epgRevisionNumber = :revisionNumber
+        WHERE kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM epg_programmes
+              WHERE epg_programmes.primaryTitle = search_documents.text
+          )
         """,
     )
-    protected abstract suspend fun deleteEpgSearchDocumentsForRevision(
-        sourceId: String,
-        revisionNumber: Long,
-    ): Int
+    protected abstract suspend fun deleteUnreferencedProgrammeTitleSearchDocuments(): Int
 
     @Query(
         """
@@ -408,10 +421,10 @@ internal abstract class EpgRevisionDao {
             "EPG source does not exist."
         }
 
-        deleteEpgSearchDocumentsExcept(sourceId, revisionNumber, previousRevision)
         deleteChannelsExcept(sourceId, revisionNumber, previousRevision)
         deleteProgrammesExcept(sourceId, revisionNumber, previousRevision)
         deleteRevisionsExcept(sourceId, revisionNumber, previousRevision)
+        deleteUnreferencedProgrammeTitleSearchDocuments()
 
         return EpgRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -422,11 +435,12 @@ internal abstract class EpgRevisionDao {
 
     @Transaction
     open suspend fun discardRevision(sourceId: String, revisionNumber: Long) {
-        deleteEpgSearchDocumentsForRevision(sourceId, revisionNumber)
         deleteStagingRevision(sourceId, revisionNumber)
+        deleteUnreferencedProgrammeTitleSearchDocuments()
     }
 
     private companion object {
+        const val EPG_SEARCH_TITLE_LOOKUP_BATCH_SIZE = 400
         const val MAX_ACTIVE_CHANNEL_IDS = 256
         const val MAX_ACTIVE_PROGRAMME_LIMIT = 500
         const val MAX_ACTIVE_WINDOW_MILLIS = 31L * 24 * 60 * 60 * 1_000
