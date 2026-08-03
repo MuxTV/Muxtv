@@ -126,7 +126,7 @@ class StreamingXmltvParser(
                     // SAX parsing does not opt into XInclude; this remains defense in depth.
                 }
             }
-            factory.setRequiredFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+            factory.enableSecureProcessingWhenSupported()
             factory.setOptionalFeature(EXTERNAL_GENERAL_ENTITIES, false)
             factory.setOptionalFeature(EXTERNAL_PARAMETER_ENTITIES, false)
             factory.setOptionalFeature(LOAD_EXTERNAL_DTD, false)
@@ -136,14 +136,17 @@ class StreamingXmltvParser(
             parser.setOptionalProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
 
             return parser.xmlReader.apply {
-                setRequiredFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+                // Older Android Expat readers do not expose every JAXP/Xerces hardening switch.
+                // The guarded input, bounded parser and rejecting resolver remain mandatory.
                 setOptionalFeature(EXTERNAL_GENERAL_ENTITIES, false)
                 setOptionalFeature(EXTERNAL_PARAMETER_ENTITIES, false)
                 setOptionalFeature(LOAD_EXTERNAL_DTD, false)
                 try {
                     setProperty(LEXICAL_HANDLER, handler)
-                } catch (failure: SAXException) {
-                    throw XmltvSecureConfigurationException(failure)
+                } catch (_: SAXNotRecognizedException) {
+                    // GuardedXmltvInputStream rejects DOCTYPE before SAX; lexical callbacks are defense in depth.
+                } catch (_: SAXNotSupportedException) {
+                    // Older Android SAX readers may not expose lexical callbacks.
                 }
                 contentHandler = handler
                 errorHandler = handler
@@ -630,10 +633,15 @@ private class GuardedXmltvInputStream(
 
 private fun Int.asciiUppercase(): Int = if (this in 'a'.code..'z'.code) this - 32 else this
 
-private fun SAXParserFactory.setRequiredFeature(name: String, value: Boolean) {
+private fun SAXParserFactory.enableSecureProcessingWhenSupported() {
     try {
-        setFeature(name, value)
-    } catch (failure: Exception) {
+        setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+    } catch (_: SAXNotRecognizedException) {
+        // Android's older Expat factory rejects the JAXP feature URI. Guarded input rejects
+        // DOCTYPE, the resolver rejects external entities, and parser resource limits stay mandatory.
+    } catch (_: SAXNotSupportedException) {
+        // Same compatibility fallback as above; independent hardening remains active.
+    } catch (failure: ParserConfigurationException) {
         throw XmltvSecureConfigurationException(failure)
     }
 }
@@ -642,7 +650,7 @@ private fun SAXParserFactory.setOptionalFeature(name: String, value: Boolean) {
     try {
         setFeature(name, value)
     } catch (_: ParserConfigurationException) {
-        // Mandatory secure processing, resolver, lexical handler, and byte-level DOCTYPE guard remain active.
+        // Guarded input, resolver, and bounded parser limits remain active.
     } catch (_: SAXNotRecognizedException) {
         // Implementation-specific defense in depth.
     } catch (_: SAXNotSupportedException) {
@@ -657,14 +665,6 @@ private fun SAXParser.setOptionalProperty(name: String, value: String) {
         // DOCTYPE rejection and the entity resolver still deny external access.
     } catch (_: SAXNotSupportedException) {
         // DOCTYPE rejection and the entity resolver still deny external access.
-    }
-}
-
-private fun XMLReader.setRequiredFeature(name: String, value: Boolean) {
-    try {
-        setFeature(name, value)
-    } catch (failure: SAXException) {
-        throw XmltvSecureConfigurationException(failure)
     }
 }
 

@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import app.muxtv.catalog.refresh.RemoteSourceRefreshRequest
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
 import app.muxtv.credentials.CredentialId
+import app.muxtv.database.EpgMatchingStore
 import app.muxtv.database.RefreshCompletionDisposition
 import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
@@ -31,6 +32,7 @@ class SourceRefreshWorker @AssistedInject constructor(
     @Assisted workerParameters: WorkerParameters,
     private val refreshStore: SourceRefreshStore,
     private val sourceRefresher: RemoteSourceRefresher,
+    private val matchingStore: EpgMatchingStore,
 ) : CoroutineWorker(appContext, workerParameters) {
     override suspend fun doWork(): Result {
         val sourceId = inputData.getString(KEY_SOURCE_ID)?.takeIf(String::isNotBlank)
@@ -59,6 +61,9 @@ class SourceRefreshWorker @AssistedInject constructor(
         return try {
             val decision = refresh(target, runToken)
             val disposition = complete(target, runToken, trigger, decision)
+            reconcileSourceAfterPublication(decision, disposition) {
+                matchingStore.reconcileProviderSource(target.sourceId)
+            }
             decision.toWorkResult(disposition)
         } catch (cancelled: CancellationException) {
             finalizeCancellationAndRethrow(cancelled) {

@@ -171,6 +171,8 @@ Add-Step -Name "android-unit-tests" -Arguments @(
     ":player:media3:testDebugUnitTest"
 )
 Add-Step -Name "android-instrumentation-compile" -Arguments @(
+    ":catalog:importer:assembleDebugAndroidTest",
+    ":catalog:refresh:assembleDebugAndroidTest",
     ":core:credentials:assembleDebugAndroidTest",
     ":core:database:assembleDebugAndroidTest",
     ":player:media3:assembleDebugAndroidTest",
@@ -204,6 +206,8 @@ if ($Mode -in @("Full", "Device")) {
 }
 
 $deviceTestModules = @(
+    [ordered]@{ ModulePath = "catalog\importer"; DisplayName = "Importer EPG integration" },
+    [ordered]@{ ModulePath = "catalog\refresh"; DisplayName = "Remote EPG integration" },
     [ordered]@{ ModulePath = "core\credentials"; DisplayName = "Credential instrumentation" },
     [ordered]@{ ModulePath = "core\database"; DisplayName = "Database instrumentation" },
     [ordered]@{ ModulePath = "player\media3"; DisplayName = "Media3 instrumentation" },
@@ -216,6 +220,12 @@ if ($Mode -eq "Device") {
         Remove-Item -Path $staleResults -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    Add-Step -Name "importer-epg-device-tests" -Arguments @(
+        ":catalog:importer:connectedDebugAndroidTest"
+    )
+    Add-Step -Name "remote-epg-device-tests" -Arguments @(
+        ":catalog:refresh:connectedDebugAndroidTest"
+    )
     Add-Step -Name "credentials-device-tests" -Arguments @(
         ":core:credentials:connectedDebugAndroidTest"
     )

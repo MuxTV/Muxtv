@@ -119,7 +119,7 @@ class EpgMigration4To5Test {
             klass = MuxTvDatabase::class.java,
             name = DATABASE_NAME,
         )
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
         migrationHelper.closeWhenFinished(database)
         val dao = database.epgRevisionDao()

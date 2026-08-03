@@ -8,6 +8,7 @@ import app.muxtv.catalog.refresh.EpgHttpValidators
 import app.muxtv.catalog.refresh.RemoteEpgRefreshRequest
 import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.credentials.CredentialId
+import app.muxtv.database.EpgMatchingStore
 import app.muxtv.database.EpgRefreshStore
 import app.muxtv.database.EpgRefreshTarget
 import app.muxtv.database.EpgRefreshTrigger
@@ -42,6 +43,7 @@ class EpgRefreshWorker @AssistedInject constructor(
     @Assisted workerParameters: WorkerParameters,
     private val refreshStore: EpgRefreshStore,
     private val epgRefresher: RemoteEpgRefresher,
+    private val matchingStore: EpgMatchingStore,
 ) : CoroutineWorker(appContext, workerParameters) {
     override suspend fun doWork(): Result {
         val sourceId = inputData.getString(KEY_SOURCE_ID)?.takeIf(String::isNotBlank)
@@ -70,6 +72,9 @@ class EpgRefreshWorker @AssistedInject constructor(
         return try {
             val decision = refresh(target, runToken)
             val disposition = complete(target, runToken, trigger, decision)
+            reconcileEpgAfterPublication(decision, disposition) {
+                matchingStore.reconcile(target.sourceId)
+            }
             decision.toWorkResult(disposition)
         } catch (cancelled: CancellationException) {
             finalizeCancellationAndRethrow(cancelled) {
