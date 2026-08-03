@@ -9,6 +9,8 @@ import androidx.media3.session.SessionResult
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.player.PlaybackSessionPhase
+import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.media3.DebugDisconnectableMediaSessionService
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.media3.MuxTvPlaybackSessionContract
@@ -19,6 +21,9 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import mockwebserver3.MockWebServer
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -150,6 +155,52 @@ class MediaSessionServiceSmokeTest {
         }
     }
 
+    @Test
+    fun playbackSessionStateTracksInstalledChannelAndClearsWhenStopped() {
+        MockWebServer().use { server ->
+            server.start()
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val connector = MuxTvMediaControllerConnector(context)
+
+            try {
+                val controller = runBlocking(Dispatchers.Main.immediate) {
+                    connector.awaitController(
+                        timeoutMillis = TimeUnit.SECONDS.toMillis(CONNECTION_TIMEOUT_SECONDS),
+                    )
+                }
+                val setupResult = runBlocking(Dispatchers.Main.immediate) {
+                    connector.awaitPlaybackRequest(
+                        controller = controller,
+                        request = PlaybackSessionRequest(
+                            mediaId = "tracked-channel",
+                            variantId = "tracked-variant",
+                            locator = server.url("/live.m3u8").toString(),
+                            insecureHttpApproved = true,
+                        ),
+                        timeoutMillis = TimeUnit.SECONDS.toMillis(COMMAND_TIMEOUT_SECONDS),
+                    )
+                }
+
+                assertThat(setupResult.resultCode).isEqualTo(SessionResult.RESULT_SUCCESS)
+                val activeState = awaitPlaybackSessionChannel(
+                    connector = connector,
+                    expectedChannelId = "tracked-channel",
+                )
+                assertThat(activeState.phase).isEqualTo(PlaybackSessionPhase.BUFFERING)
+                assertThat(activeState.isPlaying).isFalse()
+                assertThat(activeState.toString()).doesNotContain("tracked-channel")
+
+                instrumentation.runOnMainSync {
+                    controller.stop()
+                }
+                awaitPlaybackSessionIdle(connector)
+            } finally {
+                connector.close()
+            }
+        }
+    }
+
     private fun send(
         controller: MediaController,
         command: androidx.media3.session.SessionCommand,
@@ -178,6 +229,29 @@ class MediaSessionServiceSmokeTest {
             Thread.sleep(POLL_INTERVAL_MILLIS)
         }
         throw AssertionError("Expected the current setup to remain installed.")
+    }
+
+    private fun awaitPlaybackSessionChannel(
+        connector: MuxTvMediaControllerConnector,
+        expectedChannelId: String,
+    ): PlaybackSessionState {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(COMMAND_TIMEOUT_SECONDS)
+        while (System.nanoTime() < deadline) {
+            val state = connector.playbackSessionState.value
+            if (state.channelId == expectedChannelId) return state
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        throw AssertionError("Expected playback session state to expose the installed channel.")
+    }
+
+    private fun awaitPlaybackSessionIdle(connector: MuxTvMediaControllerConnector) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(COMMAND_TIMEOUT_SECONDS)
+        while (System.nanoTime() < deadline) {
+            val state = connector.playbackSessionState.value
+            if (state.phase == PlaybackSessionPhase.IDLE && state.channelId == null) return
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        throw AssertionError("Expected playback session state to clear after stop.")
     }
 
     private fun awaitConnectionEpochChange(
