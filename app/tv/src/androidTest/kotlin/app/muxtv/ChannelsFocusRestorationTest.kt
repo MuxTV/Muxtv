@@ -15,6 +15,7 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
@@ -42,6 +43,8 @@ class ChannelsFocusRestorationTest {
             MuxTvTheme {
                 ChannelsRoute(
                     playbackCatalog = StaticPlaybackCatalog,
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
                     profileId = "profile-main",
                     onOpenChannel = {},
                 )
@@ -69,6 +72,8 @@ class ChannelsFocusRestorationTest {
                     stateHolder.SaveableStateProvider("channels") {
                         ChannelsRoute(
                             playbackCatalog = StaticPlaybackCatalog,
+                            epgGuideRepository = NoGuideEpgGuideRepository,
+                            playbackSessionStateSource = NoPlaybackSessionStateSource,
                             profileId = "profile-main",
                             onOpenChannel = { playerOpen.value = true },
                         )
@@ -103,6 +108,8 @@ class ChannelsFocusRestorationTest {
                     stateHolder.SaveableStateProvider("channels") {
                         ChannelsRoute(
                             playbackCatalog = catalog,
+                            epgGuideRepository = NoGuideEpgGuideRepository,
+                            playbackSessionStateSource = NoPlaybackSessionStateSource,
                             profileId = "profile-main",
                             onOpenChannel = { playerOpen.value = true },
                         )
@@ -124,6 +131,37 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+    }
+
+    @Test
+    fun guideProjectionAppearsWithoutChangingInitialFocus() {
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = StaticPlaybackCatalog,
+                    epgGuideRepository = StaticNowNextEpgGuideRepository(
+                        channelId = "channel-a",
+                        currentTitle = "В эфире",
+                        nextTitle = "Следом",
+                    ),
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Сейчас: В эфире").assertExists()
+        composeRule.onNodeWithText("Далее: Следом").assertExists()
     }
 
     private fun moveFocusToSecondChannel() {
