@@ -18,7 +18,7 @@ class ChannelSearchQuery(
 
     override fun toString(): String =
         "ChannelSearchQuery(profileId=<redacted>, hasText=${normalizedText.isNotEmpty()}, " +
-            "normalizedLength=${normalizedText.length}, nowEpochMillis=$nowEpochMillis, limit=$limit)"
+            "lengthBucket=${normalizedText.lengthBucket()}, nowEpochMillis=$nowEpochMillis, limit=$limit)"
 
     companion object {
         const val DEFAULT_LIMIT = 100
@@ -77,4 +77,12 @@ private fun normalizeSearchText(value: String): String {
             }
         }
     }.trimEnd()
+}
+
+private fun String.lengthBucket(): String = when (length) {
+    0 -> "0"
+    in 1..3 -> "1-3"
+    in 4..7 -> "4-7"
+    in 8..15 -> "8-15"
+    else -> "16+"
 }
