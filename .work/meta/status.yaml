@@ -9,7 +9,7 @@ repository_state:
   ci: present_self_hosted_full_device_matrix_and_measurements
   tests: present_unit_android_instrumentation_migration_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_matching_policy_room_v8
+  documentation: synchronized_after_room_v8_and_clean_product_rebuilds
   architecture_version: 3
 
 active_branch_after_merge: main
@@ -49,12 +49,15 @@ verified_evidence:
   source_refresh_ownership_merge: 5c60377e07745ea9b70529bedef234d438e59c7f
   epg_matching_now_next_merge: 12dce1ac95b5a2215c53f485bf70ffd13fad46b3
   epg_matching_policy_merge: 9325e0b4b124402a8eb5b1731442bce40a5404a8
-  epg_matching_now_next_final_full_run: 30766566746
-  epg_matching_now_next_matrix_run: 30766566756
   epg_matching_policy_final_full_run: 30783348416
   epg_matching_policy_matrix_run: 30783348361
   epg_matching_policy_matrix_tests_per_profile: 118
   epg_matching_policy_database_tests_per_profile: 88
+  channels_now_next_pr_90_head: 0675015e7ba8c588c62be5f40927cbd466fc2338
+  channels_now_next_pr_90_full_run: 30785039850
+  epg_allocation_pr_89_head: a5de62323265323c9c7d893f52957f99f1218232
+  epg_allocation_pr_89_full_run: 30784628497
+  epg_allocation_pr_89_matrix_run: 30784628471
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
@@ -65,15 +68,42 @@ verified_evidence:
       ram_mb: 2048
       cpu_cores: 2
 
+active_prs:
+  product:
+    channels_now_next:
+      pr: 90
+      head: 0675015e7ba8c588c62be5f40927cbd466fc2338
+      state: draft_waiting_product_device_matrix
+      replaces: 81
+    favorites:
+      pr: 91
+      head: 3826443ec6bbf6ca2bd1bead8f2947378961f0bd
+      state: draft_stacked_waiting_clean_rebuild_after_90
+      replaces: 86
+  performance:
+    epg_allocation_stage_2:
+      pr: 89
+      head: a5de62323265323c9c7d893f52957f99f1218232
+      state: draft_correctness_green_waiting_comparable_allocations
+      replaces: 85
+    core_allocation_stage_1:
+      pr: 83
+      head: 9ac00e9a3f24cadffa24ea1d125a2080c3527972
+      state: draft_waiting_fresh_full_clean_rebuild_and_measurements
+    xmltv_allocation_stage_2:
+      pr: 87
+      head: e617bb9c4198758aa7873a802c7b98bc089a627b
+      state: draft_waiting_correctness_and_allocation_evidence
+
 next_milestone:
   id: phase-01-daily-use-and-measured-performance
   issue: 29
   immediate_sequence:
-    - validate_and_merge_channels_now_next_pr_81
-    - rebuild_and_merge_favorites_pr_86_after_81
-    - validate_and_measure_clean_epg_allocation_pr_89
-    - validate_rebuild_and_measure_core_allocation_pr_83
-    - validate_and_measure_xmltv_allocation_pr_87
+    - add_product_android_tv_device_matrix_lane
+    - validate_and_merge_channels_now_next_pr_90
+    - clean_rebuild_validate_and_merge_favorites_after_pr_90
+    - keep_pr_89_pr_83_pr_87_measurement_gated_in_parallel
+    - finalize_and_merge_repository_truth_pr_88
   daily_use_after_stack:
     - bounded_debounced_search
     - successful_playback_recent
@@ -87,10 +117,11 @@ next_milestone:
     - issue_27_per_operation_threshold_decisions
 
 known_gaps:
-  - channels_now_next_exact_head_tv_device_and_focus_playback_evidence
-  - favorites_rebuild_after_channels_now_next
-  - exact_head_correctness_and_allocation_evidence_for_pr_89
-  - comparable_allocation_evidence_for_open_performance_prs
+  - channels_now_next_exact_head_product_tv_device_journey_evidence
+  - favorites_clean_rebuild_after_channels_now_next
+  - comparable_allocation_evidence_for_pr_89
+  - fresh_exact_head_full_and_clean_rebuild_for_pr_83
+  - correctness_and_allocation_evidence_for_pr_87
   - five_run_multi_profile_measurement_variance
   - bounded_search
   - successful_playback_recent
