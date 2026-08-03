@@ -35,17 +35,27 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
         ftsExpression: String,
         nowEpochMillis: Long,
         fetchLimit: Int,
+        restrictToCanonicalIds: List<String>?,
     ): List<ChannelSearchCandidateRow> {
         require(profileId.isNotBlank())
         require(ftsExpression.isNotBlank())
         require(nowEpochMillis >= 0)
-        require(fetchLimit in 1..MAX_CANDIDATE_FETCH_LIMIT)
+        require(fetchLimit in 1..ChannelSearchLimits.CANDIDATE_FETCH_LIMIT)
+
+        val restrictedIds = restrictToCanonicalIds?.distinct()
+        if (restrictedIds != null) {
+            require(restrictedIds.size <= ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN)
+            require(restrictedIds.none(String::isBlank))
+            if (restrictedIds.isEmpty()) return emptyList()
+        }
         return selectCandidates(
             profileId = profileId,
             ftsExpression = ftsExpression,
             nowEpochMillis = nowEpochMillis,
             fetchLimit = fetchLimit,
             matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
+            restrictionEnabled = if (restrictedIds == null) 0 else 1,
+            restrictedCanonicalIds = restrictedIds ?: listOf(RESTRICTION_SENTINEL),
         )
     }
 
@@ -54,7 +64,7 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
         canonicalChannelIds: List<String>,
     ): List<PlayableChannelSummary> {
         require(profileId.isNotBlank())
-        require(canonicalChannelIds.size <= MAX_CANDIDATES_PER_TOKEN)
+        require(canonicalChannelIds.size <= ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN)
         require(canonicalChannelIds.none(String::isBlank))
         if (canonicalChannelIds.isEmpty()) return emptyList()
         return selectActiveChannelSummaries(
@@ -245,6 +255,10 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
               ),
               0
           ) = 0
+          AND (
+              :restrictionEnabled = 0
+              OR candidates.canonicalChannelId IN (:restrictedCanonicalIds)
+          )
         GROUP BY candidates.canonicalChannelId
         ORDER BY candidates.canonicalChannelId COLLATE BINARY
         LIMIT :fetchLimit
@@ -256,6 +270,8 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
         nowEpochMillis: Long,
         fetchLimit: Int,
         matchPolicyVersion: Int,
+        restrictionEnabled: Int,
+        restrictedCanonicalIds: List<String>,
     ): List<ChannelSearchCandidateRow>
 
     @Query(
@@ -389,7 +405,6 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
     ): Long?
 
     private companion object {
-        const val MAX_CANDIDATES_PER_TOKEN = 800
-        const val MAX_CANDIDATE_FETCH_LIMIT = MAX_CANDIDATES_PER_TOKEN + 1
+        const val RESTRICTION_SENTINEL = "__mux_search_no_restriction__"
     }
 }
