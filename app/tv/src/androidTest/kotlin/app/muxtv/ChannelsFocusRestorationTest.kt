@@ -165,6 +165,34 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
+    fun favoritesFilterIsReachableAndOperableWithDpad() {
+        val catalog = MutablePlaybackCatalog(
+            testChannels.mapIndexed { index, channel ->
+                if (index == 0) channel.copy(isFavorite = true) else channel
+            },
+        )
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = catalog,
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        openFavoritesFromFirstRowWithDpad()
+        composeRule.waitUntilChannelRow(index = 0)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("★  Первый", substring = false).assertExists()
+    }
+
+    @Test
     fun emptyFavoritesRecoveryActionReceivesFocus() {
         composeRule.setContent {
             MuxTvTheme {
@@ -179,7 +207,7 @@ class ChannelsFocusRestorationTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("channels-filter-favorites").performClick()
+        openFavoritesFromFirstRowWithDpad()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
         }
@@ -226,6 +254,21 @@ class ChannelsFocusRestorationTest {
             keyUp(Key.DirectionDown)
         }
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
+    }
+
+    private fun openFavoritesFromFirstRowWithDpad() {
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        composeRule.onNodeWithTag("channels-filter-all").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-all").performKeyInput {
+            keyDown(Key.DirectionRight)
+            keyUp(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-favorites").pressEnter()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilPlayerBack() {
