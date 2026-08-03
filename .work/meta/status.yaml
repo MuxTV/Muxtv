@@ -145,7 +145,7 @@ verified_evidence:
   secure_remote_epg_refresh_merge: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
   durable_epg_refresh_state_merge: ab96f0fee5b80ebc8ae7f5a2cc23608ee5450030
   durable_epg_refresh_orchestration_merge: c31b34d65ef90848bd907a521b9a0ba8860ed83a
-  source_refresh_ownership_merge: 6be1f3f4d9c42727043dc1cb9c80f48ad7c0c53f
+  source_refresh_ownership_merge: 5c60377e07745ea9b70529bedef234d438e59c7f
   epg_matching_now_next_merge: 12dce1ac95b5a2215c53f485bf70ffd13fad46b3
   measurement_series_final_full_run: 30568786155
   measurement_series_current_smoke_run: 30568786175
