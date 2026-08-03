@@ -3,6 +3,7 @@ package app.muxtv.database
 import android.content.Context
 import androidx.room3.Room
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
@@ -15,6 +16,7 @@ class MuxTvDatabaseComponents internal constructor(
     val pendingSourcePreparationStore: PendingSourcePreparationStore,
     val catalogRepository: CatalogRepository,
     val playbackCatalog: PlaybackCatalog,
+    val channelSearchRepository: ChannelSearchRepository,
     val epgRevisionStore: EpgRevisionStore,
     val epgRefreshStore: EpgRefreshStore,
     val epgMatchingStore: EpgMatchingStore,
@@ -43,6 +45,7 @@ object MuxTvDatabaseFactory {
                 MIGRATION_8_9,
             )
             .build()
+        val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
@@ -55,10 +58,14 @@ object MuxTvDatabaseFactory {
                 dao = database.playbackCatalogDao(),
                 accessPolicyResolver = playbackAccessPolicyResolver,
             ),
+            channelSearchRepository = RoomChannelSearchRepository(
+                dataSource = database.channelSearchDao(),
+                guideRepository = epgGuideRepository,
+            ),
             epgRevisionStore = RoomEpgRevisionStore(database.epgRevisionDao()),
             epgRefreshStore = RoomEpgRefreshStore(database.epgRefreshDao()),
             epgMatchingStore = RoomEpgMatchingStore(database.epgMatchingDao()),
-            epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao()),
+            epgGuideRepository = epgGuideRepository,
         )
     }
 
