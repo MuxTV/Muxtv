@@ -59,7 +59,7 @@ class ChannelSearchQueryTest {
     }
 
     @Test
-    fun diagnosticsDoNotExposeProfileOrQueryText() {
+    fun diagnosticsDoNotExposeProfileQueryTextOrExactLength() {
         val query = ChannelSearchQuery(
             profileId = "secret-profile",
             text = "Секретный запрос",
@@ -71,7 +71,9 @@ class ChannelSearchQueryTest {
 
         assertThat(diagnostic).doesNotContain("secret-profile")
         assertThat(diagnostic).doesNotContain("Секретный")
+        assertThat(diagnostic).doesNotContain("normalizedLength=")
         assertThat(diagnostic).contains("hasText=true")
+        assertThat(diagnostic).contains("lengthBucket=16+")
         assertThat(diagnostic).contains("limit=17")
     }
 
