@@ -11,7 +11,7 @@ implementation_source_commit: 9325e0b4b124402a8eb5b1731442bce40a5404a8
 
 MuxTV находится в стадии **functional pre-alpha**. Рабочий Android TV контур уже проходит source onboarding → immutable catalog → Channels → process-owned Media3 Player, а EPG-контур проходит bounded XMLTV → secure remote refresh → immutable EPG revision → deterministic versioned channel matching → bounded Now/Next.
 
-После merge PR #84 correctness foundation включает не только producer-revision provenance, но и explicit matching-policy provenance + stale-aware repair. Следующий продуктовый приоритет — daily-use TV UI (#29), параллельно с reproducible performance evidence (#27), а не новый storage/runtime/native framework.
+После merge PR #84 correctness foundation включает producer-revision provenance, explicit matching-policy provenance и stale-aware repair. Следующий продуктовый приоритет — daily-use TV UI (#29), параллельно с reproducible performance evidence (#27), а не новый storage/runtime/native framework.
 
 ## Проверенные факты
 
@@ -47,7 +47,7 @@ MuxTV находится в стадии **functional pre-alpha**. Рабочи�
 - Plain/gzip/ZIP bounded payload decode.
 - Secure conditional remote acquisition (`ETag`/`Last-Modified`, correct `304` semantics).
 - Immutable EPG revisions, current + previous-good retention.
-- Durable EPG policy/state/attempt/validator persistence and DB lease ownership.
+- Durable EPG policy/state/attempt/validator persistence и DB lease ownership.
 - Deterministic matching: exact external/tvg identity → exact `tvgName` → exact `rawName`; ambiguity не превращается в weak winner.
 - Persisted `epg_channel_matches` keyed by immutable EPG/catalog producer revisions **and current matching-policy provenance**.
 - Room v7→v8 migration marks pre-versioned rows policy `0`/stale; current policy is `1`.
@@ -87,11 +87,18 @@ Stacked on #81 and implemented:
 - `Все каналы / Избранное` filter;
 - Room-side filtering, empty-state recovery и filter-aware focus restoration.
 
-После merge #81 ветку надо rebuild/retarget на accepted `main`, затем заново пройти Full + TV device journeys.
+После merge #81 ветку надо clean rebuild/retarget на accepted `main`, затем заново пройти Full + TV device journeys.
 
-### PR #85 — EPG matching/Guide allocation Stage 2
+### PR #89 — EPG matching/Guide allocation Stage 2
 
-PR #84 уже принят, поэтому #85 retargeted to `main`, но branch ancestry всё ещё загрязняет review surface (десятки inherited files/commits). До review/merge нужен clean rebuild на `9325e0b4…` с переносом только allocation-only delta и затем comparable A/B evidence.
+PR #85 закрыт как superseded после того, как post-#84 retarget показал diverged 99-commit / 38-file review surface. Его intended allocation delta clean-rebuilt на accepted Room v8 `main` в PR #89.
+
+Verified base→head #89: **2 commits / 2 files**:
+
+- `RoomEpgMatchingStore.kt` — collision-on-demand ambiguity sets + single-pass matching summary;
+- `RoomEpgGuideRepository.kt` — direct bounded Now/Next loops.
+
+PR #89 остаётся draft: exact-head correctness и comparable allocation evidence обязательны до любого performance/merge claim.
 
 ### PR #83 — Core allocation Stage 1
 
@@ -136,11 +143,11 @@ No structural optimization or native rewrite выбирается по one/two-r
 
 1. **#81:** получить exact-head TV/device playback/focus evidence → merge.
 2. **#86:** после #81 clean rebuild/retarget → Full + TV matrix → merge.
-3. **#85:** clean rebuild на post-#84 `main` → correctness + comparable allocation evidence.
+3. **#89:** exact-head correctness + comparable EPG matching/NowNext allocation evidence; merge только при измеримом выигрыше без semantic drift.
 4. **#83:** подтвердить AGP9-compatible benchmark toolchain новым Full, затем clean rebuild/retarget + before/after M3U/XMLTV measurements.
 5. **#87:** exact-head correctness + XMLTV allocation evidence; merge только при измеримом выигрыше без semantic drift.
 
-Независимые evidence lanes (#81 device, #83/#87 perf, #27 profiles) можно выполнять параллельно; зависимые feature branches не следует постоянно ребейзить до стабилизации parent.
+Независимые evidence lanes (#81 device, #83/#87/#89 perf, #27 profiles) можно выполнять параллельно; зависимые feature branches не следует постоянно ребейзить до стабилизации parent.
 
 ### P1 — issue #29 daily-use discovery
 
@@ -151,7 +158,7 @@ No structural optimization or native rewrite выбирается по one/two-r
 3. bounded/lazy TV Guide viewport;
 4. D-pad/focus/Player Back continuity across filters/routes/restored state.
 
-FTS не вводится заранее: сначала bounded Room query и measurements. Recent, если потребует новую Room schema, должен строиться уже поверх принятой v8, а не конкурировать за migration number с #84.
+FTS не вводится заранее: сначала bounded Room query и measurements. Recent, если потребует новую Room schema, должен строиться уже поверх принятой v8.
 
 ### P2 — issue #30 bounded fallback + TV Doctor Lite
 
@@ -175,7 +182,7 @@ Media3 остаётся sole player engine, пока measured compatibility evid
 
 ## Branch hygiene
 
-В репозитории остаётся заметное число старых `feat/docs/wip/rebuild` refs. Пока #81/#86/#85 ещё используют recovery/rebuild context, массово удалять их не следует. После стабилизации этого graph — отдельный branch-hygiene pass: оставить `main`, реально активные feature/perf branches и нужные release refs; merged/replaced branches удалить после проверки PR/commit reachability.
+В репозитории остаётся заметное число старых `feat/docs/wip/rebuild` refs. Пока #81/#86 и performance rebuilds используют recovery context, массово удалять их не следует. После стабилизации graph — отдельный branch-hygiene pass: оставить `main`, реально активные feature/perf branches и нужные release refs; merged/replaced branches удалить после проверки PR/commit reachability.
 
 ## Native/Rust decision gate
 
