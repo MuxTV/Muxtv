@@ -119,20 +119,24 @@ class MeasurementRoomV2AdapterTest {
         val values = (0..4).map { baseWallTime + it * 10 }
         return """
             {
-              "min": ${values.first()},
-              "median": ${values[2]},
+              "sampleCount": ${values.size},
+              "minimum": ${values.first()},
+              "p50": ${values[2]},
+              "p90": ${values.last()},
               "p95": ${values.last()},
-              "max": ${values.last()}
+              "maximum": ${values.last()}
             }
         """.trimIndent()
     }
 
     private fun constantSummaryJson(value: Int): String = """
         {
-          "min": $value,
-          "median": $value,
+          "sampleCount": 5,
+          "minimum": $value,
+          "p50": $value,
+          "p90": $value,
           "p95": $value,
-          "max": $value
+          "maximum": $value
         }
     """.trimIndent()
 }
