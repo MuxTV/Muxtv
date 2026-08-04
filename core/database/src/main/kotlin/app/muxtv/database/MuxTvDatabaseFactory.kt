@@ -8,6 +8,7 @@ import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
 
 class MuxTvDatabaseComponents internal constructor(
@@ -18,6 +19,7 @@ class MuxTvDatabaseComponents internal constructor(
     val catalogRepository: CatalogRepository,
     val playbackCatalog: PlaybackCatalog,
     val channelPreferencesRepository: ChannelPreferencesRepository,
+    val recentChannelsRepository: RecentChannelsRepository,
     val channelSearchRepository: ChannelSearchRepository,
     val epgRevisionStore: EpgRevisionStore,
     val epgRefreshStore: EpgRefreshStore,
@@ -45,6 +47,7 @@ object MuxTvDatabaseFactory {
                 MIGRATION_6_7,
                 MIGRATION_7_8,
                 MIGRATION_8_9,
+                MIGRATION_9_10,
             )
             .build()
         val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
@@ -63,6 +66,7 @@ object MuxTvDatabaseFactory {
             channelPreferencesRepository = RoomChannelPreferencesRepository(
                 database.channelPreferencesDao(),
             ),
+            recentChannelsRepository = RoomRecentChannelsRepository(database.recentChannelsDao()),
             channelSearchRepository = RoomChannelSearchRepository(
                 dataSource = database.channelSearchDao(),
                 guideRepository = epgGuideRepository,
