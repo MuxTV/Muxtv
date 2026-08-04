@@ -125,21 +125,54 @@ class SearchIndexLifecycleTest {
     }
 
     @Test
-    fun epgStagingIndexesTitlesAndDiscardRemovesThem() = runTest {
+    fun epgStagingCollapsesRepeatedTitlesAndDiscardRemovesUnreferencedVocabulary() = runTest {
         val revision = epgStore.beginRevision(EPG_SOURCE_ID, startedAtEpochMillis = 10)
-        val programme = programme(revision, sequence = 1, title = "Вести")
 
-        epgStore.stageBatch(channels = emptyList(), programmes = listOf(programme))
+        epgStore.stageBatch(
+            channels = emptyList(),
+            programmes = listOf(
+                programme(revision, sequence = 1, title = "Вести"),
+                programme(revision, sequence = 2, title = "Вести"),
+                programme(revision, sequence = 3, title = "Новости"),
+            ),
+        )
 
-        assertThat(epgTexts(EPG_SOURCE_ID, revision)).containsExactly("Вести")
+        assertThat(epgVocabulary()).containsExactly("Вести", "Новости").inOrder()
 
         epgStore.discardRevision(EPG_SOURCE_ID, revision)
 
-        assertThat(epgTexts(EPG_SOURCE_ID, revision)).isEmpty()
+        assertThat(epgVocabulary()).isEmpty()
     }
 
     @Test
-    fun epgActivationRetainsCurrentAndPreviousSearchDocumentsOnly() = runTest {
+    fun discardingRevisionKeepsVocabularyTitleStillReferencedByActiveRevision() = runTest {
+        val activeRevision = stageEpgRevision("Общий заголовок")
+        epgStore.activateRevision(
+            EPG_SOURCE_ID,
+            activeRevision,
+            20,
+            epgStatistics(acceptedProgrammes = 1),
+        )
+        val stagingRevision = epgStore.beginRevision(EPG_SOURCE_ID, startedAtEpochMillis = 30)
+        epgStore.stageBatch(
+            channels = emptyList(),
+            programmes = listOf(
+                programme(stagingRevision, sequence = 1, title = "Общий заголовок"),
+                programme(stagingRevision, sequence = 2, title = "Только staging"),
+            ),
+        )
+
+        assertThat(epgVocabulary())
+            .containsExactly("Общий заголовок", "Только staging")
+            .inOrder()
+
+        epgStore.discardRevision(EPG_SOURCE_ID, stagingRevision)
+
+        assertThat(epgVocabulary()).containsExactly("Общий заголовок")
+    }
+
+    @Test
+    fun epgActivationKeepsActiveAndRetainedVocabularyAndPrunesOlderUnreferencedTitle() = runTest {
         val first = stageEpgRevision("Первая")
         epgStore.activateRevision(EPG_SOURCE_ID, first, 20, epgStatistics())
         val second = stageEpgRevision("Вторая")
@@ -148,9 +181,7 @@ class SearchIndexLifecycleTest {
 
         epgStore.activateRevision(EPG_SOURCE_ID, third, 40, epgStatistics())
 
-        assertThat(epgTexts(EPG_SOURCE_ID, first)).isEmpty()
-        assertThat(epgTexts(EPG_SOURCE_ID, second)).containsExactly("Вторая")
-        assertThat(epgTexts(EPG_SOURCE_ID, third)).containsExactly("Третья")
+        assertThat(epgVocabulary()).containsExactly("Вторая", "Третья").inOrder()
     }
 
     private suspend fun stageCatalogRevision(revision: Long, displayName: String) {
@@ -189,8 +220,8 @@ class SearchIndexLifecycleTest {
         revisionNumber = revision,
         sequenceNumber = sequence,
         externalChannelId = "epg-channel",
-        startEpochMillis = 1_000,
-        stopEpochMillis = 2_000,
+        startEpochMillis = 1_000 + sequence,
+        stopEpochMillis = 2_000 + sequence,
         primaryTitle = title,
         primaryLanguage = "ru",
         subtitle = null,
@@ -223,8 +254,7 @@ class SearchIndexLifecycleTest {
             ),
         )
 
-    private suspend fun epgTexts(sourceId: String, revision: Long): List<String> =
-        database.searchIndexDao().textsForEpgRevision(sourceId, revision)
+    private suspend fun epgVocabulary(): List<String> = database.searchIndexDao().programmeTitleTexts()
 
     private fun sourceStatistics() = SourceRevisionStatistics(
         parsedEntries = 1,
@@ -232,9 +262,9 @@ class SearchIndexLifecycleTest {
         warningCount = 0,
     )
 
-    private fun epgStatistics() = EpgRevisionStatistics(
+    private fun epgStatistics(acceptedProgrammes: Int = 1) = EpgRevisionStatistics(
         acceptedChannels = 0,
-        acceptedProgrammes = 1,
+        acceptedProgrammes = acceptedProgrammes,
         skippedProgrammes = 0,
         warningCount = 0,
         unresolvedTimeCount = 0,
