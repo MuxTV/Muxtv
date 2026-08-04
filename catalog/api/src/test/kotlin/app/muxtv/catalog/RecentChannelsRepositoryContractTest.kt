@@ -41,6 +41,25 @@ class RecentChannelsRepositoryContractTest {
     }
 
     @Test
+    fun `query and result diagnostics redact identities and channel metadata`() {
+        val queryText = RecentChannelsQuery(profileId = "private-profile-id").toString()
+        val recentText = RecentChannel(
+            channel = channelSummary(
+                channelId = "private-channel-id",
+                displayName = "Private Channel",
+            ),
+            lastSuccessfulPlaybackAtEpochMillis = 42_000L,
+        ).toString()
+
+        assertThat(queryText).doesNotContain("private-profile-id")
+        assertThat(queryText).contains("profileId=<redacted>")
+        assertThat(recentText).doesNotContain("private-channel-id")
+        assertThat(recentText).doesNotContain("Private Channel")
+        assertThat(recentText).contains("channelId=<redacted>")
+        assertThat(recentText).contains("lastSuccessfulPlaybackAtEpochMillis=42000")
+    }
+
+    @Test
     fun `write result distinguishes applied duplicate and unavailable target`() {
         assertThat(RecentChannelWriteResult.entries).containsExactly(
             RecentChannelWriteResult.Applied,
@@ -49,9 +68,12 @@ class RecentChannelsRepositoryContractTest {
         ).inOrder()
     }
 
-    private fun channelSummary(): PlayableChannelSummary = PlayableChannelSummary(
-        channelId = "channel-main",
-        displayName = "Channel",
+    private fun channelSummary(
+        channelId: String = "channel-main",
+        displayName: String = "Channel",
+    ): PlayableChannelSummary = PlayableChannelSummary(
+        channelId = channelId,
+        displayName = displayName,
         logoUrl = null,
         groupTitle = null,
         channelNumber = null,
