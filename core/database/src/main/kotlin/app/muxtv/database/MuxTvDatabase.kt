@@ -26,8 +26,10 @@ import androidx.room3.RoomDatabase
         EpgRefreshAttemptEntity::class,
         EpgRefreshHttpValidatorEntity::class,
         EpgChannelMatchEntity::class,
+        SearchDocumentEntity::class,
+        SearchDocumentFtsEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
@@ -43,4 +45,6 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun epgRefreshDao(): EpgRefreshDao
     abstract fun epgMatchingDao(): EpgMatchingDao
     abstract fun epgGuideDao(): EpgGuideDao
+    abstract fun searchIndexDao(): SearchIndexDao
+    abstract fun channelSearchDao(): ChannelSearchDao
 }
