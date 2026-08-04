@@ -18,6 +18,7 @@ class PlaybackSetupCommandCodecTest {
         )
 
         assertThat(decoded).isEqualTo(PlaybackSetupCommand(setupId, request))
+        assertThat(decoded!!.request.profileId).isEqualTo(PROFILE_ID)
     }
 
     @Test
@@ -83,6 +84,7 @@ class PlaybackSetupCommandCodecTest {
         val diagnostic = command.toString()
 
         assertThat(diagnostic).doesNotContain(rawId)
+        assertThat(diagnostic).doesNotContain(PROFILE_ID)
         assertThat(diagnostic).doesNotContain(locator)
         assertThat(diagnostic).doesNotContain(headerValue)
         assertThat(diagnostic).contains("<redacted>")
@@ -103,10 +105,15 @@ class PlaybackSetupCommandCodecTest {
         locator: String = "https://provider.invalid/live.m3u8",
         headerValue: String = "Bearer test",
     ): PlaybackSessionRequest = PlaybackSessionRequest(
+        profileId = PROFILE_ID,
         mediaId = "channel-1",
         variantId = "variant-1",
         locator = locator,
         displayName = "Channel",
         requestHeaders = mapOf("Authorization" to headerValue),
     )
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
+    }
 }
