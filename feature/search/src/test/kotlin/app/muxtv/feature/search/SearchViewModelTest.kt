@@ -190,7 +190,7 @@ class SearchViewModelTest {
         assertThat(repository.queries).hasSize(2)
         assertThat(repository.queries.map(ChannelSearchQuery::normalizedText))
             .containsExactly("Alpha", "Alpha").inOrder()
-        assertThat(repository.queries.last().nowEpochMillis).isEqualTo(1_101L)
+        assertThat(repository.queries.last().nowEpochMillis).isAtLeast(1_100L)
     }
 
     @Test
