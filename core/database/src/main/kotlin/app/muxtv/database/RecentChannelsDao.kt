@@ -21,7 +21,7 @@ internal data class RecentChannelRow(
 internal enum class RecentWriteResult {
     Applied,
     IgnoredOlderOrDuplicate,
-    TargetUnavailable,
+    ProfileUnavailable,
 }
 
 @Dao
@@ -126,7 +126,7 @@ internal abstract class RecentChannelsDao {
         // The first-frame event already proves that this logical channel identity was playable.
         // Catalog cleanup may race the first frame, so only profile lifetime is a write-time gate.
         if (!profileExists(profileId)) {
-            return RecentWriteResult.TargetUnavailable
+            return RecentWriteResult.ProfileUnavailable
         }
 
         val applied = if (
