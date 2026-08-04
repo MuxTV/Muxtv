@@ -11,13 +11,8 @@ internal val MIGRATION_9_10 = Migration(9, 10) { connection ->
             `canonicalChannelId` TEXT NOT NULL,
             `lastSuccessfulPlaybackAtEpochMillis` INTEGER NOT NULL,
             PRIMARY KEY(`profileId`, `canonicalChannelId`),
-            FOREIGN KEY(`profileId`) REFERENCES `profiles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
-            FOREIGN KEY(`canonicalChannelId`) REFERENCES `canonical_channels`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            FOREIGN KEY(`profileId`) REFERENCES `profiles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
         )
         """.trimIndent(),
-    )
-    connection.execSQL(
-        "CREATE INDEX IF NOT EXISTS `index_recent_channels_canonicalChannelId` " +
-            "ON `recent_channels` (`canonicalChannelId`)",
     )
 }
