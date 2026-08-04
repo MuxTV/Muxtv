@@ -50,10 +50,12 @@ class RecentChannelsRepositoryContractTest {
     }
 
     private fun channelSummary(): PlayableChannelSummary = PlayableChannelSummary(
-        id = "channel-main",
+        channelId = "channel-main",
         displayName = "Channel",
         logoUrl = null,
-        groupName = null,
+        groupTitle = null,
+        channelNumber = null,
         isFavorite = false,
+        variantCount = 1,
     )
 }
