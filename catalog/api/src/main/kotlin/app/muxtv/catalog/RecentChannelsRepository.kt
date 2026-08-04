@@ -36,7 +36,7 @@ data class RecentChannel(
 enum class RecentChannelWriteResult {
     Applied,
     IgnoredOlderOrDuplicate,
-    TargetUnavailable,
+    ProfileUnavailable,
 }
 
 interface RecentChannelsRepository {
