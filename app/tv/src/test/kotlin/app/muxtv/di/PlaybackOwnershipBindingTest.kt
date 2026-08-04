@@ -11,8 +11,6 @@ class PlaybackOwnershipBindingTest {
             .filter { method -> PlaybackEngine::class.java.isAssignableFrom(method.returnType) }
             .map { method -> method.name }
 
-        assertThat(playbackEngineProviders)
-            .named("PlaybackEngine providers outside MuxTvPlaybackService ownership")
-            .isEmpty()
+        assertThat(playbackEngineProviders).isEmpty()
     }
 }
