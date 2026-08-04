@@ -58,8 +58,6 @@ internal class SearchViewModel(
 
         val previousNormalized = normalizeForSearch(mutableQueryText.value)
         val nextNormalized = normalizeForSearch(value)
-        mutableQueryText.value = value
-
         if (previousNormalized != nextNormalized) {
             cancelBoundaryRefresh()
             mutableUiState.value = if (nextNormalized.isEmpty()) {
@@ -68,6 +66,8 @@ internal class SearchViewModel(
                 SearchUiState.Loading
             }
         }
+
+        mutableQueryText.value = value
     }
 
     fun retry() {
