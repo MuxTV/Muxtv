@@ -1,166 +1,188 @@
 ---
 status: accepted
-last_reviewed: 2026-08-03
-architecture_version: 3
-implementation_source_commit: 12dce1ac95b5a2215c53f485bf70ffd13fad46b3
+last_reviewed: 2026-08-04
+architecture_version: 4
+implementation_source_commit: 64b64c933da665d00ac403fd410a39309e773d64
 ---
 
 # Текущее состояние
 
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Рабочий Android TV контур уже проходит source onboarding → immutable catalog → Channels → process-owned Media3 Player, а EPG-контур проходит bounded XMLTV → secure remote refresh → immutable EPG revision → deterministic channel matching → bounded Now/Next.
+MuxTV находится в стадии **functional pre-alpha**. Принятый Android TV контур проходит source onboarding → immutable catalog → Channels + Now/Next/Favorites → process-owned Media3 Player, а EPG-контур проходит bounded XMLTV → secure remote refresh → immutable EPG revision → deterministic current-policy channel matching → bounded Now/Next.
 
-После merge PR #80 correctness foundation для XMLTV/matching/NowNext считается закрытым. Следующий приоритет — не новый storage/runtime framework, а доведение daily-use UI и распрямление уже реализованного stacked-графа.
+Текущий приоритет — daily-use product surfaces: Search → Recent → Guide. Новые storage/runtime frameworks не являются целью сами по себе.
 
 ## Проверенные факты
 
 - Репозиторий: `MuxTV/Muxtv`, default branch `main`, BSD 3-Clause.
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
-- Baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp, Media3.
-- Room schema на принятом `main`: **v7**.
-- Feature merge: PR #80 → `12dce1ac95b5a2215c53f485bf70ffd13fad46b3`.
-- #71 и #28 закрыты как `completed` merge-ом #80.
-- Exact-head #80 evidence: Full `30766566746` — success; API26/current database/device matrix `30766566756` — success.
-- Self-hosted Android TV runner/matrix — постоянная evidence-инфраструктура, а не отдельный product milestone.
+- Baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Room 3, WorkManager, OkHttp, Media3.
+- Room schema на принятом `main`: **v8**.
+- Принятый product head: PR #92 → `64b64c933da665d00ac403fd410a39309e773d64`.
+- PR #90 accepted merge: `7e1f18f31ab8628a104f2668d87e6478d7559242`.
+- PR #91 закрыт как superseded старый Favorites stack.
+- PR #88 закрыт как superseded stale truth-sync branch.
+- Performance PR #83/#87/#89 закрыты без merge; идеи сохраняются только как measurement-gated candidates в issue #27.
+- Self-hosted Android TV runner/matrix — acceptance/evidence-инфраструктура, а не отдельный product milestone.
 
-## Что уже закрыто в production foundation
+## Что закрыто в production foundation
 
 ### Source/catalog/playback
 
-- URL/access policy и credential isolation через Keystore-backed storage.
-- Bounded streaming M3U ingest.
-- Immutable source revisions, staging, atomic activation и previous-good preservation.
-- Durable source refresh ownership/lease/run-token protection; stale worker не может опубликовать устаревший результат.
-- Stable canonical channel identity + profile overlays.
-- `PlaybackCatalog` остаётся read/playback boundary.
-- Exact-origin HTTP approval и sensitive-header isolation.
-- Один process-owned MediaSessionService/ExoPlayer переживает Activity recreation/reconnect.
+- secure URL/access policy и Keystore-backed credential isolation;
+- bounded streaming M3U ingest;
+- immutable source revisions, staging, atomic activation и previous-good preservation;
+- durable source refresh ownership/lease/run-token protection;
+- stable canonical channel identity + profile overlays;
+- typed `PlaybackCatalog` boundary;
+- exact-origin HTTP approval и sensitive-header isolation;
+- один process-owned MediaSessionService/ExoPlayer;
+- Player → Back stable canonical-channel focus + nearest-previous fallback.
 
 ### EPG
 
-- Bounded SAX/streaming XMLTV parser без DOM.
-- Independent input/depth/element/attribute/text/channel/programme/collection limits.
-- Byte-level DOCTYPE rejection + rejecting entity resolver + Android-compatible SAX hardening.
-- Plain/gzip/ZIP bounded payload decode.
-- Secure conditional remote acquisition (`ETag`/`Last-Modified`, correct `304` semantics).
-- Immutable EPG revisions, Room v5→v6→v7 migrations, current + previous-good retention.
-- Durable EPG policy/state/attempt/validator persistence and DB lease ownership.
-- Deterministic matching in explicit provider relation: exact external/tvg identity → exact `tvgName` → exact `rawName`; ambiguity never silently becomes a weak winner.
-- Persisted `epg_channel_matches` keyed by immutable EPG/catalog producer revisions.
-- Bounded Now/Next with `READY | NO_GUIDE | SOURCE_CONFLICT` and open-ended programme handling.
-- Reconciliation after accepted catalog/EPG publication.
+- bounded SAX/streaming XMLTV parser без DOM;
+- independent parser/decode limits + XXE/DTD hardening;
+- plain/gzip/ZIP bounded payload decode;
+- secure conditional remote acquisition (`ETag`/`Last-Modified`, correct `304`);
+- immutable EPG revisions и current + previous-good retention;
+- durable EPG refresh policy/state/attempt/validator persistence и DB lease ownership;
+- deterministic EPG matching;
+- producer revision + explicit matching-policy provenance в Room v8;
+- stale-policy repair/current-policy reads;
+- bounded Now/Next с accepted open-ended programme semantics;
+- reconciliation after accepted catalog/EPG publication.
 
-## Уже реализовано в открытых PR
+### Daily-use TV surface
 
-### PR #81 — Channels Now/Next
-
-Implemented, but needs clean rebuild on current `main` after #80 squash:
-
-- destination/back-stack-scoped `ChannelsViewModel`;
-- immutable `StateFlow<ChannelsUiState>`;
-- bounded Now/Next loading and programme-boundary reload;
-- stale guide rejection on membership changes;
-- Media3-backed playback-session projection without EPG reload on playback-only changes;
-- dedicated TV rows and Player→Back focus continuity;
-- direct `feature:player → player:api` dependency;
-- OkHttp BOM for app instrumentation tests.
-
-### PR #86 — Favorites
-
-Stacked on #81 and implemented:
-
-- dedicated `ChannelPreferencesRepository` rather than mutating `PlaybackCatalog`;
-- transactional Room preference write boundary using existing `user_channel_overlays`;
-- `Applied | Unchanged | NotFound` mutation result;
+- Channels destination-scoped ViewModel/state;
+- bounded Now/Next projection and programme-boundary invalidation;
+- Media3 playback-session projection;
+- dedicated TV channel rows;
+- stable-key Player → Back focus continuity;
+- durable profile-scoped Favorites через existing `user_channel_overlays.isFavorite`;
+- typed `ChannelPreferencesRepository.setFavorite`;
 - Player favorite action;
-- `Все каналы / Избранное` filter;
-- Room-side filtering, empty-state recovery and filter-aware focus restoration.
+- Channels `Все / Избранное` filtering;
+- Room-side Favorites filtering;
+- empty Favorites recovery;
+- D-pad focus graph and surviving-canonical-key focus restoration.
 
-### PR #84 — matching policy provenance / Room v8
+### PR #92 acceptance
 
-Implemented but still draft/stacked:
+Exact head `cdd43173d00f3817555b2c640c411d82a9d75244`:
 
-- explicit `matchPolicyVersion` separate from reason code;
-- v7→v8 migration with legacy rows as policy `0` (stale), current policy `1`;
-- current-policy freshness and stale-aware repair;
-- Guide readers consume only current-policy rows;
-- `MigrationTestHelper.runMigrationsAndValidate(8)` contract added;
-- trusted Full artifact already produced the Room/KSP-generated `8.json` (`identityHash 52995b2ea0cba6fecc6a6c8670152032`), which must be committed exactly rather than hand-authored.
+- Self-hosted validation `30873814952` — success;
+- Android TV product DeviceMatrix `30873814955` — API26/API36, app instrumentation 18/18 each, 0 failures/errors/skips;
+- database/device matrix `30873814953` — API26/API36, core database 93/93 each;
+- `ChannelPreferencesRepositoryTest` — 5/5 in captured current-device report;
+- unresolved review threads — 0;
+- final review surface — 16 files.
 
-### Performance PRs
+## Активная реализация — Search Core / issue #29
 
-- #83 Core allocation Stage 1: reusable M3U buffers/decoder, reusable SHA-256 state, playback header fast paths, direct XMLTV timestamp scanner, Android microbench module.
-- #85 EPG allocation Stage 2: collision-on-demand ambiguity sets, single-pass matching summary, direct Now/Next loops.
-- #87 XMLTV allocation Stage 2: reuse normalized text and reusable guarded `skip()` scratch buffer; lazy metadata lists remain measurement-gated.
+Current working PR: #94. Его первоначальная ветка была создана до принятия Favorites и после merge #92 стала non-mergeable по двум общим DB registration files. `MuxTvDatabase` и `MuxTvDatabaseFactory` уже вручную reconciled так, чтобы сохранять одновременно `ChannelPreferences` и Search Room v9 paths. Финальный Search review должен быть clean post-Favorites surface; старую исследовательскую историю не следует merge-ить как отдельные commits.
 
-## Measurement foundation / #27
+Реализованный Search Core design/runtime scope:
 
-Already available:
+- bounded `ChannelSearchRepository` API;
+- max public results 200, max processed tokens 6;
+- Room v9 derived FTS4 + `unicode61` для Unicode/Cyrillic correctness;
+- safe quoted prefix encoding без user-controlled FTS syntax;
+- compact unique EPG programme-title vocabulary вместо одного FTS row на programme occurrence;
+- active catalog/EPG/current-policy truth revalidation;
+- current-programme-only EPG enrichment;
+- selective-seed bounded multi-token intersection;
+- explicit truncation instead of false completeness;
+- deterministic structured TV ranking;
+- global earliest programme-boundary invalidation without polling;
+- rowid-preserving search content lifecycle.
 
-- deterministic provider-neutral M3U corpora 1k/10k/50k;
-- canonical manifests and repository generation entry point;
-- bounded HLS/XMLTV fixtures and production XMLTV consumer binding;
-- descriptive M3U/Room/Player measurement adapters;
-- repository-owned `current-normal`, `old-edge-normal`, `current-low-ram` profiles;
-- fresh-AVD sequential series orchestration and audit manifests.
+Оставшиеся Search Core gates:
 
-Remaining acceptance:
+1. clean post-Favorites branch/review surface;
+2. generated Room v9 `9.json` committed exactly from Room output;
+3. exact-head compile/KSP after Favorites reconciliation;
+4. v8→v9 migration on API26/API36 and `unicode61` runtime proof;
+5. non-zero Search DAO/index/repository contracts;
+6. existing source/EPG ownership regressions green;
+7. descriptive DB-size/backfill/query measurements before any extra prefix/title index;
+8. guarded squash merge.
 
-1. five-run `current-normal`;
-2. five-run `old-edge-normal`;
-3. five-run `current-low-ram`;
-4. separated cross-profile interpretation;
-5. per-operation `hard-gate` / `warning-only` / `descriptive-only` decision;
-6. durable performance report and truth sync.
+## Measurement foundation / issue #27
 
-No structural optimization or native rewrite should be selected from one/two-run smoke evidence.
+Уже доступны deterministic M3U 1k/10k/50k, canonical manifests, HLS/XMLTV fixtures, M3U/Room/Player measurement adapters, repository-owned `current-normal` / `old-edge-normal` / `current-low-ram` profiles и fresh-AVD series orchestration.
+
+Остаётся:
+
+1. 5× `current-normal`;
+2. 5× `old-edge-normal`;
+3. 5× `current-low-ram`;
+4. cross-profile interpretation;
+5. per-operation `hard-gate` / `warning-only` / `descriptive-only` decisions;
+6. durable performance report.
+
+Старые #83/#87/#89 не переоткрывать. Если repeated evidence докажет выигрыш, полезный delta clean-rebuild от актуального accepted `main`.
 
 ## Текущий critical path
 
-### P0 — clean stacked graph
+### P0 — Search Core / Room v9
 
-1. Rebuild/merge #81 on current `main`.
-2. Rebuild/merge #86 after #81.
-3. Rebuild #84 on current `main`, commit generated Room v8 schema, validate and merge → close #82.
-4. Retarget/merge #85 after #84.
-5. Retarget/validate #83 and #87 with comparable allocation evidence.
+Закончить clean post-Favorites Search Core, migration/runtime compatibility и bounded active-truth query.
 
-### P1 — issue #29 daily-use discovery
+### P1 — Search TV
 
-После принятия #81/#86:
+- destination-scoped Search state;
+- ~300 ms initial typing debounce, immediate explicit submit;
+- cancellation/dedupe stale generations;
+- input ↔ results D-pad graph;
+- IME submit focus escape;
+- Player → Back query + canonical focus restoration;
+- no full-catalog/full-guide Compose filtering.
 
-1. bounded/debounced Search through a dedicated query boundary, including channel name/number/group and active programme metadata;
-2. profile-scoped bounded Recent updated only after successful playback, not on Player open/failed resolve;
-3. bounded/lazy Guide viewport;
-4. D-pad/focus/Player Back continuity across filters/routes.
+### P2 — Recent / ожидаемый Room v10
 
-Do not introduce FTS until bounded Room query measurement shows a real need.
+Отдельная profile-scoped durable history:
 
-### P2 — issue #30 bounded fallback + TV Doctor Lite
+- `profileId`;
+- `canonicalChannelId`;
+- `lastSuccessfulPlaybackAt`;
+- `successfulPlaybackCount`.
 
-- bounded attempt/time fallback ladder;
-- typed DNS/TLS/HTTP/auth/redirect/manifest/decoder/playback failure families;
-- no retry storms and no mutation of preferred variant from temporary fallback;
-- bind HLS fixtures to real fallback consumer;
-- redacted local diagnostics/export.
+Запись только после confirmed successful playback, не после click/open/resolve/buffering. Retention bounded; hidden/inactive channels filtered on read.
 
-Media3 remains the sole player engine unless measured compatibility evidence requires an ADR.
+### P3 — bounded Guide
 
-### P3 — issue #31 alpha hardening
+Bounded channel × time viewport, lazy data projection, deterministic TV focus и Player/Back continuity. Full-guide materialization запрещён.
 
-- R8/resource shrinking;
+### P4 — issue #30 playback recovery + TV Doctor Lite
+
+- bounded preferred → fallback1 → fallback2 → stop;
+- attempt/total time budgets;
+- typed DNS/TLS/TIMEOUT/HTTP/AUTH/REDIRECT/MANIFEST/DECODER/PLAYBACK;
+- no retry storms;
+- temporary fallback не меняет preferred variant;
+- redacted diagnostics.
+
+### P5 — issue #33 TV UX polish
+
+Финализировать Lounge/navigation/row geometry/Player overlay/Sources flow после появления реальных Search/Guide routes, без новой state architecture.
+
+### P6 — issue #31 alpha hardening
+
+- R8/resource shrink;
 - Compose compiler metrics;
 - Macrobenchmark + Baseline/Startup Profiles;
-- process/native memory evidence and API37 memory-limiter stress;
-- physical Android/Google TV + constrained/Fire TV checks;
+- Java/native/process memory;
 - upgrade/Keystore/Room recovery;
-- signing, changelog, SBOM/licenses and release checklist.
+- physical Android/Google TV + constrained/Fire TV;
+- signing, changelog, SBOM/licenses, release checklist.
 
 ## Native/Rust decision gate
 
-Rust/UniFFI, bundled SQLite, libmpv and a second playback engine are **not current correctness dependencies**. The existing Kotlin/Room/Media3 path remains preferred until repeated #27/#31 measurements identify a residual hotspot or compatibility gap large enough to justify FFI/ABI/debugging/maintenance cost.
+Rust/UniFFI, bundled SQLite, libmpv и второй playback engine **не являются текущими correctness dependencies**. Kotlin/Room/Media3 остаются preferred path, пока repeated #27/#31 evidence не докажет residual hotspot/compatibility gap, достаточный для ADR с FFI/ABI/packaging/debugging cost.
 
 ## Evidence limits
 
-API26/current emulator checks validate Android API, lifecycle, Room, focus, MediaSession and database contracts. They do not validate vendor MediaCodec/HDR/passthrough behavior, Fire OS, weak ARM SoCs, real network zap latency or thermal throttling; physical-device validation remains mandatory before alpha.
+API26/API36 emulator gates валидируют Android API, Room/migration, lifecycle, TV focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM, thermal/network behavior; physical-device validation остаётся обязательным перед alpha.
