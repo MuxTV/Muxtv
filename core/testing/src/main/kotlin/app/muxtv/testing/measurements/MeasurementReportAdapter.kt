@@ -17,11 +17,21 @@ private val SYSTEM_IMAGE = Regex(
 private val M3U_PROFILES = setOf("small-1k", "medium-10k", "large-50k")
 private const val M3U_SCOPE = "local-file-open-plus-streaming-parser-no-retention-sink"
 
-private val ROOM_OPERATION_IDS = listOf(
+private val ROOM_OPERATION_IDS_V1 = listOf(
     "stage-batch-250",
     "stage-total-10k",
     "activate-10k",
     "active-channel-first-page",
+    "source-overview-32",
+)
+
+private val ROOM_OPERATION_IDS_V2 = listOf(
+    "stage-batch-250",
+    "stage-total-10k",
+    "activate-10k",
+    "active-channel-first-page",
+    "search-exact-number-10k",
+    "search-selective-seed-10k",
     "source-overview-32",
 )
 
@@ -312,7 +322,7 @@ object MeasurementReportAdapter {
             "failureCount",
             "limitations",
         )
-        requireSchema(root)
+        val methodVersion = requireRoomSchema(root)
         requireThresholdFreeSuccess(root)
         val buildMode = root.requireString("buildMode")
         if (buildMode != "debug-instrumentation") invalidReport()
@@ -355,10 +365,20 @@ object MeasurementReportAdapter {
 
         val environment = parseAndroidEnvironment(root.requireObject("environment"))
         validateAndroidProfile(profile, environment)
-        val expectedCounts = listOf(batchSize, entryCount, entryCount, firstPageLimit, sourceOverviewCount)
+        val operationIds = when (methodVersion) {
+            1 -> ROOM_OPERATION_IDS_V1
+            2 -> ROOM_OPERATION_IDS_V2
+            else -> error("Unsupported Room measurement method version after validation.")
+        }
+        val expectedCounts = when (methodVersion) {
+            1 -> listOf(batchSize, entryCount, entryCount, firstPageLimit, sourceOverviewCount)
+            2 -> listOf(batchSize, entryCount, entryCount, firstPageLimit, 1, 1, sourceOverviewCount)
+            else -> error("Unsupported Room measurement method version after validation.")
+        }
         val operations = parseRoomOperations(
             array = root.requireArray("operations"),
             measuredIterations = measuredIterations,
+            operationIds = operationIds,
             expectedCounts = expectedCounts,
         )
         validateLimitations(root.requireArray("limitations"))
@@ -381,6 +401,7 @@ object MeasurementReportAdapter {
                 "warmup-iterations" to warmups.toString(),
                 "measured-iterations" to measuredIterations.toString(),
             ),
+            methodVersion = methodVersion,
         )
         return adaptedRun(identity, repetitionId, sourceReportSha256, operations)
     }
@@ -456,10 +477,11 @@ object MeasurementReportAdapter {
     private fun parseRoomOperations(
         array: JsonArray,
         measuredIterations: Int,
+        operationIds: List<String>,
         expectedCounts: List<Int>,
     ): Map<String, List<Long>> {
-        if (array.size != ROOM_OPERATION_IDS.size) invalidReport()
-        return ROOM_OPERATION_IDS.mapIndexed { operationIndex, expectedId ->
+        if (array.size != operationIds.size || expectedCounts.size != operationIds.size) invalidReport()
+        return operationIds.mapIndexed { operationIndex, expectedId ->
             val operation = array[operationIndex].requireObjectValue()
             operation.requireExactFields(
                 "operationId",
@@ -656,6 +678,7 @@ object MeasurementReportAdapter {
         environment: AndroidEnvironment,
         runtimeExtras: Map<String, String>,
         workload: Map<String, String>,
+        methodVersion: Int = 1,
     ): MeasurementComparisonIdentity {
         val runtimeIdentity = linkedMapOf(
             "manufacturer" to environment.manufacturer,
@@ -668,7 +691,7 @@ object MeasurementReportAdapter {
         return MeasurementComparisonIdentity(
             family = family.id,
             schemaVersion = 1,
-            methodVersion = 1,
+            methodVersion = methodVersion,
             sourceCommit = sourceCommit,
             fixtureSha256 = fixtureSha,
             runnerLabel = runnerLabel,
@@ -744,6 +767,17 @@ private fun requireSchema(root: StrictJsonObject) {
     if (root.requireInt("schemaVersion") != 1 || root.requireInt("methodVersion") != 1) {
         failAdaptation(MeasurementReportAdaptationFailure.UNSUPPORTED_SCHEMA)
     }
+}
+
+private fun requireRoomSchema(root: StrictJsonObject): Int {
+    if (root.requireInt("schemaVersion") != 1) {
+        failAdaptation(MeasurementReportAdaptationFailure.UNSUPPORTED_SCHEMA)
+    }
+    val methodVersion = root.requireInt("methodVersion")
+    if (methodVersion !in 1..2) {
+        failAdaptation(MeasurementReportAdaptationFailure.UNSUPPORTED_SCHEMA)
+    }
+    return methodVersion
 }
 
 private fun requireThresholdFreeSuccess(root: StrictJsonObject) {
