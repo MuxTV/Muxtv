@@ -6,8 +6,11 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
+import app.muxtv.catalog.ChannelSearchQuery
 import app.muxtv.database.MuxTvDatabase
 import app.muxtv.database.ProfileEntity
+import app.muxtv.database.RoomChannelSearchRepository
+import app.muxtv.database.RoomEpgGuideRepository
 import app.muxtv.database.RoomSourceRevisionStore
 import app.muxtv.database.SourceDefinition
 import app.muxtv.database.SourceRevisionActivationResult
@@ -57,6 +60,30 @@ internal class CatalogDatabaseMeasurementRunner(
                     workload = spec.workload,
                 ) { iteration ->
                     measureActiveChannels(iteration, fixture, spec.workload.firstPageLimit)
+                },
+                measureOperation(
+                    operationId = OPERATION_SEARCH_EXACT_NUMBER,
+                    expectedResultCount = 1,
+                    workload = spec.workload,
+                ) { iteration ->
+                    measureSearch(
+                        iteration = iteration,
+                        fixture = fixture,
+                        operationId = OPERATION_SEARCH_EXACT_NUMBER,
+                        queryText = SEARCH_EXACT_NUMBER_QUERY,
+                    )
+                },
+                measureOperation(
+                    operationId = OPERATION_SEARCH_SELECTIVE_SEED,
+                    expectedResultCount = 1,
+                    workload = spec.workload,
+                ) { iteration ->
+                    measureSearch(
+                        iteration = iteration,
+                        fixture = fixture,
+                        operationId = OPERATION_SEARCH_SELECTIVE_SEED,
+                        queryText = SEARCH_SELECTIVE_SEED_QUERY,
+                    )
                 },
                 measureOperation(
                     operationId = OPERATION_SOURCE_OVERVIEW,
@@ -192,30 +219,7 @@ internal class CatalogDatabaseMeasurementRunner(
         fixture: PreparedCatalogFixture,
         pageLimit: Int,
     ): CatalogDatabaseMeasurementSample = withFreshDatabase(OPERATION_ACTIVE_CHANNELS, iteration) { handle ->
-        handle.database.profileDao().insert(
-            ProfileEntity(
-                id = PROFILE_ID,
-                name = "Measurement profile",
-                isPrimary = true,
-            ),
-        )
-        handle.prepareRevision()
-        fixture.batches.forEach { batch ->
-            handle.store.stageBatch(SOURCE_ID, REVISION_NUMBER, batch)
-        }
-        val activation = handle.store.activate(
-            sourceId = SOURCE_ID,
-            revisionNumber = REVISION_NUMBER,
-            activatedAtEpochMillis = ACTIVATED_AT_EPOCH_MILLIS,
-            statistics = SourceRevisionStatistics(
-                parsedEntries = fixture.workload.entryCount,
-                skippedEntries = 0,
-                warningCount = 0,
-            ),
-        )
-        check(activation is SourceRevisionActivationResult.Activated) {
-            "Catalog database query preparation failed."
-        }
+        handle.prepareActiveCatalog(fixture)
 
         val startedAt = nanoTime()
         val rows = handle.database.playbackCatalogDao().observeActiveChannels(
@@ -229,6 +233,34 @@ internal class CatalogDatabaseMeasurementRunner(
             "Catalog database active channel query count agreement failed."
         }
         handle.sample(iteration, completedAt - startedAt, rows.size)
+    }
+
+    private suspend fun measureSearch(
+        iteration: Int,
+        fixture: PreparedCatalogFixture,
+        operationId: String,
+        queryText: String,
+    ): CatalogDatabaseMeasurementSample = withFreshDatabase(operationId, iteration) { handle ->
+        handle.prepareActiveCatalog(fixture)
+        val repository = RoomChannelSearchRepository(
+            dataSource = handle.database.channelSearchDao(),
+            guideRepository = RoomEpgGuideRepository(handle.database.epgGuideDao()),
+        )
+
+        val startedAt = nanoTime()
+        val snapshot = repository.observe(
+            ChannelSearchQuery(
+                profileId = PROFILE_ID,
+                text = queryText,
+                nowEpochMillis = SEARCH_NOW_EPOCH_MILLIS,
+                limit = SEARCH_RESULT_LIMIT,
+            ),
+        ).first()
+        val completedAt = nanoTime()
+        check(snapshot.results.size == 1) {
+            "Catalog database Search result agreement failed."
+        }
+        handle.sample(iteration, completedAt - startedAt, snapshot.results.size)
     }
 
     private suspend fun measureSourceOverview(
@@ -319,6 +351,33 @@ internal class CatalogDatabaseMeasurementRunner(
             )
         }
 
+        suspend fun prepareActiveCatalog(fixture: PreparedCatalogFixture) {
+            database.profileDao().insert(
+                ProfileEntity(
+                    id = PROFILE_ID,
+                    name = "Measurement profile",
+                    isPrimary = true,
+                ),
+            )
+            prepareRevision()
+            fixture.batches.forEach { batch ->
+                store.stageBatch(SOURCE_ID, REVISION_NUMBER, batch)
+            }
+            val activation = store.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = REVISION_NUMBER,
+                activatedAtEpochMillis = ACTIVATED_AT_EPOCH_MILLIS,
+                statistics = SourceRevisionStatistics(
+                    parsedEntries = fixture.workload.entryCount,
+                    skippedEntries = 0,
+                    warningCount = 0,
+                ),
+            )
+            check(activation is SourceRevisionActivationResult.Activated) {
+                "Catalog database query preparation failed."
+            }
+        }
+
         fun sample(
             iteration: Int,
             wallTimeNanos: Long,
@@ -387,13 +446,19 @@ internal class CatalogDatabaseMeasurementRunner(
 
     private companion object {
         const val REPORT_SCHEMA_VERSION = 1
-        const val METHOD_VERSION = 1
+        const val METHOD_VERSION = 2
         const val CACHE_STATE = "fresh-file-per-sample"
         const val OPERATION_STAGE_BATCH = "stage-batch-250"
         const val OPERATION_STAGE_TOTAL = "stage-total-10k"
         const val OPERATION_ACTIVATE = "activate-10k"
         const val OPERATION_ACTIVE_CHANNELS = "active-channel-first-page"
+        const val OPERATION_SEARCH_EXACT_NUMBER = "search-exact-number-10k"
+        const val OPERATION_SEARCH_SELECTIVE_SEED = "search-selective-seed-10k"
         const val OPERATION_SOURCE_OVERVIEW = "source-overview-32"
+        const val SEARCH_EXACT_NUMBER_QUERY = "10000"
+        const val SEARCH_SELECTIVE_SEED_QUERY = "Synthetic 10000"
+        const val SEARCH_RESULT_LIMIT = 100
+        const val SEARCH_NOW_EPOCH_MILLIS = 3_000L
         const val SOURCE_ID = "measurement-source"
         const val PROFILE_ID = "measurement-profile"
         const val REVISION_NUMBER = 1L
@@ -408,7 +473,8 @@ internal class CatalogDatabaseMeasurementRunner(
         const val MAX_FINGERPRINT_LENGTH = 256
         val LIMITATIONS = listOf(
             "Descriptive Android Room evidence for the exact recorded environment only.",
-            "Database creation and prerequisite seeding are outside measured intervals.",
+            "Database creation, fixture staging and activation are outside Search query intervals.",
+            "Search measurements use the same deterministic 10k catalog as existing Room operations.",
             "Not a codec, startup, zapping, first-frame or physical weak-TV claim.",
         )
     }
