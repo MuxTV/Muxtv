@@ -185,45 +185,54 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
                 ON active_epg_match_counts.canonicalChannelId = active_epg_matches.canonicalChannelId
                AND active_epg_match_counts.matchCount = 1
         ),
-        epg_candidates AS (
+        current_epg_programmes AS (
             SELECT unambiguous.canonicalChannelId AS canonicalChannelId,
-                   ${ChannelSearchMatchRank.PROGRAMME} AS matchRank
-            FROM hit_documents AS h
+                   programme.primaryTitle AS primaryTitle
+            FROM unambiguous_active_epg_matches AS unambiguous
             INNER JOIN epg_programmes AS programme
-                ON programme.primaryTitle = h.text
-            INNER JOIN unambiguous_active_epg_matches AS unambiguous
-                ON unambiguous.epgSourceId = programme.sourceId
-               AND unambiguous.epgRevisionNumber = programme.revisionNumber
-               AND unambiguous.epgExternalChannelId = programme.externalChannelId
-            WHERE h.kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
-              AND programme.sequenceNumber = (
-                  SELECT previous_programme.sequenceNumber
-                  FROM epg_programmes AS previous_programme
-                  WHERE previous_programme.sourceId = programme.sourceId
-                    AND previous_programme.revisionNumber = programme.revisionNumber
-                    AND previous_programme.externalChannelId = programme.externalChannelId
-                    AND previous_programme.startEpochMillis <= :nowEpochMillis
-                  ORDER BY previous_programme.startEpochMillis DESC,
-                           previous_programme.sequenceNumber DESC
-                  LIMIT 1
-              )
-              AND (
-                  (
-                      programme.stopEpochMillis IS NOT NULL
-                      AND programme.stopEpochMillis > :nowEpochMillis
-                  )
-                  OR (
-                      programme.stopEpochMillis IS NULL
-                      AND EXISTS (
-                          SELECT 1
-                          FROM epg_programmes AS next_programme
-                          WHERE next_programme.sourceId = programme.sourceId
-                            AND next_programme.revisionNumber = programme.revisionNumber
-                            AND next_programme.externalChannelId = programme.externalChannelId
-                            AND next_programme.startEpochMillis > :nowEpochMillis
-                          LIMIT 1
-                      )
-                  )
+                ON programme.sourceId = unambiguous.epgSourceId
+               AND programme.revisionNumber = unambiguous.epgRevisionNumber
+               AND programme.externalChannelId = unambiguous.epgExternalChannelId
+               AND programme.sequenceNumber = (
+                   SELECT previous_programme.sequenceNumber
+                   FROM epg_programmes AS previous_programme
+                   WHERE previous_programme.sourceId = unambiguous.epgSourceId
+                     AND previous_programme.revisionNumber = unambiguous.epgRevisionNumber
+                     AND previous_programme.externalChannelId = unambiguous.epgExternalChannelId
+                     AND previous_programme.startEpochMillis <= :nowEpochMillis
+                   ORDER BY previous_programme.startEpochMillis DESC,
+                            previous_programme.sequenceNumber DESC
+                   LIMIT 1
+               )
+            WHERE (
+                (
+                    programme.stopEpochMillis IS NOT NULL
+                    AND programme.stopEpochMillis > :nowEpochMillis
+                )
+                OR (
+                    programme.stopEpochMillis IS NULL
+                    AND EXISTS (
+                        SELECT 1
+                        FROM epg_programmes AS next_programme
+                        WHERE next_programme.sourceId = programme.sourceId
+                          AND next_programme.revisionNumber = programme.revisionNumber
+                          AND next_programme.externalChannelId = programme.externalChannelId
+                          AND next_programme.startEpochMillis > :nowEpochMillis
+                        LIMIT 1
+                    )
+                )
+            )
+        ),
+        epg_candidates AS (
+            SELECT current_epg_programmes.canonicalChannelId AS canonicalChannelId,
+                   ${ChannelSearchMatchRank.PROGRAMME} AS matchRank
+            FROM current_epg_programmes
+            WHERE current_epg_programmes.primaryTitle IS NOT NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM hit_documents AS h
+                  WHERE h.kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
+                    AND h.text = current_epg_programmes.primaryTitle
               )
         ),
         combined_candidates AS (
