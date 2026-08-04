@@ -7,6 +7,7 @@ import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.MuxTvTheme
@@ -27,6 +28,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var channelSearchRepository: ChannelSearchRepository
+
+    @Inject
+    lateinit var recentChannelsRepository: RecentChannelsRepository
 
     @Inject
     lateinit var epgGuideRepository: EpgGuideRepository
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
                     playbackCatalog = playbackCatalog,
                     channelPreferencesRepository = channelPreferencesRepository,
                     channelSearchRepository = channelSearchRepository,
+                    recentChannelsRepository = recentChannelsRepository,
                     epgGuideRepository = epgGuideRepository,
                     controllerConnector = controllerConnector,
                     sourceRefreshStore = sourceRefreshStore,
