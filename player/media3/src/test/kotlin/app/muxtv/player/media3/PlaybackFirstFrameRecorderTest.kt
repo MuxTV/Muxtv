@@ -14,10 +14,7 @@ class PlaybackFirstFrameRecorderTest {
                 PlaybackFirstFrameObserver(second::add),
             ),
         )
-        val event = PlaybackFirstFrameEvent(
-            channelId = "channel-a",
-            activationElapsedMillis = 125L,
-        )
+        val event = event()
 
         recorder.record(event)
 
@@ -34,10 +31,7 @@ class PlaybackFirstFrameRecorderTest {
                 PlaybackFirstFrameObserver(delivered::add),
             ),
         )
-        val event = PlaybackFirstFrameEvent(
-            channelId = "channel-a",
-            activationElapsedMillis = 125L,
-        )
+        val event = event()
 
         recorder.record(event)
 
@@ -48,11 +42,12 @@ class PlaybackFirstFrameRecorderTest {
     fun `empty observer set accepts first-frame event`() {
         val recorder = PlaybackFirstFrameRecorder(emptySet())
 
-        recorder.record(
-            PlaybackFirstFrameEvent(
-                channelId = "channel-a",
-                activationElapsedMillis = 125L,
-            ),
-        )
+        recorder.record(event())
     }
+
+    private fun event(): PlaybackFirstFrameEvent = PlaybackFirstFrameEvent(
+        profileId = "profile-main",
+        channelId = "channel-a",
+        activationElapsedMillis = 125L,
+    )
 }
