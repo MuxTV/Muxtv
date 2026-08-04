@@ -2,7 +2,6 @@ package app.muxtv.database
 
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
-import androidx.room3.Index
 
 @Entity(
     tableName = "recent_channels",
@@ -14,14 +13,7 @@ import androidx.room3.Index
             childColumns = ["profileId"],
             onDelete = ForeignKey.CASCADE,
         ),
-        ForeignKey(
-            entity = CanonicalChannelEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["canonicalChannelId"],
-            onDelete = ForeignKey.CASCADE,
-        ),
     ],
-    indices = [Index(value = ["canonicalChannelId"])],
 )
 internal data class RecentChannelEntity(
     val profileId: String,
