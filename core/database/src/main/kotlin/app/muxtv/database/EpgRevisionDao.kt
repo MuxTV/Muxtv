@@ -312,10 +312,11 @@ internal abstract class EpgRevisionDao {
         """
         DELETE FROM search_documents
         WHERE kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
-          AND NOT EXISTS (
-              SELECT 1
+          AND text NOT IN (
+              SELECT DISTINCT primaryTitle
               FROM epg_programmes
-              WHERE epg_programmes.primaryTitle = search_documents.text
+              WHERE primaryTitle IS NOT NULL
+                AND TRIM(primaryTitle) <> ''
           )
         """,
     )
