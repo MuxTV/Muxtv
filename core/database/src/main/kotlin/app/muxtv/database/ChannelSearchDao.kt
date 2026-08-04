@@ -109,10 +109,7 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
                    d.canonicalChannelId,
                    d.profileId,
                    d.providerChannelId,
-                   d.epgSourceId,
-                   d.epgRevisionNumber,
-                   d.epgExternalChannelId,
-                   d.epgProgrammeSequence
+                   d.text
             FROM search_documents_fts
             INNER JOIN search_documents AS d
                 ON d.rowid = search_documents_fts.rowid
@@ -159,19 +156,12 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
                   )
               )
         ),
-        epg_candidates AS (
-            SELECT matches.canonicalChannelId AS canonicalChannelId,
-                   ${ChannelSearchMatchRank.PROGRAMME} AS matchRank
-            FROM hit_documents AS h
-            INNER JOIN epg_programmes AS programme
-                ON programme.sourceId = h.epgSourceId
-               AND programme.revisionNumber = h.epgRevisionNumber
-               AND programme.externalChannelId = h.epgExternalChannelId
-               AND programme.sequenceNumber = h.epgProgrammeSequence
-            INNER JOIN epg_channel_matches AS matches
-                ON matches.epgSourceId = h.epgSourceId
-               AND matches.epgRevisionNumber = h.epgRevisionNumber
-               AND matches.epgExternalChannelId = h.epgExternalChannelId
+        active_epg_matches AS (
+            SELECT matches.epgSourceId,
+                   matches.epgRevisionNumber,
+                   matches.epgExternalChannelId,
+                   matches.canonicalChannelId
+            FROM epg_channel_matches AS matches
             INNER JOIN epg_sources
                 ON epg_sources.id = matches.epgSourceId
                AND epg_sources.activeRevision = matches.epgRevisionNumber
@@ -179,10 +169,33 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
             INNER JOIN sources
                 ON sources.id = matches.providerSourceId
                AND sources.activeRevision = matches.catalogRevisionNumber
-            WHERE h.kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
-              AND matches.matchPolicyVersion = :matchPolicyVersion
+            WHERE matches.matchPolicyVersion = :matchPolicyVersion
               AND matches.decision = 'MATCHED'
               AND matches.canonicalChannelId IS NOT NULL
+        ),
+        active_epg_match_counts AS (
+            SELECT canonicalChannelId, COUNT(*) AS matchCount
+            FROM active_epg_matches
+            GROUP BY canonicalChannelId
+        ),
+        unambiguous_active_epg_matches AS (
+            SELECT active_epg_matches.*
+            FROM active_epg_matches
+            INNER JOIN active_epg_match_counts
+                ON active_epg_match_counts.canonicalChannelId = active_epg_matches.canonicalChannelId
+               AND active_epg_match_counts.matchCount = 1
+        ),
+        epg_candidates AS (
+            SELECT unambiguous.canonicalChannelId AS canonicalChannelId,
+                   ${ChannelSearchMatchRank.PROGRAMME} AS matchRank
+            FROM hit_documents AS h
+            INNER JOIN epg_programmes AS programme
+                ON programme.primaryTitle = h.text
+            INNER JOIN unambiguous_active_epg_matches AS unambiguous
+                ON unambiguous.epgSourceId = programme.sourceId
+               AND unambiguous.epgRevisionNumber = programme.revisionNumber
+               AND unambiguous.epgExternalChannelId = programme.externalChannelId
+            WHERE h.kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'
               AND programme.sequenceNumber = (
                   SELECT previous_programme.sequenceNumber
                   FROM epg_programmes AS previous_programme
@@ -212,20 +225,6 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
                       )
                   )
               )
-              AND (
-                  SELECT COUNT(*)
-                  FROM epg_channel_matches AS current_matches
-                  INNER JOIN epg_sources AS current_epg_sources
-                      ON current_epg_sources.id = current_matches.epgSourceId
-                     AND current_epg_sources.activeRevision = current_matches.epgRevisionNumber
-                     AND current_epg_sources.providerSourceId = current_matches.providerSourceId
-                  INNER JOIN sources AS current_sources
-                      ON current_sources.id = current_matches.providerSourceId
-                     AND current_sources.activeRevision = current_matches.catalogRevisionNumber
-                  WHERE current_matches.canonicalChannelId = matches.canonicalChannelId
-                    AND current_matches.matchPolicyVersion = :matchPolicyVersion
-                    AND current_matches.decision = 'MATCHED'
-              ) = 1
         ),
         combined_candidates AS (
             SELECT canonicalChannelId, matchRank FROM direct_candidates
