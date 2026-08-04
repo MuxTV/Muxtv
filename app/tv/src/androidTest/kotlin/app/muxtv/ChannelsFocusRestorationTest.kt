@@ -175,7 +175,7 @@ class ChannelsFocusRestorationTest {
         val recent = StaticRecentChannelsRepository(
             listOf(
                 recentChannel(testChannels[2], 3_000L),
-                recentChannel(testChannels[0], 2_000L),
+                recentChannel(testChannels[1], 2_000L),
             ),
         )
         composeRule.setContent {
@@ -222,7 +222,7 @@ class ChannelsFocusRestorationTest {
         val recent = StaticRecentChannelsRepository(
             listOf(
                 recentChannel(testChannels[1], 2_000L),
-                recentChannel(testChannels[0], 1_000L),
+                recentChannel(testChannels[2], 1_000L),
             ),
         )
         composeRule.setContent {
@@ -252,7 +252,7 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Второй", substring = false).assertIsFocused()
-        composeRule.onNodeWithTag("channels-filter-recent").assertTextContains("Недавние")
+        composeRule.onNodeWithTag("channels-filter-recent").assertTextContains("• Недавние")
     }
 
     @Test
@@ -366,6 +366,9 @@ class ChannelsFocusRestorationTest {
         composeRule.onNodeWithTag("channels-filter-all").performKeyInput {
             keyDown(Key.DirectionRight)
             keyUp(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-favorites").performKeyInput {
             keyDown(Key.DirectionRight)
             keyUp(Key.DirectionRight)
         }
