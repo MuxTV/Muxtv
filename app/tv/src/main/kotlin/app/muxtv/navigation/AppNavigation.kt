@@ -26,6 +26,7 @@ import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
@@ -45,6 +46,7 @@ fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
     channelPreferencesRepository: ChannelPreferencesRepository,
     channelSearchRepository: ChannelSearchRepository,
+    recentChannelsRepository: RecentChannelsRepository,
     epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
@@ -100,6 +102,7 @@ fun AppNavigation(
 
                         AppDestination.Channels -> ChannelsRoute(
                             playbackCatalog = playbackCatalog,
+                            recentChannelsRepository = recentChannelsRepository,
                             epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
@@ -166,7 +169,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
+                Modifier.focusRequester(initialNavigationFocusRequester)
             } else {
                 Modifier
             }
