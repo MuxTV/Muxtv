@@ -114,12 +114,21 @@ class EpgMigration4To5Test {
         )
         migrated.close()
 
+        // MuxTvDatabase is the current schema (v9). The targeted assertion above deliberately
+        // validates only 4 -> 5, while this second open exercises the migrated data through the
+        // current DAO surface and therefore must register every subsequent production migration.
         val database = Room.databaseBuilder(
             context = targetContext,
             klass = MuxTvDatabase::class.java,
             name = DATABASE_NAME,
         )
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+            )
             .build()
         migrationHelper.closeWhenFinished(database)
         val dao = database.epgRevisionDao()
