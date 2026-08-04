@@ -23,7 +23,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     lateinit var httpClients: MuxTvHttpClients
 
     @Inject
-    lateinit var firstFrameEvents: PlaybackFirstFrameEvents
+    lateinit var firstFrameRecorder: PlaybackFirstFrameRecorder
 
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
@@ -47,7 +47,7 @@ class MuxTvPlaybackService : MediaSessionService() {
         )
         firstFrameTracker = PlaybackFirstFrameTracker(
             elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
-            publish = firstFrameEvents::publish,
+            publish = firstFrameRecorder::record,
         )
         player = ExoPlayer.Builder(this).build().apply {
             addListener(playerListener)
@@ -84,7 +84,11 @@ class MuxTvPlaybackService : MediaSessionService() {
         setupId: PlaybackSetupId,
         request: PlaybackSessionRequest,
     ) {
-        firstFrameTracker.activate(setupId, request.mediaId)
+        firstFrameTracker.activate(
+            setupId = setupId,
+            profileId = request.profileId,
+            channelId = request.mediaId,
+        )
         try {
             player.stop()
             player.clearMediaItems()
