@@ -8,10 +8,12 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 internal class RoomChannelSearchRepository(
     private val dataSource: ChannelSearchDataSource,
     private val guideRepository: EpgGuideRepository,
