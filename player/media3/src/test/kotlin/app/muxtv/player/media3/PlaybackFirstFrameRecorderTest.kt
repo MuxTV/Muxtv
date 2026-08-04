@@ -10,8 +10,8 @@ class PlaybackFirstFrameRecorderTest {
         val second = mutableListOf<PlaybackFirstFrameEvent>()
         val recorder = PlaybackFirstFrameRecorder(
             observers = linkedSetOf(
-                PlaybackFirstFrameObserver(first::add),
-                PlaybackFirstFrameObserver(second::add),
+                PlaybackFirstFrameObserver { event -> first += event },
+                PlaybackFirstFrameObserver { event -> second += event },
             ),
         )
         val event = event()
@@ -28,7 +28,7 @@ class PlaybackFirstFrameRecorderTest {
         val recorder = PlaybackFirstFrameRecorder(
             observers = linkedSetOf(
                 PlaybackFirstFrameObserver { throw IllegalStateException("synthetic observer failure") },
-                PlaybackFirstFrameObserver(delivered::add),
+                PlaybackFirstFrameObserver { event -> delivered += event },
             ),
         )
         val event = event()
