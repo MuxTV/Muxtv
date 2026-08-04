@@ -11,6 +11,7 @@ class PlaybackSessionRequestOwnershipTest {
     fun `session request owns a stable snapshot of caller headers`() {
         val source = linkedMapOf("User-Agent" to "MuxTV/1")
         val request = PlaybackSessionRequest(
+            profileId = PROFILE_ID,
             mediaId = "channel-1",
             variantId = "variant-1",
             locator = "https://stream.example/live.m3u8",
@@ -40,12 +41,13 @@ class PlaybackSessionRequestOwnershipTest {
             locator = "https://stream.example/live.m3u8",
             requestHeaders = source,
         )
-        val sessionRequest = playbackRequest.toPlaybackSessionRequest()
+        val sessionRequest = playbackRequest.toPlaybackSessionRequest(PROFILE_ID)
 
         source.clear()
 
         assertThat(playbackRequest.requestHeaders)
             .containsExactly("Referer", "https://portal.example/player")
+        assertThat(sessionRequest.profileId).isEqualTo(PROFILE_ID)
         assertThat(sessionRequest.requestHeaders)
             .containsExactly("Referer", "https://portal.example/player")
     }
@@ -54,6 +56,7 @@ class PlaybackSessionRequestOwnershipTest {
     fun `copy snapshots replacement headers independently`() {
         val replacement = linkedMapOf("User-Agent" to "MuxTV/2")
         val request = PlaybackSessionRequest(
+            profileId = PROFILE_ID,
             mediaId = "channel-1",
             variantId = "variant-1",
             locator = "https://stream.example/live.m3u8",
@@ -62,5 +65,9 @@ class PlaybackSessionRequestOwnershipTest {
         replacement.clear()
 
         assertThat(request.requestHeaders).containsExactly("User-Agent", "MuxTV/2")
+    }
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
     }
 }
