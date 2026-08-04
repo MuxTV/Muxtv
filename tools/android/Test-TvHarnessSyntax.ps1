@@ -15,7 +15,8 @@ $files = @(
     (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"),
     (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"),
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1")
+    (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
+    (Join-Path $repositoryRoot "tools\verify-local.ps1")
 )
 
 $messages = @()
@@ -78,6 +79,26 @@ if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--l
 }
 if ($androidSdkContent -notmatch 'Get-InstalledTvSystemImages') {
     $messages += "TV system image resolution must inspect installed SDK directories."
+}
+
+$verifyLocalContent = Get-Content -Path $files[7] -Raw
+if ($verifyLocalContent -notmatch 'DeviceOnly') {
+    $messages += "verify-local must expose DeviceOnly connected-test mode."
+}
+
+$tvValidationContent = Get-Content -Path $files[2] -Raw
+$hostValidationIndex = $tvValidationContent.IndexOf('"-Mode", "Full"')
+$profileLoopIndex = $tvValidationContent.IndexOf('foreach ($profile in $profiles)')
+$deviceOnlyIndex = $tvValidationContent.IndexOf('"-Mode", "DeviceOnly"')
+if (
+    $hostValidationIndex -lt 0 -or
+    $profileLoopIndex -lt 0 -or
+    $hostValidationIndex -gt $profileLoopIndex
+) {
+    $messages += "TV device validation must complete Full host validation before the profile loop."
+}
+if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
+    $messages += "TV profile validation must use DeviceOnly inside the profile loop."
 }
 
 if ($messages.Count -eq 0) {
