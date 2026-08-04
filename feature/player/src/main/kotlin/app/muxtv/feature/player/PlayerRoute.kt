@@ -145,6 +145,7 @@ fun PlayerRoute(
                 val request = resolution.request
                 val sessionRequest = try {
                     PlaybackSessionRequest(
+                        profileId = profileId,
                         mediaId = request.channelId,
                         variantId = request.variantId,
                         locator = request.locator,

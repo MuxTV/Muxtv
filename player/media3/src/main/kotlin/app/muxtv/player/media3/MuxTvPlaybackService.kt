@@ -1,7 +1,9 @@
 package app.muxtv.player.media3
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -20,10 +22,15 @@ class MuxTvPlaybackService : MediaSessionService() {
     @Inject
     lateinit var httpClients: MuxTvHttpClients
 
+    @Inject
+    lateinit var firstFrameRecorder: PlaybackFirstFrameRecorder
+
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
     private lateinit var setupCoordinator: PlaybackSetupCoordinator<PlaybackSessionRequest>
+    private lateinit var firstFrameTracker: PlaybackFirstFrameTracker
+    private var activeFirstFrameListener: Player.Listener? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +38,10 @@ class MuxTvPlaybackService : MediaSessionService() {
         mediaSourceFactory = PlaybackMediaSourceFactory(
             context = this,
             httpClients = httpClients,
+        )
+        firstFrameTracker = PlaybackFirstFrameTracker(
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
+            publish = firstFrameRecorder::record,
         )
         player = ExoPlayer.Builder(this).build()
         setupCoordinator = PlaybackSetupCoordinator(
@@ -48,6 +59,12 @@ class MuxTvPlaybackService : MediaSessionService() {
     ): MediaSession? = if (::mediaSession.isInitialized) mediaSession else null
 
     override fun onDestroy() {
+        if (::player.isInitialized) {
+            removeActiveFirstFrameListener()
+        }
+        if (::firstFrameTracker.isInitialized) {
+            firstFrameTracker.clearActive()
+        }
         if (::mediaSession.isInitialized) {
             mediaSession.release()
         }
@@ -57,17 +74,54 @@ class MuxTvPlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private fun install(request: PlaybackSessionRequest) {
-        player.stop()
-        player.clearMediaItems()
-        player.setMediaSource(mediaSourceFactory.create(request))
-        player.prepare()
-        player.play()
+    private fun install(
+        setupId: PlaybackSetupId,
+        request: PlaybackSessionRequest,
+    ) {
+        removeActiveFirstFrameListener()
+        firstFrameTracker.clearActive()
+        try {
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaSource(mediaSourceFactory.create(request))
+
+            firstFrameTracker.activate(
+                setupId = setupId,
+                profileId = request.profileId,
+                channelId = request.mediaId,
+            )
+            val listener = object : Player.Listener {
+                override fun onRenderedFirstFrame() {
+                    firstFrameTracker.onRenderedFirstFrame(
+                        setupId = setupId,
+                        currentMediaId = player.currentMediaItem?.mediaId,
+                    )
+                }
+            }
+            activeFirstFrameListener = listener
+            player.addListener(listener)
+
+            player.prepare()
+            player.play()
+        } catch (error: Throwable) {
+            removeActiveFirstFrameListener()
+            firstFrameTracker.clear(setupId)
+            player.stop()
+            player.clearMediaItems()
+            throw error
+        }
     }
 
     private fun clearInstalled() {
+        removeActiveFirstFrameListener()
+        firstFrameTracker.clearActive()
         player.stop()
         player.clearMediaItems()
+    }
+
+    private fun removeActiveFirstFrameListener() {
+        activeFirstFrameListener?.let(player::removeListener)
+        activeFirstFrameListener = null
     }
 
     private inner class SessionCallback : MediaSession.Callback {

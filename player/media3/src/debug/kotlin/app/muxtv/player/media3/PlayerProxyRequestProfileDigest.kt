@@ -11,6 +11,7 @@ internal object PlayerProxyRequestProfileDigest {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.updateInt(requests.size)
         requests.forEach { request ->
+            digest.updateField(request.profileId)
             digest.updateField(request.mediaId)
             digest.updateField(request.variantId)
             digest.updateField(request.locator)

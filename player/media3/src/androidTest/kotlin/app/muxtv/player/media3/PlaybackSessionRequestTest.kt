@@ -10,6 +10,7 @@ class PlaybackSessionRequestTest {
     @Test
     fun bundleRoundTripPreservesValuesWithoutExposingThemInDiagnostics() {
         val original = PlaybackSessionRequest(
+            profileId = PROFILE_ID,
             mediaId = "channel-1",
             variantId = "variant-1",
             locator = "https://stream.example/live.m3u8?token=secret",
@@ -25,10 +26,13 @@ class PlaybackSessionRequestTest {
         val restored = PlaybackSessionRequest.fromBundle(original.toBundle())
 
         assertThat(restored).isEqualTo(original)
-        assertThat(restored!!.insecureHttpApproved).isTrue()
+        assertThat(restored!!.profileId).isEqualTo(PROFILE_ID)
+        assertThat(restored.insecureHttpApproved).isTrue()
         val text = restored.toString()
+        assertThat(text).contains("profileId=<redacted>")
         assertThat(text).contains("locator=<redacted>")
         assertThat(text).contains("insecureHttpApproved=true")
+        assertThat(text).doesNotContain(PROFILE_ID)
         assertThat(text).doesNotContain("token=secret")
         assertThat(text).doesNotContain("Secret Agent")
         assertThat(text).doesNotContain("portal.example")
@@ -37,6 +41,7 @@ class PlaybackSessionRequestTest {
     @Test
     fun missingCleartextApprovalDefaultsToDenied() {
         val original = PlaybackSessionRequest(
+            profileId = PROFILE_ID,
             mediaId = "channel-1",
             variantId = "variant-1",
             locator = "https://stream.example/live.m3u8",
@@ -50,5 +55,9 @@ class PlaybackSessionRequestTest {
     @Test
     fun malformedBundleIsRejected() {
         assertThat(PlaybackSessionRequest.fromBundle(android.os.Bundle())).isNull()
+    }
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
     }
 }

@@ -137,7 +137,7 @@ class PlaybackSetupCoordinatorTest {
         clearInstalled: () -> Unit = {},
     ): PlaybackSetupCoordinator<RequestRef> = PlaybackSetupCoordinator(
         cancelledCapacity = cancelledCapacity,
-        install = install,
+        install = { _, value -> install(value) },
         clearInstalled = clearInstalled,
     )
 

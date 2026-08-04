@@ -91,10 +91,15 @@ class PlaybackMediaSourceFactoryTest {
         locator: String,
         headers: Map<String, String>,
     ) = PlaybackSessionRequest(
+        profileId = PROFILE_ID,
         mediaId = mediaId,
         variantId = "variant-$mediaId",
         locator = locator,
         requestHeaders = headers,
         insecureHttpApproved = true,
     )
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
+    }
 }

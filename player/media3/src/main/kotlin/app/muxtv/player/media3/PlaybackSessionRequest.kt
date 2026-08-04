@@ -5,6 +5,7 @@ import app.muxtv.player.PlaybackRequest
 import java.util.Collections
 
 class PlaybackSessionRequest(
+    val profileId: String,
     val mediaId: String,
     val variantId: String,
     val locator: String,
@@ -16,6 +17,7 @@ class PlaybackSessionRequest(
     val requestHeaders: Map<String, String> = requestHeaders.immutableSnapshot()
 
     init {
+        require(profileId.isValidField(MAX_ID_LENGTH))
         require(mediaId.isValidField(MAX_ID_LENGTH))
         require(variantId.isValidField(MAX_ID_LENGTH))
         require(locator.isValidField(MAX_LOCATOR_LENGTH))
@@ -37,6 +39,7 @@ class PlaybackSessionRequest(
     operator fun component7(): Boolean = insecureHttpApproved
 
     fun copy(
+        profileId: String = this.profileId,
         mediaId: String = this.mediaId,
         variantId: String = this.variantId,
         locator: String = this.locator,
@@ -45,6 +48,7 @@ class PlaybackSessionRequest(
         requestHeaders: Map<String, String> = this.requestHeaders,
         insecureHttpApproved: Boolean = this.insecureHttpApproved,
     ): PlaybackSessionRequest = PlaybackSessionRequest(
+        profileId = profileId,
         mediaId = mediaId,
         variantId = variantId,
         locator = locator,
@@ -57,7 +61,8 @@ class PlaybackSessionRequest(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PlaybackSessionRequest) return false
-        return mediaId == other.mediaId &&
+        return profileId == other.profileId &&
+            mediaId == other.mediaId &&
             variantId == other.variantId &&
             locator == other.locator &&
             displayName == other.displayName &&
@@ -67,7 +72,8 @@ class PlaybackSessionRequest(
     }
 
     override fun hashCode(): Int {
-        var result = mediaId.hashCode()
+        var result = profileId.hashCode()
+        result = 31 * result + mediaId.hashCode()
         result = 31 * result + variantId.hashCode()
         result = 31 * result + locator.hashCode()
         result = 31 * result + (displayName?.hashCode() ?: 0)
@@ -78,6 +84,7 @@ class PlaybackSessionRequest(
     }
 
     fun toBundle(): Bundle = Bundle().apply {
+        putString(KEY_PROFILE_ID, profileId)
         putString(KEY_MEDIA_ID, mediaId)
         putString(KEY_VARIANT_ID, variantId)
         putString(KEY_LOCATOR, locator)
@@ -93,11 +100,13 @@ class PlaybackSessionRequest(
     }
 
     override fun toString(): String =
-        "PlaybackSessionRequest(mediaId=<redacted>, variantId=<redacted>, locator=<redacted>, " +
+        "PlaybackSessionRequest(profileId=<redacted>, mediaId=<redacted>, " +
+            "variantId=<redacted>, locator=<redacted>, " +
             "hasDisplayName=${displayName != null}, hasArtworkUri=${artworkUri != null}, " +
             "headerCount=${requestHeaders.size}, insecureHttpApproved=$insecureHttpApproved)"
 
     companion object {
+        private const val KEY_PROFILE_ID = "profile_id"
         private const val KEY_MEDIA_ID = "media_id"
         private const val KEY_VARIANT_ID = "variant_id"
         private const val KEY_LOCATOR = "locator"
@@ -114,6 +123,7 @@ class PlaybackSessionRequest(
         private const val MAX_HEADER_VALUE_LENGTH = 8_192
 
         fun fromBundle(bundle: Bundle): PlaybackSessionRequest? = runCatching {
+            val profileId = bundle.getString(KEY_PROFILE_ID) ?: return null
             val mediaId = bundle.getString(KEY_MEDIA_ID) ?: return null
             val variantId = bundle.getString(KEY_VARIANT_ID) ?: return null
             val locator = bundle.getString(KEY_LOCATOR) ?: return null
@@ -124,6 +134,7 @@ class PlaybackSessionRequest(
                 .orEmpty()
 
             PlaybackSessionRequest(
+                profileId = profileId,
                 mediaId = mediaId,
                 variantId = variantId,
                 locator = locator,
@@ -136,15 +147,17 @@ class PlaybackSessionRequest(
     }
 }
 
-fun PlaybackRequest.toPlaybackSessionRequest(): PlaybackSessionRequest = PlaybackSessionRequest(
-    mediaId = mediaId,
-    variantId = variantId.value,
-    locator = locator,
-    displayName = displayName,
-    artworkUri = artworkUri,
-    requestHeaders = requestHeaders,
-    insecureHttpApproved = insecureHttpApproved,
-)
+fun PlaybackRequest.toPlaybackSessionRequest(profileId: String): PlaybackSessionRequest =
+    PlaybackSessionRequest(
+        profileId = profileId,
+        mediaId = mediaId,
+        variantId = variantId.value,
+        locator = locator,
+        displayName = displayName,
+        artworkUri = artworkUri,
+        requestHeaders = requestHeaders,
+        insecureHttpApproved = insecureHttpApproved,
+    )
 
 private fun String.isValidField(maxLength: Int): Boolean =
     isNotBlank() && length <= maxLength && !contains('\r') && !contains('\n')

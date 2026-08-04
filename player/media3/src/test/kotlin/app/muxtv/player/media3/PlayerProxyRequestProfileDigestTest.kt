@@ -28,6 +28,7 @@ class PlayerProxyRequestProfileDigestTest {
         val baseline = request()
         val baselineDigest = PlayerProxyRequestProfileDigest.sha256(baseline)
         val variants = listOf(
+            baseline.copy(profileId = "profile-other"),
             baseline.copy(mediaId = "channel-2"),
             baseline.copy(variantId = "variant-2"),
             baseline.copy(locator = "https://stream.example/live/2.m3u8"),
@@ -60,6 +61,7 @@ class PlayerProxyRequestProfileDigestTest {
     @Test
     fun `request diagnostics do not expose typed identity display name or header names`() {
         val request = request(
+            profileId = "profile-secret",
             mediaId = "channel-secret",
             variantId = "variant-secret",
             displayName = "Private Channel",
@@ -71,6 +73,7 @@ class PlayerProxyRequestProfileDigestTest {
 
         val text = request.toString()
 
+        assertThat(text).doesNotContain("profile-secret")
         assertThat(text).doesNotContain("channel-secret")
         assertThat(text).doesNotContain("variant-secret")
         assertThat(text).doesNotContain("Private Channel")
@@ -81,11 +84,13 @@ class PlayerProxyRequestProfileDigestTest {
     }
 
     private fun request(
+        profileId: String = "profile-main",
         mediaId: String = "channel-1",
         variantId: String = "variant-1",
         displayName: String? = "Synthetic Channel",
         headers: Map<String, String> = mapOf("User-Agent" to "MuxTV Measurement"),
     ): PlaybackSessionRequest = PlaybackSessionRequest(
+        profileId = profileId,
         mediaId = mediaId,
         variantId = variantId,
         locator = "https://stream.example/live/1.m3u8",
