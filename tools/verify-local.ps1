@@ -167,6 +167,7 @@ if ($Mode -ne "DeviceOnly") {
         ":core:ui:testDebugUnitTest",
         ":feature:channels:testDebugUnitTest",
         ":feature:home:testDebugUnitTest",
+        ":feature:search:testDebugUnitTest",
         ":feature:player:testDebugUnitTest",
         ":feature:sources:testDebugUnitTest",
         ":player:media3:testDebugUnitTest"
@@ -197,6 +198,7 @@ if ($Mode -ne "DeviceOnly") {
             ":core:ui:lintDebug",
             ":feature:channels:lintDebug",
             ":feature:home:lintDebug",
+            ":feature:search:lintDebug",
             ":feature:player:lintDebug",
             ":feature:sources:lintDebug",
             ":player:media3:lintDebug"
