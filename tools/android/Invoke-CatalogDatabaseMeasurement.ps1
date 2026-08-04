@@ -122,7 +122,7 @@ try {
     throw "Catalog database measurement report is not valid JSON."
 }
 
-if ([int]$report.schemaVersion -ne 1 -or [int]$report.methodVersion -ne 1) {
+if ([int]$report.schemaVersion -ne 1 -or [int]$report.methodVersion -ne 2) {
     throw "Catalog database measurement report schema is unsupported."
 }
 if ([string]$report.buildMode -cne "debug-instrumentation") {
@@ -154,6 +154,8 @@ $expectedOperations = [ordered]@{
     "stage-total-10k" = 10000
     "activate-10k" = 10000
     "active-channel-first-page" = 100
+    "search-exact-number-10k" = 1
+    "search-selective-seed-10k" = 1
     "source-overview-32" = 32
 }
 $operations = @($report.operations)

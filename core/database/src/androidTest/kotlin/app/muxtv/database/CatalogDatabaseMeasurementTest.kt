@@ -32,6 +32,8 @@ class CatalogDatabaseMeasurementTest {
             "stage-total-10k",
             "activate-10k",
             "active-channel-first-page",
+            "search-exact-number-10k",
+            "search-selective-seed-10k",
             "source-overview-32",
         ).inOrder()
         assertThat(report.operations.all { it.samples.size == arguments.spec.workload.measuredIterations }).isTrue()
@@ -43,6 +45,10 @@ class CatalogDatabaseMeasurementTest {
             .isEqualTo(arguments.spec.workload.entryCount)
         assertThat(report.operations.single { it.operationId == "active-channel-first-page" }.expectedResultCount)
             .isEqualTo(arguments.spec.workload.firstPageLimit)
+        assertThat(report.operations.single { it.operationId == "search-exact-number-10k" }.expectedResultCount)
+            .isEqualTo(1)
+        assertThat(report.operations.single { it.operationId == "search-selective-seed-10k" }.expectedResultCount)
+            .isEqualTo(1)
         assertThat(report.operations.single { it.operationId == "source-overview-32" }.expectedResultCount)
             .isEqualTo(arguments.spec.workload.sourceOverviewCount)
 

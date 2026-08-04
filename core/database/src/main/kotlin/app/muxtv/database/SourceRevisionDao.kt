@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.Update
 
 internal data class SourceRemovalSnapshot(
     val activeRevision: Long,
@@ -80,6 +81,18 @@ internal abstract class SourceRevisionDao {
 
     @Query(
         """
+        DELETE FROM search_documents
+        WHERE providerChannelId IN (
+            SELECT id
+            FROM provider_channels
+            WHERE sourceId = :sourceId
+        )
+        """,
+    )
+    protected abstract suspend fun deleteProviderSearchDocumentsForSource(sourceId: String): Int
+
+    @Query(
+        """
         DELETE FROM sources
         WHERE id = :sourceId
           AND activeRevision = 0
@@ -104,6 +117,7 @@ internal abstract class SourceRevisionDao {
         if (snapshot.credentialRef != expectedCredentialRef) {
             return InactiveSourceRemovalResult.CredentialMismatch
         }
+        deleteProviderSearchDocumentsForSource(sourceId)
         return if (deleteInactiveSource(sourceId, expectedCredentialRef) == 1) {
             InactiveSourceRemovalResult.Removed
         } else {
@@ -132,6 +146,39 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertStreamVariants(variants: List<StreamVariantEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
+
+    @Update(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun updateSearchDocuments(documents: List<SearchDocumentEntity>): Int
+
+    @Query(
+        """
+        SELECT *
+        FROM search_documents
+        WHERE documentKey IN (:documentKeys)
+        """,
+    )
+    protected abstract suspend fun searchDocumentsByKeys(
+        documentKeys: List<String>,
+    ): List<SearchDocumentEntity>
+
+    protected suspend fun upsertCanonicalSearchDocuments(documents: List<SearchDocumentEntity>) {
+        documents.chunked(SEARCH_DOCUMENT_LOOKUP_BATCH_SIZE).forEach { chunk ->
+            val existing = searchDocumentsByKeys(chunk.map(SearchDocumentEntity::documentKey))
+            val plan = planSearchDocumentWrites(
+                desired = chunk,
+                existing = existing,
+            )
+            if (plan.inserts.isNotEmpty()) insertSearchDocuments(plan.inserts)
+            if (plan.updates.isNotEmpty()) {
+                check(updateSearchDocuments(plan.updates) == plan.updates.size) {
+                    "Unable to refresh canonical Search metadata."
+                }
+            }
+        }
+    }
+
     @Transaction
     open suspend fun stageCatalogBatch(
         canonicalChannels: List<CanonicalChannelEntity>,
@@ -139,10 +186,13 @@ internal abstract class SourceRevisionDao {
         streamVariants: List<StreamVariantEntity>,
     ) {
         // STAGING may create a missing canonical identity, but it cannot mutate metadata already
-        // visible through an active revision. Display metadata is published in activateRevision().
+        // visible through an active revision. Canonical-name search metadata is therefore published
+        // only in activateRevision(), after canonical display metadata is accepted.
         insertCanonicalChannels(canonicalChannels)
         insertProviderChannels(providerChannels)
         insertStreamVariants(streamVariants)
+        val searchDocuments = providerSearchDocuments(providerChannels, streamVariants)
+        if (searchDocuments.isNotEmpty()) insertSearchDocuments(searchDocuments)
     }
 
     @Query(
@@ -256,6 +306,46 @@ internal abstract class SourceRevisionDao {
 
     @Query(
         """
+        SELECT DISTINCT canonical_channels.*
+        FROM canonical_channels
+        INNER JOIN stream_variants
+            ON stream_variants.canonicalChannelId = canonical_channels.id
+        INNER JOIN provider_channels
+            ON provider_channels.id = stream_variants.providerChannelId
+        WHERE provider_channels.sourceId = :sourceId
+          AND (
+              provider_channels.revisionNumber = :currentRevision
+              OR provider_channels.revisionNumber = :previousRevision
+          )
+        ORDER BY canonical_channels.id COLLATE BINARY
+        """,
+    )
+    protected abstract suspend fun affectedCanonicalChannels(
+        sourceId: String,
+        currentRevision: Long,
+        previousRevision: Long,
+    ): List<CanonicalChannelEntity>
+
+    @Query(
+        """
+        DELETE FROM search_documents
+        WHERE providerChannelId IN (
+            SELECT id
+            FROM provider_channels
+            WHERE sourceId = :sourceId
+              AND revisionNumber != :currentRevision
+              AND revisionNumber != :previousRevision
+        )
+        """,
+    )
+    protected abstract suspend fun deleteProviderSearchDocumentsExcept(
+        sourceId: String,
+        currentRevision: Long,
+        previousRevision: Long,
+    ): Int
+
+    @Query(
+        """
         DELETE FROM provider_channels
         WHERE sourceId = :sourceId
           AND revisionNumber != :currentRevision
@@ -281,6 +371,21 @@ internal abstract class SourceRevisionDao {
         currentRevision: Long,
         previousRevision: Long,
     )
+
+    @Query(
+        """
+        DELETE FROM search_documents
+        WHERE providerChannelId IN (
+            SELECT id
+            FROM provider_channels
+            WHERE sourceId = :sourceId AND revisionNumber = :revisionNumber
+        )
+        """,
+    )
+    protected abstract suspend fun deleteProviderSearchDocumentsForRevision(
+        sourceId: String,
+        revisionNumber: Long,
+    ): Int
 
     @Query(
         """
@@ -321,6 +426,20 @@ internal abstract class SourceRevisionDao {
         """,
     )
     abstract suspend fun deleteUnreferencedCanonicalChannels(): Int
+
+    @Query(
+        """
+        DELETE FROM search_documents
+        WHERE kind = '${SearchDocumentKind.CANONICAL_NAME}'
+          AND canonicalChannelId IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM canonical_channels
+              WHERE canonical_channels.id = search_documents.canonicalChannelId
+          )
+        """,
+    )
+    protected abstract suspend fun deleteOrphanCanonicalSearchDocuments(): Int
 
     @Transaction
     open suspend fun activateRevisionIfCredentialMatches(
@@ -403,7 +522,20 @@ internal abstract class SourceRevisionDao {
             currentRevision = revisionNumber,
             previousRevision = previousRevision,
         )
+        val canonicalDocuments = canonicalSearchDocuments(
+            affectedCanonicalChannels(
+                sourceId = sourceId,
+                currentRevision = revisionNumber,
+                previousRevision = previousRevision,
+            ),
+        )
+        if (canonicalDocuments.isNotEmpty()) upsertCanonicalSearchDocuments(canonicalDocuments)
 
+        deleteProviderSearchDocumentsExcept(
+            sourceId = sourceId,
+            currentRevision = revisionNumber,
+            previousRevision = previousRevision,
+        )
         deleteProviderChannelsExcept(
             sourceId = sourceId,
             currentRevision = revisionNumber,
@@ -415,6 +547,7 @@ internal abstract class SourceRevisionDao {
             previousRevision = previousRevision,
         )
         deleteUnreferencedCanonicalChannels()
+        deleteOrphanCanonicalSearchDocuments()
 
         return SourceRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -428,8 +561,10 @@ internal abstract class SourceRevisionDao {
         sourceId: String,
         revisionNumber: Long,
     ) {
+        deleteProviderSearchDocumentsForRevision(sourceId, revisionNumber)
         deleteProviderChannelsForRevision(sourceId, revisionNumber)
         deleteStagingRevision(sourceId, revisionNumber)
         deleteUnreferencedCanonicalChannels()
+        deleteOrphanCanonicalSearchDocuments()
     }
 }
