@@ -161,8 +161,12 @@ class ChannelsFocusRestorationTest {
         composeRule.waitUntilText("★  Второй")
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-        composeRule.onNodeWithText("★  Второй", substring = false).assertExists()
+        // The product contract is stable canonical-channel focus, not positional lazy-item
+        // identity. On old Compose/TV runtimes a removed keyed item can briefly retain its old
+        // index-derived test tag even after the surviving channel has been placed and focused.
+        // Assert the actual surviving favorite semantics instead of coupling this contract to
+        // `channel-row-0` after a 1 -> 0 reorder.
+        composeRule.onNodeWithText("★  Второй", substring = false).assertIsFocused()
     }
 
     @Test
