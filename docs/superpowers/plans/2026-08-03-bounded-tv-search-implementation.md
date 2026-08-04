@@ -1,223 +1,317 @@
 # Bounded TV Search Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status:** Search Core active in PR #96  
+**Accepted base:** `main@3621c2d3f4eb7b5675ab6107497b4b3edbde9851`  
+**Issue:** #29  
+**Next product slice:** Search TV after Core acceptance
 
-**Goal:** Ship Unicode-correct, bounded, profile-aware Android TV channel Search over active catalog metadata and the currently active EPG programme without full-catalog materialization or a second source of truth.
+## Goal
 
-**Architecture:** Split Search into two independently reviewable PRs. PR A (`Search Core`) is based on accepted `main` and introduces the public query contract, Room v9 derived `search_documents` + external-content FTS4/`unicode61`, bounded per-token candidate intersection, active/current-policy validation, deterministic ranking and programme-boundary metadata. PR B (`Search TV`) starts only after Favorites is accepted and adds `:feature:search`, debounce/IME generation ownership, Navigation3 wiring and explicit TV focus/Player-Back restoration.
+Ship Unicode-correct, bounded, profile-aware local channel Search over active catalog metadata and the currently active EPG programme without full-catalog materialization, a second source of truth or a new native/database runtime.
 
-**Tech Stack:** Kotlin 2.4.x, Coroutines/Flow, Room 3, platform SQLite FTS4, `unicode61`, Compose for TV, Navigation 3, Hilt, Media3, Android TV API 26–36.
+## Current architecture
 
-## Global Constraints
+Search Core is a clean post-Favorites rebuild. It owns Room v8 -> v9 and currently includes:
 
-- Repository: `MuxTV/Muxtv`; `minSdk = 26`.
-- Accepted schema before this work is Room v8; Search owns v8 -> v9.
-- Keep the platform/default Room SQLite driver; do not introduce `BundledSQLiteDriver` in Search v1.
-- Use Room 3 `@Fts4(contentEntity = ..., tokenizer = FtsOptions.TOKENIZER_UNICODE61)`.
-- FTS is derived candidate infrastructure only; active catalog/profile/current-policy EPG truth is revalidated before publication.
-- Public result limit: default 100, maximum 200.
-- Query token limit: 6. Initial internal candidate ceiling: 800 per token; fetch ceiling + 1 to detect truncation.
-- Blank query performs no unfiltered search.
-- Search diagnostics never include query text, source/provider IDs, locators, credentials, headers, cookies, tokens or raw exceptions.
-- Current programme semantics must exactly match accepted `RoomEpgGuideRepository`, including open-ended programme handling and source conflicts.
-- No FTS5/BM25, bundled SQLite, vectors, transliteration, fuzzy search, remote providers, Paging, custom global focus engine, Rust/UniFFI or alternate player engine in this slice.
-- Do not use arbitrary delays as focus synchronization.
-- TDD for behavior changes: failing test -> verify RED -> minimal implementation -> verify GREEN -> refactor.
+- bounded public `ChannelSearchRepository` API;
+- default 100 / max 200 public results;
+- max six processed Unicode tokens;
+- internal safe FTS4 quoted-prefix encoder;
+- Room v9 `search_documents` + external-content FTS4 `unicode61`;
+- transactional catalog/overlay/EPG derived-index hooks;
+- compact unique EPG title vocabulary;
+- active catalog/profile/current-policy EPG revalidation;
+- selective smallest-seed multi-token intersection;
+- explicit truncation;
+- deterministic structured TV ranking;
+- earliest programme-boundary invalidation;
+- Favorites + Search database/factory registration in one ownership path.
 
----
+The old pre-Favorites research PR #94 is closed and superseded. Do not retarget it.
 
-## PR A — Search Core (independent of Favorites UI)
+## Global constraints
 
-### Task 1: Public Search contract and safe query encoder
-
-**Files:**
-- Create: `catalog/api/src/main/kotlin/app/muxtv/catalog/ChannelSearchRepository.kt`
-- Create: `catalog/api/src/main/kotlin/app/muxtv/catalog/SearchQueryEncoder.kt`
-- Create: `catalog/api/src/test/kotlin/app/muxtv/catalog/ChannelSearchQueryTest.kt`
-- Create: `catalog/api/src/test/kotlin/app/muxtv/catalog/SearchQueryEncoderTest.kt`
-
-**Interfaces:**
-- Produces `ChannelSearchRepository.observe(ChannelSearchQuery): Flow<ChannelSearchSnapshot>`.
-- Produces `ChannelSearchQuery`, `ChannelSearchResult`, `ChannelSearchSnapshot` and internal-safe encoded query tokens.
-- Reuses existing `PlayableChannelSummary` rather than creating another channel identity model.
-
-- [ ] Write RED tests proving: blank/whitespace normalization; limit 1..200; six-token cap; redacted `toString`; punctuation separation; Cyrillic letters preserved; raw operators/quotes/wildcards never survive as FTS syntax; `Россия 1` produces two token-prefix expressions.
-- [ ] Run `./gradlew :catalog:api:test` and verify failures are caused by missing Search types/encoder.
-- [ ] Implement the minimal API and code-point encoder. Collapse whitespace for `normalizedText`; extract only Unicode letter/number runs; emit private `token*` FTS4 expressions.
-- [ ] Re-run `:catalog:api:test`; keep query/provider data out of public string rendering.
-- [ ] Commit `feat: add bounded channel search contract`.
-
-### Task 2: Room v9 external-content FTS4 schema and migration compatibility
-
-**Files:**
-- Create: `core/database/src/main/kotlin/app/muxtv/database/SearchDocumentEntity.kt`
-- Create: `core/database/src/main/kotlin/app/muxtv/database/SearchDocumentFtsEntity.kt`
-- Create: `core/database/src/main/kotlin/app/muxtv/database/SearchMigration.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabase.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabaseFactory.kt`
-- Create: `core/database/src/androidTest/kotlin/app/muxtv/database/SearchMigration8To9ContractTest.kt`
-- Create generated schema after successful compile: `core/database/schemas/app.muxtv.database.MuxTvDatabase/9.json`
-
-**Interfaces:**
-- `search_documents`: normal typed content table with integer `rowId` PK, unique `documentKey`, kind/origin/profile metadata and nonblank text.
-- `search_documents_fts`: Room external-content FTS4 table, tokenizer `unicode61`, indexed text only.
-- `MIGRATION_8_9` creates/backfills derived structures and rebuilds FTS explicitly.
-
-- [ ] Write RED migration/schema tests that open v8 fixtures, migrate to v9 and require both tables, `unicode61` FTS SQL, external-content relation, non-zero backfill from seeded canonical/provider/overlay/EPG text, and Cyrillic `рос*` matching uppercase/lowercase variants.
-- [ ] Verify RED on schema version 8 / missing FTS tables.
-- [ ] Add entities and bump `MuxTvDatabase.version` to 9; expose `searchDao()` only after Task 3 defines it.
-- [ ] Implement `MIGRATION_8_9`. Because Room removes external-content FTS synchronization triggers while migrations execute, insert/backfill `search_documents` first and then run `INSERT INTO search_documents_fts(search_documents_fts) VALUES('rebuild')` before migration completion. Room recreates sync triggers after migration.
-- [ ] Add `MIGRATION_8_9` to `MuxTvDatabaseFactory`.
-- [ ] Generate/commit the exact Room `9.json`; never hand-author identity hash.
-- [ ] Verify migration on API26/API36 when the device lane is available; the compatibility contract is a correctness gate, not a reason to block coding while runner jobs are queued.
-- [ ] Commit `feat: add Room v9 Unicode search index`.
-
-### Task 3: Explicit derived-index write boundary
-
-**Files:**
-- Create: `core/database/src/main/kotlin/app/muxtv/database/SearchIndexDao.kt`
-- Create: `core/database/src/main/kotlin/app/muxtv/database/RoomSearchIndexStore.kt`
-- Modify existing catalog/source publication boundary files identified by repository inspection.
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/ChannelPreferencesDao.kt` (post-#92 integration may be transferred in PR B if #92 is not yet accepted).
-- Modify existing EPG revision/import publication boundary files identified by repository inspection.
-- Create: `core/database/src/androidTest/kotlin/app/muxtv/database/SearchIndexLifecycleTest.kt`
-
-**Interfaces:**
-- `SearchIndexStore` is internal; no UI consumes it.
-- All application writes target `search_documents`; Room-generated external-content triggers maintain FTS after database creation/migration.
-- Document keys are deterministic and idempotent per origin/kind.
-
-- [ ] Characterize the real source catalog and EPG staging/publication transactions before editing them; no new state owner.
-- [ ] Write RED lifecycle tests for canonical name, provider raw/group/number, overlay custom name/number, EPG programme title, update idempotence and retained-revision cleanup.
-- [ ] Implement bulk upsert/delete DAO methods with bounded lists and deterministic keys.
-- [ ] Integrate index maintenance into existing publication/mutation boundaries, not Compose/ViewModel and not arbitrary observers.
-- [ ] Ensure index failure participates in the owning transaction where stale index would otherwise become permanent; active-truth validation still prevents stale publication.
-- [ ] Commit `feat: maintain derived search documents`.
-
-### Task 4: Bounded token candidate queries and active-truth validation
-
-**Files:**
-- Create: `core/database/src/main/kotlin/app/muxtv/database/ChannelSearchDao.kt`
-- Create: `core/database/src/androidTest/kotlin/app/muxtv/database/ChannelSearchDaoTest.kt`
-
-**Interfaces:**
-- `searchCandidates(profileId, ftsExpression, nowEpochMillis, fetchLimit)` returns at most candidate ceiling + 1 validated rows for one token.
-- Candidate origin is internal and sufficient for final structured ranking.
-
-- [ ] Write RED tests for Cyrillic case/prefix; canonical name; provider raw/group/number; overlay profile isolation; hidden channel exclusion; inactive source revision exclusion; stale EPG revision exclusion; stale match policy exclusion; source conflict exclusion; optional EPG never suppressing metadata match.
-- [ ] Add explicit tests for current-programme semantics matching `RoomEpgGuideRepository`: bounded stop; open-ended + next; open-ended + no-next; future/past programmes.
-- [ ] Implement one-token FTS candidate SQL joined back to active catalog/profile/current-policy truth.
-- [ ] Fetch `MAX_CANDIDATES_PER_TOKEN + 1` so overflow is observable rather than silently truncating.
-- [ ] Commit `feat: add validated search candidate queries`.
-
-### Task 5: Repository intersection, ranking and temporal boundary
-
-**Files:**
-- Create: `core/database/src/main/kotlin/app/muxtv/database/RoomChannelSearchRepository.kt`
-- Create: `core/database/src/test/kotlin/app/muxtv/database/RoomChannelSearchRepositoryTest.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabaseFactory.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabaseComponents` declaration in the factory file.
-
-**Interfaces:**
-- Implements public `ChannelSearchRepository`.
-- Intersects canonical IDs across at most six bounded token candidate sets.
-- Publishes `ChannelSearchSnapshot(results, isTruncated, nextBoundaryEpochMillis)`.
-
-- [ ] Write RED tests proving cross-field tokens (`Россия` from name + `1` from number) intersect correctly; all tokens must match same canonical channel; overflow propagates `isTruncated`; public result cap is deterministic.
-- [ ] Write ranking tests: exact effective number -> exact effective/custom name -> display-name prefix -> provider raw-name prefix -> group -> current programme -> stable number/name/id tie-break.
-- [ ] Add boundary tests proving earliest future current-programme membership change is returned even for a channel not currently in public results.
-- [ ] Implement repository intersection with bounded sets only; no full catalog/EPG materialization.
-- [ ] Expose repository from `MuxTvDatabaseComponents`.
-- [ ] Commit `feat: implement bounded Unicode channel search`.
-
-### Task 6: Search Core performance and migration evidence
-
-**Files:**
-- Extend repository-owned deterministic measurement tooling under existing `core:testing` / measurement paths.
-- Add durable report under `docs/performance/` after representative data exists.
-
-**Interfaces:**
-- Descriptive evidence for v8->v9 backfill, DB-size delta, one-token/multi-token candidate latency, final projection and low-RAM behavior.
-
-- [ ] Measure 1k/10k/50k catalog fixtures and bounded EPG text where available.
-- [ ] Record DB-size delta, migration wall time/peak memory, exact-number, Cyrillic-prefix, group, programme, multi-token and no-match cases.
-- [ ] Compare ordinary FTS4 prefix scan vs optional FTS `prefix=` indexes only after baseline; do not add prefix indexes without measured benefit.
-- [ ] Keep candidate cap 800 descriptive until selectivity/variance evidence supports tuning.
-- [ ] Do not introduce FTS5/BM25/bundled SQLite from these measurements without a separate ADR.
+- `minSdk = 26`;
+- keep platform/default Room SQLite driver;
+- Search v1 uses FTS4 + `unicode61`;
+- FTS remains derived candidate infrastructure only;
+- no raw query syntax reaches `MATCH`;
+- no query/profile/credential/locator payload in diagnostics;
+- current programme semantics must match accepted Now/Next behavior;
+- no FTS5/BM25/BundledSQLiteDriver/fuzzy/vector/transliteration/Rust/UniFFI/alternate player engine in this slice;
+- no arbitrary focus delays;
+- no speculative new indexes without measurements.
 
 ---
 
-## PR B — Search TV (starts after Favorites acceptance)
+# Package A — Search Core / PR #96
 
-### Task 7: Add `:feature:search` ViewModel generation ownership
+## A1 — public Search boundary — implemented
 
-**Files:**
-- Modify: `settings.gradle.kts`
-- Create: `feature/search/build.gradle.kts`
-- Create: `feature/search/src/main/kotlin/app/muxtv/feature/search/SearchViewModel.kt`
-- Create: `feature/search/src/test/kotlin/app/muxtv/feature/search/SearchViewModelTest.kt`
+Files:
 
-**Interfaces:**
-- `queryText: StateFlow<String>`.
-- `SearchUiState = EmptyQuery | Loading | Content(rows,isTruncated) | NoResults | Failed`.
-- Typing debounce 300 ms; IME submit bypasses debounce; newer generation cancels repository/boundary work.
+- `catalog/api/.../ChannelSearchRepository.kt`
+- `catalog/api/.../ChannelSearchQueryTest.kt`
 
-- [ ] RED: blank query performs no repository search; typing coalesces; submit is immediate; duplicate normalized query does not restart; newer generation cannot be overwritten by stale result; boundary job cancels on generation change.
-- [ ] Implement with structured coroutines/Flow and payload-free failures.
-- [ ] Preserve existing Content during same-query data/boundary refresh to keep focus tree mounted.
+Implemented contracts:
 
-### Task 8: TV Search UI, IME and focus ownership
+- profile nonblank;
+- timestamp nonnegative;
+- limit `1..200`;
+- blank query -> empty Search;
+- normalized whitespace;
+- six-token processing limit;
+- query-token overflow is not silently called complete;
+- redacted public string rendering.
 
-**Files:**
-- Create: `feature/search/src/main/kotlin/app/muxtv/feature/search/SearchRoute.kt`
-- Add instrumentation under `app/tv/src/androidTest/kotlin/app/muxtv/`.
+Remaining:
 
-**Interfaces:**
-- Search field -> first result on Down/submit when available.
-- First result -> field on Up.
-- `OK` opens Player; no Search-side playback resolution.
-- Save query + canonical focus anchor, not result list.
+- [ ] exact-head unit execution on clean post-Favorites branch.
 
-- [ ] Implement one-column TV screen: title, query field, honest count/truncation copy, lazy result rows.
-- [ ] Immediate IME Search/Done explicitly escapes input focus; if result is not ready, arm one generation-scoped `focusFirstResultWhenReady` intent instead of using delays.
-- [ ] Restore same surviving canonical result after Player -> Back; nearest-previous fallback; no-results focuses query field.
-- [ ] Include long Russian labels and Cyrillic query instrumentation.
+## A2 — safe Unicode FTS query encoder — implemented
 
-### Task 9: App DI/navigation integration
+Files:
 
-**Files:**
-- Modify: `app/tv/build.gradle.kts`
-- Create: `app/tv/src/main/kotlin/app/muxtv/di/ChannelSearchModule.kt`
-- Modify: `app/tv/src/main/kotlin/app/muxtv/MainActivity.kt`
-- Modify: `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
+- `core/database/.../SearchQueryEncoder.kt`
+- `core/database/.../SearchQueryEncoderTest.kt`
 
-**Interfaces:**
-- Replace `AppDestination.Search -> PlaceholderRoute("Поиск")` with `SearchRoute`.
-- Search opens existing `AppDestination.Player(channelId)`.
+Implemented:
 
-- [ ] Wire `channelSearchRepository` from `MuxTvDatabaseComponents` through Hilt/application composition.
-- [ ] Add `:feature:search` dependency.
-- [ ] Keep Navigation3 saveable/ViewModel decorators unchanged.
-- [ ] Verify Home/nav Search path, Search -> Player -> Back, and no duplicate presentation-state owner.
+- Unicode code-point letter/number tokenization;
+- punctuation separation;
+- quoted `"token*"` expressions;
+- operator words remain terms;
+- supplementary Unicode support;
+- no raw wildcard/operator injection.
 
-### Task 10: Acceptance, truth sync and issue #29 progression
+Remaining:
 
-**Files:**
-- Update: `README.md`
-- Update: `.work/CURRENT-STATE.md`
-- Update: `.work/meta/status.yaml`
-- Update execution checkpoint docs.
+- [ ] execute JVM contracts non-zero on exact head;
+- [ ] prove real API26/API36 `unicode61` Cyrillic behavior through migration/device tests.
 
-- [ ] Merge Favorites #92 only on exact-head evidence; do not pretend queued runs are green.
-- [ ] Clean-rebuild repository truth after #92 rather than reviving superseded #88.
-- [ ] Merge Search Core and Search TV only with clean base/head/review surfaces and non-zero migration/search/focus evidence.
-- [ ] Update issue #29: Now/Next + Favorites + Search complete; Recent then bounded/lazy Guide remain.
-- [ ] Search owns Room v9; plan Recent storage migration from v9 to v10.
+## A3 — Room v9 schema/migration — implemented, generated schema pending commit
 
-## Self-Review
+Files:
 
-- Spec coverage: Unicode correctness, FTS4/`unicode61`, active truth, multi-token intersection, truncation, temporal invalidation, debounce/IME, TV focus, Player/Back, security and measurement are all assigned.
-- Stack hygiene: Core PR does not depend on unmerged #92; TV PR starts after #92, avoiding a post-squash stacked rebuild.
-- Migration correctness: external-content FTS trigger removal during migration is explicitly handled with an FTS `rebuild` after content backfill.
-- Type consistency: public API is defined once in Task 1 and consumed unchanged by Tasks 5/7/9.
-- Scope: Recent/Guide/Recovery/alpha remain separate follow-up plans and are not smuggled into Search.
+- `SearchDocumentEntity.kt`
+- `SearchDocumentFtsEntity.kt`
+- `SearchMigration.kt`
+- `MuxTvDatabase.kt`
+- `MuxTvDatabaseFactory.kt`
+- `SearchMigration8To9ContractTest.kt`
+
+As-built content table:
+
+```text
+rowid
+documentKey
+kind
+canonicalChannelId?
+profileId?
+providerChannelId?
+text
+```
+
+There are no EPG programme-origin columns. EPG Search uses a vocabulary row plus authoritative programme lookup.
+
+Migration backfills canonical/provider/overlay text and one row per distinct exact nonblank programme title, then explicitly rebuilds FTS because normal external-content sync triggers are absent during migration execution.
+
+Trusted prior KSP artifact:
+
+- schema version: 9;
+- identity hash: `1e22d8e43770617000dcbcf5bfdbbdba`.
+
+Remaining:
+
+- [ ] reproduce/accept exact-head Room/KSP output on PR #96;
+- [ ] commit the exact Room-generated `9.json`, never hand-author it;
+- [ ] v8 -> v9 migration API26;
+- [ ] v8 -> v9 migration API36;
+- [ ] inspect migrated FTS/table counts and Cyrillic fixture.
+
+## A4 — derived Search lifecycle — implemented
+
+Files:
+
+- `SearchIndexDao.kt`
+- `SearchDocumentFactory.kt`
+- `SearchDocumentWritePlan.kt`
+- `SourceRevisionDao.kt`
+- `EpgRevisionDao.kt`
+- `CatalogDao.kt`
+- lifecycle/rowid tests.
+
+Implemented ownership:
+
+- source staging inserts provider raw/group/number docs;
+- source activation publishes canonical-name docs only after accepted metadata;
+- canonical updates preserve FTS content `rowid` through ordinary UPDATE;
+- source discard/prune deletes provider docs before origin rows;
+- overlay writes replace profile custom-name/number docs;
+- EPG staging inserts only missing unique title vocabulary rows;
+- EPG discard/prune removes unreferenced vocabulary.
+
+Review correction on PR #96:
+
+- [x] replace correlated `NOT EXISTS(primaryTitle = search_documents.text)` vocabulary cleanup with a set-based retained-title anti-membership query so cleanup does not perform an unindexed programme scan once per vocabulary row.
+
+Remaining:
+
+- [ ] exact-head lifecycle tests;
+- [ ] measure vocabulary cleanup/backfill cost on representative large EPG data;
+- [ ] do not add `primaryTitle` B-tree until that evidence exists.
+
+## A5 — active-truth candidate DAO — implemented
+
+Files:
+
+- `ChannelSearchDao.kt`
+- `ChannelSearchDataSource.kt`
+- `ChannelSearchDaoTest.kt`
+
+Implemented validation:
+
+- active source revision;
+- playable canonical mapping;
+- requested profile hidden state;
+- requested profile overlay ownership;
+- active EPG revision;
+- active provider/catalog revision;
+- `CURRENT_EPG_MATCH_POLICY_VERSION`;
+- `MATCHED` only;
+- exactly one active mapping per canonical channel;
+- exact current programme under accepted Now/Next rules;
+- missing EPG never removes metadata result.
+
+Programme Search starts from current-policy active mapping and existing source/revision/channel/time lookup, then compares the resolved current title against FTS vocabulary hits. It deliberately avoids joining millions of programme rows to title hits or creating a speculative title index.
+
+Remaining:
+
+- [ ] exact-head DAO tests non-zero;
+- [ ] review API26 query behavior/planner evidence where available;
+- [ ] characterize global boundary query cost on large data before adding indexes.
+
+## A6 — selective multi-token repository — implemented
+
+Files:
+
+- `RoomChannelSearchRepository.kt`
+- `RoomChannelSearchRepositoryTest.kt`
+
+Algorithm:
+
+1. probe each of at most six tokens with 801-row limit;
+2. retain at most 800 + overflow flag;
+3. choose smallest probe as seed;
+4. recheck overflowing broad tokens only inside current seed IDs;
+5. intersect all required token matches;
+6. fetch active summaries only for bounded IDs;
+7. rank deterministically;
+8. project Now/Next only for published <=200 rows.
+
+This prevents a query such as `канал 1200` from losing channel 1200 solely because `канал*` has tens of thousands of matches.
+
+Remaining:
+
+- [ ] exact-head JVM repository contracts;
+- [ ] confirm broad-token restricted recheck remains bounded on Room/API26;
+- [ ] measure one-token, multi-token, exact-number, Cyrillic-prefix, programme and no-match cases.
+
+## A7 — clean review/acceptance — active
+
+Repository hygiene already completed:
+
+- [x] Favorites #92 accepted;
+- [x] post-Favorites truth sync #95 accepted;
+- [x] old Search PR #94 closed unmerged;
+- [x] PR #96 rebuilt directly from current main;
+- [x] initial clean surface: 1 commit / 29 Search files / behind 0.
+
+Remaining merge gates:
+
+- [ ] exact-head compile/KSP;
+- [ ] generated schema v9 committed;
+- [ ] API26/API36 migration + `unicode61` runtime;
+- [ ] non-zero Search unit/instrumentation contracts;
+- [ ] source/EPG/Favorites regression contracts;
+- [ ] review threads resolved;
+- [ ] descriptive DB-size/backfill/query measurements;
+- [ ] final compare against then-current main;
+- [ ] ready-for-review;
+- [ ] SHA-guarded squash merge;
+- [ ] update issue #29 and repository truth with accepted Search Core merge SHA/evidence.
+
+---
+
+# Package B — Search TV
+
+Start only after Search Core is accepted so UI does not own migration/index churn.
+
+## B1 — feature module and ViewModel
+
+Create `:feature:search` with destination-scoped state.
+
+Required behavior:
+
+- blank query performs no repository search;
+- typing debounce starts at ~300 ms;
+- explicit IME Search/Done is immediate;
+- normalized duplicate query does not restart work;
+- newer generation cancels old repository/boundary work;
+- stale generation cannot overwrite current state;
+- same-query data/time refresh keeps current Content mounted;
+- payload-free failures;
+- process death retains query/focus anchor only, not result lists.
+
+## B2 — TV route/focus
+
+Screen:
+
+- one search field;
+- result/status copy;
+- one lazy vertical result list;
+- row number/favorite/name/group/current-programme;
+- explicit truncated copy.
+
+Focus contract:
+
+- initial -> input;
+- Down input -> first result;
+- Up first result -> input;
+- OK -> existing Player;
+- Player -> Back restores query + same canonical channel;
+- removed result -> nearest previous;
+- no results -> input;
+- IME submit immediately escapes text input;
+- no arbitrary delay/global focus engine.
+
+## B3 — app integration
+
+- Hilt/application wiring from accepted `MuxTvDatabaseComponents.channelSearchRepository`;
+- replace Search placeholder route;
+- no Search-side playback resolution;
+- preserve Navigation3 saveable/ViewModel decorators;
+- instrument Home/Search/Player/Back and long Cyrillic queries on TV APIs.
+
+## B4 — Search TV acceptance
+
+- [ ] unit generation/debounce/cancellation tests;
+- [ ] API26 D-pad/IME path;
+- [ ] API36 D-pad/IME path;
+- [ ] Search -> Player -> Back stable identity;
+- [ ] no-results/truncated/long-RU-string behavior;
+- [ ] clean review surface + guarded merge.
+
+---
+
+# Following product sequence
+
+After Search:
+
+1. **Recent / expected Room v10** — profile-scoped history written only after confirmed successful playback;
+2. **bounded Guide** — channel × time viewport, never full-guide materialization;
+3. **issue #30** — bounded playback fallback + TV Doctor Lite;
+4. **issue #33** — final TV UX/Lounge polish on real routes;
+5. **issue #31** — R8/Baseline/Startup/Macrobenchmark/signing/SBOM/physical-device alpha work.
+
+Issue #27 remains parallel repeated performance evidence and does not block daily-use product work.
