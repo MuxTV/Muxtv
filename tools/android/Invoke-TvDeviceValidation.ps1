@@ -274,6 +274,26 @@ try {
     $bootstrapTools = Get-AndroidSdkTools -AllowMissingRuntime
     Update-AndroidRuntimePackages -Tools $bootstrapTools -EvidenceDirectory $evidenceDirectory
 
+    $hostValidationRoot = Join-Path $evidenceDirectory "host-validation"
+    $hostValidationArguments = @(
+        "-NoProfile",
+        "-File", $verifyScript,
+        "-Mode", "Full",
+        "-EvidenceRoot", $hostValidationRoot,
+        "-SourceBranch", $branch,
+        "-SourceCommit", $commit
+    )
+    if ($NoDaemon) {
+        $hostValidationArguments += "-NoDaemon"
+    }
+
+    Write-Host "`n==> Host validation before Android TV emulator startup"
+    & pwsh @hostValidationArguments
+    $hostValidationExitCode = $LASTEXITCODE
+    if ($hostValidationExitCode -ne 0) {
+        throw "Host validation failed before Android TV emulator startup with exit code $hostValidationExitCode."
+    }
+
     $tools = Get-AndroidSdkTools
     Reset-AdbServer -Tools $tools -EvidenceDirectory $evidenceDirectory
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $evidenceDirectory
@@ -387,7 +407,7 @@ try {
             $validationArguments = @(
                 "-NoProfile",
                 "-File", $verifyScript,
-                "-Mode", "Device",
+                "-Mode", "DeviceOnly",
                 "-EvidenceRoot", $validationRoot,
                 "-SourceBranch", $branch,
                 "-SourceCommit", $commit
@@ -396,11 +416,11 @@ try {
                 $validationArguments += "-NoDaemon"
             }
 
-            Write-Host "`n==> Device validation for Android TV API $($profile.Image.Api) ($deviceSerial)"
+            Write-Host "`n==> Connected device validation for Android TV API $($profile.Image.Api) ($deviceSerial)"
             & pwsh @validationArguments
             $validationExitCode = $LASTEXITCODE
             if ($validationExitCode -ne 0) {
-                throw "Device validation failed with exit code $validationExitCode on $deviceSerial."
+                throw "Connected device validation failed with exit code $validationExitCode on $deviceSerial."
             }
 
             $profileRecord.status = "passed"
