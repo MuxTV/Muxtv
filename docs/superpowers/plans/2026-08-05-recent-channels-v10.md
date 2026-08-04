@@ -24,11 +24,11 @@ RED first for bounds, blank profile and negative timestamps.
 
 Create `recent_channels` with composite PK `(profileId, canonicalChannelId)`, profile FK `ON DELETE CASCADE`, and `lastSuccessfulPlaybackAtEpochMillis`.
 
-**Intentional lifecycle rule:** `canonicalChannelId` is a bounded logical identity, not a physical FK. The DAO verifies that the canonical target exists when success is recorded. Later catalog cleanup may remove an inactive canonical row without cascading away Recent history. The active-truth read JOIN then hides that history; if the same canonical ID returns, it becomes visible again. The hard 50-row/profile cap bounds orphaned history without retaining catalog tombstones or polluting user overlays.
+**Intentional lifecycle rule:** `canonicalChannelId` is a bounded logical identity, not a physical FK. A trusted first-frame event may race a source refresh that has already removed the canonical catalog row, so the write-time owner verifies only profile lifetime and stores the logical channel ID carried by that accepted playback event. The active-truth read JOIN hides IDs that are not currently active; if the same canonical ID returns, history becomes visible again. The hard 50-row/profile cap bounds orphaned logical history without retaining catalog tombstones or polluting user overlays.
 
 Write transaction:
 1. validate IDs/timestamp;
-2. verify profile + canonical target exists;
+2. verify profile still exists;
 3. update only if stored timestamp is older;
 4. otherwise insert-if-absent;
 5. older/equal delivery is idempotent;
