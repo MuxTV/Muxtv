@@ -13,7 +13,7 @@ internal enum class PlaybackSetupCancelResult {
 
 internal class PlaybackSetupCoordinator<T : Any>(
     private val cancelledCapacity: Int = DEFAULT_CANCELLED_CAPACITY,
-    private val install: (T) -> Unit,
+    private val install: (PlaybackSetupId, T) -> Unit,
     private val clearInstalled: () -> Unit,
 ) {
     private val cancelledIds = linkedSetOf<PlaybackSetupId>()
@@ -29,7 +29,7 @@ internal class PlaybackSetupCoordinator<T : Any>(
     ): PlaybackSetupInstallResult {
         if (id in cancelledIds) return PlaybackSetupInstallResult.Cancelled
 
-        install(value)
+        install(id, value)
         activeId = id
         return PlaybackSetupInstallResult.Installed
     }
