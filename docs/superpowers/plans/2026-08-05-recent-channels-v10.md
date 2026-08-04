@@ -1,147 +1,81 @@
 # Recent Channels v10 Implementation Plan
 
-> Execute task-by-task with TDD. Start from accepted `main@8fced4dc282eaf07e8160f463c8276d7e48ba01b`; do not stack on historical branches.
+> Execute task-by-task with TDD from accepted `main@8fced4dc282eaf07e8160f463c8276d7e48ba01b`; do not stack on historical branches.
 
 ## Goal
 
-Add bounded, profile-scoped Recent channels whose only write trigger is the accepted service-owned first-rendered-frame signal. Persist only profile identity, canonical channel identity, and successful wall-clock time. Read only current active/non-hidden catalog truth while retaining bounded history across temporary source disappearance.
+Add bounded, profile-scoped Recent channels whose only write trigger is the accepted service-owned first-rendered-frame signal. Persist only profile ID, logical canonical channel ID and successful wall-clock time. Read only current active/non-hidden catalog truth while retaining bounded history across temporary source disappearance.
 
 ## Non-goals
 
-- no playback success inference from click, command success, BUFFERING, READY or `isPlaying`;
-- no player/media3 dependency on Room/database;
-- no provider URL/header/title/query text in Recent persistence or diagnostics;
-- no unbounded history, Paging3, speculative indexes or new state framework;
-- no M3U conditional validators (#100), Guide, fallback/Doctor or CI Phase 2 (#101) in this branch.
+No click/command/BUFFERING/READY/`isPlaying` success inference; no player→Room dependency; no provider URLs/headers/titles/query text in Recent persistence; no Paging3/speculative indexes/new state framework; no #100 validators, Guide, fallback/Doctor or #101 CI redesign in this PR.
 
-## Task 1 — Catalog API contract
+## Task 1 — Catalog API
 
-Files:
-- create `catalog/api/src/main/kotlin/app/muxtv/catalog/RecentChannelsRepository.kt`
-- create focused API tests under `catalog/api/src/test/...`
+Create `RecentChannelsRepository` with:
+- `RecentChannelsQuery(profileId, limit)` default 20 / hard max 50;
+- `RecentChannel(PlayableChannelSummary, timestamp)`;
+- typed write result: `Applied`, `IgnoredOlderOrDuplicate`, `TargetUnavailable`;
+- `observeRecent` and `recordSuccessfulPlayback`.
 
-Contract:
-- `RecentChannel(channel: PlayableChannelSummary, lastSuccessfulPlaybackAtEpochMillis: Long)`;
-- `RecentChannelsQuery(profileId, limit)` with default 20 and hard max 50;
-- `RecentChannelWriteResult { Applied, IgnoredOlderOrDuplicate, TargetUnavailable }`;
-- `observeRecent(query): Flow<List<RecentChannel>>`;
-- `recordSuccessfulPlayback(profileId, channelId, successfulAtEpochMillis)`.
+RED first for bounds, blank profile and negative timestamps.
 
-RED first: invalid blank profile, invalid bounds, negative timestamps/result model.
+## Task 2 — Room v10 owner
 
-## Task 2 — Room v10 schema and migration
+Create `recent_channels` with composite PK `(profileId, canonicalChannelId)`, profile FK `ON DELETE CASCADE`, and `lastSuccessfulPlaybackAtEpochMillis`.
 
-Files:
-- create `core/database/src/main/kotlin/app/muxtv/database/RecentChannelEntity.kt`
-- create `RecentChannelsDao.kt`
-- create `RoomRecentChannelsRepository.kt`
-- create `RecentMigration.kt`
-- modify `MuxTvDatabase.kt`
-- modify `MuxTvDatabaseFactory.kt`
-- export `schemas/app.muxtv.database.MuxTvDatabase/10.json`
-- add migration/DAO instrumentation tests.
-
-Schema:
-- table `recent_channels`;
-- composite PK `(profileId, canonicalChannelId)`;
-- FK profile -> profiles(id) ON DELETE CASCADE;
-- FK canonical -> canonical_channels(id) ON DELETE CASCADE;
-- index on `canonicalChannelId` only for FK child lookup;
-- `lastSuccessfulPlaybackAtEpochMillis INTEGER NOT NULL`.
+**Intentional lifecycle rule:** `canonicalChannelId` is a bounded logical identity, not a physical FK. The DAO verifies that the canonical target exists when success is recorded. Later catalog cleanup may remove an inactive canonical row without cascading away Recent history. The active-truth read JOIN then hides that history; if the same canonical ID returns, it becomes visible again. The hard 50-row/profile cap bounds orphaned history without retaining catalog tombstones or polluting user overlays.
 
 Write transaction:
-1. require nonblank IDs and nonnegative timestamp;
-2. ensure profile + canonical target exists, else `TargetUnavailable`;
-3. update only when stored timestamp is older;
+1. validate IDs/timestamp;
+2. verify profile + canonical target exists;
+3. update only if stored timestamp is older;
 4. otherwise insert-if-absent;
 5. older/equal delivery is idempotent;
-6. after applied write trim to 50 newest rows for that profile using deterministic `(timestamp DESC, canonicalChannelId ASC)` ordering.
+6. trim to 50 newest rows using `(timestamp DESC, canonicalChannelId ASC)`.
 
 Read:
-- join recent -> canonical -> stream variants -> provider channels -> sources;
-- require provider revision equals source activeRevision;
-- LEFT JOIN overlay and exclude hidden channels;
-- deterministic newest-first + canonical ID tie-break;
-- bounded query limit.
+- recent → canonical → active stream/provider/source truth;
+- exclude hidden overlays;
+- newest first with canonical ID tie-break;
+- bounded limit.
 
-## Task 3 — Preserve canonical identity while Recent references it
+Files include entity, DAO, Room repository, migration 9→10, DB registration/factory, schema 10 export and instrumentation contracts.
 
-Modify `SourceRevisionDao.deleteUnreferencedCanonicalChannels()` so canonical rows referenced by `recent_channels` are not deleted during source activation cleanup.
+## Task 3 — Durable first-frame observer
 
-Tests:
-- temporary source disappearance hides channel from Recent read but keeps Recent row/canonical identity;
-- after Recent row ages out/deletes, later cleanup can remove truly unreferenced canonical row.
+Create an app-layer `PlaybackFirstFrameObserver`, never a player/database coupling:
+- wall clock captured at this boundary;
+- async repository write on process-lifetime IO scope;
+- Hilt `@IntoSet` contribution;
+- persistence exception isolated from playback and other observers.
 
-## Task 4 — Database component wiring
+Tests cover exact profile/channel, wall-clock capture and failure isolation.
 
-Modify `MuxTvDatabaseComponents` / factory to expose `RecentChannelsRepository`; add DAO accessor to `MuxTvDatabase` and register migration 9→10.
+## Task 4 — Channels TV surface
 
-Acceptance:
-- schema export matches migration;
-- migration matrix can open an actual v9 database and preserve existing data.
+Replace boolean filter state with `ChannelsFilter { ALL, FAVORITES, RECENT }`.
+- ALL/FAVORITES remain PlaybackCatalog-backed;
+- RECENT uses the Recent repository;
+- preserve stable canonical keys and existing FocusAnchor restoration;
+- D-pad All ↔ Favorites ↔ Recent;
+- Up returns to selected filter;
+- bounded Recent empty action returns to All;
+- Recent→Player→Back restores exact channel focus.
 
-## Task 5 — Durable first-frame observer in app layer
+## Task 5 — Home bounded Recent surface
 
-Files:
-- create app-layer singleton observer/module, not in `player/media3`;
-- add focused unit tests with fake Recent repository, controlled clock and test scope.
+After Tasks 1–4 are stable, add a small real-repository-backed Recent surface to Home. No duplicate cache/identity model. Split to clean R2B only if Home materially enlarges review scope.
 
-Behavior:
-- implement `PlaybackFirstFrameObserver`;
-- capture `System.currentTimeMillis()` at Recent boundary;
-- asynchronously call `recordSuccessfulPlayback(event.profileId, event.channelId, now)` on process-lifetime IO scope;
-- contribute observer via Hilt `@IntoSet`;
-- persistence failure must not fail playback or other observers.
+## Task 6 — Acceptance
 
-Tests:
-- exact profile/channel propagated;
-- wall-clock captured only at observer boundary;
-- duplicate/stale ordering delegated to repository semantics;
-- persistence exception isolated.
-
-## Task 6 — Channels TV surface
-
-Files:
-- modify `ChannelsViewModel.kt` + tests;
-- modify `ChannelsRoute.kt` + D-pad instrumentation tests;
-- app wiring as needed.
-
-Replace boolean Favorites filter with explicit `ChannelsFilter { ALL, FAVORITES, RECENT }`.
-
-Behavior:
-- ALL/FAVORITES continue using PlaybackCatalog;
-- RECENT observes Recent repository and maps to current `PlayableChannelSummary`;
-- stable canonical keys and existing `FocusAnchor` restoration remain authoritative;
-- D-pad filter graph All ↔ Favorites ↔ Recent;
-- Up from rows returns to selected filter;
-- Recent empty state has one bounded action back to All;
-- OK opens Player; Player→Back restores exact recent channel focus.
-
-## Task 7 — Home bounded Recent surface
-
-Add a small real-repository-backed Recent rail/list to Home only after Tasks 1–6 are stable. No duplicate Recent cache or independent identity model.
-
-Behavior:
-- newest first, bounded;
-- stable canonical key;
-- OK opens Player;
-- empty state does not add noise.
-
-If this materially enlarges review scope after data/Channels are green, split Home into a clean R2B follow-up from accepted R2A rather than stack branches.
-
-## Task 8 — Acceptance and merge
-
-Required exact-head evidence:
-1. focused API/Room tests;
-2. migration 9→10 + schema export validation;
-3. Full self-hosted validation;
-4. database API26/current matrix because Room schema changes;
-5. product API26/current matrix with non-zero connected tests, including Recent→Player→Back;
+Exact-head gates:
+1. API/Room tests;
+2. migration 9→10 + generated schema validation;
+3. Full validation;
+4. database API26/current matrix;
+5. product API26/current matrix including Recent→Player→Back;
 6. zero unresolved review threads;
-7. base-to-head semantic review confirms no provider secrets, URLs, headers or programme/query text persisted.
+7. privacy review confirms no provider secrets, URLs, headers, programme text or query text persisted.
 
-After acceptance:
-- squash merge Recent;
-- truth-sync if repository status docs require it;
-- only then allow #100 to own the next Room migration;
-- start bounded Guide from the newly accepted main.
+After merge: truth-sync if needed; only then let #100 own a later DB migration; start bounded Guide from accepted main.
