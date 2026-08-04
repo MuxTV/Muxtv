@@ -23,6 +23,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelPreferencesRepository
+import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.sync.SourceRefreshScheduler
@@ -32,6 +33,7 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.home.HomeRoute
+import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
@@ -42,6 +44,7 @@ import app.muxtv.player.media3.MuxTvMediaControllerConnector
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
     channelPreferencesRepository: ChannelPreferencesRepository,
+    channelSearchRepository: ChannelSearchRepository,
     epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
@@ -106,7 +109,14 @@ fun AppNavigation(
                         )
 
                         AppDestination.Guide -> PlaceholderRoute("Телепрограмма")
-                        AppDestination.Search -> PlaceholderRoute("Поиск")
+                        AppDestination.Search -> SearchRoute(
+                            repository = channelSearchRepository,
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                            onOpenChannel = { channelId ->
+                                open(AppDestination.Player(channelId))
+                            },
+                        )
+
                         AppDestination.Sources -> SourcesRoute(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,

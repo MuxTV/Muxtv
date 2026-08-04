@@ -71,6 +71,7 @@ class AppNavigationSourceJourneyTest {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
                         channelPreferencesRepository = NoChannelPreferencesRepository,
+                        channelSearchRepository = NoChannelSearchRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
