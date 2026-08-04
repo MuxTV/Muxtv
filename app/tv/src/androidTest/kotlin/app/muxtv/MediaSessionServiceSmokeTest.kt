@@ -173,6 +173,7 @@ class MediaSessionServiceSmokeTest {
                     connector.awaitPlaybackRequest(
                         controller = controller,
                         request = PlaybackSessionRequest(
+                            profileId = PROFILE_ID,
                             mediaId = "tracked-channel",
                             variantId = "tracked-variant",
                             locator = server.url("/live.m3u8").toString(),
@@ -270,12 +271,14 @@ class MediaSessionServiceSmokeTest {
         requireNotNull(PlaybackSetupId.parse(raw))
 
     private fun request(mediaId: String): PlaybackSessionRequest = PlaybackSessionRequest(
+        profileId = PROFILE_ID,
         mediaId = mediaId,
         variantId = "variant",
         locator = "https://127.0.0.1/stream.m3u8",
     )
 
     private companion object {
+        const val PROFILE_ID = "profile-main"
         const val CONNECTION_TIMEOUT_SECONDS = 20L
         const val DISCONNECT_TIMEOUT_SECONDS = 10L
         const val COMMAND_TIMEOUT_SECONDS = 10L
