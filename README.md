@@ -1,61 +1,62 @@
 # MuxTV
 
-MuxTV — local-first приложение для Android TV, Google TV и Fire TV, которое превращает пользовательские IPTV-источники в единый локальный каталог каналов и локальный EPG. Код лицензирован по BSD 3-Clause; текущий private-репозиторий и собираемые artifacts пока не являются публичным релизом.
+MuxTV — local-first приложение для Android TV, Google TV и Fire TV, которое превращает пользовательские IPTV-источники в единый локальный каталог каналов и локальный EPG. Код лицензирован по BSD 3-Clause; текущий репозиторий и собираемые artifacts пока не являются публичным релизом.
 
 Приложение не предоставляет телеканалы и не продаёт IPTV-подписки: пользователь подключает только источники, на использование которых у него есть права.
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. На `main` (`c31b34d65ef90848bd907a521b9a0ba8860ed83a`) реализованы source onboarding, immutable M3U catalog, Channels, process-owned Media3 Player и EPG foundation вплоть до durable WorkManager scheduling/state, DB lease и transactional publication ownership.
+Проект находится в стадии **functional pre-alpha**. Принятый `main` — `64b64c933da665d00ac403fd410a39309e773d64` (PR #92 Favorites).
 
-Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManager, OkHttp и Media3. Room schema — **v6**. `minSdk = 26`.
+Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v8**. `minSdk = 26`.
 
-### Рабочий IPTV путь
+Рабочий продуктовый контур:
 
-1. добавить HTTPS M3U или отдельно подтвердить HTTP-источник;
-2. сохранить access в Android Keystore-backed credential store вне Room public projections;
-3. потоково импортировать M3U в staging и атомарно активировать immutable source revision;
-4. открыть Channels и запустить канал;
-5. для нового HTTP host/port подтвердить exact origin;
-6. Player заново разрешает active variant и устанавливает request в process-owned MediaSession/ExoPlayer;
-7. Player → Back восстанавливает stable channel focus.
+1. secure source onboarding с Keystore-backed access isolation;
+2. bounded streaming M3U ingest;
+3. immutable source revisions, staging и atomic activation;
+4. durable source refresh ownership;
+5. bounded XMLTV + secure remote EPG refresh;
+6. immutable EPG revisions;
+7. deterministic EPG matching с policy-version provenance;
+8. bounded Now/Next;
+9. Channels с destination-scoped state;
+10. process-owned Media3 Player;
+11. Player → Back с stable canonical-channel focus restoration;
+12. profile-scoped Favorites в Player и Channels.
 
-### Реализованный EPG foundation
+### Принятые последние продуктовые этапы
 
-- PR #63 — secure bounded streaming XMLTV parser без DOM, с independent limits, XXE/DTD protection и typed timestamp handling;
-- PR #64 — Room v5 `epg_sources` / `epg_revisions` / `epg_channels` / `epg_programmes`, immutable staging, monotonic atomic activation, previous-good retention, bounded queries и migration/device contracts;
-- PR #68 — bounded magic-first plain/gzip/ZIP EPG payload decoder с post-decompression limits;
-- PR #72 — secure conditional remote EPG refresh через существующий encrypted access/network boundary, `If-None-Match` / `If-Modified-Since`, safe `304`, bounded `200` decode/import и cancellation preserving previous-good guide;
-- PR #74 — Room v6 durable EPG refresh policies/state/attempts/validators, DB lease, stale reclaim и old-token completion rejection;
-- PR #75 — durable WorkManager orchestration, startup policy constraints, trigger-distinct work identities, access+run-token activation ownership, nullable completion ownership, cancellation authority и diagnostic redaction.
+- PR #80 — deterministic EPG matching + bounded Now/Next foundation;
+- PR #84 — Room v8 matching-policy provenance и stale-policy repair;
+- PR #90 — Channels Now/Next, scoped screen state, Media3 playback projection и stable focus;
+- PR #92 — durable Favorites, All/Favorites filter, Player favorite action и TV D-pad/focus contracts.
 
-Последние проверочные evidence:
+Exact-head acceptance PR #92:
 
-- XMLTV parser Full: `30576931624`;
-- immutable EPG Full: `30663759211`;
-- Room v4→v5 migration API26/API36 matrix: `30663759884`;
-- payload decoder Full: `30666205286`;
-- remote EPG refresh Full: `30668000159`;
-- durable EPG state Full: `30703994191`;
-- Room v5→v6/API26/API36 matrix: `30703994190`;
-- durable EPG orchestration exact-head Full: `30708756373`;
-- durable EPG orchestration exact-head API26/API36 matrix: `30708756357`.
+- Self-hosted validation `30873814952` — success;
+- Android TV product DeviceMatrix `30873814955` — API26/API36 success, app instrumentation 18/18 на каждом профиле;
+- database/device matrix `30873814953` — API26/API36 success, core database 93/93 на каждом профиле, `ChannelPreferencesRepositoryTest` 5/5.
 
 ## Что ещё не завершено
 
-Текущий critical path:
+Текущий product critical path:
 
-1. **issue #76** — harden существующий M3U/source refresh publication boundary: remote refresh не должен возвращать stale credential metadata, activation/completion должны доказывать captured credential binding + durable run token; cancellation и diagnostics должны иметь те же ownership/redaction guarantees, что EPG;
-2. **issue #71** — deterministic explainable channel matching + bounded now/next projections;
-3. закрытие **issue #28** после интеграционного evidence XMLTV → remote refresh → activation → matching → now-next;
-4. **issue #29** — real now/next, Guide, Search, Favorites и Recent;
-5. **issue #33** — TV-first visual modernization без новой state architecture;
-6. **issue #30** — bounded variant fallback + TV Doctor Lite + HLS runtime fixture binding;
-7. **issue #31** — R8, Baseline Profile, signed alpha, SBOM/release checklist и physical TV evidence.
+1. **issue #29 / Search Core** — Room v9 derived Unicode FTS4 (`unicode61`), bounded active-truth candidate search и current-programme enrichment;
+2. **Search TV** — debounced + immediate-submit TV Search, D-pad/IME focus и Player → Back continuity;
+3. **Recent** — отдельная profile-scoped durable playback history, записываемая только после подтверждённого успешного playback; ожидаемый следующий schema bump после Search — Room v10;
+4. **Guide** — bounded/lazy channel × time viewport, без full-guide materialization;
+5. **issue #30** — bounded playback fallback + typed failure families + TV Doctor Lite;
+6. **issue #33** — финальная TV-first visual/interaction polish поверх реальных Search/Guide routes;
+7. **issue #31** — R8, Baseline/Startup Profiles, Macrobenchmark, signing, SBOM/release checklist и physical-device evidence.
 
-Параллельно остаётся **issue #27**: пять независимых repetitions для `current-normal`, `old-edge-normal`, `current-low-ram`, затем cross-profile interpretation и per-operation hard-gate/warning/descriptive decision. Эти измерения не блокируют correctness critical path.
+Параллельно остаётся **issue #27**: повторяемые performance datasets (`current-normal`, `old-edge-normal`, `current-low-ram`) и только затем per-operation hard-gate/warning/descriptive decisions.
 
-**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence из #27 и отдельного ADR, который оправдывает FFI/ABI/packaging/debugging complexity измеримым выигрышем.
+Старые allocation PR #83/#87/#89 закрыты без merge. Их идеи разрешено clean-rebuild только после воспроизводимого same-corpus measurement evidence.
+
+PR #88 закрыт как superseded; старую truth-sync историю не следует восстанавливать или ретаргетить.
+
+**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence и отдельного ADR.
 
 ## Архитектурные принципы
 
@@ -67,8 +68,9 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Room 3, WorkManage
 - один process-owned `ExoPlayer`/`MediaSession`;
 - один in-process owner encrypted source access;
 - WorkManager — durable orchestration boundary, но authoritative publication ownership остаётся за DB lease + transactional revision activation;
+- derived Search index никогда не является source of truth;
 - UI не выполняет full-catalog/full-guide materialization;
-- emulator/API matrix проверяет Android contracts, но не доказывает vendor codec/HDR/passthrough/Fire OS/weak ARM performance.
+- emulator/API matrix проверяет Android contracts, но не заменяет physical-device validation.
 
 ## Сборка и проверка
 
@@ -103,7 +105,7 @@ Deterministic M3U corpus:
   -PcorpusSourceCommit=<full-lowercase-40-character-git-sha>
 ```
 
-Measurement series example:
+Measurement series:
 
 ```powershell
 pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
@@ -116,12 +118,11 @@ pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
 
 ## Документация
 
-- текущая repository truth: [`.work/CURRENT-STATE.md`](.work/CURRENT-STATE.md);
+- repository truth: [`.work/CURRENT-STATE.md`](.work/CURRENT-STATE.md);
 - machine-readable status: [`.work/meta/status.yaml`](.work/meta/status.yaml);
-- активный EPG/source ownership plan: [`docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md`](docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md);
-- benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md);
-- current-profile variance smoke: [`docs/performance/2026-07-30-current-variance-smoke.md`](docs/performance/2026-07-30-current-variance-smoke.md);
-- открытые функциональные packages ведутся через GitHub Issues и отдельные reviewable PR.
+- current execution plan: [`docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md`](docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md);
+- Search comparative research: [`docs/research/2026-08-03-tv-search-comparative-review.md`](docs/research/2026-08-03-tv-search-comparative-review.md) (currently on active Search work until merged);
+- benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md).
 
 ## Лицензия
 
