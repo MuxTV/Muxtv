@@ -15,11 +15,14 @@ internal class PlaybackFirstFrameTracker(
     @Synchronized
     fun activate(
         setupId: PlaybackSetupId,
+        profileId: String,
         channelId: String,
     ) {
+        require(profileId.isNotBlank())
         require(channelId.isNotBlank())
         active = ActivePlayback(
             setupId = setupId,
+            profileId = profileId,
             channelId = channelId,
             startedAtNanos = elapsedRealtimeNanos(),
         )
@@ -49,6 +52,7 @@ internal class PlaybackFirstFrameTracker(
             val elapsedNanos = (elapsedRealtimeNanos() - current.startedAtNanos)
                 .coerceAtLeast(0L)
             PlaybackFirstFrameEvent(
+                profileId = current.profileId,
                 channelId = current.channelId,
                 activationElapsedMillis = elapsedNanos / NANOS_PER_MILLISECOND,
             )
@@ -60,6 +64,7 @@ internal class PlaybackFirstFrameTracker(
 
     private class ActivePlayback(
         val setupId: PlaybackSetupId,
+        val profileId: String,
         val channelId: String,
         val startedAtNanos: Long,
         var firstFrameReported: Boolean = false,
