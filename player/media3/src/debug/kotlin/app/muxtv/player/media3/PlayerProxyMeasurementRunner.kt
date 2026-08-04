@@ -150,7 +150,9 @@ internal class PlayerProxyMeasurementRunner(
         var clearCallbacks = 0
         var successful = 0
         val coordinator = PlaybackSetupCoordinator<PlaybackSessionRequest>(
-            install = { installed -> if (installed === request) installCallbacks += 1 },
+            install = { _, installed ->
+                if (installed === request) installCallbacks += 1
+            },
             clearInstalled = { clearCallbacks += 1 },
         )
         val startedAt = nanoTime()
@@ -182,7 +184,7 @@ internal class PlayerProxyMeasurementRunner(
         var clearCallbacks = 0
         var successful = 0
         val coordinator = PlaybackSetupCoordinator<PlaybackSessionRequest>(
-            install = { installCallbacks += 1 },
+            install = { _, _ -> installCallbacks += 1 },
             clearInstalled = { clearCallbacks += 1 },
         )
         val startedAt = nanoTime()
