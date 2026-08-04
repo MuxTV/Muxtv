@@ -14,13 +14,14 @@ class PlaybackFirstFrameTrackerTest {
         )
         val setupId = setupId("00000000-0000-0000-0000-000000000101")
 
-        tracker.activate(setupId, "channel-a")
+        tracker.activate(setupId, PROFILE_ID, "channel-a")
         nowNanos += 235_000_000L
         val first = tracker.onRenderedFirstFrame("channel-a")
         val duplicate = tracker.onRenderedFirstFrame("channel-a")
 
         assertThat(first).isEqualTo(
             PlaybackFirstFrameEvent(
+                profileId = PROFILE_ID,
                 channelId = "channel-a",
                 activationElapsedMillis = 235L,
             ),
@@ -36,10 +37,12 @@ class PlaybackFirstFrameTrackerTest {
 
         tracker.activate(
             setupId("00000000-0000-0000-0000-000000000102"),
+            PROFILE_ID,
             "channel-a",
         )
         tracker.activate(
             setupId("00000000-0000-0000-0000-000000000103"),
+            PROFILE_ID,
             "channel-b",
         )
 
@@ -47,6 +50,7 @@ class PlaybackFirstFrameTrackerTest {
         assertThat(published).isEmpty()
         assertThat(tracker.onRenderedFirstFrame("channel-b")).isNotNull()
         assertThat(published).hasSize(1)
+        assertThat(published.single().profileId).isEqualTo(PROFILE_ID)
         assertThat(published.single().channelId).isEqualTo("channel-b")
     }
 
@@ -56,7 +60,7 @@ class PlaybackFirstFrameTrackerTest {
         val tracker = tracker(published)
         val setupId = setupId("00000000-0000-0000-0000-000000000104")
 
-        tracker.activate(setupId, "channel-a")
+        tracker.activate(setupId, PROFILE_ID, "channel-a")
         assertThat(tracker.clear(setupId)).isTrue()
 
         assertThat(tracker.onRenderedFirstFrame("channel-a")).isNull()
@@ -70,8 +74,8 @@ class PlaybackFirstFrameTrackerTest {
         val first = setupId("00000000-0000-0000-0000-000000000105")
         val second = setupId("00000000-0000-0000-0000-000000000106")
 
-        tracker.activate(first, "channel-a")
-        tracker.activate(second, "channel-b")
+        tracker.activate(first, PROFILE_ID, "channel-a")
+        tracker.activate(second, PROFILE_ID, "channel-b")
 
         assertThat(tracker.clear(first)).isFalse()
         assertThat(tracker.onRenderedFirstFrame("channel-b")).isNotNull()
@@ -85,6 +89,7 @@ class PlaybackFirstFrameTrackerTest {
 
         tracker.activate(
             setupId("00000000-0000-0000-0000-000000000107"),
+            PROFILE_ID,
             "channel-a",
         )
 
@@ -94,7 +99,7 @@ class PlaybackFirstFrameTrackerTest {
     }
 
     @Test
-    fun `negative clock movement is clamped and diagnostics redact channel`() {
+    fun `negative clock movement is clamped and diagnostics redact identities`() {
         var nowNanos = 2_000_000L
         val tracker = PlaybackFirstFrameTracker(
             elapsedRealtimeNanos = { nowNanos },
@@ -103,12 +108,14 @@ class PlaybackFirstFrameTrackerTest {
 
         tracker.activate(
             setupId("00000000-0000-0000-0000-000000000108"),
+            "private-profile-id",
             "private-channel-id",
         )
         nowNanos = 1_000_000L
         val event = requireNotNull(tracker.onRenderedFirstFrame("private-channel-id"))
 
         assertThat(event.activationElapsedMillis).isEqualTo(0L)
+        assertThat(event.toString()).doesNotContain("private-profile-id")
         assertThat(event.toString()).doesNotContain("private-channel-id")
         assertThat(event.toString()).contains("activationElapsedMillis=0")
     }
@@ -122,4 +129,8 @@ class PlaybackFirstFrameTrackerTest {
 
     private fun setupId(raw: String): PlaybackSetupId =
         requireNotNull(PlaybackSetupId.parse(raw))
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
+    }
 }
