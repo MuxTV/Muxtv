@@ -1,7 +1,9 @@
 package app.muxtv.player.media3
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -20,10 +22,21 @@ class MuxTvPlaybackService : MediaSessionService() {
     @Inject
     lateinit var httpClients: MuxTvHttpClients
 
+    @Inject
+    lateinit var firstFrameEvents: PlaybackFirstFrameEvents
+
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
     private lateinit var setupCoordinator: PlaybackSetupCoordinator<PlaybackSessionRequest>
+    private lateinit var firstFrameTracker: PlaybackFirstFrameTracker
+
+    private val playerListener = object : Player.Listener {
+        override fun onRenderedFirstFrame() {
+            if (!::player.isInitialized || !::firstFrameTracker.isInitialized) return
+            firstFrameTracker.onRenderedFirstFrame(player.currentMediaItem?.mediaId)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -32,7 +45,13 @@ class MuxTvPlaybackService : MediaSessionService() {
             context = this,
             httpClients = httpClients,
         )
-        player = ExoPlayer.Builder(this).build()
+        firstFrameTracker = PlaybackFirstFrameTracker(
+            elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
+            publish = firstFrameEvents::publish,
+        )
+        player = ExoPlayer.Builder(this).build().apply {
+            addListener(playerListener)
+        }
         setupCoordinator = PlaybackSetupCoordinator(
             install = ::install,
             clearInstalled = ::clearInstalled,
@@ -48,24 +67,38 @@ class MuxTvPlaybackService : MediaSessionService() {
     ): MediaSession? = if (::mediaSession.isInitialized) mediaSession else null
 
     override fun onDestroy() {
+        if (::firstFrameTracker.isInitialized) {
+            firstFrameTracker.clearActive()
+        }
         if (::mediaSession.isInitialized) {
             mediaSession.release()
         }
         if (::player.isInitialized) {
+            player.removeListener(playerListener)
             player.release()
         }
         super.onDestroy()
     }
 
-    private fun install(request: PlaybackSessionRequest) {
-        player.stop()
-        player.clearMediaItems()
-        player.setMediaSource(mediaSourceFactory.create(request))
-        player.prepare()
-        player.play()
+    private fun install(
+        setupId: PlaybackSetupId,
+        request: PlaybackSessionRequest,
+    ) {
+        firstFrameTracker.activate(setupId, request.mediaId)
+        try {
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaSource(mediaSourceFactory.create(request))
+            player.prepare()
+            player.play()
+        } catch (error: Throwable) {
+            firstFrameTracker.clear(setupId)
+            throw error
+        }
     }
 
     private fun clearInstalled() {
+        firstFrameTracker.clearActive()
         player.stop()
         player.clearMediaItems()
     }
