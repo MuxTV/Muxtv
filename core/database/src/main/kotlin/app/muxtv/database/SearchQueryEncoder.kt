@@ -2,7 +2,7 @@ package app.muxtv.database
 
 import app.muxtv.catalog.ChannelSearchQuery
 
-data class SearchQueryToken internal constructor(
+class SearchQueryToken internal constructor(
     val value: String,
 ) {
     init {
