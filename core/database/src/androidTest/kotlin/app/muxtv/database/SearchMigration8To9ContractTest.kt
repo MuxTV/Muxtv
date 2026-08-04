@@ -38,7 +38,7 @@ class SearchMigration8To9ContractTest {
     }
 
     @Test
-    fun v8BackfillBuildsUnicodeSearchIndex() = runBlocking {
+    fun v8BackfillBuildsUnicodeSearchIndexWithoutPerProgrammeFtsRows() = runBlocking {
         val version8 = migrationHelper.createDatabase(8)
         version8.execSQL("PRAGMA foreign_keys = OFF")
         version8.execSQL(
@@ -90,6 +90,18 @@ class SearchMigration8To9ContractTest {
             )
             """.trimIndent(),
         )
+        version8.execSQL(
+            """
+            INSERT INTO epg_programmes(
+                sourceId, revisionNumber, sequenceNumber, externalChannelId,
+                startEpochMillis, stopEpochMillis, primaryTitle, primaryLanguage,
+                subtitle, description, category, iconRef, episodeNumber, isNew
+            ) VALUES(
+                'epg-a', 1, 2, 'epg-channel-b', 1000, 2000, 'ВЕСТИ', 'ru',
+                NULL, NULL, NULL, NULL, NULL, 0
+            )
+            """.trimIndent(),
+        )
         version8.close()
 
         val migrated = migrationHelper.runMigrationsAndValidate(
@@ -106,16 +118,24 @@ class SearchMigration8To9ContractTest {
 
         migrated.prepare("SELECT COUNT(*) FROM search_documents").use { statement ->
             assertThat(statement.step()).isTrue()
-            assertThat(statement.getLong(0)).isAtLeast(7L)
+            // 1 canonical + 3 provider + 2 overlay + one unique EPG title.
+            assertThat(statement.getLong(0)).isEqualTo(7L)
+        }
+        migrated.prepare(
+            "SELECT COUNT(*) FROM search_documents " +
+                "WHERE kind = '${SearchDocumentKind.EPG_PROGRAMME_TITLE}'",
+        ).use { statement ->
+            assertThat(statement.step()).isTrue()
+            assertThat(statement.getLong(0)).isEqualTo(1L)
         }
 
         migrated.prepare(
             """
             SELECT d.text
             FROM search_documents_fts
-            JOIN search_documents AS d ON d.rowId = search_documents_fts.rowid
+            JOIN search_documents AS d ON d.rowid = search_documents_fts.rowid
             WHERE search_documents_fts MATCH 'рос*'
-            ORDER BY d.rowId
+            ORDER BY d.rowid
             """.trimIndent(),
         ).use { statement ->
             val matches = buildList {
@@ -128,12 +148,13 @@ class SearchMigration8To9ContractTest {
             """
             SELECT d.text
             FROM search_documents_fts
-            JOIN search_documents AS d ON d.rowId = search_documents_fts.rowid
+            JOIN search_documents AS d ON d.rowid = search_documents_fts.rowid
             WHERE search_documents_fts MATCH 'вес*'
             """.trimIndent(),
         ).use { statement ->
             assertThat(statement.step()).isTrue()
             assertThat(statement.getText(0)).isEqualTo("ВЕСТИ")
+            assertThat(statement.step()).isFalse()
         }
 
         migrated.close()
