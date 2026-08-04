@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("Fast", "Full", "Device")]
+    [ValidateSet("Fast", "Full", "Device", "DeviceOnly")]
     [string]$Mode = "Fast",
 
     [string]$EvidenceRoot = ".work/evidence",
@@ -140,69 +140,71 @@ function Add-Step {
     })
 }
 
-Add-Step -Name "gradle-version" -Arguments @("--version")
-Add-Step -Name "build-logic-tests" -Arguments @("-p", "build-logic", ":convention:test")
-Add-Step -Name "configuration-cache" -Arguments @("help", "--configuration-cache")
-Add-Step -Name "configuration-cache-reuse" -Arguments @("help", "--configuration-cache")
-Add-Step -Name "pure-kotlin-tests" -Arguments @(
-    ":core:common:test",
-    ":core:model:test",
-    ":core:testing:test",
-    ":catalog:api:test",
-    ":catalog:ingest:test",
-    ":player:api:test",
-    ":player:fake:test"
-)
-Add-Step -Name "android-unit-tests" -Arguments @(
-    ":app:tv:testDebugUnitTest",
-    ":catalog:importer:testDebugUnitTest",
-    ":catalog:onboarding:testDebugUnitTest",
-    ":catalog:refresh:testDebugUnitTest",
-    ":catalog:sync:testDebugUnitTest",
-    ":core:credentials:testDebugUnitTest",
-    ":core:database:testDebugUnitTest",
-    ":core:designsystem:testDebugUnitTest",
-    ":core:network:testDebugUnitTest",
-    ":core:ui:testDebugUnitTest",
-    ":feature:channels:testDebugUnitTest",
-    ":feature:home:testDebugUnitTest",
-    ":feature:player:testDebugUnitTest",
-    ":feature:sources:testDebugUnitTest",
-    ":player:media3:testDebugUnitTest"
-)
-Add-Step -Name "android-instrumentation-compile" -Arguments @(
-    ":catalog:importer:assembleDebugAndroidTest",
-    ":catalog:refresh:assembleDebugAndroidTest",
-    ":core:credentials:assembleDebugAndroidTest",
-    ":core:database:assembleDebugAndroidTest",
-    ":player:media3:assembleDebugAndroidTest",
-    ":app:tv:assembleDebugAndroidTest"
-)
-Add-Step -Name "debug-apk" -Arguments @(
-    ":app:tv:assembleDebug"
-)
+if ($Mode -ne "DeviceOnly") {
+    Add-Step -Name "gradle-version" -Arguments @("--version")
+    Add-Step -Name "build-logic-tests" -Arguments @("-p", "build-logic", ":convention:test")
+    Add-Step -Name "configuration-cache" -Arguments @("help", "--configuration-cache")
+    Add-Step -Name "configuration-cache-reuse" -Arguments @("help", "--configuration-cache")
+    Add-Step -Name "pure-kotlin-tests" -Arguments @(
+        ":core:common:test",
+        ":core:model:test",
+        ":core:testing:test",
+        ":catalog:api:test",
+        ":catalog:ingest:test",
+        ":player:api:test",
+        ":player:fake:test"
+    )
+    Add-Step -Name "android-unit-tests" -Arguments @(
+        ":app:tv:testDebugUnitTest",
+        ":catalog:importer:testDebugUnitTest",
+        ":catalog:onboarding:testDebugUnitTest",
+        ":catalog:refresh:testDebugUnitTest",
+        ":catalog:sync:testDebugUnitTest",
+        ":core:credentials:testDebugUnitTest",
+        ":core:database:testDebugUnitTest",
+        ":core:designsystem:testDebugUnitTest",
+        ":core:network:testDebugUnitTest",
+        ":core:ui:testDebugUnitTest",
+        ":feature:channels:testDebugUnitTest",
+        ":feature:home:testDebugUnitTest",
+        ":feature:player:testDebugUnitTest",
+        ":feature:sources:testDebugUnitTest",
+        ":player:media3:testDebugUnitTest"
+    )
+    Add-Step -Name "android-instrumentation-compile" -Arguments @(
+        ":catalog:importer:assembleDebugAndroidTest",
+        ":catalog:refresh:assembleDebugAndroidTest",
+        ":core:credentials:assembleDebugAndroidTest",
+        ":core:database:assembleDebugAndroidTest",
+        ":player:media3:assembleDebugAndroidTest",
+        ":app:tv:assembleDebugAndroidTest"
+    )
+    Add-Step -Name "debug-apk" -Arguments @(
+        ":app:tv:assembleDebug"
+    )
 
-if ($Mode -in @("Full", "Device")) {
-    Add-Step -Name "android-lint" -Arguments @(
-        ":app:tv:lintDebug",
-        ":catalog:importer:lintDebug",
-        ":catalog:onboarding:lintDebug",
-        ":catalog:refresh:lintDebug",
-        ":catalog:sync:lintDebug",
-        ":core:credentials:lintDebug",
-        ":core:database:lintDebug",
-        ":core:designsystem:lintDebug",
-        ":core:network:lintDebug",
-        ":core:ui:lintDebug",
-        ":feature:channels:lintDebug",
-        ":feature:home:lintDebug",
-        ":feature:player:lintDebug",
-        ":feature:sources:lintDebug",
-        ":player:media3:lintDebug"
-    )
-    Add-Step -Name "release-assembly" -Arguments @(
-        ":app:tv:assembleRelease"
-    )
+    if ($Mode -in @("Full", "Device")) {
+        Add-Step -Name "android-lint" -Arguments @(
+            ":app:tv:lintDebug",
+            ":catalog:importer:lintDebug",
+            ":catalog:onboarding:lintDebug",
+            ":catalog:refresh:lintDebug",
+            ":catalog:sync:lintDebug",
+            ":core:credentials:lintDebug",
+            ":core:database:lintDebug",
+            ":core:designsystem:lintDebug",
+            ":core:network:lintDebug",
+            ":core:ui:lintDebug",
+            ":feature:channels:lintDebug",
+            ":feature:home:lintDebug",
+            ":feature:player:lintDebug",
+            ":feature:sources:lintDebug",
+            ":player:media3:lintDebug"
+        )
+        Add-Step -Name "release-assembly" -Arguments @(
+            ":app:tv:assembleRelease"
+        )
+    }
 }
 
 $deviceTestModules = @(
@@ -214,7 +216,7 @@ $deviceTestModules = @(
     [ordered]@{ ModulePath = "app\tv"; DisplayName = "Application instrumentation" }
 )
 
-if ($Mode -eq "Device") {
+if ($Mode -in @("Device", "DeviceOnly")) {
     foreach ($module in $deviceTestModules) {
         $staleResults = Join-Path $repositoryRoot (Join-Path $module.ModulePath "build\outputs\androidTest-results")
         Remove-Item -Path $staleResults -Recurse -Force -ErrorAction SilentlyContinue
@@ -302,7 +304,7 @@ try {
         }
     }
 
-    if ($Mode -eq "Device") {
+    if ($Mode -in @("Device", "DeviceOnly")) {
         foreach ($module in $deviceTestModules) {
             $manifest.instrumentationTests += Assert-AndroidTestCount `
                 -ModulePath $module.ModulePath `
