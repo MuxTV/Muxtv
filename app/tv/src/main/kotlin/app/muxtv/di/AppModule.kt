@@ -40,8 +40,6 @@ import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcePlaybackApprovalResetResult
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
-import app.muxtv.player.PlaybackEngine
-import app.muxtv.player.media3.Media3PlaybackEngineFactory
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.Module
 import dagger.Provides
@@ -243,11 +241,6 @@ object AppModule {
         override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? =
             durable.restoreLatestPrepared()
     }
-
-    @Provides
-    @Singleton
-    fun providePlaybackEngine(@ApplicationContext context: Context): PlaybackEngine =
-        Media3PlaybackEngineFactory.create(context)
 
     @Provides
     @Singleton
