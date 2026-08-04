@@ -68,19 +68,8 @@ internal abstract class RecentChannelsDao {
         limit: Int,
     ): Flow<List<RecentChannelRow>>
 
-    @Query(
-        """
-        SELECT CASE WHEN EXISTS(
-            SELECT 1 FROM profiles WHERE id = :profileId
-        ) AND EXISTS(
-            SELECT 1 FROM canonical_channels WHERE id = :channelId
-        ) THEN 1 ELSE 0 END
-        """,
-    )
-    protected abstract suspend fun targetExists(
-        profileId: String,
-        channelId: String,
-    ): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE id = :profileId)")
+    protected abstract suspend fun profileExists(profileId: String): Boolean
 
     @Query(
         """
@@ -134,7 +123,9 @@ internal abstract class RecentChannelsDao {
         require(successfulAtEpochMillis >= 0L)
         require(retentionLimit > 0)
 
-        if (!targetExists(profileId, channelId)) {
+        // The first-frame event already proves that this logical channel identity was playable.
+        // Catalog cleanup may race the first frame, so only profile lifetime is a write-time gate.
+        if (!profileExists(profileId)) {
             return RecentWriteResult.TargetUnavailable
         }
 
