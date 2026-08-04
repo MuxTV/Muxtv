@@ -86,18 +86,17 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
         )
     }
 
+    // Observe only authoritative publication surfaces. Catalog/EPG staging can write hundreds or
+    // thousands of provider/programme/Search rows while no public Search result is allowed to
+    // change. Source/EPG activation, matching publication and profile overlays are the boundaries
+    // that can actually change visible Search truth.
     @Query(
         """
         SELECT
-            (SELECT COUNT(*) FROM search_documents)
-          + (SELECT COUNT(*) FROM canonical_channels)
-          + (SELECT COUNT(*) FROM provider_channels)
-          + (SELECT COUNT(*) FROM stream_variants)
-          + (SELECT COUNT(*) FROM user_channel_overlays)
-          + (SELECT COUNT(*) FROM sources)
+            (SELECT COUNT(*) FROM sources)
           + (SELECT COUNT(*) FROM epg_sources)
           + (SELECT COUNT(*) FROM epg_channel_matches)
-          + (SELECT COUNT(*) FROM epg_programmes)
+          + (SELECT COUNT(*) FROM user_channel_overlays)
         """,
     )
     protected abstract fun observeChangeToken(): Flow<Long>
