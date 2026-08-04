@@ -16,6 +16,16 @@ internal class PlaybackSetupCoordinator<T : Any>(
     private val install: (PlaybackSetupId, T) -> Unit,
     private val clearInstalled: () -> Unit,
 ) {
+    constructor(
+        cancelledCapacity: Int = DEFAULT_CANCELLED_CAPACITY,
+        install: (T) -> Unit,
+        clearInstalled: () -> Unit,
+    ) : this(
+        cancelledCapacity = cancelledCapacity,
+        install = { _, value -> install(value) },
+        clearInstalled = clearInstalled,
+    )
+
     private val cancelledIds = linkedSetOf<PlaybackSetupId>()
     private var activeId: PlaybackSetupId? = null
 
