@@ -78,7 +78,7 @@ class MeasurementRoomV2AdapterTest {
             ${roomOperation("source-overview-32", 32, 700)}
           ],
           "failureCount": 0,
-          "limitations": []
+          "limitations": ["descriptive debug-instrumentation evidence only"]
         }
     """.trimIndent()
 
