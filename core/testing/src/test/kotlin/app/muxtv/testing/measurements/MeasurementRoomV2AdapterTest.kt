@@ -23,13 +23,13 @@ class MeasurementRoomV2AdapterTest {
 
         assertThat(adapted.identity.methodVersion).isEqualTo(2)
         assertThat(adapted.run.operations.keys).containsExactly(
-            "stage-batch-250",
-            "stage-total-10k",
             "activate-10k",
             "active-channel-first-page",
             "search-exact-number-10k",
             "search-selective-seed-10k",
             "source-overview-32",
+            "stage-batch-250",
+            "stage-total-10k",
         ).inOrder()
         assertThat(adapted.run.operations.getValue("search-exact-number-10k"))
             .containsExactly(500L, 510L, 520L, 530L, 540L).inOrder()
@@ -78,44 +78,61 @@ class MeasurementRoomV2AdapterTest {
             ${roomOperation("source-overview-32", 32, 700)}
           ],
           "failureCount": 0,
-          "limitations": ["Descriptive Android Room evidence only."]
+          "limitations": []
         }
     """.trimIndent()
 
     private fun roomOperation(
-        id: String,
+        operationId: String,
         expectedResultCount: Int,
-        base: Long,
-    ): String = """
-        {
-          "operationId": "$id",
-          "expectedResultCount": $expectedResultCount,
-          "wallTimeNanos": ${summaryJson(base, base + 20, base + 40)},
-          "databaseBytes": ${summaryJson(1000, 1200, 1400)},
-          "walBytes": ${summaryJson(0, 0, 0)},
-          "shmBytes": ${summaryJson(0, 0, 0)},
-          "rawSamples": [
-            {"iteration": 1, "wallTimeNanos": $base, "resultCount": $expectedResultCount, "databaseBytes": 1000, "walBytes": 0, "shmBytes": 0},
-            {"iteration": 2, "wallTimeNanos": ${base + 10}, "resultCount": $expectedResultCount, "databaseBytes": 1100, "walBytes": 0, "shmBytes": 0},
-            {"iteration": 3, "wallTimeNanos": ${base + 20}, "resultCount": $expectedResultCount, "databaseBytes": 1200, "walBytes": 0, "shmBytes": 0},
-            {"iteration": 4, "wallTimeNanos": ${base + 30}, "resultCount": $expectedResultCount, "databaseBytes": 1300, "walBytes": 0, "shmBytes": 0},
-            {"iteration": 5, "wallTimeNanos": ${base + 40}, "resultCount": $expectedResultCount, "databaseBytes": 1400, "walBytes": 0, "shmBytes": 0}
-          ]
+        baseWallTime: Int,
+    ): String {
+        val samples = (1..5).joinToString(",\n") { iteration ->
+            val wallTime = baseWallTime + (iteration - 1) * 10
+            """
+                {
+                  "iteration": $iteration,
+                  "wallTimeNanos": $wallTime,
+                  "resultCount": $expectedResultCount,
+                  "databaseBytes": 1000,
+                  "walBytes": 0,
+                  "shmBytes": 0
+                }
+            """.trimIndent()
         }
-    """.trimIndent()
+        return """
+            {
+              "operationId": "$operationId",
+              "expectedResultCount": $expectedResultCount,
+              "wallTimeNanos": ${summaryJson(baseWallTime)},
+              "databaseBytes": ${constantSummaryJson(1000)},
+              "walBytes": ${constantSummaryJson(0)},
+              "shmBytes": ${constantSummaryJson(0)},
+              "rawSamples": [
+                $samples
+              ]
+            }
+        """.trimIndent()
+    }
 
-    private fun summaryJson(
-        minimum: Long,
-        p50: Long,
-        maximum: Long,
-    ): String = """
+    private fun summaryJson(baseWallTime: Int): String {
+        val values = (0..4).map { baseWallTime + it * 10 }
+        return """
+            {
+              "min": ${values.first()},
+              "median": ${values[2]},
+              "p95": ${values.last()},
+              "max": ${values.last()}
+            }
+        """.trimIndent()
+    }
+
+    private fun constantSummaryJson(value: Int): String = """
         {
-          "sampleCount": 5,
-          "minimum": $minimum,
-          "p50": $p50,
-          "p90": $maximum,
-          "p95": $maximum,
-          "maximum": $maximum
+          "min": $value,
+          "median": $value,
+          "p95": $value,
+          "max": $value
         }
     """.trimIndent()
 }
