@@ -60,11 +60,11 @@ class RecentChannelsRepositoryContractTest {
     }
 
     @Test
-    fun `write result distinguishes applied duplicate and unavailable target`() {
+    fun `write result distinguishes applied duplicate and unavailable profile`() {
         assertThat(RecentChannelWriteResult.entries).containsExactly(
             RecentChannelWriteResult.Applied,
             RecentChannelWriteResult.IgnoredOlderOrDuplicate,
-            RecentChannelWriteResult.TargetUnavailable,
+            RecentChannelWriteResult.ProfileUnavailable,
         ).inOrder()
     }
 
