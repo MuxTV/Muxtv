@@ -37,7 +37,7 @@ internal class RoomRecentChannelsRepository(
             RecentWriteResult.Applied -> RecentChannelWriteResult.Applied
             RecentWriteResult.IgnoredOlderOrDuplicate ->
                 RecentChannelWriteResult.IgnoredOlderOrDuplicate
-            RecentWriteResult.TargetUnavailable -> RecentChannelWriteResult.TargetUnavailable
+            RecentWriteResult.ProfileUnavailable -> RecentChannelWriteResult.ProfileUnavailable
         }
     }
 }
