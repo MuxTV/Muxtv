@@ -111,7 +111,7 @@ class RecentChannelsRepositoryTest {
     }
 
     @Test
-    fun inactiveChannelIsSuppressedButCanonicalIdentitySurvivesCleanupWhileRecentReferencesIt() =
+    fun inactiveChannelHistorySurvivesCatalogCleanupAndReappearsWithSameCanonicalIdentity() =
         runTest {
             activateRevision(1, listOf("channel-a"))
             assertThat(recent.recordSuccessfulPlayback(PROFILE_A, "channel-a", 1_000L))
@@ -122,6 +122,12 @@ class RecentChannelsRepositoryTest {
 
             assertThat(recent.observeRecent(RecentChannelsQuery(PROFILE_A)).first()).isEmpty()
             assertThat(database.recentChannelsDao().countForProfile(PROFILE_A)).isEqualTo(1)
+
+            activateRevision(4, listOf("channel-a"))
+
+            val restored = recent.observeRecent(RecentChannelsQuery(PROFILE_A)).first().single()
+            assertThat(restored.channel.channelId).isEqualTo("channel-a")
+            assertThat(restored.lastSuccessfulPlaybackAtEpochMillis).isEqualTo(1_000L)
         }
 
     @Test
