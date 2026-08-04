@@ -313,6 +313,7 @@ internal class PlayerProxyMeasurementRunner(
         val headerCount: Int = headers.size
 
         fun newRequest(index: Int): PlaybackSessionRequest = PlaybackSessionRequest(
+            profileId = MEASUREMENT_PROFILE_ID,
             mediaId = "$mediaIdPrefix-${index % ID_VARIANTS}",
             variantId = "$variantIdPrefix-${index % ID_VARIANTS}",
             locator = locator,
@@ -335,6 +336,7 @@ internal class PlayerProxyMeasurementRunner(
                 ).toMap()
                 val profile = List(ID_VARIANTS) { index ->
                     PlaybackSessionRequest(
+                        profileId = MEASUREMENT_PROFILE_ID,
                         mediaId = "$mediaIdPrefix-$index",
                         variantId = "$variantIdPrefix-$index",
                         locator = locator,
@@ -367,6 +369,7 @@ internal class PlayerProxyMeasurementRunner(
         const val OPERATION_INSTALL_CLEAR = "coordinator-install-active-clear"
         const val OPERATION_CANCEL_BEFORE_INSTALL = "coordinator-cancel-before-install"
         const val OPERATION_REGISTRY_RECONNECT = "registry-disconnect-reacquire"
+        const val MEASUREMENT_PROFILE_ID = "measurement-profile"
         const val ID_VARIANTS = 32
         const val MAX_ENVIRONMENT_VALUE_LENGTH = 128
         const val MAX_FINGERPRINT_LENGTH = 256
