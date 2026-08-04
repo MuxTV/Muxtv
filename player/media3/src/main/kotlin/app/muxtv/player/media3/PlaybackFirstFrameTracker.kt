@@ -3,8 +3,9 @@ package app.muxtv.player.media3
 /**
  * Service-thread ownership guard for the first rendered frame of the latest playback setup.
  *
- * The setup id prevents stale cancellation/renderer callbacks from completing a newer request.
- * The current MediaItem id must also match the canonical channel id installed for that setup.
+ * Both the callback setup id and current MediaItem id must match the active setup. The explicit
+ * callback id prevents a delayed renderer callback for the same canonical channel from completing
+ * a newer setup generation.
  */
 internal class PlaybackFirstFrameTracker(
     private val elapsedRealtimeNanos: () -> Long,
@@ -41,10 +42,17 @@ internal class PlaybackFirstFrameTracker(
         active = null
     }
 
-    fun onRenderedFirstFrame(currentMediaId: String?): PlaybackFirstFrameEvent? {
+    fun onRenderedFirstFrame(
+        setupId: PlaybackSetupId,
+        currentMediaId: String?,
+    ): PlaybackFirstFrameEvent? {
         val event = synchronized(this) {
             val current = active ?: return@synchronized null
-            if (current.firstFrameReported || currentMediaId != current.channelId) {
+            if (
+                current.firstFrameReported ||
+                current.setupId != setupId ||
+                currentMediaId != current.channelId
+            ) {
                 return@synchronized null
             }
 
