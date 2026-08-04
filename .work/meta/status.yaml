@@ -1,206 +1,138 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-08-01
+updated_at: 2026-08-04
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
-  gradle_project: present_modular_23_projects
-  ci: present_self_hosted_full_device_matrix_focused_measurements_and_variance_smoke
+  gradle_project: present_modular
+  ci: present_self_hosted_full_and_api26_api36_device_matrices
   tests: present_unit_android_instrumentation_migration_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_after_durable_epg_refresh
-  architecture_version: 3
+  documentation: synchronizing_post_favorites
+  architecture_version: 4
 active_branch_after_merge: main
-implementation_source_commit: c31b34d65ef90848bd907a521b9a0ba8860ed83a
-room_schema: 6
+implementation_source_commit: 64b64c933da665d00ac403fd410a39309e773d64
+room_schema: 8
 implemented:
   - android_tv_application_shell
   - navigation3_top_level_routes
   - deterministic_dpad_focus
-  - room_schema_v6_and_migrations
+  - room_schema_v8_and_migrations
   - android_keystore_credentials
   - bounded_secure_network_foundation
   - bounded_streaming_m3u_parser
   - immutable_source_revisions
   - transactional_catalog_staging_and_activation
+  - durable_source_refresh_ownership
   - secure_remote_source_onboarding
   - durable_pending_source_registry
-  - source_refresh_and_scheduling
-  - source_management_ui
   - channels_browser
-  - media3_session_and_basic_player
-  - media3_request_scoped_okhttp_transport
-  - playback_header_isolation
-  - immutable_playback_request_header_snapshots
-  - playback_redirect_downgrade_and_cross_origin_policy
-  - retryable_media_controller_lifecycle
-  - remote_session_reconnect_epoch
-  - cancellable_playback_setup_protocol
+  - media3_process_owned_session_and_player
   - exact_origin_http_playback_approval
-  - encrypted_remote_source_access_v2
-  - singleton_remote_source_access_owner
+  - encrypted_remote_source_access
   - typed_playback_catalog_resolution
-  - player_http_warning_reresolution_and_revocation
-  - redacted_catalog_approval_and_playback_request_diagnostics
-  - redacted_m3u_diagnostics
   - deterministic_m3u_corpus_profiles_1k_10k_50k
-  - canonical_fixed_order_manifest_json
-  - deterministic_m3u_manifest_artifact_pair
-  - repository_owned_corpus_command
-  - bounded_typed_hls_xmltv_starter_fixtures
-  - descriptive_m3u_parse_measurements
-  - descriptive_android_room_stage_activate_query_measurements
-  - descriptive_android_player_proxy_measurements
-  - immutable_measurement_comparison_identity
-  - immutable_measurement_variance_analysis
-  - strict_m3u_room_player_report_adapters
-  - canonical_threshold_free_variance_reports
-  - child_sha_backed_audit_manifests
-  - repository_owned_measurement_profile_catalog
-  - sequential_measurement_series_orchestrator
-  - fresh_avd_per_measurement_repetition
-  - stable_android_measurement_boot_readiness
-  - interrupted_measurement_evidence_finalization
-  - trusted_same_repository_variance_smoke
-  - deterministic_windows_android_sdk_bootstrap
-  - permanent_core_testing_validation_gate
-  - windows_long_path_clean_workspace_gate
-  - api_26_api_36_tv_device_harness
+  - repository_owned_measurement_profiles_and_series
+  - api26_api36_android_tv_device_harness
   - bounded_secure_streaming_xmltv_parser
-  - typed_xmltv_timestamp_normalization
-  - immutable_epg_revisions
-  - epg_current_previous_good_retention
-  - epg_atomic_monotonic_activation
-  - bounded_active_epg_queries
-  - room_v4_to_v5_epg_migration
   - bounded_plain_gzip_zip_epg_payload_decoder
   - secure_conditional_remote_epg_refresh
-  - cancellable_shared_okhttp_await_boundary
-  - epg_http_304_conditional_validation
-  - room_v5_to_v6_epg_refresh_migration
-  - durable_epg_refresh_policy_state_attempts
-  - epg_refresh_http_validator_ownership
-  - epg_refresh_database_lease_and_stale_reclaim
-  - epg_workmanager_manual_startup_periodic_orchestration
-  - epg_startup_policy_constraint_reconciliation
-  - epg_access_and_run_token_publication_ownership
-  - epg_nullable_access_completion_ownership
-  - epg_cancellation_authority_preservation
-  - epg_refresh_diagnostic_redaction
-accepted_specifications:
-  - profiles
-  - domain_model
-  - source_refresh
-  - m3u_ingestion
-  - xmltv_processing
-  - playback_runtime
-  - playback_errors
-  - smart_channels
-  - tv_doctor
-  - focus_navigation
-  - design_system
-  - threat_model
-  - network_source_policy
-  - local_control
-  - self_update_signing
-  - benchmark_methodology
-  - fire_tv
-  - reference_repository_review
-  - exact_origin_http_playback_approval
-  - catalog_database_measurements
-  - player_proxy_measurements
-  - playback_request_header_ownership
-  - repeated_measurement_variance
   - immutable_epg_revisions
-  - secure_remote_epg_refresh
-  - durable_epg_refresh
+  - durable_epg_refresh_policy_state_attempts_and_validators
+  - epg_database_lease_and_stale_reclaim
+  - epg_workmanager_orchestration
+  - deterministic_epg_channel_matching
+  - epg_matching_producer_revision_provenance
+  - epg_matching_policy_version_provenance_room_v8
+  - stale_epg_matching_policy_repair
+  - bounded_now_next_projection
+  - channels_destination_scoped_state
+  - media3_playback_session_projection
+  - stable_player_back_channel_focus_restoration
+  - profile_scoped_channel_favorites
+  - player_favorite_action
+  - channels_all_favorites_filter
+  - favorites_empty_state_recovery
+  - favorites_keyed_relayout_focus_restoration
 verified_evidence:
-  source_focus_merge: 4959e9ef65f2141fdacb588b15111fa607d9b20d
-  media3_transport_merge: f241d0c7eb1b8dfbd89b81e3f21dee75aa34940e
-  controller_lifecycle_merge: 66cf8dbaddafa87be7bfd619515452ceb3c46354
-  setup_reconnect_merge: 8665f80d6e38bc90d10ead0d3a3618fbecd4e304
-  exact_origin_http_approval_merge: 764ec102808c4df57e826d05ce7b1334063bb520
-  deterministic_m3u_foundation_merge: 3e24cccb188b53652285929a11e3b50697aad5f7
-  typed_starter_fixtures_merge: a26fd4ba492948c413b317c168db5678db4ed00e
-  m3u_parse_measurement_merge: ccf61362b61b2097cb56a4589f83edc7fa068ca1
-  android_room_measurement_merge: d5afef744de71715ce3d34acd6ef80c4bd8fa957
-  player_proxy_measurement_merge: e020d747b59e07c45db5076b38409f4319c51b96
-  playback_header_ownership_merge: f1a92a2d8ef05f0dd61b0492b51a732a4978bd54
-  variance_foundation_merge: 76bc9ad9a55d1535a7d6e5ff408502f2062fd8d5
-  measurement_report_adapters_merge: da1b377032a7eb66fcf4086ee7518616047b672b
-  measurement_series_orchestration_merge: a99461b0f54e42d95aea8bf31d81215ced2a49e3
-  measurement_truth_sync_merge: aa47611914f241d06cc98ff5907ddb4a579d63cb
-  xmltv_parser_merge: 0f484905b6aefff5f2e284b521c946b35c4a70de
-  immutable_epg_revision_merge: 1a032c232aef67553354077a3000a1a74e867bee
-  epg_payload_decoder_merge: 34dae3ec4f2a97d574bcf6bb00132c295a707872
-  secure_remote_epg_refresh_merge: 27bb5bc49685779251b75c6e0aa134e4aaf4d3b1
-  durable_epg_refresh_state_merge: ab96f0fee5b80ebc8ae7f5a2cc23608ee5450030
-  durable_epg_refresh_orchestration_merge: c31b34d65ef90848bd907a521b9a0ba8860ed83a
-  measurement_series_final_full_run: 30568786155
-  measurement_series_current_smoke_run: 30568786175
-  xmltv_parser_final_full_run: 30576931624
-  immutable_epg_final_full_run: 30663759211
-  epg_database_migration_matrix_run: 30663759884
-  epg_payload_decoder_final_full_run: 30666205286
-  secure_remote_epg_refresh_final_full_run: 30668000159
-  durable_epg_state_final_full_run: 30703994191
-  durable_epg_state_matrix_run: 30703994190
-  durable_epg_orchestration_final_full_run: 30708756373
-  durable_epg_orchestration_matrix_run: 30708756357
-  current_variance_smoke:
-    source_head: 5091d3a1bdc005a5682b5d0915c617f7491885eb
-    profile: current-normal
-    api: 36
-    image: system-images;android-36;android-tv;x86_64
-    ram_mb: 2048
-    cpu_cores: 2
-    repetitions: 2
-    threshold_applied: false
-    status: passed
+  now_next_channels_merge: 7e1f18f31ab8628a104f2668d87e6478d7559242
+  favorites_merge: 64b64c933da665d00ac403fd410a39309e773d64
+  favorites_exact_head: cdd43173d00f3817555b2c640c411d82a9d75244
+  favorites_full_run: 30873814952
+  favorites_product_matrix_run: 30873814955
+  favorites_database_matrix_run: 30873814953
+  favorites_product_app_tests_per_api: 18
+  favorites_database_tests_per_api: 93
+  favorites_channel_preferences_tests: 5
   device_profiles:
     - api: 26
       image: system-images;android-26;android-tv;x86
-      fallback_used: false
       ram_mb: 1536
       cpu_cores: 2
     - api: 36
       image: system-images;android-36;android-tv;x86_64
-      fallback_used: false
       ram_mb: 2048
       cpu_cores: 2
+active_work:
+  search_core:
+    issue: 29
+    pr: 94
+    target_room_schema: 9
+    status: post_favorites_rebuild_required
+    implemented_on_working_branch:
+      - bounded_channel_search_api
+      - unicode_fts4_unicode61_candidate_index
+      - safe_prefix_query_encoding
+      - compact_unique_epg_title_vocabulary
+      - active_catalog_and_current_policy_epg_revalidation
+      - selective_seed_multi_token_intersection
+      - structured_tv_ranking
+      - programme_boundary_invalidation
+      - rowid_preserving_search_document_lifecycle
+    remaining_gates:
+      - clean_post_favorites_review_surface
+      - commit_room_generated_schema_9
+      - exact_head_compile_and_ksp
+      - api26_api36_v8_to_v9_migration
+      - api26_api36_unicode61_runtime_proof
+      - nonzero_search_contracts
+      - existing_publication_regressions_green
+      - descriptive_db_size_backfill_query_measurements
+      - guarded_squash_merge
 next_milestone:
-  id: phase-01-source-refresh-ownership-hardening
-  issue: 76
-  plan: docs/superpowers/plans/2026-08-01-epg-orchestration-review-addendum.md
-  completed_packages:
-    - deterministic_corpus_and_measurement_foundation
-    - bounded_xmltv_streaming_parser
-    - immutable_epg_room_v5
-    - bounded_epg_payload_decoder
-    - secure_conditional_remote_epg_refresh
-    - durable_epg_refresh_persistence_room_v6
-    - durable_epg_workmanager_orchestration_and_publication_ownership
+  id: phase_01_daily_use_search
+  issue: 29
   immediate_sequence:
-    - source_refresh_publication_ownership_issue_76
-    - deterministic_epg_channel_matching_and_now_next_issue_71
-    - close_issue_28_after_integration_evidence
-  parallel_work:
-    - issue_27_five_run_current_normal
-    - issue_27_five_run_old_edge_normal
-    - issue_27_five_run_current_low_ram
-    - issue_27_cross_profile_interpretation
-    - issue_27_per_operation_threshold_decisions
+    - search_core_room_v9
+    - search_tv_route_and_focus
+    - recent_successful_playback_history_room_v10
+    - bounded_guide_viewport
+    - issue_30_playback_recovery_and_tv_doctor
+    - issue_33_tv_ux_polish
+    - issue_31_alpha_hardening
+parallel_work:
+  issue_27:
+    - five_run_current_normal
+    - five_run_old_edge_normal
+    - five_run_current_low_ram
+    - cross_profile_interpretation
+    - per_operation_threshold_decisions
+    - durable_performance_report
+closed_superseded_or_unmerged:
+  - pr_83_stale_performance_stage1
+  - pr_87_measurement_unproven_xmltv_allocation
+  - pr_88_superseded_truth_sync
+  - pr_89_measurement_unproven_epg_allocation
+  - pr_91_superseded_favorites_stack
 known_gaps:
-  - source_refresh_binding_and_run_token_publication_ownership
-  - source_refresh_completion_binding_guard
-  - source_refresh_cancellation_authority_and_entity_redaction
-  - deterministic_epg_channel_matching
-  - bounded_now_next_projection
-  - five_run_multi_profile_measurement_variance
-  - guide_search_favorites_recent_product_flows
+  - search_core_not_accepted
+  - search_tv_not_implemented
+  - recent_successful_playback_history
+  - bounded_guide_screen
   - playback_variant_fallback
   - tv_doctor_lite
-  - light_tv_first_visual_modernization
+  - final_tv_first_visual_modernization
+  - five_run_multi_profile_performance_evidence
   - r8_baseline_and_startup_profiles
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
@@ -213,8 +145,9 @@ deferred:
   - vod_movies_series
   - multiview
   - executable_extensions
+  - bundled_sqlite
   - libmpv
-  - rust_engine
+  - rust_uniffi_engine
   - cloud_sync
   - tizen
   - webos
