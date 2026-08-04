@@ -131,13 +131,32 @@ class RecentChannelsRepositoryTest {
         }
 
     @Test
-    fun missingProfileOrCanonicalTargetIsUnavailable() = runTest {
+    fun firstFrameIdentityCanBeRecordedAfterCatalogCleanupRace() = runTest {
+        activateRevision(1, listOf("channel-a"))
+        activateRevision(2, listOf("channel-b"))
+        activateRevision(3, listOf("channel-c"))
+
+        assertThat(recent.recordSuccessfulPlayback(PROFILE_A, "channel-a", 7_000L))
+            .isEqualTo(RecentChannelWriteResult.Applied)
+        assertThat(recent.observeRecent(RecentChannelsQuery(PROFILE_A)).first()).isEmpty()
+        assertThat(database.recentChannelsDao().countForProfile(PROFILE_A)).isEqualTo(1)
+
+        activateRevision(4, listOf("channel-a"))
+
+        val restored = recent.observeRecent(RecentChannelsQuery(PROFILE_A)).first().single()
+        assertThat(restored.lastSuccessfulPlaybackAtEpochMillis).isEqualTo(7_000L)
+    }
+
+    @Test
+    fun missingProfileIsUnavailableButTrustedLogicalChannelIdentityIsBoundedAndAccepted() = runTest {
         activateRevision(1, listOf("channel-a"))
 
         assertThat(recent.recordSuccessfulPlayback("missing-profile", "channel-a", 1_000L))
             .isEqualTo(RecentChannelWriteResult.TargetUnavailable)
         assertThat(recent.recordSuccessfulPlayback(PROFILE_A, "missing-channel", 1_000L))
-            .isEqualTo(RecentChannelWriteResult.TargetUnavailable)
+            .isEqualTo(RecentChannelWriteResult.Applied)
+        assertThat(database.recentChannelsDao().countForProfile(PROFILE_A)).isEqualTo(1)
+        assertThat(recent.observeRecent(RecentChannelsQuery(PROFILE_A)).first()).isEmpty()
     }
 
     private suspend fun insertProfile(profileId: String, primary: Boolean) {
