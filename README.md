@@ -121,7 +121,7 @@ pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
 - repository truth: [`.work/CURRENT-STATE.md`](.work/CURRENT-STATE.md);
 - machine-readable status: [`.work/meta/status.yaml`](.work/meta/status.yaml);
 - current execution plan: [`docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md`](docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md);
-- Search comparative research: [`docs/research/2026-08-03-tv-search-comparative-review.md`](docs/research/2026-08-03-tv-search-comparative-review.md) (currently on active Search work until merged);
+- Search comparative research remains attached to the active Search work until that code is accepted into `main`;
 - benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md).
 
 ## Лицензия
