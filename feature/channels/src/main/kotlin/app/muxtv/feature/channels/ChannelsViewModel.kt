@@ -44,25 +44,37 @@ internal class ChannelsViewModel(
     private val mutableUiState = MutableStateFlow<ChannelsUiState>(ChannelsUiState.Loading)
     val uiState: StateFlow<ChannelsUiState> = mutableUiState.asStateFlow()
 
+    private val mutableFavoritesOnly = MutableStateFlow(false)
+    val favoritesOnly: StateFlow<Boolean> = mutableFavoritesOnly.asStateFlow()
+
     private val guideReloadMutex = Mutex()
     private var currentChannels: List<PlayableChannelSummary> = emptyList()
     private var currentGuide: List<ChannelNowNext> = emptyList()
     private var currentPlaybackSessionState: PlaybackSessionState = PlaybackSessionState.Idle
     private var guideGeneration: Long = 0
+    private var catalogObserverJob: Job? = null
     private var guideObserverJob: Job? = null
     private var boundaryJob: Job? = null
 
     init {
         require(profileId.isNotBlank())
-        observeChannels()
+        observeChannels(favoritesOnly = false)
         observePlaybackSession()
     }
 
-    private fun observeChannels() {
-        viewModelScope.launch {
+    fun setFavoritesOnly(favoritesOnly: Boolean) {
+        if (mutableFavoritesOnly.value == favoritesOnly) return
+        mutableFavoritesOnly.value = favoritesOnly
+        observeChannels(favoritesOnly)
+    }
+
+    private fun observeChannels(favoritesOnly: Boolean) {
+        catalogObserverJob?.cancel()
+        catalogObserverJob = viewModelScope.launch {
             playbackCatalog.observeChannels(
                 ChannelQuery(
                     profileId = profileId,
+                    favoritesOnly = favoritesOnly,
                     limit = CHANNEL_LIMIT,
                 ),
             )

@@ -70,6 +70,7 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        channelPreferencesRepository = NoChannelPreferencesRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,

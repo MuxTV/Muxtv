@@ -14,8 +14,10 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
@@ -29,6 +31,7 @@ import app.muxtv.feature.channels.ChannelsRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import org.junit.Rule
 import org.junit.Test
 
@@ -134,6 +137,91 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
+    fun favoritesFilterKeepsFocusedFavoriteChannel() {
+        val catalog = MutablePlaybackCatalog(
+            testChannels.map { channel ->
+                if (channel.channelId == "channel-b") channel.copy(isFavorite = true) else channel
+            },
+        )
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = catalog,
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        moveFocusToSecondChannel()
+        composeRule.onNodeWithTag("channels-filter-favorites").performClick()
+        composeRule.waitUntilText("★  Второй")
+        composeRule.waitForIdle()
+
+        // The product contract is stable canonical-channel focus, not positional lazy-item
+        // identity. On old Compose/TV runtimes a removed keyed item can briefly retain its old
+        // index-derived test tag even after the surviving channel has been placed and focused.
+        // Assert the actual surviving favorite semantics instead of coupling this contract to
+        // `channel-row-0` after a 1 -> 0 reorder.
+        composeRule.onNodeWithText("★  Второй", substring = false).assertIsFocused()
+    }
+
+    @Test
+    fun favoritesFilterIsReachableAndOperableWithDpad() {
+        val catalog = MutablePlaybackCatalog(
+            testChannels.mapIndexed { index, channel ->
+                if (index == 0) channel.copy(isFavorite = true) else channel
+            },
+        )
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = catalog,
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        openFavoritesFromFirstRowWithDpad()
+        composeRule.waitUntilText("★  Первый")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("★  Первый", substring = false).assertExists()
+    }
+
+    @Test
+    fun emptyFavoritesRecoveryActionReceivesFocus() {
+        composeRule.setContent {
+            MuxTvTheme {
+                ChannelsRoute(
+                    playbackCatalog = MutablePlaybackCatalog(),
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    playbackSessionStateSource = NoPlaybackSessionStateSource,
+                    profileId = "profile-main",
+                    onOpenChannel = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        openFavoritesFromFirstRowWithDpad()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Показать все каналы").assertIsFocused()
+    }
+
+    @Test
     fun guideProjectionAppearsWithoutChangingInitialFocus() {
         composeRule.setContent {
             MuxTvTheme {
@@ -173,6 +261,21 @@ class ChannelsFocusRestorationTest {
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
     }
 
+    private fun openFavoritesFromFirstRowWithDpad() {
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        composeRule.onNodeWithTag("channels-filter-all").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-all").performKeyInput {
+            keyDown(Key.DirectionRight)
+            keyUp(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-favorites").pressEnter()
+    }
+
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilPlayerBack() {
         waitUntil(timeoutMillis = 5_000) {
             onAllNodesWithTag("test-player-back").fetchSemanticsNodes().size == 1
@@ -182,6 +285,12 @@ class ChannelsFocusRestorationTest {
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilChannelRow(index: Int) {
         waitUntil(timeoutMillis = 5_000) {
             onAllNodesWithTag("channel-row-$index").fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilText(text: String) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithText(text, substring = false).fetchSemanticsNodes().size == 1
         }
     }
 }
@@ -215,7 +324,7 @@ private val testChannels = listOf(
 
 private object StaticPlaybackCatalog : PlaybackCatalog {
     override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
-        flowOf(testChannels)
+        flowOf(testChannels.filterFor(query))
 
     override suspend fun getChannel(
         profileId: String,
@@ -241,14 +350,17 @@ private object StaticPlaybackCatalog : PlaybackCatalog {
     ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
 
-private class MutablePlaybackCatalog : PlaybackCatalog {
-    private val channels = MutableStateFlow(testChannels)
+private class MutablePlaybackCatalog(
+    initialChannels: List<PlayableChannelSummary> = testChannels,
+) : PlaybackCatalog {
+    private val channels = MutableStateFlow(initialChannels)
 
     fun remove(channelId: String) {
         channels.value = channels.value.filterNot { it.channelId == channelId }
     }
 
-    override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> = channels
+    override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
+        channels.map { rows -> rows.filterFor(query) }
 
     override suspend fun getChannel(
         profileId: String,
@@ -273,6 +385,9 @@ private class MutablePlaybackCatalog : PlaybackCatalog {
         variantId: String,
     ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
+
+private fun List<PlayableChannelSummary>.filterFor(query: ChannelQuery): List<PlayableChannelSummary> =
+    if (query.favoritesOnly) filter(PlayableChannelSummary::isFavorite) else this
 
 private fun testChannel(
     id: String,
