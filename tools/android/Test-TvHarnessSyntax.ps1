@@ -135,11 +135,17 @@ if (Test-Path $productWorkflowPath -PathType Leaf) {
     if ($productWorkflowContent -notmatch '-ConnectedSuite\s+Product') {
         $messages += "Android TV product workflow must explicitly select ConnectedSuite Product."
     }
+    if ($productWorkflowContent -notmatch 'tools/verify-local\.ps1') {
+        $messages += "Android TV product workflow path ownership must include tools/verify-local.ps1."
+    }
 }
 if (Test-Path $databaseWorkflowPath -PathType Leaf) {
     $databaseWorkflowContent = Get-Content -Path $databaseWorkflowPath -Raw
     if ($databaseWorkflowContent -notmatch '-ConnectedSuite\s+Database') {
         $messages += "Database migration workflow must explicitly select ConnectedSuite Database."
+    }
+    if ($databaseWorkflowContent -notmatch 'tools/verify-local\.ps1') {
+        $messages += "Database migration workflow path ownership must include tools/verify-local.ps1."
     }
 }
 
