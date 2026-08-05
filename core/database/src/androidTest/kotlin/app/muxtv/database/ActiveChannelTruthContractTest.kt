@@ -350,18 +350,34 @@ class ActiveChannelTruthContractTest {
         assertThat(
             database.epgMatchingDao().replaceIfCurrent(
                 snapshot = snapshot,
-                matches = matches.map { (externalId, channelId) ->
-                    EpgChannelMatchEntity(
-                        epgSourceId = EPG_SOURCE_ID,
-                        epgRevisionNumber = EPG_REVISION,
-                        providerSourceId = SOURCE_ID,
-                        catalogRevisionNumber = catalogRevisionNumber,
-                        epgExternalChannelId = externalId,
-                        decision = EpgChannelMatchDecision.MATCHED.name,
-                        reasonCode = EpgMatchReasonCode.EXACT_ID.name,
-                        canonicalChannelId = channelId,
-                        candidateCount = 1,
-                    )
+                matches = ALL_CHANNELS.map { channelId ->
+                    val externalId = externalId(channelId)
+                    val canonicalChannelId = matches[externalId]
+                    if (canonicalChannelId == null) {
+                        EpgChannelMatchEntity(
+                            epgSourceId = EPG_SOURCE_ID,
+                            epgRevisionNumber = EPG_REVISION,
+                            providerSourceId = SOURCE_ID,
+                            catalogRevisionNumber = catalogRevisionNumber,
+                            epgExternalChannelId = externalId,
+                            decision = EpgChannelMatchDecision.UNRESOLVED.name,
+                            reasonCode = EpgMatchReasonCode.NO_MATCH.name,
+                            canonicalChannelId = null,
+                            candidateCount = 0,
+                        )
+                    } else {
+                        EpgChannelMatchEntity(
+                            epgSourceId = EPG_SOURCE_ID,
+                            epgRevisionNumber = EPG_REVISION,
+                            providerSourceId = SOURCE_ID,
+                            catalogRevisionNumber = catalogRevisionNumber,
+                            epgExternalChannelId = externalId,
+                            decision = EpgChannelMatchDecision.MATCHED.name,
+                            reasonCode = EpgMatchReasonCode.EXACT_ID.name,
+                            canonicalChannelId = canonicalChannelId,
+                            candidateCount = 1,
+                        )
+                    }
                 },
             ),
         ).isEqualTo(EpgMatchPublicationResult.Applied)
