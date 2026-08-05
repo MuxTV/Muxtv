@@ -1,3 +1,4 @@
+import app.muxtv.buildlogic.VerifyCurrentRoomSchemaTask
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Sync
 
@@ -38,8 +39,27 @@ val publishRoomSchemasEvidence = tasks.register<Sync>("publishRoomSchemasEvidenc
     into(rootProject.layout.projectDirectory.dir(".work/evidence/room-schemas"))
 }
 
+val verifyCurrentRoomSchema = tasks.register<VerifyCurrentRoomSchemaTask>(
+    "verifyCurrentRoomSchema",
+) {
+    group = "verification"
+    description =
+        "Verifies that the current generated Room schema is committed and matches the database version."
+    versionSource.set(
+        layout.projectDirectory.file(
+            "src/main/kotlin/app/muxtv/database/CurrentDatabaseMigrations.kt",
+        ),
+    )
+    schemaRoot.set(
+        layout.projectDirectory.dir(
+            "schemas/app.muxtv.database.MuxTvDatabase",
+        ),
+    )
+    repositoryRoot.set(rootProject.layout.projectDirectory)
+}
+
 tasks.matching { it.name == "copyRoomSchemas" }.configureEach {
-    finalizedBy(publishRoomSchemasEvidence)
+    finalizedBy(publishRoomSchemasEvidence, verifyCurrentRoomSchema)
 }
 
 dependencies {

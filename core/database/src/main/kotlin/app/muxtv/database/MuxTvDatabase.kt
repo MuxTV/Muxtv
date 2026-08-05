@@ -30,7 +30,7 @@ import androidx.room3.RoomDatabase
         SearchDocumentEntity::class,
         SearchDocumentFtsEntity::class,
     ],
-    version = 10,
+    version = CURRENT_DATABASE_VERSION,
     exportSchema = true,
 )
 internal abstract class MuxTvDatabase : RoomDatabase() {
