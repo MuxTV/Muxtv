@@ -152,7 +152,7 @@ class RecentChannelsRepositoryTest {
         activateRevision(1, listOf("channel-a"))
 
         assertThat(recent.recordSuccessfulPlayback("missing-profile", "channel-a", 1_000L))
-            .isEqualTo(RecentChannelWriteResult.TargetUnavailable)
+            .isEqualTo(RecentChannelWriteResult.ProfileUnavailable)
         assertThat(recent.recordSuccessfulPlayback(PROFILE_A, "missing-channel", 1_000L))
             .isEqualTo(RecentChannelWriteResult.Applied)
         assertThat(database.recentChannelsDao().countForProfile(PROFILE_A)).isEqualTo(1)
