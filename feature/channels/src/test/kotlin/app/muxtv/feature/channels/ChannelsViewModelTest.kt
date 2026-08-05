@@ -15,6 +15,10 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
+import app.muxtv.catalog.RecentChannel
+import app.muxtv.catalog.RecentChannelWriteResult
+import app.muxtv.catalog.RecentChannelsQuery
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
@@ -55,12 +59,8 @@ class ChannelsViewModelTest {
 
     @Test
     fun `screen owner combines catalog rows with guide projection`() = runTest {
-        val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
-        )
-        val guide = FakeGuideRepository().apply {
-            currentTitle = "Новости"
-        }
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
+        val guide = FakeGuideRepository().apply { currentTitle = "Новости" }
         val viewModel = createViewModel(catalog, guide)
 
         val state = viewModel.uiState.value as ChannelsUiState.Content
@@ -73,9 +73,7 @@ class ChannelsViewModelTest {
 
     @Test
     fun `ordinary guide failure degrades to channel only content`() = runTest {
-        val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
-        )
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
         val guide = FakeGuideRepository().apply {
             failure = IllegalStateException("synthetic guide failure")
         }
@@ -89,12 +87,8 @@ class ChannelsViewModelTest {
 
     @Test
     fun `guide invalidation reloads the bounded projection`() = runTest {
-        val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
-        )
-        val guide = FakeGuideRepository().apply {
-            currentTitle = "Первая программа"
-        }
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
+        val guide = FakeGuideRepository().apply { currentTitle = "Первая программа" }
         val viewModel = createViewModel(catalog, guide)
         assertThat(
             (viewModel.uiState.value as ChannelsUiState.Content).rows.single().currentTitle,
@@ -112,22 +106,14 @@ class ChannelsViewModelTest {
     @Test
     fun `metadata and order changes reuse guide snapshot`() = runTest {
         val catalog = FakePlaybackCatalog(
-            listOf(
-                channel("channel-a", "Alpha"),
-                channel("channel-b", "Beta"),
-            ),
+            listOf(channel("channel-a", "Alpha"), channel("channel-b", "Beta")),
         )
-        val guide = FakeGuideRepository().apply {
-            currentTitle = "Программа"
-        }
+        val guide = FakeGuideRepository().apply { currentTitle = "Программа" }
         val viewModel = createViewModel(catalog, guide)
         assertThat(guide.queryCount).isEqualTo(1)
 
         catalog.replaceChannels(
-            listOf(
-                channel("channel-b", "Beta updated"),
-                channel("channel-a", "Alpha updated"),
-            ),
+            listOf(channel("channel-b", "Beta updated"), channel("channel-a", "Alpha updated")),
         )
 
         val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
@@ -142,20 +128,13 @@ class ChannelsViewModelTest {
 
     @Test
     fun `channel membership change reloads guide for the new bounded set`() = runTest {
-        val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
-        )
-        val guide = FakeGuideRepository().apply {
-            currentTitle = "Программа"
-        }
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
+        val guide = FakeGuideRepository().apply { currentTitle = "Программа" }
         val viewModel = createViewModel(catalog, guide)
         assertThat(guide.queryCount).isEqualTo(1)
 
         catalog.replaceChannels(
-            listOf(
-                channel("channel-a", "Alpha"),
-                channel("channel-b", "Beta"),
-            ),
+            listOf(channel("channel-a", "Alpha"), channel("channel-b", "Beta")),
         )
 
         val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
@@ -177,39 +156,70 @@ class ChannelsViewModelTest {
         assertThat((viewModel.uiState.value as ChannelsUiState.Content).rows).hasSize(2)
         assertThat(guide.queryCount).isEqualTo(1)
 
-        viewModel.setFavoritesOnly(true)
+        viewModel.setFilter(ChannelsFilter.FAVORITES)
         runCurrent()
 
-        assertThat(viewModel.favoritesOnly.value).isTrue()
+        assertThat(viewModel.filter.value).isEqualTo(ChannelsFilter.FAVORITES)
         val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
         assertThat(rows.map(ChannelRowProjection::channelId)).containsExactly("channel-b")
         assertThat(guide.queryCount).isEqualTo(2)
     }
 
     @Test
-    fun `empty favorites can switch back to all channels`() = runTest {
+    fun `recent filter preserves repository newest-first order`() = runTest {
         val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
+            listOf(channel("channel-a", "Alpha"), channel("channel-b", "Beta")),
         )
-        val viewModel = createViewModel(catalog, FakeGuideRepository())
+        val recent = FakeRecentChannelsRepository(
+            listOf(
+                recent(channel("channel-b", "Beta"), 2_000L),
+                recent(channel("channel-a", "Alpha"), 1_000L),
+            ),
+        )
+        val guide = FakeGuideRepository()
+        val viewModel = createViewModel(catalog, guide, recent = recent)
 
-        viewModel.setFavoritesOnly(true)
+        viewModel.setFilter(ChannelsFilter.RECENT)
+        runCurrent()
+
+        assertThat(viewModel.filter.value).isEqualTo(ChannelsFilter.RECENT)
+        val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
+        assertThat(rows.map(ChannelRowProjection::channelId))
+            .containsExactly("channel-b", "channel-a").inOrder()
+        assertThat(recent.lastQuery?.profileId).isEqualTo("profile-main")
+        assertThat(recent.lastQuery?.limit).isEqualTo(RecentChannelsQuery.DEFAULT_LIMIT)
+        assertThat(guide.queryCount).isEqualTo(2)
+    }
+
+    @Test
+    fun `empty filtered views can switch back to all channels`() = runTest {
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
+        val recent = FakeRecentChannelsRepository(emptyList())
+        val viewModel = createViewModel(catalog, FakeGuideRepository(), recent = recent)
+
+        viewModel.setFilter(ChannelsFilter.FAVORITES)
         runCurrent()
         assertThat(viewModel.uiState.value).isEqualTo(ChannelsUiState.Empty)
 
-        viewModel.setFavoritesOnly(false)
+        viewModel.setFilter(ChannelsFilter.ALL)
+        runCurrent()
+        assertThat((viewModel.uiState.value as ChannelsUiState.Content).rows).hasSize(1)
+
+        viewModel.setFilter(ChannelsFilter.RECENT)
+        runCurrent()
+        assertThat(viewModel.uiState.value).isEqualTo(ChannelsUiState.Empty)
+
+        viewModel.setFilter(ChannelsFilter.ALL)
         runCurrent()
 
-        assertThat(viewModel.favoritesOnly.value).isFalse()
+        assertThat(viewModel.filter.value).isEqualTo(ChannelsFilter.ALL)
         val rows = (viewModel.uiState.value as ChannelsUiState.Content).rows
         assertThat(rows.map(ChannelRowProjection::channelId)).containsExactly("channel-a")
     }
 
     @Test
     fun `programme boundary reloads guide once when the boundary is reached`() = runTest {
-        val catalog = FakePlaybackCatalog(
-            listOf(channel("channel-a", "Alpha")),
-        )
+        val catalog = FakePlaybackCatalog(listOf(channel("channel-a", "Alpha")))
         val guide = FakeGuideRepository().apply {
             currentTitle = "Первая программа"
             nextBoundaryEpochMillis = 1_100L
@@ -238,14 +248,11 @@ class ChannelsViewModelTest {
     @Test
     fun `playback session updates current channel without reloading guide`() = runTest {
         val catalog = FakePlaybackCatalog(
-            listOf(
-                channel("channel-a", "Alpha"),
-                channel("channel-b", "Beta"),
-            ),
+            listOf(channel("channel-a", "Alpha"), channel("channel-b", "Beta")),
         )
         val guide = FakeGuideRepository()
         val playback = FakePlaybackSessionStateSource()
-        val viewModel = createViewModel(catalog, guide, playback)
+        val viewModel = createViewModel(catalog, guide, playback = playback)
         assertThat(guide.queryCount).isEqualTo(1)
 
         playback.state.value = PlaybackSessionState(
@@ -264,6 +271,7 @@ class ChannelsViewModelTest {
     private fun createViewModel(
         catalog: PlaybackCatalog,
         guide: EpgGuideRepository,
+        recent: RecentChannelsRepository = FakeRecentChannelsRepository(emptyList()),
         playback: PlaybackSessionStateSource = FakePlaybackSessionStateSource(),
         nowEpochMillis: () -> Long = { 1_000L },
     ): ChannelsViewModel {
@@ -272,6 +280,7 @@ class ChannelsViewModelTest {
             initializer {
                 ChannelsViewModel(
                     playbackCatalog = catalog,
+                    recentChannelsRepository = recent,
                     epgGuideRepository = guide,
                     playbackSessionStateSource = playback,
                     profileId = "profile-main",
@@ -286,16 +295,23 @@ class ChannelsViewModelTest {
         id: String,
         name: String,
         isFavorite: Boolean = false,
-    ): PlayableChannelSummary =
-        PlayableChannelSummary(
-            channelId = id,
-            displayName = name,
-            logoUrl = null,
-            groupTitle = null,
-            channelNumber = null,
-            isFavorite = isFavorite,
-            variantCount = 1,
-        )
+    ): PlayableChannelSummary = PlayableChannelSummary(
+        channelId = id,
+        displayName = name,
+        logoUrl = null,
+        groupTitle = null,
+        channelNumber = null,
+        isFavorite = isFavorite,
+        variantCount = 1,
+    )
+
+    private fun recent(
+        channel: PlayableChannelSummary,
+        timestamp: Long,
+    ): RecentChannel = RecentChannel(
+        channel = channel,
+        lastSuccessfulPlaybackAtEpochMillis = timestamp,
+    )
 }
 
 private class FakePlaybackCatalog(
@@ -332,6 +348,25 @@ private class FakePlaybackCatalog(
         channelId: String,
         variantId: String,
     ): PlaybackAccessMutationResult = error("Not used by ChannelsViewModelTest")
+}
+
+private class FakeRecentChannelsRepository(
+    initialRecent: List<RecentChannel>,
+) : RecentChannelsRepository {
+    private val recent = MutableStateFlow(initialRecent)
+    var lastQuery: RecentChannelsQuery? = null
+        private set
+
+    override fun observeRecent(query: RecentChannelsQuery): Flow<List<RecentChannel>> {
+        lastQuery = query
+        return recent.map { rows -> rows.take(query.limit) }
+    }
+
+    override suspend fun recordSuccessfulPlayback(
+        profileId: String,
+        channelId: String,
+        successfulAtEpochMillis: Long,
+    ): RecentChannelWriteResult = error("Not used by ChannelsViewModelTest")
 }
 
 private class FakeGuideRepository : EpgGuideRepository {

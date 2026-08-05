@@ -8,21 +8,31 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsQuery
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+internal enum class ChannelsFilter {
+    ALL,
+    FAVORITES,
+    RECENT,
+}
 
 internal sealed interface ChannelsUiState {
     data object Loading : ChannelsUiState
@@ -36,6 +46,7 @@ internal sealed interface ChannelsUiState {
 
 internal class ChannelsViewModel(
     private val playbackCatalog: PlaybackCatalog,
+    private val recentChannelsRepository: RecentChannelsRepository,
     private val epgGuideRepository: EpgGuideRepository,
     private val playbackSessionStateSource: PlaybackSessionStateSource,
     private val profileId: String,
@@ -44,8 +55,8 @@ internal class ChannelsViewModel(
     private val mutableUiState = MutableStateFlow<ChannelsUiState>(ChannelsUiState.Loading)
     val uiState: StateFlow<ChannelsUiState> = mutableUiState.asStateFlow()
 
-    private val mutableFavoritesOnly = MutableStateFlow(false)
-    val favoritesOnly: StateFlow<Boolean> = mutableFavoritesOnly.asStateFlow()
+    private val mutableFilter = MutableStateFlow(ChannelsFilter.ALL)
+    val filter: StateFlow<ChannelsFilter> = mutableFilter.asStateFlow()
 
     private val guideReloadMutex = Mutex()
     private var currentChannels: List<PlayableChannelSummary> = emptyList()
@@ -58,26 +69,24 @@ internal class ChannelsViewModel(
 
     init {
         require(profileId.isNotBlank())
-        observeChannels(favoritesOnly = false)
+        observeChannels(ChannelsFilter.ALL)
         observePlaybackSession()
     }
 
-    fun setFavoritesOnly(favoritesOnly: Boolean) {
-        if (mutableFavoritesOnly.value == favoritesOnly) return
-        mutableFavoritesOnly.value = favoritesOnly
-        observeChannels(favoritesOnly)
+    fun setFilter(filter: ChannelsFilter) {
+        if (mutableFilter.value == filter) return
+        mutableFilter.value = filter
+        observeChannels(filter)
     }
 
-    private fun observeChannels(favoritesOnly: Boolean) {
+    private fun observeChannels(filter: ChannelsFilter) {
         catalogObserverJob?.cancel()
+        invalidateGuideGeneration()
+        currentChannels = emptyList()
+        currentGuide = emptyList()
+        mutableUiState.value = ChannelsUiState.Loading
         catalogObserverJob = viewModelScope.launch {
-            playbackCatalog.observeChannels(
-                ChannelQuery(
-                    profileId = profileId,
-                    favoritesOnly = favoritesOnly,
-                    limit = CHANNEL_LIMIT,
-                ),
-            )
+            channelFlow(filter)
                 .catch {
                     invalidateGuideGeneration()
                     currentChannels = emptyList()
@@ -88,6 +97,28 @@ internal class ChannelsViewModel(
                     acceptChannels(channels)
                 }
         }
+    }
+
+    private fun channelFlow(filter: ChannelsFilter): Flow<List<PlayableChannelSummary>> = when (filter) {
+        ChannelsFilter.ALL -> playbackCatalog.observeChannels(
+            ChannelQuery(
+                profileId = profileId,
+                favoritesOnly = false,
+                limit = CHANNEL_LIMIT,
+            ),
+        )
+
+        ChannelsFilter.FAVORITES -> playbackCatalog.observeChannels(
+            ChannelQuery(
+                profileId = profileId,
+                favoritesOnly = true,
+                limit = CHANNEL_LIMIT,
+            ),
+        )
+
+        ChannelsFilter.RECENT -> recentChannelsRepository.observeRecent(
+            RecentChannelsQuery(profileId = profileId),
+        ).map { recent -> recent.map { item -> item.channel } }
     }
 
     private fun observePlaybackSession() {

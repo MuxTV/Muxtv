@@ -23,6 +23,10 @@ import app.muxtv.catalog.PlayableVariant
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
+import app.muxtv.catalog.RecentChannel
+import app.muxtv.catalog.RecentChannelWriteResult
+import app.muxtv.catalog.RecentChannelsQuery
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
@@ -72,6 +76,7 @@ class AppNavigationSourceJourneyTest {
                         playbackCatalog = playbackCatalog,
                         channelPreferencesRepository = NoChannelPreferencesRepository,
                         channelSearchRepository = NoChannelSearchRepository,
+                        recentChannelsRepository = NoRecentChannelsRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
@@ -154,6 +159,16 @@ private fun SemanticsNodeInteraction.press(
             keyUp(key)
         }
     }
+}
+
+private object NoRecentChannelsRepository : RecentChannelsRepository {
+    override fun observeRecent(query: RecentChannelsQuery): Flow<List<RecentChannel>> = flowOf(emptyList())
+
+    override suspend fun recordSuccessfulPlayback(
+        profileId: String,
+        channelId: String,
+        successfulAtEpochMillis: Long,
+    ): RecentChannelWriteResult = RecentChannelWriteResult.ProfileUnavailable
 }
 
 private class JourneySourceEntryOnboarding(

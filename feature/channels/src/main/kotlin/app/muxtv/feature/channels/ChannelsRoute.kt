@@ -43,6 +43,7 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.player.PlaybackSessionStateSource
@@ -52,6 +53,7 @@ import kotlinx.coroutines.flow.first
 @Composable
 fun ChannelsRoute(
     playbackCatalog: PlaybackCatalog,
+    recentChannelsRepository: RecentChannelsRepository,
     epgGuideRepository: EpgGuideRepository,
     playbackSessionStateSource: PlaybackSessionStateSource,
     profileId: String,
@@ -60,6 +62,7 @@ fun ChannelsRoute(
 ) {
     val factory = remember(
         playbackCatalog,
+        recentChannelsRepository,
         epgGuideRepository,
         playbackSessionStateSource,
         profileId,
@@ -68,6 +71,7 @@ fun ChannelsRoute(
             initializer {
                 ChannelsViewModel(
                     playbackCatalog = playbackCatalog,
+                    recentChannelsRepository = recentChannelsRepository,
                     epgGuideRepository = epgGuideRepository,
                     playbackSessionStateSource = playbackSessionStateSource,
                     profileId = profileId,
@@ -77,7 +81,7 @@ fun ChannelsRoute(
     }
     val screenViewModel: ChannelsViewModel = viewModel(factory = factory)
     val state by screenViewModel.uiState.collectAsStateWithLifecycle()
-    val favoritesOnly by screenViewModel.favoritesOnly.collectAsStateWithLifecycle()
+    val filter by screenViewModel.filter.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     var focusedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -91,43 +95,51 @@ fun ChannelsRoute(
             scrollOffset = focusedChannelScrollOffset,
         )
     }
-    val routeTitle = if (favoritesOnly) "Избранное" else "Каналы"
+    val routeTitle = filter.title()
 
     when (val current = state) {
         ChannelsUiState.Loading -> MessageRoute(
             title = routeTitle,
-            message = "Загрузка активного каталога…",
+            message = filter.loadingMessage(),
             modifier = modifier,
         )
 
-        ChannelsUiState.Empty -> if (favoritesOnly) {
-            MessageRoute(
-                title = "Избранное",
-                message = "В избранном пока нет каналов.",
-                actionLabel = "Показать все каналы",
-                onAction = { screenViewModel.setFavoritesOnly(false) },
+        ChannelsUiState.Empty -> when (filter) {
+            ChannelsFilter.ALL -> MessageRoute(
+                title = routeTitle,
+                message = "Активных каналов пока нет. Добавьте или обновите источник.",
                 modifier = modifier,
             )
-        } else {
-            MessageRoute(
-                title = "Каналы",
-                message = "Активных каналов пока нет. Добавьте или обновите источник.",
+
+            ChannelsFilter.FAVORITES -> MessageRoute(
+                title = routeTitle,
+                message = "В избранном пока нет каналов.",
+                actionLabel = "Показать все каналы",
+                onAction = { screenViewModel.setFilter(ChannelsFilter.ALL) },
+                modifier = modifier,
+            )
+
+            ChannelsFilter.RECENT -> MessageRoute(
+                title = routeTitle,
+                message = "Недавно просмотренных каналов пока нет.",
+                actionLabel = "Показать все каналы",
+                onAction = { screenViewModel.setFilter(ChannelsFilter.ALL) },
                 modifier = modifier,
             )
         }
 
         ChannelsUiState.Failed -> MessageRoute(
             title = routeTitle,
-            message = "Не удалось прочитать активный каталог.",
+            message = filter.failureMessage(),
             modifier = modifier,
         )
 
         is ChannelsUiState.Content -> ChannelsContent(
             rows = current.rows,
-            favoritesOnly = favoritesOnly,
+            filter = filter,
             listState = listState,
             focusAnchor = focusAnchor,
-            onFavoritesOnlyChanged = screenViewModel::setFavoritesOnly,
+            onFilterChanged = screenViewModel::setFilter,
             onFocusAnchorChanged = { anchor ->
                 focusedChannelId = anchor.itemKey
                 focusedChannelIndex = anchor.previousIndex
@@ -142,10 +154,10 @@ fun ChannelsRoute(
 @Composable
 private fun ChannelsContent(
     rows: List<ChannelRowProjection>,
-    favoritesOnly: Boolean,
+    filter: ChannelsFilter,
     listState: LazyListState,
     focusAnchor: FocusAnchor?,
-    onFavoritesOnlyChanged: (Boolean) -> Unit,
+    onFilterChanged: (ChannelsFilter) -> Unit,
     onFocusAnchorChanged: (FocusAnchor) -> Unit,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier,
@@ -153,11 +165,17 @@ private fun ChannelsContent(
     val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val allFilterFocusRequester = remember { FocusRequester() }
     val favoritesFilterFocusRequester = remember { FocusRequester() }
+    val recentFilterFocusRequester = remember { FocusRequester() }
+    val selectedFilterFocusRequester = when (filter) {
+        ChannelsFilter.ALL -> allFilterFocusRequester
+        ChannelsFilter.FAVORITES -> favoritesFilterFocusRequester
+        ChannelsFilter.RECENT -> recentFilterFocusRequester
+    }
     val channelIds = rows.map(ChannelRowProjection::channelId)
-    val restorationAnchor = remember(favoritesOnly, channelIds) { focusAnchor }
-    var restorationCompleted by remember(favoritesOnly, channelIds) { mutableStateOf(false) }
+    val restorationAnchor = remember(filter, channelIds) { focusAnchor }
+    var restorationCompleted by remember(filter, channelIds) { mutableStateOf(false) }
 
-    LaunchedEffect(channelIds, restorationAnchor, restorationCompleted, favoritesOnly) {
+    LaunchedEffect(channelIds, restorationAnchor, restorationCompleted, filter) {
         if (restorationCompleted || channelIds.isEmpty()) return@LaunchedEffect
 
         val target = restorationAnchor?.resolveAgainst(channelIds) ?: FocusTarget(
@@ -173,10 +191,6 @@ private fun ChannelsContent(
         if (!targetIsPlacedInCurrentLayout()) {
             listState.scrollToItem(target.index)
         }
-        // `channelIds` can change while LazyColumn still exposes the previous layout. Index-only
-        // visibility is therefore insufficient when a surviving stable key moves (for example
-        // channel-b from row 1 to row 0 after enabling Favorites). Wait for the exact key/index
-        // pair from the new layout instead of guessing with a frame delay.
         snapshotFlow { targetIsPlacedInCurrentLayout() }
             .first { isPlaced -> isPlaced }
 
@@ -192,37 +206,40 @@ private fun ChannelsContent(
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
         Text(
-            text = if (favoritesOnly) "Избранное" else "Каналы",
+            text = filter.title(),
             style = MaterialTheme.typography.displaySmall,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
             MuxTvActionButton(
-                text = if (favoritesOnly) "Все каналы" else "• Все каналы",
-                onClick = { onFavoritesOnlyChanged(false) },
+                text = filter.filterLabel(ChannelsFilter.ALL, "Все каналы"),
+                onClick = { onFilterChanged(ChannelsFilter.ALL) },
                 modifier = Modifier
                     .testTag(CHANNELS_ALL_FILTER_TEST_TAG)
-                    .focusProperties {
-                        right = favoritesFilterFocusRequester
-                    }
+                    .focusProperties { right = favoritesFilterFocusRequester }
                     .focusRequester(allFilterFocusRequester),
             )
             MuxTvActionButton(
-                text = if (favoritesOnly) "• Избранное" else "Избранное",
-                onClick = { onFavoritesOnlyChanged(true) },
+                text = filter.filterLabel(ChannelsFilter.FAVORITES, "Избранное"),
+                onClick = { onFilterChanged(ChannelsFilter.FAVORITES) },
                 modifier = Modifier
                     .testTag(CHANNELS_FAVORITES_FILTER_TEST_TAG)
                     .focusProperties {
                         left = allFilterFocusRequester
+                        right = recentFilterFocusRequester
                     }
                     .focusRequester(favoritesFilterFocusRequester),
             )
+            MuxTvActionButton(
+                text = filter.filterLabel(ChannelsFilter.RECENT, "Недавние"),
+                onClick = { onFilterChanged(ChannelsFilter.RECENT) },
+                modifier = Modifier
+                    .testTag(CHANNELS_RECENT_FILTER_TEST_TAG)
+                    .focusProperties { left = favoritesFilterFocusRequester }
+                    .focusRequester(recentFilterFocusRequester),
+            )
         }
         Text(
-            text = if (favoritesOnly) {
-                "Избранных каналов: ${rows.size}"
-            } else {
-                "Активных каналов: ${rows.size}"
-            },
+            text = filter.countLabel(rows.size),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -265,9 +282,7 @@ private fun ChannelsContent(
                         .fillMaxWidth()
                         .testTag("$CHANNEL_ROW_TEST_TAG_PREFIX$index")
                         .focusProperties {
-                            if (index == 0) {
-                                up = allFilterFocusRequester
-                            }
+                            if (index == 0) up = selectedFilterFocusRequester
                         }
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
@@ -361,6 +376,35 @@ private fun MessageRoute(
     }
 }
 
+private fun ChannelsFilter.title(): String = when (this) {
+    ChannelsFilter.ALL -> "Каналы"
+    ChannelsFilter.FAVORITES -> "Избранное"
+    ChannelsFilter.RECENT -> "Недавние"
+}
+
+private fun ChannelsFilter.loadingMessage(): String = when (this) {
+    ChannelsFilter.RECENT -> "Загрузка недавних каналов…"
+    ChannelsFilter.ALL,
+    ChannelsFilter.FAVORITES,
+    -> "Загрузка активного каталога…"
+}
+
+private fun ChannelsFilter.failureMessage(): String = when (this) {
+    ChannelsFilter.RECENT -> "Не удалось прочитать недавние каналы."
+    ChannelsFilter.ALL,
+    ChannelsFilter.FAVORITES,
+    -> "Не удалось прочитать активный каталог."
+}
+
+private fun ChannelsFilter.filterLabel(target: ChannelsFilter, label: String): String =
+    if (this == target) "• $label" else label
+
+private fun ChannelsFilter.countLabel(count: Int): String = when (this) {
+    ChannelsFilter.ALL -> "Показано каналов: $count"
+    ChannelsFilter.FAVORITES -> "Показано избранных: $count"
+    ChannelsFilter.RECENT -> "Показано недавних: $count"
+}
+
 private fun ChannelRowProjection.primaryLabel(): String = buildString {
     if (isCurrentPlayback) {
         append(if (isPlaying) "▶  " else "●  ")
@@ -400,3 +444,4 @@ private fun ChannelRowProjection.nextProgrammeLabel(): String = when (guideState
 private const val CHANNEL_ROW_TEST_TAG_PREFIX = "channel-row-"
 private const val CHANNELS_ALL_FILTER_TEST_TAG = "channels-filter-all"
 private const val CHANNELS_FAVORITES_FILTER_TEST_TAG = "channels-filter-favorites"
+private const val CHANNELS_RECENT_FILTER_TEST_TAG = "channels-filter-recent"

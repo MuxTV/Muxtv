@@ -11,6 +11,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -25,6 +26,10 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
+import app.muxtv.catalog.RecentChannel
+import app.muxtv.catalog.RecentChannelWriteResult
+import app.muxtv.catalog.RecentChannelsQuery
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
@@ -44,13 +49,7 @@ class ChannelsFocusRestorationTest {
         val restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
             MuxTvTheme {
-                ChannelsRoute(
-                    playbackCatalog = StaticPlaybackCatalog,
-                    epgGuideRepository = NoGuideEpgGuideRepository,
-                    playbackSessionStateSource = NoPlaybackSessionStateSource,
-                    profileId = "profile-main",
-                    onOpenChannel = {},
-                )
+                channelsRoute()
             }
         }
         composeRule.waitForIdle()
@@ -73,13 +72,7 @@ class ChannelsFocusRestorationTest {
                     TestPlayer(onBack = { playerOpen.value = false })
                 } else {
                     stateHolder.SaveableStateProvider("channels") {
-                        ChannelsRoute(
-                            playbackCatalog = StaticPlaybackCatalog,
-                            epgGuideRepository = NoGuideEpgGuideRepository,
-                            playbackSessionStateSource = NoPlaybackSessionStateSource,
-                            profileId = "profile-main",
-                            onOpenChannel = { playerOpen.value = true },
-                        )
+                        channelsRoute(onOpenChannel = { playerOpen.value = true })
                     }
                 }
             }
@@ -109,11 +102,8 @@ class ChannelsFocusRestorationTest {
                     TestPlayer(onBack = { playerOpen.value = false })
                 } else {
                     stateHolder.SaveableStateProvider("channels") {
-                        ChannelsRoute(
+                        channelsRoute(
                             playbackCatalog = catalog,
-                            epgGuideRepository = NoGuideEpgGuideRepository,
-                            playbackSessionStateSource = NoPlaybackSessionStateSource,
-                            profileId = "profile-main",
                             onOpenChannel = { playerOpen.value = true },
                         )
                     }
@@ -145,13 +135,7 @@ class ChannelsFocusRestorationTest {
         )
         composeRule.setContent {
             MuxTvTheme {
-                ChannelsRoute(
-                    playbackCatalog = catalog,
-                    epgGuideRepository = NoGuideEpgGuideRepository,
-                    playbackSessionStateSource = NoPlaybackSessionStateSource,
-                    profileId = "profile-main",
-                    onOpenChannel = {},
-                )
+                channelsRoute(playbackCatalog = catalog)
             }
         }
         composeRule.waitForIdle()
@@ -161,11 +145,6 @@ class ChannelsFocusRestorationTest {
         composeRule.waitUntilText("★  Второй")
         composeRule.waitForIdle()
 
-        // The product contract is stable canonical-channel focus, not positional lazy-item
-        // identity. On old Compose/TV runtimes a removed keyed item can briefly retain its old
-        // index-derived test tag even after the surviving channel has been placed and focused.
-        // Assert the actual surviving favorite semantics instead of coupling this contract to
-        // `channel-row-0` after a 1 -> 0 reorder.
         composeRule.onNodeWithText("★  Второй", substring = false).assertIsFocused()
     }
 
@@ -178,13 +157,7 @@ class ChannelsFocusRestorationTest {
         )
         composeRule.setContent {
             MuxTvTheme {
-                ChannelsRoute(
-                    playbackCatalog = catalog,
-                    epgGuideRepository = NoGuideEpgGuideRepository,
-                    playbackSessionStateSource = NoPlaybackSessionStateSource,
-                    profileId = "profile-main",
-                    onOpenChannel = {},
-                )
+                channelsRoute(playbackCatalog = catalog)
             }
         }
         composeRule.waitForIdle()
@@ -198,16 +171,95 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
+    fun recentFilterIsReachableWithDpadAndUsesRecentOrder() {
+        val recent = StaticRecentChannelsRepository(
+            listOf(
+                recentChannel(testChannels[2], 3_000L),
+                recentChannel(testChannels[1], 2_000L),
+            ),
+        )
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(recentChannelsRepository = recent)
+            }
+        }
+        composeRule.waitForIdle()
+
+        openRecentFromFirstRowWithDpad()
+        composeRule.waitUntilText("Третий")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Третий", substring = false).assertExists()
+        composeRule.onNodeWithText("Показано недавних: 2").assertExists()
+    }
+
+    @Test
+    fun firstRecentRowReturnsUpToRecentFilter() {
+        val recent = StaticRecentChannelsRepository(
+            listOf(recentChannel(testChannels[0], 1_000L)),
+        )
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(recentChannelsRepository = recent)
+            }
+        }
+        composeRule.waitForIdle()
+
+        openRecentFromFirstRowWithDpad()
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+
+        composeRule.onNodeWithTag("channels-filter-recent").assertIsFocused()
+    }
+
+    @Test
+    fun recentChannelFocusIsRestoredAfterPlayerBack() {
+        val playerOpen = mutableStateOf(false)
+        val recent = StaticRecentChannelsRepository(
+            listOf(
+                recentChannel(testChannels[1], 2_000L),
+                recentChannel(testChannels[2], 1_000L),
+            ),
+        )
+        composeRule.setContent {
+            val stateHolder = rememberSaveableStateHolder()
+            MuxTvTheme {
+                if (playerOpen.value) {
+                    TestPlayer(onBack = { playerOpen.value = false })
+                } else {
+                    stateHolder.SaveableStateProvider("channels") {
+                        channelsRoute(
+                            recentChannelsRepository = recent,
+                            onOpenChannel = { playerOpen.value = true },
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+
+        openRecentFromFirstRowWithDpad()
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused().pressEnter()
+        composeRule.waitUntilPlayerBack()
+        composeRule.onNodeWithTag("test-player-back")
+            .assertIsFocused()
+            .pressEnter()
+        composeRule.waitUntilText("Второй")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Второй", substring = false).assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-recent").assertTextContains("• Недавние")
+    }
+
+    @Test
     fun emptyFavoritesRecoveryActionReceivesFocus() {
         composeRule.setContent {
             MuxTvTheme {
-                ChannelsRoute(
-                    playbackCatalog = MutablePlaybackCatalog(),
-                    epgGuideRepository = NoGuideEpgGuideRepository,
-                    playbackSessionStateSource = NoPlaybackSessionStateSource,
-                    profileId = "profile-main",
-                    onOpenChannel = {},
-                )
+                channelsRoute(playbackCatalog = MutablePlaybackCatalog())
             }
         }
         composeRule.waitForIdle()
@@ -222,19 +274,33 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
+    fun emptyRecentRecoveryActionReceivesFocus() {
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(recentChannelsRepository = StaticRecentChannelsRepository(emptyList()))
+            }
+        }
+        composeRule.waitForIdle()
+
+        openRecentFromFirstRowWithDpad()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Показать все каналы").assertIsFocused()
+    }
+
+    @Test
     fun guideProjectionAppearsWithoutChangingInitialFocus() {
         composeRule.setContent {
             MuxTvTheme {
-                ChannelsRoute(
-                    playbackCatalog = StaticPlaybackCatalog,
+                channelsRoute(
                     epgGuideRepository = StaticNowNextEpgGuideRepository(
                         channelId = "channel-a",
                         currentTitle = "В эфире",
                         nextTitle = "Следом",
                     ),
-                    playbackSessionStateSource = NoPlaybackSessionStateSource,
-                    profileId = "profile-main",
-                    onOpenChannel = {},
                 )
             }
         }
@@ -242,14 +308,28 @@ class ChannelsFocusRestorationTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
         }
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isNotEmpty()
-        }
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
         composeRule.onNodeWithText("Сейчас: В эфире").assertExists()
         composeRule.onNodeWithText("Далее: Следом").assertExists()
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun channelsRoute(
+        playbackCatalog: PlaybackCatalog = StaticPlaybackCatalog,
+        recentChannelsRepository: RecentChannelsRepository = StaticRecentChannelsRepository(emptyList()),
+        epgGuideRepository: app.muxtv.catalog.EpgGuideRepository = NoGuideEpgGuideRepository,
+        onOpenChannel: (String) -> Unit = {},
+    ) {
+        ChannelsRoute(
+            playbackCatalog = playbackCatalog,
+            recentChannelsRepository = recentChannelsRepository,
+            epgGuideRepository = epgGuideRepository,
+            playbackSessionStateSource = NoPlaybackSessionStateSource,
+            profileId = "profile-main",
+            onOpenChannel = onOpenChannel,
+        )
     }
 
     private fun moveFocusToSecondChannel() {
@@ -274,6 +354,26 @@ class ChannelsFocusRestorationTest {
         }
         composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
         composeRule.onNodeWithTag("channels-filter-favorites").pressEnter()
+    }
+
+    private fun openRecentFromFirstRowWithDpad() {
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        composeRule.onNodeWithTag("channels-filter-all").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-all").performKeyInput {
+            keyDown(Key.DirectionRight)
+            keyUp(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-favorites").performKeyInput {
+            keyDown(Key.DirectionRight)
+            keyUp(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("channels-filter-recent").assertIsFocused()
+        composeRule.onNodeWithTag("channels-filter-recent").pressEnter()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilPlayerBack() {
@@ -385,6 +485,27 @@ private class MutablePlaybackCatalog(
         variantId: String,
     ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
+
+private class StaticRecentChannelsRepository(
+    private val rows: List<RecentChannel>,
+) : RecentChannelsRepository {
+    override fun observeRecent(query: RecentChannelsQuery): Flow<List<RecentChannel>> =
+        flowOf(rows.take(query.limit))
+
+    override suspend fun recordSuccessfulPlayback(
+        profileId: String,
+        channelId: String,
+        successfulAtEpochMillis: Long,
+    ): RecentChannelWriteResult = RecentChannelWriteResult.Applied
+}
+
+private fun recentChannel(
+    channel: PlayableChannelSummary,
+    timestamp: Long,
+): RecentChannel = RecentChannel(
+    channel = channel,
+    lastSuccessfulPlaybackAtEpochMillis = timestamp,
+)
 
 private fun List<PlayableChannelSummary>.filterFor(query: ChannelQuery): List<PlayableChannelSummary> =
     if (query.favoritesOnly) filter(PlayableChannelSummary::isFavorite) else this
