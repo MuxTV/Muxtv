@@ -79,6 +79,11 @@ class EpgPayloadDecoder {
     ): EpgPayloadDecodeResult<T> {
         val source = PushbackInputStream(input, MAGIC_BYTE_COUNT)
         return try {
+            val encodingSelection = selectContentEncoding(hints)
+            if (encodingSelection is FormatSelection.Rejected) {
+                return EpgPayloadDecodeResult.Rejected(encodingSelection.reason)
+            }
+
             val sniffed = ByteArray(MAGIC_BYTE_COUNT)
             val sniffedCount = readPrefix(source, sniffed)
             if (sniffedCount == 0) {
@@ -87,7 +92,8 @@ class EpgPayloadDecoder {
             source.unread(sniffed, 0, sniffedCount)
 
             val emptyZipArchiveMagic = isEmptyZipArchiveMagic(sniffed, sniffedCount)
-            when (val selection = selectFormat(sniffed, sniffedCount, hints)) {
+            val selection = encodingSelection ?: selectPayloadFormat(sniffed, sniffedCount, hints)
+            when (selection) {
                 is FormatSelection.Rejected -> EpgPayloadDecodeResult.Rejected(selection.reason)
 
                 is FormatSelection.Selected -> when (selection.format) {
@@ -207,20 +213,20 @@ class EpgPayloadDecoder {
         }
     }
 
-    private fun selectFormat(
-        prefix: ByteArray,
-        count: Int,
-        hints: EpgPayloadHints,
-    ): FormatSelection {
-        val encoding = hints.contentEncoding.normalizedHeaderToken()
-        when (encoding) {
-            null, "", "identity" -> Unit
-            "gzip", "x-gzip" -> return FormatSelection.Selected(EpgPayloadFormat.Gzip)
-            else -> return FormatSelection.Rejected(
+    private fun selectContentEncoding(hints: EpgPayloadHints): FormatSelection? =
+        when (hints.contentEncoding.normalizedHeaderToken()) {
+            null, "", "identity" -> null
+            "gzip", "x-gzip" -> FormatSelection.Selected(EpgPayloadFormat.Gzip)
+            else -> FormatSelection.Rejected(
                 EpgPayloadRejectionReason.UnsupportedContentEncoding,
             )
         }
 
+    private fun selectPayloadFormat(
+        prefix: ByteArray,
+        count: Int,
+        hints: EpgPayloadHints,
+    ): FormatSelection {
         magicFormat(prefix, count)?.let { return FormatSelection.Selected(it) }
 
         return when (hints.contentType.normalizedMediaType()) {
