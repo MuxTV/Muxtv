@@ -212,8 +212,6 @@ class EpgPayloadDecoder {
         count: Int,
         hints: EpgPayloadHints,
     ): FormatSelection {
-        magicFormat(prefix, count)?.let { return FormatSelection.Selected(it) }
-
         val encoding = hints.contentEncoding.normalizedHeaderToken()
         when (encoding) {
             null, "", "identity" -> Unit
@@ -222,6 +220,8 @@ class EpgPayloadDecoder {
                 EpgPayloadRejectionReason.UnsupportedContentEncoding,
             )
         }
+
+        magicFormat(prefix, count)?.let { return FormatSelection.Selected(it) }
 
         return when (hints.contentType.normalizedMediaType()) {
             in GZIP_MEDIA_TYPES -> FormatSelection.Selected(EpgPayloadFormat.Gzip)
