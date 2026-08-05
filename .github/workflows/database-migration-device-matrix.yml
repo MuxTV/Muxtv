@@ -10,6 +10,7 @@ on:
       - core/database/src/main/kotlin/app/muxtv/database/**
       - core/database/src/androidTest/kotlin/app/muxtv/database/**
       - core/database/schemas/**
+      - tools/verify-local.ps1
       - tools/android/**
 
 permissions:
