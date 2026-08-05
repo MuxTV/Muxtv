@@ -64,6 +64,25 @@ Add a decoder resource test that cancellation/failure during compressed consumpt
 
 Update #110 to reflect that gzip/ZIP streaming support and dual network limits pre-existed the issue; the remaining work is precedence + end-to-end hardening rather than a new decoder subsystem.
 
+## Runner-off execution status
+
+Implemented on `work/epg-gzip-hardening`:
+
+- source-proven RED contract for unsupported `Content-Encoding` taking precedence over gzip magic;
+- production `selectFormat()` precedence fix; the production delta is intentionally limited to the ordering inside that method;
+- explicit regression retaining gzip-magic fallback when `Content-Encoding` is absent;
+- MockWebServer journey for `Content-Encoding: gzip` through the accepted OkHttp transparent-decompression path;
+- generic-content-type/no-suffix gzip journey;
+- misleading `.gz` URL with plain XML journey;
+- typed compressed-wire-byte overflow journey;
+- previous-good active revision preservation after decoded overflow;
+- previous-good active revision preservation after malformed gzip;
+- cancellation during gzip consumption closes the compressed input and propagates the exact cancellation object.
+
+Static diff review from accepted main shows only the decoder, decoder/refresher tests and this plan. No Room schema, XMLTV parser, EPG matching, Guide UI or HTTP client policy has been modified.
+
+No test in this section is claimed as executed while self-hosted CI is disabled. The precedence RED is source-proven against accepted main; all other new contracts require exact-head execution when the runner returns.
+
 ## Acceptance when self-hosted returns
 
 Exact final head must pass:
