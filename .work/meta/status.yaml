@@ -1,17 +1,17 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-08-04
+updated_at: 2026-08-05
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
-  ci: present_host_before_api26_api36_device_matrices
-  tests: present_unit_android_instrumentation_migration_search_and_measurement_contracts
+  ci: present_host_before_old_edge_current_device_matrices
+  tests: present_unit_android_instrumentation_migration_search_playback_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_search_tv
+  documentation: synchronized_post_first_rendered_frame
   architecture_version: 5
 active_branch_after_merge: main
-implementation_source_commit: d12bad2c0acc0a0dbeeffbc2c25308d1143329d8
+implementation_source_commit: 8fced4dc282eaf07e8160f463c8276d7e48ba01b
 room_schema: 9
 implemented:
   - android_tv_application_shell
@@ -56,6 +56,11 @@ implemented:
   - search_retry_and_programme_boundary_refresh
   - search_player_back_focus_restoration
   - api26_explicit_search_input_dpad_down
+  - service_owned_first_rendered_frame_success
+  - playback_setup_generation_identity_guard
+  - direct_first_frame_recorder_observer_fanout
+  - exact_profile_channel_first_frame_identity
+  - privacy_safe_first_frame_latency_measurement
 verified_evidence:
   search_core_merge: fe2f8472
   single_player_owner_merge: bd1ff29959e96305ea99b6480f402efebadc9d53
@@ -64,60 +69,59 @@ verified_evidence:
   search_tv_merge: d12bad2c0acc0a0dbeeffbc2c25308d1143329d8
   search_tv_full_run: 30935565574
   search_tv_product_matrix_run: 30935565897
-  search_tv_api36_app_tests: 22
-  search_tv_focus_journeys: 4
+  first_frame_exact_head: 6bc33d8b61d0f687d52cdf6f65ca216035ef369d
+  first_frame_merge: 8fced4dc282eaf07e8160f463c8276d7e48ba01b
+  first_frame_full_run: 30946905694
+  first_frame_product_matrix_run: 30946905920
   device_profiles:
-    - api: 26
-      image: system-images;android-26;android-tv;x86
-      ram_mb: 1536
-      cpu_cores: 2
+    - requested_api: 26
       status: passed
-    - api: 36
-      image: system-images;android-36;android-tv;x86_64
-      ram_mb: 2048
-      cpu_cores: 2
+    - requested_api: 36
       status: passed
 active_work:
-  first_rendered_frame_success:
-    issue: 29
-    branch: work/first-rendered-frame-signal
-    status: implementation_in_progress
-    implemented_on_working_branch:
-      - setup_generation_identity
-      - current_media_identity_guard
-      - one_shot_first_frame_tracker
-      - privacy_safe_activation_latency_event
-      - service_owned_player_listener
-    test_first_contracts_pending_green:
-      - direct_multi_observer_recorder
-      - observer_failure_isolation
-      - profile_identity_bundle_round_trip
-      - profile_identity_diagnostic_redaction
-    remaining_gates:
-      - rebase_on_accepted_search_tv_main
-      - direct_injected_recorder_boundary
-      - profile_identity_in_session_request_and_event
-      - exact_head_compile_and_unit_tests
-      - api26_api36_first_frame_instrumentation
-      - clean_review_and_guarded_merge
   recent:
     issue: 29
+    pull_request: 107
+    branch: feat/recent-channels-v10
     target_room_schema: 10
-    status: waiting_for_first_frame_signal
-    required:
+    status: acceptance_in_progress
+    implemented_on_working_branch:
       - profile_channel_composite_identity
       - first_frame_only_write
-      - bounded_retention
+      - bounded_per_profile_history
       - active_visible_channel_filtering
       - deterministic_newest_first_read
-      - channels_or_home_tv_surface
+      - channels_recent_filter
       - canonical_focus_restoration
+      - migration_9_10
+    remaining_gates:
+      - committed_exact_generated_room_v10_schema
+      - final_full_validation
+      - old_edge_current_product_device_matrix
+      - old_edge_current_database_device_matrix
+      - final_semantic_privacy_review
+  cross_surface_active_truth:
+    issue: 114
+    status: blocked_until_recent_accepted
+    required:
+      - one_active_current_revision_membership_rule
+      - selected_profile_visibility_rule
+      - cross_surface_contract_test
+      - bounded_count_semantics
+  guide:
+    issue: 29
+    status: waiting_for_recent_and_truth_contract
+    required:
+      - bounded_channel_window
+      - bounded_time_window
+      - active_profile_visible_membership
+      - deterministic_focus_restoration
 next_milestone:
   id: phase_01_daily_use_recent_and_guide
   issue: 29
   immediate_sequence:
-    - first_rendered_frame_success
-    - recent_room_v10_data_and_ui
+    - accept_recent_room_v10
+    - issue_114_cross_surface_truth_contract
     - bounded_guide_viewport
     - issue_30_playback_recovery_and_tv_doctor
     - issue_33_and_93_lounge_ui_packages
@@ -139,6 +143,15 @@ parallel_work:
     - wait_for_next_free_room_schema_owner
     - source_etag_last_modified_binding
     - correct_304_not_modified_semantics
+  issue_110:
+    pull_request: 119
+    branch: work/epg-gzip-hardening
+    status: acceptance_in_progress
+    required:
+      - exact_head_full_validation
+      - old_edge_current_device_evidence
+      - previous_good_room_backed_evidence
+      - final_privacy_review
 closed_superseded_or_unmerged:
   - pr_83_stale_performance_stage1
   - pr_87_measurement_unproven_xmltv_allocation
@@ -150,8 +163,8 @@ closed_superseded_or_unmerged:
   - pr_98_deferred_baseline_profile_stack
   - pr_99_superseded_player_owner_stack
 known_gaps:
-  - durable_first_rendered_frame_recorder
-  - recent_successful_playback_history
+  - recent_successful_playback_history_not_yet_accepted
+  - cross_surface_active_profile_truth_contract
   - bounded_guide_screen
   - playback_variant_fallback
   - tv_doctor_lite
