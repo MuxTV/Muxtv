@@ -12,6 +12,7 @@ on:
       - player/api/**
       - player/media3/**
       - catalog/api/**
+      - catalog/refresh/**
       - core/designsystem/**
       - tools/android/**
 
