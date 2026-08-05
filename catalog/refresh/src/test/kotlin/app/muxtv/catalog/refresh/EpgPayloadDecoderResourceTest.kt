@@ -12,6 +12,24 @@ import org.junit.Test
 
 class EpgPayloadDecoderResourceTest {
     @Test
+    fun `unsupported content encoding is rejected before payload read and closes input`() = runTest {
+        val input = NoReadAllowedInputStream()
+
+        val result = EpgPayloadDecoder().decode(
+            input = input,
+            hints = EpgPayloadHints(contentEncoding = "br"),
+        ) { it.readBytes() }
+
+        assertThat(result).isEqualTo(
+            EpgPayloadDecodeResult.Rejected(
+                EpgPayloadRejectionReason.UnsupportedContentEncoding,
+            ),
+        )
+        assertThat(input.readAttempted).isFalse()
+        assertThat(input.closed).isTrue()
+    }
+
+    @Test
     fun `transport failure during magic sniff closes input and propagates unchanged`() = runTest {
         val expected = IOException("private transport failure")
         val input = SniffFailureInputStream(expected)
@@ -38,6 +56,27 @@ class EpgPayloadDecoderResourceTest {
 
         assertThat(actual).isSameInstanceAs(expected)
         assertThat(input.closed).isTrue()
+    }
+}
+
+private class NoReadAllowedInputStream : InputStream() {
+    var readAttempted: Boolean = false
+        private set
+    var closed: Boolean = false
+        private set
+
+    override fun read(): Int {
+        readAttempted = true
+        throw AssertionError("Unsupported content encoding must be rejected before reading payload bytes.")
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        readAttempted = true
+        throw AssertionError("Unsupported content encoding must be rejected before reading payload bytes.")
+    }
+
+    override fun close() {
+        closed = true
     }
 }
 
