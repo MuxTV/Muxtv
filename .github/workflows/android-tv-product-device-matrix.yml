@@ -14,6 +14,7 @@ on:
       - catalog/api/**
       - catalog/refresh/**
       - core/designsystem/**
+      - tools/verify-local.ps1
       - tools/android/**
 
 permissions:
