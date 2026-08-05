@@ -28,7 +28,7 @@ class EpgPayloadDecoderTest {
     }
 
     @Test
-    fun `gzip magic overrides HTTP hints`() = runTest {
+    fun `unsupported content encoding is authoritative over gzip magic`() = runTest {
         val xml = "<tv><programme channel=\"one\"/></tv>"
 
         val result = decoder.decode(
@@ -37,6 +37,18 @@ class EpgPayloadDecoderTest {
                 contentEncoding = "br",
                 contentType = "application/xml",
             ),
+        ) { it.readBytes().decodeToString() }
+
+        assertRejected(result, EpgPayloadRejectionReason.UnsupportedContentEncoding)
+    }
+
+    @Test
+    fun `gzip magic is used when content encoding is absent`() = runTest {
+        val xml = "<tv><programme channel=\"one\"/></tv>"
+
+        val result = decoder.decode(
+            input = ByteArrayInputStream(gzip(xml.toByteArray())),
+            hints = EpgPayloadHints(contentType = "application/xml"),
         ) { it.readBytes().decodeToString() }
 
         assertThat(result).isEqualTo(
