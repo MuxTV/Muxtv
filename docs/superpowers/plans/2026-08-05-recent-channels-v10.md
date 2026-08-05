@@ -17,6 +17,7 @@
 - Default Recent query limit is 20; hard repository/history bound is 50 rows per profile.
 - Reads expose only current active source revisions and non-hidden channels.
 - `canonicalChannelId` is a logical history identity, intentionally not a physical FK to `canonical_channels`.
+- Bounded result sizes are never presented as authoritative totals. Channels UI labels them as `Показано …` unless a future owner provides a truth-aligned count query.
 - No Paging3, speculative indexes, Rust/UniFFI, alternate player, #100 validators, Guide, fallback/Doctor or #101 CI redesign in this PR.
 - Self-hosted CI is currently disabled: source/static work may continue, but the PR must remain draft/unmerged until the exact final head passes the required gates.
 
@@ -114,6 +115,7 @@ CREATE TABLE recent_channels (
 - `Up` from first row returns to the currently selected filter.
 - Empty Favorites/Recent exposes one D-pad-reachable “Показать все каналы” recovery action.
 - Recent → Player → Back restores the canonical channel, not an index-only position.
+- ALL/FAVORITES/RECENT counts in this bounded surface mean `rows currently shown`, not authoritative totals.
 
 - [x] Replace boolean Favorites state with `ChannelsFilter { ALL, FAVORITES, RECENT }`.
 - [x] Preserve guide projection by canonical ID and reuse guide snapshot across pure row reorder/metadata changes.
@@ -121,6 +123,8 @@ CREATE TABLE recent_channels (
 - [x] Add Recent empty/failure/loading copy.
 - [x] Add ViewModel test for repository order and bounded default query.
 - [x] Add D-pad reachability, first-row Up, empty recovery and Player/Back focus contracts.
+- [x] Correct bounded count wording to `Показано каналов / избранных / недавних`; do not infer a total from `rows.size`.
+- [x] Align instrumentation assertion with the truthful bounded wording.
 - [x] Static review found no additional runtime semantic change required.
 - [ ] Execute current/old-edge TV key journeys on the final exact head when runner is available.
 
@@ -152,6 +156,7 @@ The following work is allowed while self-hosted CI is unavailable:
 - [x] compare Room entity/DAO/migration against the historical generated schema;
 - [x] review Hilt/navigation/focus/data-flow ownership;
 - [x] review privacy and boundedness;
+- [x] remove a false-total UI semantic discovered during #114 inventory: capped `rows.size` is now labeled only as a shown count;
 - [x] keep PR draft and document unverified gates.
 
 The following **must not** be claimed complete without a build environment:
