@@ -27,7 +27,7 @@ class VerifyCurrentRoomSchemaTaskTest {
     }
 
     @Test
-    fun `extracts version and identity from Room schema`() {
+    fun `extracts version and identity from nested Room schema`() {
         val metadata = extractRoomSchemaMetadata(
             """
             {
@@ -35,7 +35,14 @@ class VerifyCurrentRoomSchemaTaskTest {
               "database": {
                 "version": 10,
                 "identityHash": "identity-v10",
-                "entities": []
+                "entities": [
+                  {
+                    "tableName": "sample",
+                    "fields": [
+                      { "fieldPath": "id", "notNull": true }
+                    ]
+                  }
+                ]
               }
             }
             """.trimIndent(),
@@ -43,6 +50,15 @@ class VerifyCurrentRoomSchemaTaskTest {
 
         assertEquals(10, metadata.version)
         assertEquals("identity-v10", metadata.identityHash)
+    }
+
+    @Test
+    fun `rejects malformed Room schema JSON`() {
+        val failure = assertFailsWith<GradleException> {
+            extractRoomSchemaMetadata("{ not-json }")
+        }
+
+        assertTrue(failure.message.orEmpty().contains("not valid JSON"))
     }
 
     @Test

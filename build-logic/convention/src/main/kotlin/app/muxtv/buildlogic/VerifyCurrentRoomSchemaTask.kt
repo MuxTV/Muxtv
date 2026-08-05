@@ -1,5 +1,6 @@
 package app.muxtv.buildlogic
 
+import groovy.json.JsonSlurper
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import org.gradle.api.DefaultTask
@@ -111,20 +112,16 @@ internal fun extractCurrentDatabaseVersion(source: String): Int =
         ?: throw GradleException("Unable to resolve CURRENT_DATABASE_VERSION from source.")
 
 internal fun extractRoomSchemaMetadata(json: String): RoomSchemaMetadata {
-    val databaseObject = Regex(
-        pattern = """(?s)"database"\s*:\s*\{(.*?)\n\s*\}""",
-    ).find(json)?.groupValues?.get(1)
+    val root = try {
+        JsonSlurper().parseText(json) as? Map<*, *>
+    } catch (failure: RuntimeException) {
+        throw GradleException("Room schema is not valid JSON.", failure)
+    } ?: throw GradleException("Room schema root must be a JSON object.")
+    val database = root["database"] as? Map<*, *>
         ?: throw GradleException("Room schema has no database object.")
-    val version = Regex(""""version"\s*:\s*(\d+)""")
-        .find(databaseObject)
-        ?.groupValues
-        ?.get(1)
-        ?.toInt()
+    val version = (database["version"] as? Number)?.toInt()
         ?: throw GradleException("Room schema has no numeric database.version.")
-    val identityHash = Regex(""""identityHash"\s*:\s*"([^"]*)"""")
-        .find(databaseObject)
-        ?.groupValues
-        ?.get(1)
+    val identityHash = database["identityHash"] as? String
         ?: throw GradleException("Room schema has no database.identityHash.")
     return RoomSchemaMetadata(
         version = version,
