@@ -20,7 +20,7 @@ Close #110 by hardening the already-existing streaming EPG decoder instead of in
 2. Treat a non-empty HTTP `Content-Encoding` as authoritative transport metadata:
    - `identity` continues to sniff actual payload bytes;
    - `gzip` / `x-gzip` selects gzip when raw encoded bytes reach the decoder;
-   - unsupported or layered encodings are rejected as `UnsupportedContentEncoding` instead of being bypassed by gzip magic.
+   - unsupported or layered encodings are rejected as `UnsupportedContentEncoding` before payload bytes are read.
 3. When `Content-Encoding` is absent/identity, payload magic is stronger than `Content-Type`.
 4. `Content-Type` remains only a fallback hint when magic is inconclusive.
 5. Do not add URL suffix detection. Actual magic bytes cover gzip-without-suffix and avoid false positives from misleading `.gz` filenames; add an end-to-end regression proving a `.gz` path with plain XML still imports as Plain.
@@ -31,19 +31,21 @@ Close #110 by hardening the already-existing streaming EPG decoder instead of in
 
 Update `EpgPayloadDecoderTest` so an unsupported `Content-Encoding` with gzip-looking bytes is rejected rather than decoded. Keep separate coverage that gzip magic works when encoding metadata is absent.
 
-Expected current-main RED by source inspection: `selectFormat()` currently calls `magicFormat()` before parsing `contentEncoding`.
+Add a resource contract proving unsupported encoding is rejected without reading payload bytes and still closes the input.
+
+Expected current-main RED by source inspection: accepted `decode()` sniffs payload bytes before `selectFormat()`, and accepted `selectFormat()` calls `magicFormat()` before parsing `contentEncoding`.
 
 ## Task 2 — Implement decoder precedence
 
-Refactor only `selectFormat()`:
+Split transport metadata selection from payload-format selection:
 
-1. normalize content encoding;
-2. reject unsupported non-empty encoding before magic sniff;
-3. recognized gzip selects Gzip;
-4. identity/absent proceeds to magic;
-5. content type remains fallback.
+1. normalize and classify `Content-Encoding` before sniffing the body;
+2. reject unsupported non-empty encoding before any payload read;
+3. retain recognized gzip selection as authoritative;
+4. only absent/identity encoding proceeds to magic sniff;
+5. content type remains fallback after magic.
 
-Do not leak header values in diagnostics.
+Do not leak header values in diagnostics. Preserve empty-payload handling and all existing streaming/close behavior for supported encodings.
 
 ## Task 3 — HTTP integration contracts
 
@@ -69,7 +71,9 @@ Update #110 to reflect that gzip/ZIP streaming support and dual network limits p
 Implemented on `work/epg-gzip-hardening`:
 
 - source-proven RED contract for unsupported `Content-Encoding` taking precedence over gzip magic;
-- production `selectFormat()` precedence fix; the production delta is intentionally limited to the ordering inside that method;
+- second source-proven RED proving unsupported encoding must be rejected before any payload read;
+- production split between authoritative content-encoding selection and payload magic/content-type selection;
+- unsupported/layered encoding is now rejected before reading the body while the input is still closed;
 - explicit regression retaining gzip-magic fallback when `Content-Encoding` is absent;
 - MockWebServer journey for `Content-Encoding: gzip` through the accepted OkHttp transparent-decompression path;
 - generic-content-type/no-suffix gzip journey;
@@ -81,7 +85,7 @@ Implemented on `work/epg-gzip-hardening`:
 
 Static diff review from accepted main shows only the decoder, decoder/refresher tests and this plan. No Room schema, XMLTV parser, EPG matching, Guide UI or HTTP client policy has been modified.
 
-No test in this section is claimed as executed while self-hosted CI is disabled. The precedence RED is source-proven against accepted main; all other new contracts require exact-head execution when the runner returns.
+No test in this section is claimed as executed while self-hosted CI is disabled. Both precedence RED contracts are source-proven against accepted main; all new contracts require exact-head execution when the runner returns.
 
 ## Acceptance when self-hosted returns
 
