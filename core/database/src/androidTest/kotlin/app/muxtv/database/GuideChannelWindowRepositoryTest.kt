@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 class GuideChannelWindowRepositoryTest {
     private lateinit var database: MuxTvDatabase
     private lateinit var sourceStore: SourceRevisionStore
-    private lateinit var repository: RoomEpgGuideRepository
+    private lateinit var repository: RoomGuideWindowRepository
 
     @Before
     fun setUp() = runTest {
@@ -25,7 +25,11 @@ class GuideChannelWindowRepositoryTest {
         ).build()
         DatabaseInitializer(database).initialize()
         sourceStore = RoomSourceRevisionStore(database.sourceRevisionDao())
-        repository = RoomEpgGuideRepository(database.epgGuideDao())
+        val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
+        repository = RoomGuideWindowRepository(
+            dao = database.guideWindowDao(),
+            invalidationSource = epgGuideRepository,
+        )
 
         sourceStore.upsertSource(
             SourceDefinition(
