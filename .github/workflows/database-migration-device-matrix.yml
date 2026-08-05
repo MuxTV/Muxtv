@@ -90,6 +90,7 @@ jobs:
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Invoke-TvDeviceValidation.ps1 `
             -Mode DeviceMatrix `
+            -ConnectedSuite Database `
             -SourceBranch "${{ github.head_ref }}" `
             -SourceCommit "${{ github.event.pull_request.head.sha }}" `
             -NoDaemon
