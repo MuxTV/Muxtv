@@ -47,6 +47,7 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun epgRefreshDao(): EpgRefreshDao
     abstract fun epgMatchingDao(): EpgMatchingDao
     abstract fun epgGuideDao(): EpgGuideDao
+    abstract fun guideWindowDao(): GuideWindowDao
     abstract fun searchIndexDao(): SearchIndexDao
     abstract fun channelSearchDao(): ChannelSearchDao
 }
