@@ -3,6 +3,9 @@ param(
     [ValidateSet("DeviceCurrent", "DeviceMatrix")]
     [string]$Mode = "DeviceCurrent",
 
+    [ValidateSet("Product", "Database")]
+    [string]$ConnectedSuite = "Product",
+
     [string]$EvidenceRoot = ".work/evidence",
 
     [string]$SourceBranch = "",
@@ -257,6 +260,7 @@ $manifest = [ordered]@{
     branch = $branch
     commit = $commit
     mode = $Mode
+    connectedSuite = $ConnectedSuite
     startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     completedAtUtc = $null
     status = "running"
@@ -359,6 +363,7 @@ try {
             ramMb = $profile.RamMb
             cpuCores = $profile.CpuCores
             fallbackUsed = $profile.FallbackUsed
+            connectedSuite = $ConnectedSuite
             startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
             completedAtUtc = $null
             status = "running"
@@ -408,6 +413,7 @@ try {
                 "-NoProfile",
                 "-File", $verifyScript,
                 "-Mode", "DeviceOnly",
+                "-ConnectedSuite", $ConnectedSuite,
                 "-EvidenceRoot", $validationRoot,
                 "-SourceBranch", $branch,
                 "-SourceCommit", $commit
@@ -416,11 +422,11 @@ try {
                 $validationArguments += "-NoDaemon"
             }
 
-            Write-Host "`n==> Connected device validation for Android TV API $($profile.Image.Api) ($deviceSerial)"
+            Write-Host "`n==> Connected $ConnectedSuite device validation for Android TV API $($profile.Image.Api) ($deviceSerial)"
             & pwsh @validationArguments
             $validationExitCode = $LASTEXITCODE
             if ($validationExitCode -ne 0) {
-                throw "Connected device validation failed with exit code $validationExitCode on $deviceSerial."
+                throw "Connected $ConnectedSuite device validation failed with exit code $validationExitCode on $deviceSerial."
             }
 
             $profileRecord.status = "passed"
