@@ -7,7 +7,9 @@ import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runCurrent
@@ -155,10 +157,15 @@ class EpgNowNextRepositoryTest {
 
     @Test
     fun dataChangeSignalEmitsWhenActiveCatalogRevisionChanges() = runTest {
+        val firstEmission = CompletableDeferred<Unit>()
         val emissions = async {
-            repository.observeDataChanges().take(2).toList()
+            repository.observeDataChanges()
+                .onEach { firstEmission.complete(Unit) }
+                .take(2)
+                .toList()
         }
         runCurrent()
+        firstEmission.await()
 
         database.sourceRevisionDao().insertRevision(
             SourceRevisionEntity(
