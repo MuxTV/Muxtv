@@ -16,6 +16,8 @@ import app.muxtv.database.EpgRevisionStatistics
 import app.muxtv.database.EpgRevisionStore
 import app.muxtv.database.EpgSourceDefinition
 import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.network.ResponseSizeKind
+import app.muxtv.network.ResponseSizeLimits
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
@@ -142,6 +144,112 @@ class RemoteEpgRefresherTest {
     }
 
     @Test
+    fun `HTTP content encoding gzip imports through transparent decoding without double decode`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(
+                        headersOf(
+                            "Content-Encoding", "gzip",
+                            "Content-Type", "application/xml",
+                        ),
+                    )
+                    .body(Buffer().write(gzip(XMLTV.toByteArray())))
+                    .build(),
+            )
+            val fixture = fixture(server)
+
+            val result = fixture.refresher.refresh(request())
+
+            val refreshed = result as RemoteEpgRefreshResult.Refreshed
+            assertThat(refreshed.programmeCount).isEqualTo(1)
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun `gzip magic imports with generic content type and no gzip suffix`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/octet-stream"))
+                    .body(Buffer().write(gzip(XMLTV.toByteArray())))
+                    .build(),
+            )
+            val fixture = fixture(server, sourcePath = "/download?id=guide")
+
+            val result = fixture.refresher.refresh(request())
+
+            val refreshed = result as RemoteEpgRefreshResult.Refreshed
+            assertThat(refreshed.payloadFormat).isEqualTo(EpgPayloadFormat.Gzip)
+            assertThat(refreshed.programmeCount).isEqualTo(1)
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun `misleading gzip suffix with plain XML imports as plain`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/xml"))
+                    .body(XMLTV)
+                    .build(),
+            )
+            val fixture = fixture(server, sourcePath = "/guide.xml.gz")
+
+            val result = fixture.refresher.refresh(request())
+
+            val refreshed = result as RemoteEpgRefreshResult.Refreshed
+            assertThat(refreshed.payloadFormat).isEqualTo(EpgPayloadFormat.Plain)
+            assertThat(refreshed.programmeCount).isEqualTo(1)
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun `compressed payload overflow remains typed before transparent gzip decoding`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            val compressed = gzip(XMLTV.toByteArray())
+            val compressedLimit = compressed.size.toLong() - 1L
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(
+                        headersOf(
+                            "Content-Encoding", "gzip",
+                            "Content-Type", "application/xml",
+                        ),
+                    )
+                    .body(Buffer().write(compressed))
+                    .build(),
+            )
+            val fixture = fixture(server)
+
+            val result = fixture.refresher.refresh(
+                request(
+                    responseSizeLimits = ResponseSizeLimits(
+                        maxCompressedBytes = compressedLimit,
+                        maxDecodedBytes = 8L * 1024L,
+                    ),
+                ),
+            )
+
+            assertThat(result).isEqualTo(
+                RemoteEpgRefreshResult.ResponseTooLarge(
+                    kind = ResponseSizeKind.Compressed,
+                    limitBytes = compressedLimit,
+                ),
+            )
+            assertThat(fixture.revisionStore.begunRevisions).isEmpty()
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(0)
+        }
+    }
+
+    @Test
     fun `decoded payload overflow remains typed and discards staging revision`() = runTest {
         MockWebServer().use { server ->
             server.start()
@@ -170,6 +278,80 @@ class RemoteEpgRefresherTest {
     }
 
     @Test
+    fun `decoded overflow preserves previous good active revision`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/xml"))
+                    .body(XMLTV)
+                    .build(),
+            )
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/gzip"))
+                    .body(Buffer().write(gzip(XMLTV.toByteArray())))
+                    .build(),
+            )
+            val fixture = fixture(server)
+
+            val first = fixture.refresher.refresh(request())
+            val second = fixture.refresher.refresh(
+                request(
+                    decodeLimits = EpgPayloadDecodeLimits(maxDecodedBytes = 64),
+                ),
+            )
+
+            assertThat(first).isInstanceOf(RemoteEpgRefreshResult.Refreshed::class.java)
+            assertThat(second).isEqualTo(
+                RemoteEpgRefreshResult.PayloadRejected(
+                    EpgPayloadRejectionReason.DecodedSizeExceeded,
+                ),
+            )
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(1L)
+            assertThat(fixture.revisionStore.begunRevisions).containsExactly(1L, 2L).inOrder()
+            assertThat(fixture.revisionStore.discardedRevisions).containsExactly(2L)
+            assertThat(fixture.revisionStore.stagedProgrammes.map { it.revisionNumber })
+                .containsExactly(1L)
+        }
+    }
+
+    @Test
+    fun `malformed gzip preserves previous good active revision without staging replacement`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/xml"))
+                    .body(XMLTV)
+                    .build(),
+            )
+            server.enqueue(
+                MockResponse.Builder()
+                    .headers(headersOf("Content-Type", "application/gzip"))
+                    .body(Buffer().write(byteArrayOf(0x1f, 0x8b.toByte(), 0x08, 0x00)))
+                    .build(),
+            )
+            val fixture = fixture(server)
+
+            val first = fixture.refresher.refresh(request())
+            val second = fixture.refresher.refresh(request())
+
+            assertThat(first).isInstanceOf(RemoteEpgRefreshResult.Refreshed::class.java)
+            assertThat(second).isEqualTo(
+                RemoteEpgRefreshResult.PayloadRejected(
+                    EpgPayloadRejectionReason.MalformedGzip,
+                ),
+            )
+            assertThat(fixture.revisionStore.activeRevision).isEqualTo(1L)
+            assertThat(fixture.revisionStore.begunRevisions).containsExactly(1L)
+            assertThat(fixture.revisionStore.discardedRevisions).isEmpty()
+            assertThat(fixture.revisionStore.stagedProgrammes.map { it.revisionNumber })
+                .containsExactly(1L)
+        }
+    }
+
+    @Test
     fun `unapproved HTTP EPG source is rejected before network access`() = runTest {
         MockWebServer().use { server ->
             server.start()
@@ -186,6 +368,7 @@ class RemoteEpgRefresherTest {
     private suspend fun fixture(
         server: MockWebServer,
         insecureHttpApproved: Boolean = true,
+        sourcePath: String = "/guide.xml",
     ): Fixture {
         val credentialStore = EpgTestCredentialStore()
         val accessManager = RemoteSourceAccessManager(credentialStore)
@@ -193,7 +376,7 @@ class RemoteEpgRefresherTest {
             accessManager.save(
                 CREDENTIAL_ID,
                 RemoteSourceAccess(
-                    url = server.url("/guide.xml").toString(),
+                    url = server.url(sourcePath).toString(),
                     insecureHttpApproved = insecureHttpApproved,
                     userAgent = "MuxTV EPG Test",
                     sensitiveHeaders = mapOf(
@@ -220,6 +403,7 @@ class RemoteEpgRefresherTest {
 
     private fun request(
         validators: EpgHttpValidators = EpgHttpValidators(),
+        responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
         decodeLimits: EpgPayloadDecodeLimits = EpgPayloadDecodeLimits(),
     ): RemoteEpgRefreshRequest = RemoteEpgRefreshRequest(
         sourceId = "epg-source-one",
@@ -228,6 +412,7 @@ class RemoteEpgRefresherTest {
         accessCredentialId = CREDENTIAL_ID,
         defaultZoneId = null,
         validators = validators,
+        responseSizeLimits = responseSizeLimits,
         decodeLimits = decodeLimits,
     )
 
