@@ -18,6 +18,8 @@ $files = @(
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
     (Join-Path $repositoryRoot "tools\verify-local.ps1")
 )
+$productWorkflowPath = Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml"
+$databaseWorkflowPath = Join-Path $repositoryRoot ".github\workflows\database-migration-device-matrix.yml"
 
 $messages = @()
 foreach ($file in $files) {
@@ -33,6 +35,12 @@ foreach ($file in $files) {
     foreach ($parseError in @($parseErrors)) {
         $location = "{0}:{1}:{2}" -f $file, $parseError.Extent.StartLineNumber, $parseError.Extent.StartColumnNumber
         $messages += $location + " " + $parseError.Message
+    }
+}
+
+foreach ($workflowPath in @($productWorkflowPath, $databaseWorkflowPath)) {
+    if (-not (Test-Path $workflowPath -PathType Leaf)) {
+        $messages += "Missing Android TV workflow: " + $workflowPath
     }
 }
 
@@ -85,6 +93,15 @@ $verifyLocalContent = Get-Content -Path $files[7] -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
     $messages += "verify-local must expose DeviceOnly connected-test mode."
 }
+if ($verifyLocalContent -notmatch '\[ValidateSet\("Product",\s*"Database"\)\]') {
+    $messages += "verify-local must expose Product/Database ConnectedSuite values."
+}
+if ($verifyLocalContent -notmatch '\[string\]\$ConnectedSuite\s*=\s*"Product"') {
+    $messages += "verify-local ConnectedSuite must default to Product for direct/manual callers."
+}
+if ($verifyLocalContent -notmatch 'connectedSuite\s*=\s*\$ConnectedSuite') {
+    $messages += "verify-local evidence manifest must record ConnectedSuite."
+}
 
 $tvValidationContent = Get-Content -Path $files[2] -Raw
 $hostValidationIndex = $tvValidationContent.IndexOf('"-Mode", "Full"')
@@ -99,6 +116,31 @@ if (
 }
 if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
     $messages += "TV profile validation must use DeviceOnly inside the profile loop."
+}
+if ($tvValidationContent -notmatch '\[ValidateSet\("Product",\s*"Database"\)\]') {
+    $messages += "TV device validation must expose Product/Database ConnectedSuite values."
+}
+if ($tvValidationContent -notmatch '\[string\]\$ConnectedSuite\s*=\s*"Product"') {
+    $messages += "TV device validation ConnectedSuite must default to Product."
+}
+if ($tvValidationContent -notmatch '"-ConnectedSuite",\s*\$ConnectedSuite') {
+    $messages += "TV profile validation must forward ConnectedSuite to verify-local DeviceOnly."
+}
+if ($tvValidationContent -notmatch 'connectedSuite\s*=\s*\$ConnectedSuite') {
+    $messages += "TV device manifest must record ConnectedSuite."
+}
+
+if (Test-Path $productWorkflowPath -PathType Leaf) {
+    $productWorkflowContent = Get-Content -Path $productWorkflowPath -Raw
+    if ($productWorkflowContent -notmatch '-ConnectedSuite\s+Product') {
+        $messages += "Android TV product workflow must explicitly select ConnectedSuite Product."
+    }
+}
+if (Test-Path $databaseWorkflowPath -PathType Leaf) {
+    $databaseWorkflowContent = Get-Content -Path $databaseWorkflowPath -Raw
+    if ($databaseWorkflowContent -notmatch '-ConnectedSuite\s+Database') {
+        $messages += "Database migration workflow must explicitly select ConnectedSuite Database."
+    }
 }
 
 if ($messages.Count -eq 0) {
