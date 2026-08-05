@@ -9,6 +9,7 @@ on:
       - .work/schema-v10-chunks/**
 
 permissions:
+  actions: read
   contents: write
 
 env:
