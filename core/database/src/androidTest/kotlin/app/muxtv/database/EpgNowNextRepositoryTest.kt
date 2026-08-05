@@ -38,6 +38,7 @@ class EpgNowNextRepositoryTest {
         database.catalogDao().insertCanonicalChannel(
             CanonicalChannelEntity(id = CANONICAL, displayName = "Channel"),
         )
+        insertActiveCatalogVariant()
         insertEpgSource(EPG_A, revision = 1)
         insertEpgChannel(EPG_A, revision = 1, externalId = CHANNEL_A)
         publishMatch(EPG_A, revision = 1, externalId = CHANNEL_A)
@@ -204,6 +205,31 @@ class EpgNowNextRepositoryTest {
         )
     }
 
+    private suspend fun insertActiveCatalogVariant() {
+        database.sourceRevisionDao().insertProviderChannels(
+            listOf(
+                ProviderChannelEntity(
+                    id = PROVIDER_CHANNEL,
+                    sourceId = SOURCE,
+                    revisionNumber = 1,
+                    providerKey = "tvg:$CHANNEL_A",
+                    rawName = "Channel",
+                    tvgId = CHANNEL_A,
+                ),
+            ),
+        )
+        database.sourceRevisionDao().insertStreamVariants(
+            listOf(
+                StreamVariantEntity(
+                    id = STREAM_VARIANT,
+                    providerChannelId = PROVIDER_CHANNEL,
+                    canonicalChannelId = CANONICAL,
+                    locator = "https://example.invalid/live.m3u8",
+                ),
+            ),
+        )
+    }
+
     private suspend fun insertEpgSource(sourceId: String, revision: Long) {
         database.epgRevisionDao().insertSource(
             EpgSourceEntity(
@@ -303,5 +329,7 @@ class EpgNowNextRepositoryTest {
         const val CHANNEL_A = "channel-a"
         const val CHANNEL_B = "channel-b"
         const val CANONICAL = "canonical-1"
+        const val PROVIDER_CHANNEL = "provider-channel-1"
+        const val STREAM_VARIANT = "stream-variant-1"
     }
 }
