@@ -3,6 +3,9 @@ param(
     [ValidateSet("Fast", "Full", "Device", "DeviceOnly")]
     [string]$Mode = "Fast",
 
+    [ValidateSet("Product", "Database")]
+    [string]$ConnectedSuite = "Product",
+
     [string]$EvidenceRoot = ".work/evidence",
 
     [string]$SourceBranch = "",
@@ -209,14 +212,56 @@ if ($Mode -ne "DeviceOnly") {
     }
 }
 
-$deviceTestModules = @(
-    [ordered]@{ ModulePath = "catalog\importer"; DisplayName = "Importer EPG integration" },
-    [ordered]@{ ModulePath = "catalog\refresh"; DisplayName = "Remote EPG integration" },
-    [ordered]@{ ModulePath = "core\credentials"; DisplayName = "Credential instrumentation" },
-    [ordered]@{ ModulePath = "core\database"; DisplayName = "Database instrumentation" },
-    [ordered]@{ ModulePath = "player\media3"; DisplayName = "Media3 instrumentation" },
-    [ordered]@{ ModulePath = "app\tv"; DisplayName = "Application instrumentation" }
+$connectedTestCatalog = @(
+    [ordered]@{
+        Suites = @("Product", "Database")
+        StepName = "importer-epg-device-tests"
+        GradleTask = ":catalog:importer:connectedDebugAndroidTest"
+        ModulePath = "catalog\importer"
+        DisplayName = "Importer EPG integration"
+    },
+    [ordered]@{
+        Suites = @("Product")
+        StepName = "remote-epg-device-tests"
+        GradleTask = ":catalog:refresh:connectedDebugAndroidTest"
+        ModulePath = "catalog\refresh"
+        DisplayName = "Remote EPG integration"
+    },
+    [ordered]@{
+        Suites = @("Product")
+        StepName = "credentials-device-tests"
+        GradleTask = ":core:credentials:connectedDebugAndroidTest"
+        ModulePath = "core\credentials"
+        DisplayName = "Credential instrumentation"
+    },
+    [ordered]@{
+        Suites = @("Product", "Database")
+        StepName = "database-device-tests"
+        GradleTask = ":core:database:connectedDebugAndroidTest"
+        ModulePath = "core\database"
+        DisplayName = "Database instrumentation"
+    },
+    [ordered]@{
+        Suites = @("Product")
+        StepName = "media3-device-tests"
+        GradleTask = ":player:media3:connectedDebugAndroidTest"
+        ModulePath = "player\media3"
+        DisplayName = "Media3 instrumentation"
+    },
+    [ordered]@{
+        Suites = @("Product")
+        StepName = "app-device-tests"
+        GradleTask = ":app:tv:connectedDebugAndroidTest"
+        ModulePath = "app\tv"
+        DisplayName = "Application instrumentation"
+    }
 )
+$deviceTestModules = @(
+    $connectedTestCatalog | Where-Object { $_.Suites -contains $ConnectedSuite }
+)
+if ($deviceTestModules.Count -lt 1) {
+    throw "Connected suite '$ConnectedSuite' selected no instrumentation modules."
+}
 
 if ($Mode -in @("Device", "DeviceOnly")) {
     foreach ($module in $deviceTestModules) {
@@ -224,24 +269,9 @@ if ($Mode -in @("Device", "DeviceOnly")) {
         Remove-Item -Path $staleResults -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Add-Step -Name "importer-epg-device-tests" -Arguments @(
-        ":catalog:importer:connectedDebugAndroidTest"
-    )
-    Add-Step -Name "remote-epg-device-tests" -Arguments @(
-        ":catalog:refresh:connectedDebugAndroidTest"
-    )
-    Add-Step -Name "credentials-device-tests" -Arguments @(
-        ":core:credentials:connectedDebugAndroidTest"
-    )
-    Add-Step -Name "database-device-tests" -Arguments @(
-        ":core:database:connectedDebugAndroidTest"
-    )
-    Add-Step -Name "media3-device-tests" -Arguments @(
-        ":player:media3:connectedDebugAndroidTest"
-    )
-    Add-Step -Name "app-device-tests" -Arguments @(
-        ":app:tv:connectedDebugAndroidTest"
-    )
+    foreach ($module in $deviceTestModules) {
+        Add-Step -Name $module.StepName -Arguments @($module.GradleTask)
+    }
 }
 
 $manifest = [ordered]@{
@@ -250,6 +280,7 @@ $manifest = [ordered]@{
     branch = $branch
     commit = $commit
     mode = $Mode
+    connectedSuite = $ConnectedSuite
     startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     completedAtUtc = $null
     status = "running"
