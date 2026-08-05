@@ -191,7 +191,7 @@ class ChannelsFocusRestorationTest {
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
         composeRule.onNodeWithText("Третий", substring = false).assertExists()
-        composeRule.onNodeWithText("Недавно просмотренных каналов: 2").assertExists()
+        composeRule.onNodeWithText("Показано недавних: 2").assertExists()
     }
 
     @Test
