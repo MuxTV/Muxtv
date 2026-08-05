@@ -23,7 +23,7 @@ interface GuideWindowRepository {
 }
 ```
 
-`RoomGuideWindowRepository` owns viewport mapping over a dedicated `GuideWindowDao`. It receives the accepted `EpgGuideRepository` only as the payload-free invalidation source, so Now/Next and viewport retain separate query owners while sharing one Room database and one data-change lifecycle. `MuxTvDatabaseComponents` creates one instance and Hilt exposes that instance; no second database, polling loop or invalidation owner is introduced.
+`RoomGuideWindowRepository` owns viewport mapping over a dedicated `GuideWindowDao`. A separate `GuideWindowInvalidationDao` observes every table that can change channel membership, overlay presentation, EPG matching or programme payload. Its scalar `EXISTS` projections are intentionally cheap: Room table invalidation is the signal, not a full-table count or polling loop. `MuxTvDatabaseComponents` creates one repository instance and Hilt exposes that instance; no second database or competing Now/Next owner is introduced.
 
 ## Channel keyset window
 
@@ -152,7 +152,7 @@ class GuideProgrammeWindow(
 )
 ```
 
-Collection inputs are copied. Non-`READY` channel results must not carry programme payload.
+Collection inputs are copied. Non-`READY` channel results must not carry programme payload. Programme truncation is a viewport safety ceiling, not pagination: a future state owner must shrink the channel/time window before presenting a truncated result as complete.
 
 ## Error and privacy contract
 
@@ -162,6 +162,7 @@ Invalid bounds fail at API construction with `IllegalArgumentException`. Reposit
 
 - API contract tests for bounds, defensive copies, cursor/result invariants and redaction.
 - Room integration tests for deterministic keyset pages, hidden/staged/stale exclusion, revision swap, conflict, overlap, open-ended effective end and explicit truncation.
+- Room invalidation test proving an overlay update emits even when table cardinality is unchanged.
 - Existing Now/Next and cross-surface truth tests remain green.
 - No Room v11 or full-guide materialization.
 - Exact-head Full plus old-edge/current database/product acceptance before merge.

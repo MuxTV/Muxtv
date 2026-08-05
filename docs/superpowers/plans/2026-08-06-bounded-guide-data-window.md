@@ -4,7 +4,7 @@
 
 **Goal:** Add a profile-visible active-channel keyset window and a bounded EPG programme time window that can back a future TV Guide grid without full catalog/EPG materialization.
 
-**Architecture:** A new `GuideWindowRepository` API owns viewport queries while existing `EpgGuideRepository` continues to own Now/Next. `RoomEpgGuideRepository` implements both interfaces over an extended `EpgGuideDao`; channel and programme reads reuse accepted active-revision/profile-visible semantics and explicit `limit + 1` completeness.
+**Architecture:** `GuideWindowRepository` owns viewport queries while `EpgGuideRepository` remains the Now/Next owner. `RoomGuideWindowRepository` consumes a dedicated `GuideWindowDao` and `GuideWindowInvalidationDao`; channel and programme reads reuse accepted active-revision/profile-visible semantics, execute bounded queries and expose explicit `limit + 1` completeness.
 
 **Tech Stack:** Kotlin, Coroutines Flow, Room 3, SQLite, JUnit4, Truth, Android instrumentation, Hilt.
 
@@ -27,73 +27,54 @@
 - Create: `catalog/api/src/main/kotlin/app/muxtv/catalog/GuideWindowRepository.kt`
 - Create: `catalog/api/src/test/kotlin/app/muxtv/catalog/GuideWindowRepositoryContractTest.kt`
 
-**Interfaces:**
-- Produces: `GuideChannelCursor`, `GuideChannelWindowQuery`, `GuideChannelWindow`
-- Produces: `GuideProgrammeWindowQuery`, `GuideProgrammeKey`, `GuideProgrammeCell`
-- Produces: `ChannelGuideProgrammeWindow`, `GuideProgrammeWindow`, `GuideWindowRepository`
-
-- [ ] **Step 1: Write compile-RED tests for query bounds, defensive channel ID copy, cursor/result invariants, non-READY payload rejection and redaction.**
-- [ ] **Step 2: Run `./gradlew.bat :catalog:api:test --tests app.muxtv.catalog.GuideWindowRepositoryContractTest --stacktrace --console=plain`; expect unresolved Guide window symbols.**
-- [ ] **Step 3: Implement only the immutable API models and validation needed by those tests.**
-- [ ] **Step 4: Rerun the focused API test and all `:catalog:api:test`; expect green.**
-- [ ] **Step 5: Commit `feat(catalog): define bounded Guide window contracts`.**
+- [x] Add RED contracts for bounds, defensive copies, cursor/result invariants, non-READY payload rejection and redaction.
+- [x] Implement immutable API models and `GuideWindowRepository`.
+- [x] Preserve payload-free invalidation and privacy-safe `toString()` surfaces.
 
 ### Task 2: Active profile-visible channel keyset window
 
 **Files:**
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/EpgGuideDao.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/RoomEpgGuideRepository.kt`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/GuideWindowDao.kt`
+- Create: `core/database/src/main/kotlin/app/muxtv/database/RoomGuideWindowRepository.kt`
 - Create: `core/database/src/androidTest/kotlin/app/muxtv/database/GuideChannelWindowRepositoryTest.kt`
 
-**Interfaces:**
-- Consumes: `GuideChannelWindowQuery`
-- Produces DAO rows carrying `channelNumberSort`, display name and `PlayableChannelSummary` fields.
-- Produces repository `getChannelWindow()`.
-
-- [ ] **Step 1: Seed active revision channels, a staged-only channel, hidden overlay, duplicate variants and numbered/unnumbered rows; assert first page, cursor and second page.**
-- [ ] **Step 2: Run the focused instrumentation test; expect compile failure because DAO/repository methods do not exist.**
-- [ ] **Step 3: Add one bounded DAO query with active/profile-visible predicate, deterministic keyset comparison and `limit + 1`.**
-- [ ] **Step 4: Map rows to `PlayableChannelSummary`; trim the extra row and derive `nextCursor` only when truncated.**
-- [ ] **Step 5: Add revision-swap and stale-cursor assertions; staged/previous/hidden channels remain absent.**
-- [ ] **Step 6: Run focused and existing Playback/active-truth database tests; expect green.**
-- [ ] **Step 7: Commit `feat(database): add Guide channel keyset window`.**
+- [x] Seed active, staged-only, hidden, duplicate-variant and numbered/unnumbered fixtures.
+- [x] Implement deterministic keyset comparison with explicit numbered/null ordering.
+- [x] Request `limit + 1`, trim the extra row and expose a cursor only when truncated.
+- [x] Cover revision swap and stale-cursor continuation without exposing previous/staged rows.
 
 ### Task 3: Bounded programme overlap window
 
 **Files:**
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/EpgGuideDao.kt`
-- Modify: `core/database/src/main/kotlin/app/muxtv/database/RoomEpgGuideRepository.kt`
+- Modify: `core/database/src/main/kotlin/app/muxtv/database/GuideWindowDao.kt`
+- Modify: `core/database/src/main/kotlin/app/muxtv/database/RoomGuideWindowRepository.kt`
 - Create: `core/database/src/androidTest/kotlin/app/muxtv/database/GuideProgrammeWindowRepositoryTest.kt`
 
-**Interfaces:**
-- Consumes: `GuideProgrammeWindowQuery`
-- Produces transaction snapshot: accepted match counts plus bounded programme rows with stable EPG key and effective end.
-- Produces repository `getProgrammeWindow()`.
+- [x] Add fixtures for explicit overlap, non-overlap, open-ended effective end, terminal-open exclusion, hidden membership, conflict and truncation.
+- [x] Resolve current match counts and bounded programme rows inside one Room transaction.
+- [x] Query programme rows only for exactly-one-match canonical IDs.
+- [x] Preserve requested channel order and map `READY`, `NO_GUIDE` and `SOURCE_CONFLICT`.
+- [x] Carry stable EPG keys and explicit global truncation.
 
-- [ ] **Step 1: Write RED fixtures for explicit overlap, excluded non-overlap, open-ended effective end, open-ended terminal exclusion, hidden/stale exclusion, source conflict and `limit + 1` truncation.**
-- [ ] **Step 2: Run the focused instrumentation test; expect missing DAO/repository methods.**
-- [ ] **Step 3: Reuse current match-count query and add a programme-window query only for single-match IDs.**
-- [ ] **Step 4: Compute effective end with explicit stop or correlated next-start subquery and apply one overlap predicate.**
-- [ ] **Step 5: Preserve requested channel order and return `READY`, `NO_GUIDE` or `SOURCE_CONFLICT` per ID.**
-- [ ] **Step 6: Trim the global extra row, set `isTruncated`, and keep stable programme keys.**
-- [ ] **Step 7: Run focused, Now/Next, active-membership and full database instrumentation tests; expect green.**
-- [ ] **Step 8: Commit `feat(database): add bounded Guide programme window`.**
-
-### Task 4: Runtime exposure and acceptance
+### Task 4: Runtime exposure and complete invalidation
 
 **Files:**
+- Create: `core/database/src/main/kotlin/app/muxtv/database/GuideWindowInvalidationDao.kt`
+- Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabase.kt`
 - Modify: `core/database/src/main/kotlin/app/muxtv/database/MuxTvDatabaseFactory.kt`
-- Modify: `app/tv/src/main/kotlin/app/muxtv/di/AppModule.kt`
-- Add API/DI tests only if existing test modules require them.
+- Create: `app/tv/src/main/kotlin/app/muxtv/di/GuideWindowModule.kt`
+- Create: `core/database/src/androidTest/kotlin/app/muxtv/database/GuideWindowInvalidationTest.kt`
 
-**Interfaces:**
-- `MuxTvDatabaseComponents.guideWindowRepository: GuideWindowRepository`
-- Hilt provider for `GuideWindowRepository`
+- [x] Expose one `RoomGuideWindowRepository` through database components and Hilt.
+- [x] Observe catalog, overlay, match and programme table invalidations without polling or full-table counts.
+- [x] Cover same-cardinality overlay update invalidation.
 
-- [ ] **Step 1: Expose the same `RoomEpgGuideRepository` instance through the new interface.**
-- [ ] **Step 2: Add the Hilt provider without creating a second Room repository instance.**
-- [ ] **Step 3: Run host Full and database instrumentation compile.**
-- [ ] **Step 4: Open/update draft PR with exact scope, RED/GREEN evidence and explicit non-goals.**
-- [ ] **Step 5: Run old-edge/current database/product evidence on exact head.**
-- [ ] **Step 6: Verify zero schema diff, zero unresolved review threads and final privacy/semantic review.**
-- [ ] **Step 7: Squash-merge only after exact-head evidence is green; update issue #29 to leave only Guide state/UI/Player-Back work.**
+### Task 5: Acceptance and merge truth
+
+- [ ] Confirm host Full compiles API, Room SQL, Hilt and all unit tests on the exact head.
+- [ ] Confirm API26/API36 database tests for keyset, overlap and invalidation.
+- [ ] Confirm product matrix has no startup/DI regression.
+- [ ] Confirm generated Room v10 schema is byte-identical and no migration is introduced.
+- [ ] Confirm zero unresolved review threads and final privacy/performance review.
+- [ ] Update PR evidence and merge only after exact-head acceptance.
+- [ ] Update issue #29 after merge, leaving Guide state/UI/D-pad/Player-Back as the remaining Guide package.
