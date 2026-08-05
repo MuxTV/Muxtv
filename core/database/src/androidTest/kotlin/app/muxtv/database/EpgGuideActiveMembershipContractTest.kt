@@ -29,9 +29,17 @@ class EpgGuideActiveMembershipContractTest {
         guide = RoomEpgGuideRepository(database.epgGuideDao())
 
         sourceStore.upsertSource(SourceDefinition(id = SOURCE_ID, name = "Guide membership"))
-        stageRevision(revisionNumber = 1, channelId = ACTIVE_CHANNEL)
-        activateRevision(revisionNumber = 1)
-        stageRevision(revisionNumber = 2, channelId = STAGED_CHANNEL)
+        stageRevision(
+            revisionNumber = 1,
+            channelId = ACTIVE_CHANNEL,
+            variantCount = 2,
+        )
+        activateRevision(revisionNumber = 1, entryCount = 2)
+        stageRevision(
+            revisionNumber = 2,
+            channelId = STAGED_CHANNEL,
+            variantCount = 1,
+        )
 
         insertActiveEpg()
         publishCurrentRelationWithPoisonedStagedMatch()
@@ -61,7 +69,9 @@ class EpgGuideActiveMembershipContractTest {
     private suspend fun stageRevision(
         revisionNumber: Long,
         channelId: String,
+        variantCount: Int,
     ) {
+        require(variantCount > 0)
         sourceStore.beginRevision(
             sourceId = SOURCE_ID,
             revisionNumber = revisionNumber,
@@ -70,29 +80,32 @@ class EpgGuideActiveMembershipContractTest {
         sourceStore.stageBatch(
             sourceId = SOURCE_ID,
             revisionNumber = revisionNumber,
-            entries = listOf(
+            entries = List(variantCount) { index ->
                 StagedCatalogEntry(
-                    providerChannelId = "provider-$revisionNumber-$channelId",
-                    providerKey = "tvg:${externalId(channelId)}",
-                    rawName = "Guide $channelId",
+                    providerChannelId = "provider-$revisionNumber-$channelId-$index",
+                    providerKey = "tvg:${externalId(channelId)}:$index",
+                    rawName = "Guide $channelId $index",
                     canonicalChannelId = channelId,
                     canonicalDisplayName = "Guide $channelId",
-                    streamVariantId = "variant-$revisionNumber-$channelId",
-                    locator = "https://example.invalid/$revisionNumber/$channelId.m3u8",
+                    streamVariantId = "variant-$revisionNumber-$channelId-$index",
+                    locator = "https://example.invalid/$revisionNumber/$channelId/$index.m3u8",
                     tvgId = externalId(channelId),
-                ),
-            ),
+                )
+            },
         )
     }
 
-    private suspend fun activateRevision(revisionNumber: Long) {
+    private suspend fun activateRevision(
+        revisionNumber: Long,
+        entryCount: Int,
+    ) {
         assertThat(
             sourceStore.activate(
                 sourceId = SOURCE_ID,
                 revisionNumber = revisionNumber,
                 activatedAtEpochMillis = revisionNumber * 1_000L + 500L,
                 statistics = SourceRevisionStatistics(
-                    parsedEntries = 1,
+                    parsedEntries = entryCount,
                     skippedEntries = 0,
                     warningCount = 0,
                 ),
