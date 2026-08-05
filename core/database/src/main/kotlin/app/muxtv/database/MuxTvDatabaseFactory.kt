@@ -55,7 +55,7 @@ object MuxTvDatabaseFactory {
         val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
         val guideWindowRepository = RoomGuideWindowRepository(
             dao = database.guideWindowDao(),
-            invalidationSource = epgGuideRepository,
+            invalidationDao = database.guideWindowInvalidationDao(),
         )
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
