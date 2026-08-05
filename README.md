@@ -6,9 +6,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Принятый `main` — `64b64c933da665d00ac403fd410a39309e773d64` (PR #92 Favorites).
+Проект находится в стадии **functional pre-alpha**. Принятый `main` — `8fced4dc282eaf07e8160f463c8276d7e48ba01b` (PR #106 first-rendered-frame success signal).
 
-Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v8**. `minSdk = 26`.
+Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v9**. `minSdk = 26`.
 
 Рабочий продуктовый контур:
 
@@ -17,44 +17,44 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Room
 3. immutable source revisions, staging и atomic activation;
 4. durable source refresh ownership;
 5. bounded XMLTV + secure remote EPG refresh;
-6. immutable EPG revisions;
-7. deterministic EPG matching с policy-version provenance;
-8. bounded Now/Next;
-9. Channels с destination-scoped state;
+6. immutable EPG revisions и deterministic EPG matching;
+7. bounded Now/Next;
+8. Channels с destination-scoped state и profile-scoped Favorites;
+9. bounded Unicode Search Core + Search TV;
 10. process-owned Media3 Player;
-11. Player → Back с stable canonical-channel focus restoration;
-12. profile-scoped Favorites в Player и Channels.
+11. Player/Search → Back со stable canonical-channel focus restoration;
+12. service-owned first-rendered-frame success boundary с exact profile/channel identity и direct recorder fan-out.
 
-### Принятые последние продуктовые этапы
+### Последние принятые продуктовые этапы
 
-- PR #80 — deterministic EPG matching + bounded Now/Next foundation;
-- PR #84 — Room v8 matching-policy provenance и stale-policy repair;
-- PR #90 — Channels Now/Next, scoped screen state, Media3 playback projection и stable focus;
-- PR #92 — durable Favorites, All/Favorites filter, Player favorite action и TV D-pad/focus contracts.
+- PR #92 — durable Favorites, All/Favorites filter, Player favorite action и TV D-pad/focus contracts;
+- PR #104 — Room v9 bounded Unicode Search Core + Search TV;
+- PR #105 — truth-sync после принятия Search TV;
+- PR #106 — service-owned first-rendered-frame success boundary для durable Recent.
 
-Exact-head acceptance PR #92:
+Exact-head acceptance PR #106 (`6bc33d8b61d0f687d52cdf6f65ca216035ef369d`):
 
-- Self-hosted validation `30873814952` — success;
-- Android TV product DeviceMatrix `30873814955` — API26/API36 success, app instrumentation 18/18 на каждом профиле;
-- database/device matrix `30873814953` — API26/API36 success, core database 93/93 на каждом профиле, `ChannelPreferencesRepositoryTest` 5/5.
+- Self-hosted Full validation `30946905694` — success;
+- Android TV product matrix `30946905920` — old-edge/current success;
+- merge commit — `8fced4dc282eaf07e8160f463c8276d7e48ba01b`.
 
 ## Что ещё не завершено
 
 Текущий product critical path:
 
-1. **issue #29 / Search Core** — Room v9 derived Unicode FTS4 (`unicode61`), bounded active-truth candidate search и current-programme enrichment;
-2. **Search TV** — debounced + immediate-submit TV Search, D-pad/IME focus и Player → Back continuity;
-3. **Recent** — отдельная profile-scoped durable playback history, записываемая только после подтверждённого успешного playback; ожидаемый следующий schema bump после Search — Room v10;
-4. **Guide** — bounded/lazy channel × time viewport, без full-guide materialization;
-5. **issue #30** — bounded playback fallback + typed failure families + TV Doctor Lite;
-6. **issue #33** — финальная TV-first visual/interaction polish поверх реальных Search/Guide routes;
-7. **issue #31** — R8, Baseline/Startup Profiles, Macrobenchmark, signing, SBOM/release checklist и physical-device evidence.
+1. **PR #107 / Recent / Room v10** — profile-scoped bounded successful-playback history, записываемая только после accepted first rendered frame; Channels `Недавние`; migration 9→10; exact generated Room schema и old-edge/current device acceptance до merge;
+2. **issue #114** — единый active/current-revision + selected-profile-visible truth contract для rows/counts/pagination/Playback/Search/Recent/Guide;
+3. **Guide** — bounded/lazy channel × time viewport без full-guide materialization;
+4. **issue #30** — bounded playback fallback + typed failure families + TV Doctor Lite;
+5. **issues #33/#93** — TV-first visual/interaction polish поверх реальных Search/Recent/Guide routes;
+6. **issue #31** — R8, Baseline/Startup Profiles, Macrobenchmark, signing, SBOM/release checklist и physical-device evidence.
 
-Параллельно остаётся **issue #27**: повторяемые performance datasets (`current-normal`, `old-edge-normal`, `current-low-ram`) и только затем per-operation hard-gate/warning/descriptive decisions.
+Параллельно:
 
-Старые allocation PR #83/#87/#89 закрыты без merge. Их идеи разрешено clean-rebuild только после воспроизводимого same-corpus measurement evidence.
-
-PR #88 закрыт как superseded; старую truth-sync историю не следует восстанавливать или ретаргетить.
+- **PR #119 / issue #110** hardens compressed XMLTV transport without replacing the accepted streaming decoder/parser or immutable EPG revision model;
+- **issue #27** owns repeated performance datasets (`current-normal`, `old-edge-normal`, `current-low-ram`) and evidence-driven thresholds;
+- **issue #101** owns optional connected-suite split inside the existing self-hosted AVD harness;
+- **issue #100** owns conditional M3U validators/`304 Not Modified` only after the next Room schema owner is free.
 
 **Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence и отдельного ADR.
 
@@ -62,11 +62,10 @@ PR #88 закрыт как superseded; старую truth-sync историю н
 
 - TV-first и полноценный D-pad/remote flow;
 - local-first/privacy-first;
-- playlist/XML locators, query values, cookies, credentials, provider identities и sensitive headers не попадают в Navigation, public Room projections, logs, traces, screenshots или raw exception text;
+- sensitive source/playback metadata не попадает в Navigation, public Room projections, logs, traces или screenshots;
 - source и EPG обновления используют immutable revisions, staging и atomic activation;
 - previous-good data сохраняется при malformed input, cancellation, supersede и network failure;
 - один process-owned `ExoPlayer`/`MediaSession`;
-- один in-process owner encrypted source access;
 - WorkManager — durable orchestration boundary, но authoritative publication ownership остаётся за DB lease + transactional revision activation;
 - derived Search index никогда не является source of truth;
 - UI не выполняет full-catalog/full-guide materialization;
@@ -86,7 +85,7 @@ Debug APK:
 pwsh -NoProfile -File .\tools\verify-local.ps1 -Mode Full -NoDaemon
 ```
 
-API26/API36 Android TV matrix:
+Old-edge/current Android TV matrix:
 
 ```powershell
 pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
@@ -95,6 +94,8 @@ pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
   -SourceCommit <full-lowercase-40-character-git-sha> `
   -NoDaemon
 ```
+
+`DeviceMatrix` автоматически запускает Full host gate, затем последовательно поднимает old-edge Android TV image (предпочтительно API26, с явным fallback только если image недоступен) и current API36 image, собирает evidence и останавливает каждый AVD.
 
 Deterministic M3U corpus:
 
@@ -120,9 +121,11 @@ pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
 
 - repository truth: [`.work/CURRENT-STATE.md`](.work/CURRENT-STATE.md);
 - machine-readable status: [`.work/meta/status.yaml`](.work/meta/status.yaml);
-- current execution plan: [`docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md`](docs/superpowers/plans/2026-08-04-post-favorites-product-execution.md);
-- Search comparative research remains attached to the active Search work until that code is accepted into `main`;
+- long-lived roadmap: [`.work/ROADMAP.md`](.work/ROADMAP.md);
+- architecture: [`.work/ARCHITECTURE.md`](.work/ARCHITECTURE.md);
 - benchmark methodology: [`.work/quality/benchmark-methodology.md`](.work/quality/benchmark-methodology.md).
+
+Active implementation plans live under `docs/superpowers/plans/` and must not override accepted `main` truth until their PRs pass final exact-head acceptance.
 
 ## Лицензия
 
