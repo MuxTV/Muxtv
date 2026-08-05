@@ -1,7 +1,6 @@
 package app.muxtv.database
 
 import app.muxtv.catalog.ChannelGuideProgrammeWindow
-import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideChannelCursor
 import app.muxtv.catalog.GuideChannelWindow
 import app.muxtv.catalog.GuideChannelWindowQuery
@@ -13,10 +12,11 @@ import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlayableChannelSummary
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 internal class RoomGuideWindowRepository(
     private val dao: GuideWindowDao,
-    private val invalidationSource: EpgGuideRepository,
+    private val invalidationDao: GuideWindowInvalidationDao,
 ) : GuideWindowRepository {
     override suspend fun getChannelWindow(
         query: GuideChannelWindowQuery,
@@ -93,7 +93,8 @@ internal class RoomGuideWindowRepository(
         )
     }
 
-    override fun observeDataChanges(): Flow<Unit> = invalidationSource.observeDataChanges()
+    override fun observeDataChanges(): Flow<Unit> =
+        invalidationDao.observeDataVersion().map { Unit }
 }
 
 private fun GuideChannelWindowRow.toSummary(): PlayableChannelSummary = PlayableChannelSummary(
