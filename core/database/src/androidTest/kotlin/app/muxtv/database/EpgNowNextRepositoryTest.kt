@@ -7,7 +7,9 @@ import app.muxtv.catalog.GuideProgramme
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runCurrent
@@ -36,6 +38,7 @@ class EpgNowNextRepositoryTest {
         database.catalogDao().insertCanonicalChannel(
             CanonicalChannelEntity(id = CANONICAL, displayName = "Channel"),
         )
+        insertActiveCatalogVariant()
         insertEpgSource(EPG_A, revision = 1)
         insertEpgChannel(EPG_A, revision = 1, externalId = CHANNEL_A)
         publishMatch(EPG_A, revision = 1, externalId = CHANNEL_A)
@@ -155,10 +158,15 @@ class EpgNowNextRepositoryTest {
 
     @Test
     fun dataChangeSignalEmitsWhenActiveCatalogRevisionChanges() = runTest {
+        val firstEmission = CompletableDeferred<Unit>()
         val emissions = async {
-            repository.observeDataChanges().take(2).toList()
+            repository.observeDataChanges()
+                .onEach { firstEmission.complete(Unit) }
+                .take(2)
+                .toList()
         }
         runCurrent()
+        firstEmission.await()
 
         database.sourceRevisionDao().insertRevision(
             SourceRevisionEntity(
@@ -193,6 +201,31 @@ class EpgNowNextRepositoryTest {
                 startedAtEpochMillis = 10,
                 activatedAtEpochMillis = 20,
                 parsedEntries = 1,
+            ),
+        )
+    }
+
+    private suspend fun insertActiveCatalogVariant() {
+        database.sourceRevisionDao().insertProviderChannels(
+            listOf(
+                ProviderChannelEntity(
+                    id = PROVIDER_CHANNEL,
+                    sourceId = SOURCE,
+                    revisionNumber = 1,
+                    providerKey = "tvg:$CHANNEL_A",
+                    rawName = "Channel",
+                    tvgId = CHANNEL_A,
+                ),
+            ),
+        )
+        database.sourceRevisionDao().insertStreamVariants(
+            listOf(
+                StreamVariantEntity(
+                    id = STREAM_VARIANT,
+                    providerChannelId = PROVIDER_CHANNEL,
+                    canonicalChannelId = CANONICAL,
+                    locator = "https://example.invalid/live.m3u8",
+                ),
             ),
         )
     }
@@ -296,5 +329,7 @@ class EpgNowNextRepositoryTest {
         const val CHANNEL_A = "channel-a"
         const val CHANNEL_B = "channel-b"
         const val CANONICAL = "canonical-1"
+        const val PROVIDER_CHANNEL = "provider-channel-1"
+        const val STREAM_VARIANT = "stream-variant-1"
     }
 }

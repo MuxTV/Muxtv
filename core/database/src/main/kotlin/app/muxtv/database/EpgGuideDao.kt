@@ -105,6 +105,17 @@ internal abstract class EpgGuideDao {
           AND epg_channel_matches.canonicalChannelId IS NOT NULL
           AND epg_channel_matches.canonicalChannelId IN (:canonicalChannelIds)
           AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+          AND EXISTS (
+              SELECT 1
+              FROM stream_variants AS active_stream_variants
+              INNER JOIN provider_channels AS active_provider_channels
+                  ON active_provider_channels.id = active_stream_variants.providerChannelId
+              INNER JOIN sources AS active_sources
+                  ON active_sources.id = active_provider_channels.sourceId
+              WHERE active_stream_variants.canonicalChannelId =
+                    epg_channel_matches.canonicalChannelId
+                AND active_provider_channels.revisionNumber = active_sources.activeRevision
+          )
         GROUP BY epg_channel_matches.canonicalChannelId
         """,
     )
@@ -140,6 +151,17 @@ internal abstract class EpgGuideDao {
           AND epg_channel_matches.canonicalChannelId IS NOT NULL
           AND epg_channel_matches.canonicalChannelId IN (:canonicalChannelIds)
           AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+          AND EXISTS (
+              SELECT 1
+              FROM stream_variants AS active_stream_variants
+              INNER JOIN provider_channels AS active_provider_channels
+                  ON active_provider_channels.id = active_stream_variants.providerChannelId
+              INNER JOIN sources AS active_sources
+                  ON active_sources.id = active_provider_channels.sourceId
+              WHERE active_stream_variants.canonicalChannelId =
+                    epg_channel_matches.canonicalChannelId
+                AND active_provider_channels.revisionNumber = active_sources.activeRevision
+          )
           AND (
               epg_programmes.sequenceNumber = (
                   SELECT previous_programme.sequenceNumber
