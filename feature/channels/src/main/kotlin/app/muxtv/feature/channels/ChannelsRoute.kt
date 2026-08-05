@@ -400,9 +400,9 @@ private fun ChannelsFilter.filterLabel(target: ChannelsFilter, label: String): S
     if (this == target) "• $label" else label
 
 private fun ChannelsFilter.countLabel(count: Int): String = when (this) {
-    ChannelsFilter.ALL -> "Активных каналов: $count"
-    ChannelsFilter.FAVORITES -> "Избранных каналов: $count"
-    ChannelsFilter.RECENT -> "Недавно просмотренных каналов: $count"
+    ChannelsFilter.ALL -> "Показано каналов: $count"
+    ChannelsFilter.FAVORITES -> "Показано избранных: $count"
+    ChannelsFilter.RECENT -> "Показано недавних: $count"
 }
 
 private fun ChannelRowProjection.primaryLabel(): String = buildString {
