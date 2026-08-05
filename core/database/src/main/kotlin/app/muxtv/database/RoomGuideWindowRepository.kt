@@ -1,12 +1,16 @@
 package app.muxtv.database
 
+import app.muxtv.catalog.ChannelGuideProgrammeWindow
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideChannelCursor
 import app.muxtv.catalog.GuideChannelWindow
 import app.muxtv.catalog.GuideChannelWindowQuery
+import app.muxtv.catalog.GuideProgrammeCell
+import app.muxtv.catalog.GuideProgrammeKey
 import app.muxtv.catalog.GuideProgrammeWindow
 import app.muxtv.catalog.GuideProgrammeWindowQuery
+import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.GuideWindowRepository
-import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlayableChannelSummary
 import kotlinx.coroutines.flow.Flow
 
@@ -43,7 +47,51 @@ internal class RoomGuideWindowRepository(
 
     override suspend fun getProgrammeWindow(
         query: GuideProgrammeWindowQuery,
-    ): GuideProgrammeWindow = error("Bounded Guide programme window is not implemented yet.")
+    ): GuideProgrammeWindow {
+        if (query.canonicalChannelIds.isEmpty()) {
+            return GuideProgrammeWindow(emptyList(), isTruncated = false)
+        }
+        val snapshot = dao.programmeWindowSnapshot(
+            profileId = query.profileId,
+            canonicalChannelIds = query.canonicalChannelIds,
+            fromEpochMillis = query.fromEpochMillis,
+            toEpochMillis = query.toEpochMillis,
+            limit = query.limit + 1,
+        )
+        val isTruncated = snapshot.programmeRows.size > query.limit
+        val visibleRows = if (isTruncated) {
+            snapshot.programmeRows.take(query.limit)
+        } else {
+            snapshot.programmeRows
+        }
+        val countsByChannel = snapshot.matchCounts.associate { row ->
+            row.canonicalChannelId to row.matchCount
+        }
+        val rowsByChannel = visibleRows.groupBy(GuideProgrammeWindowRow::canonicalChannelId)
+        val channels = query.canonicalChannelIds.map { canonicalChannelId ->
+            val matchCount = countsByChannel[canonicalChannelId] ?: 0L
+            val state = when {
+                matchCount == 0L -> GuideProjectionState.NO_GUIDE
+                matchCount == 1L -> GuideProjectionState.READY
+                else -> GuideProjectionState.SOURCE_CONFLICT
+            }
+            ChannelGuideProgrammeWindow(
+                canonicalChannelId = canonicalChannelId,
+                state = state,
+                programmes = if (state == GuideProjectionState.READY) {
+                    rowsByChannel[canonicalChannelId]
+                        .orEmpty()
+                        .map(GuideProgrammeWindowRow::toCell)
+                } else {
+                    emptyList()
+                },
+            )
+        }
+        return GuideProgrammeWindow(
+            channels = channels,
+            isTruncated = isTruncated,
+        )
+    }
 
     override fun observeDataChanges(): Flow<Unit> = invalidationSource.observeDataChanges()
 }
@@ -62,4 +110,15 @@ private fun GuideChannelWindowRow.toCursor(): GuideChannelCursor = GuideChannelC
     channelNumber = cursorChannelNumber,
     displayName = displayName,
     canonicalChannelId = channelId,
+)
+
+private fun GuideProgrammeWindowRow.toCell(): GuideProgrammeCell = GuideProgrammeCell(
+    key = GuideProgrammeKey(
+        epgSourceId = epgSourceId,
+        epgRevisionNumber = epgRevisionNumber,
+        sequenceNumber = sequenceNumber,
+    ),
+    startEpochMillis = startEpochMillis,
+    endEpochMillis = endEpochMillis,
+    title = primaryTitle,
 )
