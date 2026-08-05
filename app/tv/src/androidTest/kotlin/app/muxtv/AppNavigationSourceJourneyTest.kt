@@ -168,7 +168,7 @@ private object NoRecentChannelsRepository : RecentChannelsRepository {
         profileId: String,
         channelId: String,
         successfulAtEpochMillis: Long,
-    ): RecentChannelWriteResult = RecentChannelWriteResult.TargetUnavailable
+    ): RecentChannelWriteResult = RecentChannelWriteResult.ProfileUnavailable
 }
 
 private class JourneySourceEntryOnboarding(
