@@ -1,0 +1,104 @@
+name: Publish exact Room v10 schema
+
+on:
+  push:
+    branches:
+      - feat/recent-channels-v10
+    paths:
+      - .github/workflows/publish-room-v10-schema.yml
+      - .work/schema-v10-chunks/**
+
+permissions:
+  contents: write
+
+env:
+  EXPECTED_SCHEMA_SHA256: 809c0bfa812e5a86a5a84d97fe4f48f1d9ac71e515c5745ef222f24689e926c4
+  EXPECTED_IDENTITY_HASH: f6625d546ddfbad62e4e33340b17f490
+  SOURCE_RUN_ID: 31021437239
+  SOURCE_ARTIFACT_NAME: self-hosted-validation-31021437239-1
+  TARGET_SCHEMA: core/database/schemas/app.muxtv.database.MuxTvDatabase/10.json
+
+jobs:
+  publish:
+    name: Publish byte-exact Room v10 schema
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout schema branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+          ref: feat/recent-channels-v10
+          fetch-depth: 0
+
+      - name: Clean workspace
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          git reset --hard HEAD
+          git clean -ffdx
+          if ($LASTEXITCODE -ne 0) {
+            throw "Workspace cleanup failed."
+          }
+
+      - name: Download exact-head Full artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ env.SOURCE_ARTIFACT_NAME }}
+          path: .work/schema-v10-source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: MuxTV/Muxtv
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Verify and publish schema
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $source = Get-ChildItem -Path .work/schema-v10-source -Recurse -File -Filter 10.json |
+            Where-Object { $_.FullName -like "*room-schemas*app.muxtv.database.MuxTvDatabase*10.json" } |
+            Select-Object -First 1
+          if (-not $source) {
+            throw "Exact generated Room v10 schema was not found in artifact $env:SOURCE_ARTIFACT_NAME."
+          }
+
+          $sourceHash = (Get-FileHash -Path $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sourceHash -ne $env:EXPECTED_SCHEMA_SHA256) {
+            throw "Schema SHA-256 mismatch. Expected $env:EXPECTED_SCHEMA_SHA256, got $sourceHash."
+          }
+
+          $schema = Get-Content -Path $source.FullName -Raw | ConvertFrom-Json
+          if ($schema.database.version -ne 10) {
+            throw "Expected Room schema version 10, got $($schema.database.version)."
+          }
+          if ($schema.database.identityHash -ne $env:EXPECTED_IDENTITY_HASH) {
+            throw "Room identity hash mismatch."
+          }
+
+          $targetDirectory = Split-Path -Parent $env:TARGET_SCHEMA
+          New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+          Copy-Item -Path $source.FullName -Destination $env:TARGET_SCHEMA -Force
+
+          $targetHash = (Get-FileHash -Path $env:TARGET_SCHEMA -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($targetHash -ne $env:EXPECTED_SCHEMA_SHA256) {
+            throw "Published schema bytes differ from the accepted artifact."
+          }
+
+          if (Test-Path .work/schema-v10-chunks) {
+            Remove-Item -Path .work/schema-v10-chunks -Recurse -Force
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $env:TARGET_SCHEMA
+          git rm -r --ignore-unmatch .work/schema-v10-chunks
+          git commit -m "chore(database): publish exact Room v10 schema"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Schema commit failed."
+          }
+          git push origin HEAD:feat/recent-channels-v10
+          if ($LASTEXITCODE -ne 0) {
+            throw "Schema push failed."
+          }
