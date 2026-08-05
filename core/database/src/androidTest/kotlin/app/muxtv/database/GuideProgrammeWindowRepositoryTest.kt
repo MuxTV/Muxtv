@@ -25,10 +25,9 @@ class GuideProgrammeWindowRepositoryTest {
         ).build()
         DatabaseInitializer(database).initialize()
         val sourceStore = RoomSourceRevisionStore(database.sourceRevisionDao())
-        val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
         repository = RoomGuideWindowRepository(
             dao = database.guideWindowDao(),
-            invalidationSource = epgGuideRepository,
+            invalidationDao = database.guideWindowInvalidationDao(),
         )
 
         sourceStore.upsertSource(SourceDefinition(SOURCE_ID, "Programme source"))
