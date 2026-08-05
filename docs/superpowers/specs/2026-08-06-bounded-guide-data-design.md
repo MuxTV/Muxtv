@@ -6,7 +6,7 @@ Provide a database-backed TV Guide viewport without loading the full catalog or 
 
 ## Existing boundaries
 
-- `EpgGuideRepository` remains the Now/Next owner.
+- `EpgGuideRepository` / `RoomEpgGuideRepository` remain the Now/Next owner.
 - Accepted Playback, Search, Recent and Now/Next reads already enforce active source revision and selected-profile visibility.
 - `EpgGuideDao` already independently revalidates that a matched canonical identity has an active stream variant.
 - Room remains schema v10; no table or index change is required.
@@ -23,7 +23,7 @@ interface GuideWindowRepository {
 }
 ```
 
-`RoomEpgGuideRepository` implements both interfaces so both paths consume the same DAO and invalidation source without introducing a second owner.
+`RoomGuideWindowRepository` owns viewport mapping over a dedicated `GuideWindowDao`. It receives the accepted `EpgGuideRepository` only as the payload-free invalidation source, so Now/Next and viewport retain separate query owners while sharing one Room database and one data-change lifecycle. `MuxTvDatabaseComponents` creates one instance and Hilt exposes that instance; no second database, polling loop or invalidation owner is introduced.
 
 ## Channel keyset window
 
@@ -62,11 +62,11 @@ data class GuideChannelCursor(
 )
 ```
 
-A stale cursor may produce an empty or shorter continuation after catalog/profile changes, but must never reveal hidden, staged or previous-revision channels.
+The SQL distinguishes numbered and unnumbered rows explicitly rather than encoding `NULL` through a sentinel that could collide with a valid channel number. A stale cursor may produce an empty or shorter continuation after catalog/profile changes, but must never reveal hidden, staged or previous-revision channels.
 
 ### Row payload
 
-Reuse `PlayableChannelSummary`. Locator, headers, credential references and provider identifiers are excluded.
+Reuse `PlayableChannelSummary`. Locator, headers, credential references and provider identifiers are excluded. Duplicate active variants contribute to `variantCount` but do not duplicate channel rows.
 
 ## Programme time window
 
@@ -117,7 +117,7 @@ Inside one Room transaction:
    - `NO_GUIDE` with no cells;
    - `SOURCE_CONFLICT` with no cells.
 
-Multiple active playback variants do not multiply EPG match counts.
+Multiple active playback variants do not multiply EPG match counts. The viewport DAO repeats the accepted membership predicate deliberately; no derived EPG match may resurrect a hidden, staged or stale canonical identity.
 
 ### Stable programme identity
 
@@ -134,34 +134,34 @@ Rows are ordered by canonical ID, start time, EPG source ID, revision and sequen
 ## Result models
 
 ```kotlin
-data class GuideChannelWindow(
-    val channels: List<PlayableChannelSummary>,
+class GuideChannelWindow(
+    channels: List<PlayableChannelSummary>,
     val nextCursor: GuideChannelCursor?,
     val isTruncated: Boolean,
 )
 
-data class ChannelGuideProgrammeWindow(
+class ChannelGuideProgrammeWindow(
     val canonicalChannelId: String,
     val state: GuideProjectionState,
-    val programmes: List<GuideProgrammeCell>,
+    programmes: List<GuideProgrammeCell>,
 )
 
-data class GuideProgrammeWindow(
-    val channels: List<ChannelGuideProgrammeWindow>,
+class GuideProgrammeWindow(
+    channels: List<ChannelGuideProgrammeWindow>,
     val isTruncated: Boolean,
 )
 ```
 
-Non-`READY` channel results must not carry programme payload.
+Collection inputs are copied. Non-`READY` channel results must not carry programme payload.
 
 ## Error and privacy contract
 
-Invalid bounds fail at API construction with `IllegalArgumentException`. Repository/DAO failures propagate to the future Guide state owner as typed loading failures; this package does not introduce retries. `toString()` methods redact profile IDs, canonical IDs, display names and programme titles and never expose playback access data.
+Invalid bounds fail at API construction with `IllegalArgumentException`. Repository/DAO failures propagate to the future Guide state owner; this package does not introduce retries. `toString()` methods redact profile IDs, canonical IDs, display names, EPG source IDs and programme titles and never expose playback access data.
 
 ## Acceptance
 
 - API contract tests for bounds, defensive copies, cursor/result invariants and redaction.
 - Room integration tests for deterministic keyset pages, hidden/staged/stale exclusion, revision swap, conflict, overlap, open-ended effective end and explicit truncation.
-- Existing Now/Next tests remain green.
+- Existing Now/Next and cross-surface truth tests remain green.
 - No Room v11 or full-guide materialization.
-- Exact-head Full plus old-edge/current database acceptance before merge.
+- Exact-head Full plus old-edge/current database/product acceptance before merge.
