@@ -29,6 +29,48 @@ class GuideFocusTest {
     }
 
     @Test
+    fun `exact identity detector distinguishes surviving and removed programme`() {
+        val anchor = GuideFocusAnchor(
+            channelId = "channel-b",
+            programmeKey = key(7),
+            previousChannelIndex = 1,
+            previousProgrammeIndex = 0,
+        )
+        val surviving = listOf(
+            focusChannel("channel-a", listOf(key(1))),
+            focusChannel("channel-b", listOf(key(7), key(8))),
+        )
+        val removed = listOf(
+            focusChannel("channel-a", listOf(key(1))),
+            focusChannel("channel-b", listOf(key(8))),
+        )
+
+        assertThat(anchor.hasExactIdentityIn(surviving)).isTrue()
+        assertThat(anchor.hasExactIdentityIn(removed)).isFalse()
+    }
+
+    @Test
+    fun `channel only focus is exact only when channel has no programme identity`() {
+        val anchor = GuideFocusAnchor(
+            channelId = "channel-b",
+            programmeKey = null,
+            previousChannelIndex = 1,
+            previousProgrammeIndex = 0,
+        )
+
+        assertThat(
+            anchor.hasExactIdentityIn(
+                listOf(focusChannel("channel-b", emptyList())),
+            ),
+        ).isTrue()
+        assertThat(
+            anchor.hasExactIdentityIn(
+                listOf(focusChannel("channel-b", listOf(key(1)))),
+            ),
+        ).isFalse()
+    }
+
+    @Test
     fun `missing programme falls back within same surviving channel`() {
         val anchor = GuideFocusAnchor(
             channelId = "channel-b",
