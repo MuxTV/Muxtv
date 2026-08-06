@@ -6,6 +6,7 @@ import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
+import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.RecentChannelsRepository
@@ -25,6 +26,7 @@ class MuxTvDatabaseComponents internal constructor(
     val epgRefreshStore: EpgRefreshStore,
     val epgMatchingStore: EpgMatchingStore,
     val epgGuideRepository: EpgGuideRepository,
+    val guideWindowRepository: GuideWindowRepository,
 )
 
 object MuxTvDatabaseFactory {
@@ -41,6 +43,10 @@ object MuxTvDatabaseFactory {
             .addMigrations(*CURRENT_DATABASE_MIGRATIONS)
             .build()
         val epgGuideRepository = RoomEpgGuideRepository(database.epgGuideDao())
+        val guideWindowRepository = RoomGuideWindowRepository(
+            dao = database.guideWindowDao(),
+            invalidationDao = database.guideWindowInvalidationDao(),
+        )
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
@@ -65,6 +71,7 @@ object MuxTvDatabaseFactory {
             epgRefreshStore = RoomEpgRefreshStore(database.epgRefreshDao()),
             epgMatchingStore = RoomEpgMatchingStore(database.epgMatchingDao()),
             epgGuideRepository = epgGuideRepository,
+            guideWindowRepository = guideWindowRepository,
         )
     }
 
