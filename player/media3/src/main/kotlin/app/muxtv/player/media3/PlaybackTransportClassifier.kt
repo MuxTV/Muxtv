@@ -1,5 +1,7 @@
 package app.muxtv.player.media3
 
+import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.extractor.ts.TsExtractor
 import java.net.URI
 import java.util.Locale
@@ -38,6 +40,7 @@ internal data class PlaybackTransportDecision(
         "PlaybackTransportDecision(transport=$transport, reason=$reason, sourcePolicy=$sourcePolicy)"
 }
 
+@AndroidXOptIn(UnstableApi::class)
 internal object PlaybackTransportClassifier {
     private val progressiveSuffixes = setOf(
         ".mp4",
