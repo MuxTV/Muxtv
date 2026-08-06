@@ -12,16 +12,16 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 
 object PortableBackupCodec {
     fun encode(snapshot: PortableBackupSnapshot): ByteArray {
-        val unsigned = canonicalUnsignedJson(snapshot).toByteArray(Charsets.UTF_8)
+        val unsignedJson = canonicalUnsignedJson(snapshot)
+        val unsigned = unsignedJson.toByteArray(Charsets.UTF_8)
         val digest = sha256(unsigned)
         val json = buildString {
-            append(canonicalUnsignedJson(snapshot).dropLast(1))
+            append(unsignedJson.dropLast(1))
             append(",\"integrity\":{")
             append("\"algorithm\":")
             appendQuoted(PortableBackupIntegrity.SHA_256_ALGORITHM)
@@ -330,34 +330,66 @@ private fun JsonObject.requiredObject(name: String): JsonObject =
 private fun JsonObject.requiredArray(name: String): JsonArray =
     this[name] as? JsonArray ?: throw MalformedBackupException()
 
-private fun JsonObject.requiredString(name: String): String =
-    primitive(name).contentOrNull ?: throw MalformedBackupException()
+private fun JsonObject.requiredString(name: String): String {
+    val value = primitive(name)
+    if (!value.isString) {
+        throw MalformedBackupException()
+    }
+    return value.content
+}
 
-private fun JsonObject.requiredInt(name: String): Int =
-    primitive(name).intOrNull ?: throw MalformedBackupException()
+private fun JsonObject.requiredInt(name: String): Int {
+    val value = primitive(name)
+    if (value.isString) {
+        throw MalformedBackupException()
+    }
+    return value.intOrNull ?: throw MalformedBackupException()
+}
 
-private fun JsonObject.requiredLong(name: String): Long =
-    primitive(name).longOrNull ?: throw MalformedBackupException()
+private fun JsonObject.requiredLong(name: String): Long {
+    val value = primitive(name)
+    if (value.isString) {
+        throw MalformedBackupException()
+    }
+    return value.longOrNull ?: throw MalformedBackupException()
+}
 
-private fun JsonObject.requiredBoolean(name: String): Boolean =
-    primitive(name).booleanOrNull ?: throw MalformedBackupException()
+private fun JsonObject.requiredBoolean(name: String): Boolean {
+    val value = primitive(name)
+    if (value.isString) {
+        throw MalformedBackupException()
+    }
+    return value.booleanOrNull ?: throw MalformedBackupException()
+}
 
 private fun JsonObject.optionalString(name: String): String? {
     val value = this[name] ?: throw MalformedBackupException()
     if (value === JsonNull) return null
-    return (value as? JsonPrimitive)?.contentOrNull ?: throw MalformedBackupException()
+    val primitive = value as? JsonPrimitive ?: throw MalformedBackupException()
+    if (!primitive.isString) {
+        throw MalformedBackupException()
+    }
+    return primitive.content
 }
 
 private fun JsonObject.optionalInt(name: String): Int? {
     val value = this[name] ?: throw MalformedBackupException()
     if (value === JsonNull) return null
-    return (value as? JsonPrimitive)?.intOrNull ?: throw MalformedBackupException()
+    val primitive = value as? JsonPrimitive ?: throw MalformedBackupException()
+    if (primitive.isString) {
+        throw MalformedBackupException()
+    }
+    return primitive.intOrNull ?: throw MalformedBackupException()
 }
 
 private fun JsonObject.optionalLong(name: String): Long? {
     val value = this[name] ?: throw MalformedBackupException()
     if (value === JsonNull) return null
-    return (value as? JsonPrimitive)?.longOrNull ?: throw MalformedBackupException()
+    val primitive = value as? JsonPrimitive ?: throw MalformedBackupException()
+    if (primitive.isString) {
+        throw MalformedBackupException()
+    }
+    return primitive.longOrNull ?: throw MalformedBackupException()
 }
 
 private fun JsonObject.primitive(name: String): JsonPrimitive =
