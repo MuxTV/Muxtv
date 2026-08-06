@@ -119,7 +119,8 @@ if (Test-Path $m3uSeriesScript -PathType Leaf) {
         ':core:testing:analyzeMeasurementSeries',
         'corpusSha256',
         'claimEligible',
-        'M3U corpus identity drifted between repetitions.'
+        'M3U corpus identity drifted between repetitions.',
+        'M3U series evidence directory already exists.'
     )
     foreach ($token in $requiredTokens) {
         if ($m3uSeriesContent -notmatch [regex]::Escape($token)) {
