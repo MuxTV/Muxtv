@@ -12,7 +12,7 @@ MuxTV does **not** support functional Direct Boot in this package. The main data
 
 ## Current defect
 
-`MuxTvApplication.onCreate()` currently launches all credential-encrypted startup work unconditionally:
+`MuxTvApplication.onCreate()` previously launched all credential-encrypted startup work unconditionally:
 
 1. `DatabaseInitializer.initialize()`;
 2. stale EPG matching repair;
@@ -69,7 +69,23 @@ Do not call `.get()` until the gate publishes user-unlocked readiness. `HiltWork
 
 ### Android adapter
 
-`MuxTvApplication` owns the dynamic receiver because its lifetime is the application process. It registers only for `Intent.ACTION_USER_UNLOCKED`, which Android documents as a registered-receiver-only signal for credential-encrypted storage availability. API 33+ uses `Context.RECEIVER_NOT_EXPORTED`; the gate re-checks `UserManager.isUserUnlocked` because Android explicitly warns that user state may have changed by broadcast delivery time.
+`MuxTvApplication` owns the dynamic receiver because its lifetime is the application process. It registers only for `Intent.ACTION_USER_UNLOCKED`, which Android documents as a registered-receiver-only signal for credential-encrypted storage availability. The gate re-checks `UserManager.isUserUnlocked` because Android explicitly warns that user state may have changed by broadcast delivery time.
+
+#### API 33+ receiver-flag finding from offline review
+
+The current authored branch uses `Context.RECEIVER_NOT_EXPORTED` on API 33+. That choice must **not** be accepted yet.
+
+Current Android broadcast guidance says a context-registered receiver listening for system broadcasts should use `RECEIVER_EXPORTED`; `RECEIVER_NOT_EXPORTED` can miss broadcasts originating from privileged framework apps outside the system UID. Android's platform manifest lists `android.intent.action.USER_UNLOCKED` as a `protected-broadcast`, so third-party apps cannot legitimately spoof that action.
+
+Required follow-up when execution is available:
+
+1. add an executable Android contract around the registered `ACTION_USER_UNLOCKED` path on API33/current;
+2. observe the current branch behavior before changing production code;
+3. if the expected delivery gap is reproduced/confirmed, switch this single-action receiver to the exported system-broadcast registration path;
+4. keep the authoritative `UserManager.isUserUnlocked` re-check even after the flag fix;
+5. do not generalize `RECEIVER_EXPORTED` to unrelated app-internal receivers.
+
+No production flag change is made while the runner is unavailable because the existing Package #118 code was already authored and TDD requires an executed failing contract before a behavior fix.
 
 The existing startup coroutine is moved behind `launchCredentialEncryptedStartup()` without changing operation ordering or EPG matching best-effort failure semantics.
 
@@ -100,10 +116,11 @@ Exact PR head must pass, at minimum:
 3. static/diff review confirming CE Application fields remain lazy and no CE `.get()` occurs before the gate;
 4. Product DeviceMatrix on API26 and current API;
 5. a locked-user/unlock lifecycle scenario where the environment supports it;
-6. existing source/EPG unique-work reconciliation checks;
-7. no Room schema change;
-8. no new manifest receiver/directBootAware component;
-9. unresolved review threads = 0.
+6. explicit API33/current verification of `ACTION_USER_UNLOCKED` delivery and receiver flags before accepting the dynamic-receiver implementation;
+7. existing source/EPG unique-work reconciliation checks;
+8. no Room schema change;
+9. no new manifest receiver/directBootAware component;
+10. unresolved review threads = 0.
 
 If the emulator cannot faithfully simulate pre-unlock credential storage, that limitation must be recorded and the physical-device reboot/unlock check remains part of #31 release hardening.
 
