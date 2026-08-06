@@ -43,6 +43,17 @@ internal data class GuideFocusTarget(
             "programmeIndex=$programmeIndex)"
 }
 
+internal fun GuideFocusAnchor.hasExactIdentityIn(
+    channels: List<GuideFocusChannel>,
+): Boolean {
+    val channel = channels.firstOrNull { it.channelId == channelId } ?: return false
+    return if (programmeKey == null) {
+        channel.programmeKeys.isEmpty()
+    } else {
+        programmeKey in channel.programmeKeys
+    }
+}
+
 internal fun GuideFocusAnchor.resolveAgainst(
     channels: List<GuideFocusChannel>,
 ): GuideFocusTarget? {
