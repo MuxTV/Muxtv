@@ -2,11 +2,13 @@ package app.muxtv.feature.guide
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.muxtv.catalog.GuideChannelCursor
 import app.muxtv.catalog.GuideChannelWindow
 import app.muxtv.catalog.GuideChannelWindowQuery
 import app.muxtv.catalog.GuideProgrammeWindow
 import app.muxtv.catalog.GuideProgrammeWindowQuery
 import app.muxtv.catalog.GuideWindowRepository
+import java.util.ArrayDeque
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,9 @@ internal class GuideViewModel(
     private var generation: Long = 0L
     private var loadJob: Job? = null
     private var focusAnchor: GuideFocusAnchor? = null
+    private var currentStartCursor: GuideChannelCursor? = null
+    private var nextCursor: GuideChannelCursor? = null
+    private val previousStarts = ArrayDeque<PageStart>()
 
     init {
         require(profileId.isNotBlank())
@@ -59,6 +64,32 @@ internal class GuideViewModel(
         }
     }
 
+    fun loadNextPage() {
+        val continuation = nextCursor ?: return
+        if (previousStarts.size == MAX_PAGE_HISTORY) {
+            previousStarts.removeFirst()
+        }
+        previousStarts.addLast(PageStart(currentStartCursor))
+        currentStartCursor = continuation
+        focusAnchor = null
+        reload()
+    }
+
+    fun loadPreviousPage() {
+        val previous = previousStarts.pollLast() ?: return
+        currentStartCursor = previous.cursor
+        focusAnchor = null
+        reload()
+    }
+
+    fun resetToFirstPage() {
+        if (currentStartCursor == null && previousStarts.isEmpty()) return
+        currentStartCursor = null
+        previousStarts.clear()
+        focusAnchor = null
+        reload()
+    }
+
     fun updateFocusAnchor(anchor: GuideFocusAnchor) {
         focusAnchor = anchor
     }
@@ -72,11 +103,13 @@ internal class GuideViewModel(
         val channelWindow = repository.getChannelWindow(
             GuideChannelWindowQuery(
                 profileId = profileId,
+                after = currentStartCursor,
                 limit = GuideViewportPolicy.CHANNEL_LIMIT,
             ),
         )
         if (!isCurrent(requestGeneration)) return
         if (channelWindow.channels.isEmpty()) {
+            nextCursor = null
             publishIfCurrent(requestGeneration, GuideUiState.Empty)
             return
         }
@@ -99,6 +132,7 @@ internal class GuideViewModel(
             return
         }
 
+        nextCursor = channelWindow.nextCursor
         val rows = channelWindow.channels.map { channel ->
             val projection = requireNotNull(projections[channel.channelId])
             GuideRow(
@@ -115,6 +149,8 @@ internal class GuideViewModel(
                     fromEpochMillis = fromEpochMillis,
                     toEpochMillis = programmeLoad.query.toEpochMillis,
                     hasMoreChannels = channelWindow.isTruncated,
+                    canGoPrevious = previousStarts.isNotEmpty(),
+                    canResetToFirstPage = currentStartCursor != null,
                 ),
             ),
         )
@@ -156,8 +192,16 @@ internal class GuideViewModel(
 
     private fun isCurrent(requestGeneration: Long): Boolean = generation == requestGeneration
 
+    private data class PageStart(
+        val cursor: GuideChannelCursor?,
+    )
+
     private data class ProgrammeLoad(
         val query: GuideProgrammeWindowQuery,
         val window: GuideProgrammeWindow,
     )
+
+    private companion object {
+        const val MAX_PAGE_HISTORY: Int = 32
+    }
 }
