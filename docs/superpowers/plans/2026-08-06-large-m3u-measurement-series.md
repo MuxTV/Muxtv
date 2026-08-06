@@ -15,33 +15,35 @@ The repository already has the correct deterministic corpus primitive:
 - exact UTF-8 byte count and SHA-256 in the generated manifest;
 - parser measurements verify parsed/skipped/warning counts against that manifest.
 
-The remaining gap is in `Invoke-MeasurementSeriesCore.ps1`: every repeated host M3U run is hard-coded to `small-1k`. As a result, the current variance-series harness cannot exercise the existing 10k/50k corpus contract, and its top-level run manifest does not surface the corpus digest that makes different repetitions directly auditable.
+The remaining gap is that `Invoke-MeasurementSeriesCore.ps1` hard-codes every repeated host M3U run to `small-1k`. The existing full Android variance harness therefore cannot directly produce a focused, auditable 10k/50k parser series, and its top-level run manifest does not promote the corpus digest for easy cross-repetition inspection.
 
 ## Objective
 
-Make the existing sequential measurement-series harness capable of producing repeatable 10k/50k M3U parser evidence without duplicating corpus-generation logic or changing runtime product code.
+Add a focused sequential M3U evidence entry point for 1k/10k/50k corpora without duplicating corpus generation, changing product runtime code, or perturbing the existing Android measurement-series lifecycle while that lifecycle is already established.
 
 ## Design
 
-1. Add explicit `-M3uProfile` with `small-1k | medium-10k | large-50k` to the public series entry point and core.
-2. Add explicit deterministic `-M3uSeed`, defaulting to the existing `20260728` seed.
-3. Change the manual evidence default from two repetitions to five. Keep `2..20` available for smoke/debug runs, but hard performance claims require >=5.
-4. Pass profile/seed into the existing `:core:testing:measureM3uParse` task; do not generate/commit huge playlist files.
-5. Name M3U reports/analysis outputs with the corpus profile to prevent accidental evidence mixing.
-6. Parse every emitted M3U measurement report and fail closed unless profile, seed and source commit match the requested series.
-7. Require all repetitions to report the same corpus SHA-256 and UTF-8 byte count.
-8. Promote corpus identity into `measurement-series-run-manifest.json`:
+1. Add `tools/measurements/Invoke-M3uCorpusSeries.ps1` with explicit `small-1k | medium-10k | large-50k` selection.
+2. Default the focused evidence command to `medium-10k` and five repetitions; retain `2..20` for smoke/debug, while the manifest marks `<5` repetitions as not claim-eligible.
+3. Expose deterministic `-M3uSeed`, defaulting to the existing `20260728` seed.
+4. Reuse `:core:testing:measureM3uParse`; do not generate or commit huge playlist files.
+5. Reuse `:core:testing:analyzeMeasurementSeries` for the final threshold-free variance report rather than creating a second statistics implementation.
+6. Parse every emitted M3U measurement report and fail closed unless profile, seed, source commit, measured iteration count, threshold flag and failure count match the requested series.
+7. Require all repetitions to report the same corpus SHA-256, UTF-8 byte count and expected parsed/skipped/warning counts.
+8. Promote corpus identity into `m3u-series-run-manifest.json`:
    - profile;
    - seed;
    - SHA-256;
    - UTF-8 byte count;
-   - expected parsed/skipped/warning counts.
-9. Preserve the existing sequential execution and single-AVD lifecycle per repetition; no parallel jobs.
-10. Extend the PowerShell harness contract check so future refactors cannot silently revert to `small-1k`.
+   - expected parsed/skipped/warning counts;
+   - repetition count and claim-eligibility marker.
+9. Keep execution strictly sequential; forbid PowerShell job/parallel primitives.
+10. Extend `Test-MeasurementHarnessSyntax.ps1` so the new entry point is syntax-parsed and its profile/digest/sequential contract cannot silently disappear.
+11. Leave `Invoke-MeasurementSeriesCore.ps1` unchanged in this package. Integrating large M3U selection into the combined Android series can be considered after focused evidence exists; there is no reason to destabilize the accepted AVD harness while the runner is unavailable.
 
 ## Why this is safe while the runner is offline
 
-This package changes only evidence tooling. It does not touch parser behavior, Room, Media3, production DI, schema, Android UI or WorkManager. The existing Kotlin generator already owns corpus semantics and digest calculation.
+This package changes only evidence tooling. It does not touch parser behavior, Room, Media3, production DI, schema, Android UI, WorkManager or the current Android AVD lifecycle. The existing Kotlin generator remains the sole owner of corpus bytes and digest calculation.
 
 ## Validation when execution is available
 
@@ -52,45 +54,33 @@ pwsh -NoProfile -File tools/measurements/Test-MeasurementHarnessSyntax.ps1
 ./gradlew.bat :core:testing:test --no-daemon
 ```
 
-### Determinism spot-check
-
-Run at least two host-only `measureM3uParse` invocations for each large profile with the same seed/source commit and require identical:
-
-- profile;
-- seed;
-- corpus SHA-256;
-- corpus UTF-8 byte count;
-- expected parser counts.
-
-Timing samples are expected to vary; corpus identity is not.
-
-### Full evidence series
-
-For each Android environment profile:
-
-- `current-normal`;
-- `old-edge-normal`;
-- `current-low-ram`;
-
-run at least five repetitions for `medium-10k`, and a deliberate five-repetition `large-50k` series before structural parser/native optimization claims.
-
-Example:
+### Focused 10k series
 
 ```powershell
-pwsh -NoProfile -File tools/measurements/Invoke-MeasurementSeries.ps1 `
+pwsh -NoProfile -File tools/measurements/Invoke-M3uCorpusSeries.ps1 `
   -SourceCommit <40-char-sha> `
   -SourceBranch main `
-  -ProfileId current-normal `
   -M3uProfile medium-10k `
-  -Repetitions 5
+  -Repetitions 5 `
+  -RunnerLabel self-hosted-windows-x64-v1
 ```
+
+### Focused 50k series
+
+Repeat with `-M3uProfile large-50k -Repetitions 5`. Timing samples are expected to vary; corpus SHA-256/byte count/expected counts must not.
+
+### Broader #27 evidence
+
+The focused M3U series is only one lane. #27 remains open until the repository also has reviewed repeated evidence for the existing `current-normal`, `old-edge-normal` and `current-low-ram` Android measurement profiles. Do not infer Android low-RAM/device behavior from host parser timing.
 
 ## Acceptance
 
 - syntax/contract script passes;
 - `:core:testing:test` passes;
-- exact-head measurement series records requested M3U profile/seed;
+- exact-head 10k/50k series records requested profile/seed/source commit;
 - all repetitions agree on corpus digest/byte count/expected counts;
-- no threshold is introduced from a single series;
+- final variance report is produced by the existing analyzer;
+- `thresholdApplied=false` remains explicit;
+- `<5` repetitions are never marked claim-eligible;
 - no product runtime file changes;
-- issue #27 remains open until the actual 10k/50k repeated distributions across required environments are captured and reviewed.
+- issue #27 remains open until actual repeated distributions are captured and reviewed.
