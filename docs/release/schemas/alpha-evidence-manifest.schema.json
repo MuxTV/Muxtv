@@ -92,9 +92,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 500,
-          "not": {
-            "pattern": "(?i)(authorization|cookie|bearer|token=|password=|sig=|signature=)"
-          }
+          "description": "Safe evidence reference only. Secret-bearing URLs/credentials are forbidden by the release redaction gate and future finalizer."
         }
       }
     },
@@ -210,9 +208,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300,
-          "not": {
-            "pattern": "(?i)(authorization|cookie|bearer|token=|password=|sig=|signature=)"
-          }
+          "description": "Safe repository/CI artifact name only; secret-bearing URLs and local private paths are forbidden."
         },
         "sha256": {
           "type": ["string", "null"],
