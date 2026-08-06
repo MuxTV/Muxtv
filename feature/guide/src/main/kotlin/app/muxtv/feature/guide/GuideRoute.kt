@@ -3,9 +3,10 @@ package app.muxtv.feature.guide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,14 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +54,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun GuideRoute(
@@ -173,9 +171,6 @@ private fun GuideContent(
     onOpenChannel: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    val timeScrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
     val rowCells = remember(state) {
         state.rows.map { row -> row.toCells(state.viewport) }
     }
@@ -183,8 +178,10 @@ private fun GuideContent(
     val requesters = remember(requesterShape) {
         requesterShape.map { count -> List(count) { FocusRequester() } }
     }
-    var restorationAttempted by remember(state.rows) { mutableStateOf(false) }
-    var focusedDetail by remember { mutableStateOf<String?>(null) }
+    val pageIdentity = state.rows.firstOrNull()?.channel?.channelId
+    var restorationAttempted by remember(pageIdentity) { mutableStateOf(false) }
+    var focusedDetail by remember(pageIdentity) { mutableStateOf<String?>(null) }
+    var timeOffset by remember(pageIdentity) { mutableStateOf(0.dp) }
     var nowEpochMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
@@ -194,7 +191,7 @@ private fun GuideContent(
         }
     }
 
-    LaunchedEffect(state.rows, focusAnchor, restorationAttempted) {
+    LaunchedEffect(pageIdentity, focusAnchor, restorationAttempted) {
         if (restorationAttempted || state.rows.isEmpty()) return@LaunchedEffect
         val focusChannels = state.rows.map { row ->
             GuideFocusChannel(
@@ -252,7 +249,7 @@ private fun GuideContent(
     TimelineHeader(
         viewport = state.viewport,
         totalWidth = totalTimelineWidth,
-        timeScrollState = timeScrollState,
+        timeOffset = timeOffset,
         nowEpochMillis = nowEpochMillis,
     )
 
@@ -272,8 +269,8 @@ private fun GuideContent(
                 requesters = requesters[rowIndex],
                 viewport = state.viewport,
                 totalWidth = totalTimelineWidth,
+                timeOffset = timeOffset,
                 nowEpochMillis = nowEpochMillis,
-                timeScrollState = timeScrollState,
                 onFocused = { cellIndex, cell ->
                     focusedDetail = cell.detailLabel(row.channel.displayName)
                     onFocusAnchorChanged(
@@ -284,16 +281,12 @@ private fun GuideContent(
                             previousProgrammeIndex = cellIndex,
                         ),
                     )
-                    val targetDp = epochOffsetDp(
-                        epochMillis = cell.startEpochMillis,
-                        viewportStartEpochMillis = state.viewport.fromEpochMillis,
-                    )
-                    val targetPx = with(density) {
-                        (targetDp - FOCUS_SCROLL_LEADING_SPACE).coerceAtLeast(0.dp).roundToPx()
-                    }
-                    scope.launch {
-                        timeScrollState.animateScrollTo(targetPx.coerceAtMost(timeScrollState.maxValue))
-                    }
+                    timeOffset = (
+                        epochOffsetDp(
+                            epochMillis = cell.startEpochMillis,
+                            viewportStartEpochMillis = state.viewport.fromEpochMillis,
+                        ) - FOCUS_SCROLL_LEADING_SPACE
+                    ).coerceAtLeast(0.dp)
                 },
                 onOpenChannel = { onOpenChannel(row.channel.channelId) },
             )
@@ -339,7 +332,7 @@ private fun GuidePager(
 private fun TimelineHeader(
     viewport: GuideViewport,
     totalWidth: Dp,
-    timeScrollState: androidx.compose.foundation.ScrollState,
+    timeOffset: Dp,
     nowEpochMillis: Long,
 ) {
     Row(modifier = Modifier.fillMaxWidth()) {
@@ -355,33 +348,27 @@ private fun TimelineHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(TIME_HEADER_HEIGHT)
-                .horizontalScroll(timeScrollState, enabled = false),
+        TimelineViewport(
+            totalWidth = totalWidth,
+            requestedOffset = timeOffset,
+            height = TIME_HEADER_HEIGHT,
+            modifier = Modifier.weight(1f),
         ) {
-            Box(
-                modifier = Modifier
-                    .width(totalWidth)
-                    .height(TIME_HEADER_HEIGHT),
-            ) {
-                timelineTicks(viewport).forEach { tick ->
-                    Text(
-                        text = formatTime(tick),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.offset(
-                            x = epochOffsetDp(tick, viewport.fromEpochMillis),
-                        ),
-                    )
-                }
-                CurrentTimeMarker(
-                    viewport = viewport,
-                    nowEpochMillis = nowEpochMillis,
-                    height = TIME_HEADER_HEIGHT,
+            timelineTicks(viewport).forEach { tick ->
+                Text(
+                    text = formatTime(tick),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.offset(
+                        x = epochOffsetDp(tick, viewport.fromEpochMillis),
+                    ),
                 )
             }
+            CurrentTimeMarker(
+                viewport = viewport,
+                nowEpochMillis = nowEpochMillis,
+                height = TIME_HEADER_HEIGHT,
+            )
         }
     }
 }
@@ -394,8 +381,8 @@ private fun GuideTimelineRow(
     requesters: List<FocusRequester>,
     viewport: GuideViewport,
     totalWidth: Dp,
+    timeOffset: Dp,
     nowEpochMillis: Long,
-    timeScrollState: androidx.compose.foundation.ScrollState,
     onFocused: (Int, GuideCellUi) -> Unit,
     onOpenChannel: () -> Unit,
 ) {
@@ -405,35 +392,54 @@ private fun GuideTimelineRow(
             .height(GUIDE_ROW_HEIGHT),
     ) {
         ChannelRailCell(row = row)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(GUIDE_ROW_HEIGHT)
-                .horizontalScroll(timeScrollState, enabled = false),
+        TimelineViewport(
+            totalWidth = totalWidth,
+            requestedOffset = timeOffset,
+            height = GUIDE_ROW_HEIGHT,
+            modifier = Modifier.weight(1f),
         ) {
-            Box(
-                modifier = Modifier
-                    .width(totalWidth)
-                    .height(GUIDE_ROW_HEIGHT),
-            ) {
-                cells.forEachIndexed { cellIndex, cell ->
-                    ProgrammeCell(
-                        rowIndex = rowIndex,
-                        cellIndex = cellIndex,
-                        cell = cell,
-                        viewport = viewport,
-                        focusRequester = requesters[cellIndex],
-                        onFocused = { onFocused(cellIndex, cell) },
-                        onClick = onOpenChannel,
-                    )
-                }
-                CurrentTimeMarker(
+            cells.forEachIndexed { cellIndex, cell ->
+                ProgrammeCell(
+                    rowIndex = rowIndex,
+                    cellIndex = cellIndex,
+                    cell = cell,
                     viewport = viewport,
-                    nowEpochMillis = nowEpochMillis,
-                    height = GUIDE_ROW_HEIGHT,
+                    focusRequester = requesters[cellIndex],
+                    onFocused = { onFocused(cellIndex, cell) },
+                    onClick = onOpenChannel,
                 )
             }
+            CurrentTimeMarker(
+                viewport = viewport,
+                nowEpochMillis = nowEpochMillis,
+                height = GUIDE_ROW_HEIGHT,
+            )
         }
+    }
+}
+
+@Composable
+private fun TimelineViewport(
+    totalWidth: Dp,
+    requestedOffset: Dp,
+    height: Dp,
+    modifier: Modifier,
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = modifier
+            .height(height)
+            .clipToBounds(),
+    ) {
+        val maximumOffset = (totalWidth - maxWidth).coerceAtLeast(0.dp)
+        val appliedOffset = requestedOffset.coerceIn(0.dp, maximumOffset)
+        Box(
+            modifier = Modifier
+                .offset(x = 0.dp - appliedOffset)
+                .width(totalWidth)
+                .height(height),
+            content = content,
+        )
     }
 }
 
