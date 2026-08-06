@@ -8,8 +8,13 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.ts.TsExtractor
 import app.muxtv.network.MuxTvHttpClients
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -23,9 +28,30 @@ internal class PlaybackMediaSourceFactory(
     fun create(request: PlaybackSessionRequest): MediaSource {
         val httpFactory = createHttpDataSourceFactory(request)
         val dataSourceFactory = DefaultDataSource.Factory(applicationContext, httpFactory)
-        return DefaultMediaSourceFactory(applicationContext)
-            .setDataSourceFactory(dataSourceFactory)
-            .createMediaSource(request.toMediaItem())
+        val mediaItem = request.toMediaItem()
+        return when (PlaybackTransportClassifier.classify(request.locator).sourcePolicy.kind) {
+            PlaybackMediaSourceKind.HLS -> HlsMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(mediaItem)
+            PlaybackMediaSourceKind.DASH -> DashMediaSource.Factory(dataSourceFactory)
+                .createMediaSource(mediaItem)
+            PlaybackMediaSourceKind.PROGRESSIVE -> {
+                val decision = PlaybackTransportClassifier.classify(request.locator)
+                val extractorMode = decision.sourcePolicy.tsExtractorMode
+                if (extractorMode == null) {
+                    ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                } else {
+                    val extractorsFactory = ExtractorsFactory {
+                        arrayOf(TsExtractor(extractorMode))
+                    }
+                    ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
+                        .createMediaSource(mediaItem)
+                }
+            }
+            PlaybackMediaSourceKind.AUTO -> DefaultMediaSourceFactory(applicationContext)
+                .setDataSourceFactory(dataSourceFactory)
+                .createMediaSource(mediaItem)
+        }
     }
 
     internal fun createHttpDataSourceFactory(
