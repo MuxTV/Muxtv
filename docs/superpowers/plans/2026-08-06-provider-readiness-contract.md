@@ -164,7 +164,37 @@ git add catalog/api/src/main/kotlin/app/muxtv/catalog/ProviderReadiness.kt
 git commit -m "feat: add provider readiness contract (#112)"
 ```
 
-### Task 3: Document ownership and integration rules
+### Task 3: Adversarial truth-invariant follow-up
+
+**Files:**
+- Test-only while runner is unavailable: `catalog/api/src/test/kotlin/app/muxtv/catalog/ProviderReadinessInvariantTest.kt`
+- Modify after observed RED: `catalog/api/src/main/kotlin/app/muxtv/catalog/ProviderReadiness.kt`
+
+**Offline finding:** the first authored model permits states that contradict the durable-revision semantics expected by #112.
+
+Required invariants:
+
+- `ProviderSecondaryAttempt` must represent terminal `Cancelled` and `Superseded` outcomes just like catalog sync, because secondary/enrichment work can also be cancelled or become stale;
+- `ProviderSecondaryAttempt.Succeeded(revision=N)` is valid only when `activeRevisionNumber == N`;
+- `ProviderCatalogSyncAttempt.Succeeded(revision=N)` is valid only when `activeCatalog?.revisionNumber == N`;
+- failed/cancelled/superseded attempts may coexist with previous-good active data and must not erase it.
+
+The test-only contract is committed while the runner is unavailable. Do **not** modify production for these invariants until the exact test-only head has been run and the expected RED is observed.
+
+When execution returns:
+
+```powershell
+./gradlew.bat :catalog:api:test --tests app.muxtv.catalog.ProviderReadinessInvariantTest --no-daemon
+```
+
+Expected RED on the current test-only head:
+
+1. compile failure because `ProviderSecondaryAttempt.Cancelled` / `Superseded` do not yet exist;
+2. after adding only those variants, behavioral failures because contradictory success/active-revision combinations are currently accepted.
+
+Minimal GREEN should add only the missing terminal secondary variants and constructor invariants; it must not introduce a state machine, run token, scheduler or persistence layer into `catalog:api`.
+
+### Task 4: Document ownership and integration rules
 
 **Files:**
 - Modify: issue #112 discussion only; no runtime ownership file is required in this package.
@@ -191,9 +221,17 @@ Keep #112 open until at least one future adapter or provider-neutral integration
 
 ## Acceptance After Runner Returns
 
-1. Exact branch head passes `:catalog:api:test` and pure Kotlin lane.
+1. Exact branch head passes `:catalog:api:test`, including `ProviderReadinessInvariantTest`, and pure Kotlin lane.
 2. Full host acceptance confirms no compile/API regression.
 3. No Room schema artifact changes.
 4. No WorkManager, DI, Android manifest, provider protocol or credential-storage changes.
 5. Static API review confirms no provider-total percentage or secret-bearing field.
-6. #112 remains open as an integration umbrella until a real adapter consumes the contract.
+6. Success-attempt revision invariants match the active revision they claim to have published.
+7. Secondary cancellation/supersession is representable without erasing previous-good data.
+8. #112 remains open as an integration umbrella until a real adapter consumes the contract.
+
+## Offline status
+
+- Initial contract implementation is authored but unexecuted.
+- Adversarial invariant test-only commit is authored after static review.
+- No GREEN/compile-ready claim is made while the runner is unavailable.
