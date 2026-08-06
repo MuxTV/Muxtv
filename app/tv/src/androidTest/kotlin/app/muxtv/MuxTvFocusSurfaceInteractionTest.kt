@@ -3,8 +3,6 @@ package app.muxtv
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -64,8 +62,6 @@ class MuxTvFocusSurfaceInteractionTest {
         val requester = FocusRequester()
 
         composeRule.setContent {
-            val compositionCount = remember { mutableIntStateOf(0) }
-            compositionCount.intValue += 1
             MuxTvTheme {
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     repeat(3) { index ->
