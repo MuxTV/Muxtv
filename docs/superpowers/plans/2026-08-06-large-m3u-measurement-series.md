@@ -41,13 +41,45 @@ Add a focused sequential M3U evidence entry point for 1k/10k/50k corpora without
 10. Extend `Test-MeasurementHarnessSyntax.ps1` so the new entry point is syntax-parsed and its profile/digest/sequential contract cannot silently disappear.
 11. Leave `Invoke-MeasurementSeriesCore.ps1` unchanged in this package. Integrating large M3U selection into the combined Android series can be considered after focused evidence exists; there is no reason to destabilize the accepted AVD harness while the runner is unavailable.
 
+## Offline adversarial evidence review
+
+Static review found two evidence-integrity concerns before the first real 10k/50k series is trusted.
+
+### 1. Series-directory collision must fail closed
+
+The current entry point derives the evidence directory from UTC time with one-second precision, short commit and profile, then creates it with `New-Item -Force`. Two invocations with the same commit/profile inside the same timestamp second can therefore reuse the same directory. That makes old/new reports indistinguishable and can contaminate an otherwise deterministic evidence package.
+
+A historical test-only update to `Test-MeasurementHarnessSyntax.ps1` now requires the future guard token:
+
+```text
+M3U series evidence directory already exists.
+```
+
+The production series script is deliberately unchanged while the runner is unavailable. When execution returns, the syntax/contract test should first fail because that guard does not exist. Minimal GREEN should check `Test-Path $seriesDirectory` before creating any subdirectory and throw the exact fail-closed diagnostic rather than reusing/deleting evidence.
+
+Do not solve this by silently adding random UUIDs to the report identity: deterministic run metadata should remain inspectable. A higher-resolution timestamp or explicit run id may be added later, but an already-existing selected output directory must never be reused implicitly.
+
+### 2. Analyzer output must be validated, not merely exist
+
+The current wrapper treats the series as passed when `analyzeMeasurementSeries` exits 0 and the requested variance JSON path exists. Before any performance claim, review the analyzer's output schema and add fail-closed checks that the produced analysis belongs to the current request/run set. At minimum, validation should bind the report to the expected family/output and number/identity of repetitions using fields the existing analyzer already emits.
+
+Do not invent a second statistics schema in the PowerShell wrapper. First inspect the analyzer's actual JSON contract/tests, then add a test-first wrapper assertion against those existing fields.
+
 ## Why this is safe while the runner is offline
 
 This package changes only evidence tooling. It does not touch parser behavior, Room, Media3, production DI, schema, Android UI, WorkManager or the current Android AVD lifecycle. The existing Kotlin generator remains the sole owner of corpus bytes and digest calculation.
 
 ## Validation when execution is available
 
-### Cheap host validation
+### First RED: evidence directory ownership
+
+```powershell
+pwsh -NoProfile -File tools/measurements/Test-MeasurementHarnessSyntax.ps1
+```
+
+Expected on the current test-only head: failure because `Invoke-M3uCorpusSeries.ps1` does not yet contain the required fail-closed collision guard. Do not add the production guard until this RED is observed.
+
+### Cheap host validation after minimal GREEN
 
 ```powershell
 pwsh -NoProfile -File tools/measurements/Test-MeasurementHarnessSyntax.ps1
@@ -75,12 +107,17 @@ The focused M3U series is only one lane. #27 remains open until the repository a
 
 ## Acceptance
 
-- syntax/contract script passes;
+- syntax/contract script passes after an observed RED/GREEN cycle for the directory-ownership guard;
 - `:core:testing:test` passes;
+- selected evidence directory is never implicitly reused;
 - exact-head 10k/50k series records requested profile/seed/source commit;
 - all repetitions agree on corpus digest/byte count/expected counts;
-- final variance report is produced by the existing analyzer;
+- final variance report is produced by the existing analyzer and validated against the current request/run set;
 - `thresholdApplied=false` remains explicit;
 - `<5` repetitions are never marked claim-eligible;
 - no product runtime file changes;
 - issue #27 remains open until actual repeated distributions are captured and reviewed.
+
+## Offline status
+
+The new directory-ownership assertion is test-only and unexecuted. No syntax-pass, RED, GREEN or performance claim is made while the runner is unavailable.
