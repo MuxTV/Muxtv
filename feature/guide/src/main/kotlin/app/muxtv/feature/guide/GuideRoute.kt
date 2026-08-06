@@ -3,7 +3,6 @@ package app.muxtv.feature.guide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -117,10 +116,12 @@ private fun GuideScreen(
             GuideUiState.Failed -> GuideFailure(
                 message = "Не удалось загрузить программу.",
                 onRetry = onRetry,
+                onResetToFirstPage = onResetToFirstPage,
             )
             GuideUiState.Incomplete -> GuideFailure(
                 message = "Программа слишком большая для безопасного окна. Попробуйте ещё раз.",
                 onRetry = onRetry,
+                onResetToFirstPage = onResetToFirstPage,
             )
             is GuideUiState.Content -> GuideContent(
                 state = state,
@@ -149,14 +150,22 @@ private fun GuideMessage(message: String) {
 private fun GuideFailure(
     message: String,
     onRetry: () -> Unit,
+    onResetToFirstPage: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
         GuideMessage(message)
-        MuxTvActionButton(
-            text = "Повторить",
-            onClick = onRetry,
-            modifier = Modifier.testTag(GUIDE_RETRY_TAG),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+            MuxTvActionButton(
+                text = "Повторить",
+                onClick = onRetry,
+                modifier = Modifier.testTag(GUIDE_RETRY_TAG),
+            )
+            MuxTvActionButton(
+                text = "В начало",
+                onClick = onResetToFirstPage,
+                modifier = Modifier.testTag(GUIDE_FIRST_PAGE_TAG),
+            )
+        }
     }
 }
 
@@ -586,7 +595,7 @@ private data class GuideCellUi(
 }
 
 private fun GuideRow.toCells(viewport: GuideViewport): List<GuideCellUi> {
-    if (state == GuideProjectionState.NO_GUIDE) {
+    if (state == GuideProjectionState.NO_GUIDIDE) {
         return listOf(statusCell(viewport, state, "Нет программы"))
     }
     if (state == GuideProjectionState.SOURCE_CONFLICT) {
