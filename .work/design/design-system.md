@@ -1,7 +1,9 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-06
 owners: [design, ui, accessibility, performance]
+primary_craft_reference: https://github.com/emilkowalski/skills
+secondary_visual_reference: Open Design
 ---
 
 # MuxTV Design System
@@ -18,6 +20,8 @@ Principles:
 4. current programme/context is always understandable;
 5. advanced diagnostics do not leak into simple mode;
 6. visual state is deterministic across weak and powerful devices.
+
+For visual craft and micro-interaction decisions after Android TV platform correctness, the primary reference is `emilkowalski/skills`. Open Design is a secondary source for composition exploration and prototypes. Project-specific adaptation lives in `.work/design/craft-principles.md`.
 
 ## 2. Token groups
 
@@ -60,7 +64,8 @@ Rules:
 - selected state is not represented only by accent color;
 - background artwork always receives deterministic scrim based on measured luminance or preset;
 - provider logos do not define application palette automatically;
-- red is reserved for live/recording/error semantics and must remain distinguishable.
+- red is reserved for live/recording/error semantics and must remain distinguishable;
+- unfocused structural borders remain quieter than the active focus ring; avoid equal-strength outlines on every cell.
 
 ## 4. Typography
 
@@ -106,7 +111,7 @@ Compose uses dp/sp, but screenshot/reference layouts cover these resolutions and
 - no essential control placed at extreme edges;
 - width classes distinguish compact TV, standard TV and ultra-wide/4K presentation, not phone breakpoints;
 - content density may increase on 4K but touch-sized mobile patterns are not introduced;
-- focus scaling must stay inside clipping bounds.
+- focus treatment stays inside clipping/safe bounds and does not move neighboring layout.
 
 ## 6. Spacing and sizing
 
@@ -121,7 +126,7 @@ Actual token values are calibrated on TV screenshots and viewing distance.
 Component constraints:
 
 - focusable targets have minimum visible/selectable area;
-- card gaps leave room for focus scale/glow;
+- card gaps leave room for focus ring/static depth;
 - sidebar width supports longest common localization;
 - player controls remain reachable without covering critical subtitles/content;
 - EPG row height balances programme readability and channel count;
@@ -130,34 +135,41 @@ Component constraints:
 ## 7. Shape and depth
 
 - moderate rounded corners, consistent by component class;
-- focus elevation/scale communicates cursor without excessive zoom;
-- shadow/glow effects have low-end fallback;
+- dense D-pad surfaces communicate focus through immediate outline/tone/luminance, not animated zoom;
+- shadow/glow effects have low-end fallback and remain visually subordinate to the focus ring;
 - no permanent glass blur dependency;
 - overlays use layered scrims rather than expensive real-time blur where possible;
-- focused item must not trigger remeasurement or neighbor movement.
+- focused item must not trigger remeasurement or neighbor movement;
+- sparse hero/poster scale treatment, if ever used, is explicit opt-in rather than a global focus default.
 
 ## 8. Motion
+
+Motion is frequency-aware and purpose-driven. The primary craft rule is that high-frequency keyboard/D-pad actions should not animate.
 
 Motion groups:
 
 ```text
-focus transition
 route transition
 overlay reveal/hide
-rail item insertion/removal
+rare state explanation
 player status transition
 loading/progress
 ```
 
-Budgets:
+`focus transition` is intentionally **not** a default animated group for dense TV navigation.
 
-- focus feedback begins immediately and completes quickly;
-- route transition never delays input readiness;
-- player overlay appears faster than decorative home transitions;
-- reduced-motion profile removes scale/parallax and uses opacity/outline;
-- repeated D-pad input coalesces/interrupts animations;
+Budgets and rules:
+
+- D-pad focus feedback is immediate: no scale/position animation for navigation, Channels, Guide, Search or settings lists;
+- repeated D-pad input must never queue animation or make the cursor feel delayed;
+- route/overlay transition exists only when it explains spatial/state context and never delays input readiness;
+- entry/exit motion, when justified, should feel responsive from the first frame; avoid slow-start `ease-in` UI motion;
+- moving/morphing content may use an interruptible ease-in-out/spring only when the interaction actually benefits from continuous motion;
+- ordinary UI motion stays below roughly 300 ms;
+- reduced-motion profile removes scale/parallax/position motion and uses opacity/outline/tone;
 - no autoplaying hero preview by default on weak device profile;
-- background video disabled by setting and device capability.
+- background video disabled by setting and device capability;
+- animate cheap render properties only; do not animate width/height/padding in performance-sensitive TV lists/grids.
 
 ## 9. Images
 
@@ -210,6 +222,8 @@ Each component documents:
 - screenshots and tests;
 - performance notes.
 
+Shared dense-navigation components additionally document whether any motion is present. The default answer for D-pad focus is none.
+
 ## 11. Home screen
 
 Home is personalized by current profile but does not imitate a VOD storefront.
@@ -239,7 +253,8 @@ Alternative compact mode can reduce columns. Requirements:
 - channel number/logo/name/current programme/progress readable;
 - preview does not start decoder for every rapid focus movement; debounce and setting required;
 - favorites/custom groups first-class;
-- no dead space requiring excessive D-pad travel.
+- no dead space requiring excessive D-pad travel;
+- rapid focus traversal has no decorative focus-animation queue.
 
 ## 13. EPG
 
@@ -253,7 +268,9 @@ Custom high-performance timeline component, not nested unconstrained lazy lists.
 - lazy interval loading;
 - focus retains time anchor vertically;
 - past/catch-up/recordable/live states encoded with multiple cues;
-- selected programme can reveal detail pane without losing grid context.
+- selected programme can reveal detail pane without losing grid context;
+- focus styling never changes programme-width = time geometry;
+- Left/Right/Up/Down focus changes are immediate and non-animated.
 
 ## 14. Player UI
 
@@ -298,11 +315,14 @@ Avoid theme engine/plugin complexity in MVP.
 - gradients/scrims measured on weak reference device;
 - no unbounded recomposition from player progress/clock;
 - programme progress updates at appropriate cadence, not per frame;
-- design token changes require broad screenshot review.
+- design token changes require broad screenshot review;
+- real-device review explicitly checks whether rapid remote navigation feels instant rather than merely measuring nominal animation duration.
 
-## 18. Critical lessons from reference apps
+## 18. Critical lessons from reference apps and craft sources
 
 - official Compose TV samples define current component/focus mechanics but are demos, not complete product architecture;
+- `emilkowalski/skills` is the primary craft reference for polish: invisible details compound; frequent keyboard actions should not animate; motion requires a concrete purpose; UI review compares specific before/after choices;
+- Open Design is secondary for layout/composition exploration and prototype comparison, not runtime focus/key semantics;
 - Jellyfin demonstrates mature device/release support, while long-lived issues expose focus restoration, slow image loading and player/UI lifecycle regressions;
 - StreamVault demonstrates visually rich TV-first capabilities, but focused-button contrast and unreachable restore action show why screenshots alone are insufficient;
 - M3UAndroid's simpler positioning is a reminder that polished simplicity can be stronger than exposing every technical capability.
@@ -313,7 +333,9 @@ Avoid theme engine/plugin complexity in MVP.
 - focused text/control remains clearly readable;
 - high contrast and reduced motion are complete variants, not partial overlays;
 - no component changes layout size when focused;
+- dense D-pad focus movement has no scale/position animation delay;
 - rapid D-pad navigation remains responsive under image load;
 - EPG and live browser meet performance budgets;
 - no essential information depends only on color/artwork;
-- UI remains coherent with missing logos, programme data and network images.
+- UI remains coherent with missing logos, programme data and network images;
+- every non-trivial animation has a documented purpose and reduced-motion behavior.
