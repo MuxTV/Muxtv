@@ -34,6 +34,7 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":feature:home"))
     implementation(project(":feature:channels"))
+    implementation(project(":feature:guide"))
     implementation(project(":feature:search"))
     implementation(project(":feature:player"))
     implementation(project(":feature:sources"))
