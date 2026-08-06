@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -183,12 +184,20 @@ private fun GuideContent(
     val rowCells = remember(state) {
         state.rows.map { row -> row.toCells(state.viewport) }
     }
+    val focusChannels = remember(state, rowCells) {
+        state.rows.mapIndexed { index, row ->
+            GuideFocusChannel(
+                channelId = row.channel.channelId,
+                programmeKeys = rowCells[index].mapNotNull(GuideCellUi::programmeKey),
+            )
+        }
+    }
     val requesterShape = remember(rowCells) { rowCells.map { cells -> cells.size } }
     val requesters = remember(requesterShape) {
         requesterShape.map { count -> List(count) { FocusRequester() } }
     }
     val pageIdentity = state.rows.firstOrNull()?.channel?.channelId
-    var restorationAttempted by remember(pageIdentity) { mutableStateOf(false) }
+    var initialFocusRestored by remember(pageIdentity) { mutableStateOf(false) }
     var focusedDetail by remember(pageIdentity) { mutableStateOf<String?>(null) }
     var timeOffset by remember(pageIdentity) { mutableStateOf(0.dp) }
     var nowEpochMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -200,23 +209,20 @@ private fun GuideContent(
         }
     }
 
-    LaunchedEffect(pageIdentity, focusAnchor, restorationAttempted) {
-        if (restorationAttempted || state.rows.isEmpty()) return@LaunchedEffect
-        val focusChannels = state.rows.map { row ->
-            GuideFocusChannel(
-                channelId = row.channel.channelId,
-                programmeKeys = row.programmes
-                    .sortedBy(GuideProgrammeCell::startEpochMillis)
-                    .map(GuideProgrammeCell::key),
-            )
+    LaunchedEffect(pageIdentity, focusAnchor, focusChannels, initialFocusRestored) {
+        val exactIdentitySurvives = focusAnchor?.hasExactIdentityIn(focusChannels) == true
+        if (initialFocusRestored && (focusAnchor == null || exactIdentitySurvives)) {
+            return@LaunchedEffect
         }
+        if (state.rows.isEmpty()) return@LaunchedEffect
+
         val target = focusAnchor?.resolveAgainst(focusChannels)
         val rowIndex = target?.channelIndex ?: 0
         val cellIndex = target?.programmeIndex ?: 0
         listState.scrollToItem(rowIndex)
         withFrameNanos { }
         requesters.getOrNull(rowIndex)?.getOrNull(cellIndex)?.requestFocus()
-        restorationAttempted = true
+        initialFocusRestored = true
     }
 
     val spanMillis = state.viewport.toEpochMillis - state.viewport.fromEpochMillis
@@ -408,15 +414,17 @@ private fun GuideTimelineRow(
             modifier = Modifier.weight(1f),
         ) {
             cells.forEachIndexed { cellIndex, cell ->
-                ProgrammeCell(
-                    rowIndex = rowIndex,
-                    cellIndex = cellIndex,
-                    cell = cell,
-                    viewport = viewport,
-                    focusRequester = requesters[cellIndex],
-                    onFocused = { onFocused(cellIndex, cell) },
-                    onClick = onOpenChannel,
-                )
+                key(cell.composeKey()) {
+                    ProgrammeCell(
+                        rowIndex = rowIndex,
+                        cellIndex = cellIndex,
+                        cell = cell,
+                        viewport = viewport,
+                        focusRequester = requesters[cellIndex],
+                        onFocused = { onFocused(cellIndex, cell) },
+                        onClick = onOpenChannel,
+                    )
+                }
             }
             CurrentTimeMarker(
                 viewport = viewport,
@@ -581,6 +589,8 @@ private data class GuideCellUi(
     val endEpochMillis: Long,
     val title: String,
 ) {
+    fun composeKey(): Any = programmeKey ?: "status:${state.name}"
+
     fun detailLabel(channelName: String): String = when (state) {
         GuideProjectionState.READY ->
             "$channelName · $title · ${formatTime(startEpochMillis)}–${formatTime(endEpochMillis)}"
