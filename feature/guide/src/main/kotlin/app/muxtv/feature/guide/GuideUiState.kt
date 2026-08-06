@@ -8,10 +8,13 @@ internal data class GuideViewport(
     val fromEpochMillis: Long,
     val toEpochMillis: Long,
     val hasMoreChannels: Boolean,
+    val canGoPrevious: Boolean,
+    val canResetToFirstPage: Boolean,
 ) {
     init {
         require(fromEpochMillis >= 0L)
         require(toEpochMillis > fromEpochMillis)
+        require(!canGoPrevious || canResetToFirstPage)
     }
 }
 
@@ -50,6 +53,8 @@ internal sealed interface GuideUiState {
 
         override fun toString(): String =
             "Content(rowCount=${rows.size}, hasMoreChannels=${viewport.hasMoreChannels}, " +
+                "canGoPrevious=${viewport.canGoPrevious}, " +
+                "canResetToFirstPage=${viewport.canResetToFirstPage}, " +
                 "spanMillis=${viewport.toEpochMillis - viewport.fromEpochMillis})"
     }
 }
