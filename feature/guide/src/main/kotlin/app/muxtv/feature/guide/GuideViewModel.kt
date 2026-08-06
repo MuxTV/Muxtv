@@ -26,6 +26,7 @@ internal class GuideViewModel(
 
     private var generation: Long = 0L
     private var loadJob: Job? = null
+    private var focusAnchor: GuideFocusAnchor? = null
 
     init {
         require(profileId.isNotBlank())
@@ -57,6 +58,12 @@ internal class GuideViewModel(
             }
         }
     }
+
+    fun updateFocusAnchor(anchor: GuideFocusAnchor) {
+        focusAnchor = anchor
+    }
+
+    fun currentFocusAnchor(): GuideFocusAnchor? = focusAnchor
 
     private suspend fun loadGeneration(requestGeneration: Long) {
         val fromEpochMillis = nowEpochMillis()
