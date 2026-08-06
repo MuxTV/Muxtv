@@ -36,16 +36,25 @@ object SourceUrlPolicy {
         }
 
         val schemeSeparator = candidate.indexOf("://")
-        if (schemeSeparator <= 0) {
-            return SourceUrlDecision.Rejected(SourceUrlRejectionReason.Malformed)
+        val normalizedCandidate = if (schemeSeparator >= 0) {
+            if (schemeSeparator == 0) {
+                return SourceUrlDecision.Rejected(SourceUrlRejectionReason.Malformed)
+            }
+            val rawScheme = candidate.substring(0, schemeSeparator)
+            if (!SCHEME.matches(rawScheme)) {
+                return SourceUrlDecision.Rejected(SourceUrlRejectionReason.Malformed)
+            }
+            if (!rawScheme.equals("http", ignoreCase = true) &&
+                !rawScheme.equals("https", ignoreCase = true)
+            ) {
+                return SourceUrlDecision.Rejected(SourceUrlRejectionReason.UnsupportedScheme)
+            }
+            candidate
+        } else {
+            "https://$candidate"
         }
 
-        val rawScheme = candidate.substring(0, schemeSeparator).lowercase()
-        if (rawScheme != "http" && rawScheme != "https") {
-            return SourceUrlDecision.Rejected(SourceUrlRejectionReason.UnsupportedScheme)
-        }
-
-        val url = candidate.toHttpUrlOrNull()
+        val url = normalizedCandidate.toHttpUrlOrNull()
             ?: return SourceUrlDecision.Rejected(SourceUrlRejectionReason.Malformed)
 
         if (url.username.isNotEmpty() || url.password.isNotEmpty()) {
@@ -78,5 +87,6 @@ object SourceUrlPolicy {
     }
 
     private const val MAX_ENCODING_LAYERS = 2
+    private val SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
     private val ENCODED_CONTROL_SEPARATOR = Regex("%(?:0a|0d|09)", RegexOption.IGNORE_CASE)
 }
