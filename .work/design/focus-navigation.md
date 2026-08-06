@@ -1,11 +1,13 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-06
 owners: [ui, design, accessibility]
 reference_repositories:
   - android/tv-samples
   - jellyfin/jellyfin-androidtv
   - Davidona/StreamVault-IPTV
+primary_craft_reference: https://github.com/emilkowalski/skills
+secondary_visual_reference: Open Design
 ---
 
 # Focus, D-pad и remote navigation
@@ -22,6 +24,8 @@ reference_repositories:
 - иметь доступное имя и действие.
 
 Красота без надёжного focus считается дефектом.
+
+Для interaction craft после Android TV platform semantics основной референс — `emilkowalski/skills`; Open Design используется как вторичный источник визуальных/composition-приёмов. Подробный проектный адаптер правил: `.work/design/craft-principles.md`.
 
 ## 2. Информационная архитектура
 
@@ -162,6 +166,8 @@ Long press is not the only access path for essential actions.
 - accessibility alternative exists in «Ещё» menu;
 - instructions are discoverable contextually, not shown constantly.
 
+Shared components must not synthesize ordinary short clicks from `onPreviewKeyEvent` if doing so consumes the native DOWN/UP sequence needed by long-press semantics.
+
 ## 9. Search and keyboard
 
 - focus enters TextField only by explicit activation;
@@ -206,14 +212,26 @@ Overlay requirements:
 
 ## 12. Focus visual state
 
+Для плотной TV-навигации (navigation, Channels, Guide, Search, settings lists) focused state должен быть **мгновенным**, без декоративной focus-анимации.
+
 Minimum cues use more than color alone:
 
-- scale or elevation/outline;
-- luminance/contrast change;
-- optional glow/scrim;
+- immediate outline/ring;
+- surface/luminance or tone change;
+- optional low-cost static depth/glow where it does not affect reachability;
 - text/icon remains readable;
-- motion duration short and consistent;
 - no layout reflow or neighbor displacement.
+
+Default dense-navigation rules:
+
+- focus scale = `1.0`;
+- no `animateFloatAsState`/tween/spring tied directly to D-pad focus movement;
+- no animated position/size/geometry on focus;
+- no queued animation under rapid key repeat;
+- the cursor becomes visually obvious immediately;
+- focus styling does not distort EPG programme-width = time mapping.
+
+Sparse poster/hero components may later opt into a distinct visual treatment only with explicit purpose, screenshot/device evidence and reduced-motion behavior. It is not a global focus default.
 
 Selected != focused:
 
@@ -221,9 +239,26 @@ Selected != focused:
 selected: current navigation/category/profile state
 focused: current remote cursor
 pressed: active key press
+playing: current playback state
 ```
 
-## 13. Accessibility
+These states remain distinguishable even in combinations such as focused+selected or focused+playing.
+
+## 13. Motion on remote-driven UI
+
+The primary craft rule is frequency-aware: repeated keyboard/D-pad actions should not animate because motion adds latency and disconnects visual response from the key press.
+
+Therefore:
+
+- ordinary focus move: 0 ms positional/scale animation;
+- ordinary D-pad activation: native/instant pressed state, no decorative transform animation;
+- repeated rail/grid traversal: no stagger;
+- route/overlay animation is allowed only when it explains spatial/state context and never delays input readiness;
+- if justified, entry/exit should feel immediately responsive; avoid slow-start `ease-in` UI motion;
+- ordinary UI motion stays under ~300 ms;
+- reduced motion removes scale/position movement and keeps useful tone/opacity/state feedback.
+
+## 14. Accessibility
 
 - target sizes suitable for 10-foot UI;
 - focus order matches visual order;
@@ -236,7 +271,7 @@ pressed: active key press
 - TalkBack/VoiceView testing on representative devices;
 - RTL mirroring tested separately; playback time direction and media controls follow platform convention.
 
-## 14. Testing
+## 15. Testing
 
 ### Deterministic navigation tests
 
@@ -252,7 +287,8 @@ For each screen:
 - keyboard enter/exit;
 - profile switch;
 - restricted item;
-- long press and key repeat.
+- long press and key repeat;
+- rapid D-pad repeat does not leave a delayed focus-animation queue.
 
 ### Screenshot states
 
@@ -261,7 +297,9 @@ default
 focused
 pressed
 selected
+playing
 focused+selected
+focused+playing
 disabled
 loading
 error
@@ -273,17 +311,21 @@ large text
 ### Reference lessons
 
 - Android TV official samples are primary for current Compose focus APIs and accessibility demos.
+- `emilkowalski/skills` is the primary craft reference after platform correctness: frequent keyboard actions stay immediate; every animation needs a concrete purpose; invisible detail and responsive feedback matter more than decorative motion.
+- Open Design is secondary for visual composition/prototype alternatives, not remote semantics.
 - Jellyfin issues show real failures: focus trapped in search, guide returning to wrong position, too many remote steps and player lifecycle interactions.
 - StreamVault issues show focused text contrast and restore screens with no visible continuation control; visual polish must be checked together with focus reachability.
 
-## 15. Acceptance criteria
+## 16. Acceptance criteria
 
 - all user journeys complete using only five-button D-pad and Back;
 - focus always visible;
+- dense D-pad focus movement has no scale/position animation delay;
 - Back never traps user in TextField/overlay;
 - route return restores stable item context;
 - EPG returns to current/selected channel and time;
 - no essential action depends solely on long press/vendor key;
-- selected/focused states are distinguishable;
+- selected/focused/playing states are distinguishable;
 - profile picker behavior follows actual number of profiles;
-- automated focus graph tests cover every route edge.
+- automated focus graph tests cover every route edge;
+- rapid key repeat does not queue stale visual focus transitions.
