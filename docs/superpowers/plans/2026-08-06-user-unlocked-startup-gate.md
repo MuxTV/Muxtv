@@ -20,22 +20,23 @@ MuxTV does **not** support functional Direct Boot in this package. The main data
 4. source refresh scheduler reconciliation;
 5. EPG refresh scheduler reconciliation.
 
-If the process is created before user unlock, that sequence has no explicit lifecycle guard.
+There is a second, less obvious boundary: those dependencies were injected directly into the Application. Resolving `DatabaseInitializer`/`EpgMatchingStore` reaches the singleton `MuxTvDatabaseComponents` provider, which calls `MuxTvDatabaseFactory.create(...)`. Therefore merely delaying method calls would not be a complete CE boundary if Hilt resolves that graph during Application injection.
 
 ## Invariants
 
-1. Zero credential-encrypted startup work before `UserManager.isUserUnlocked == true`.
+1. Zero credential-encrypted startup work **and zero eager construction of the CE dependency graph** before `UserManager.isUserUnlocked == true`.
 2. If already unlocked, startup runs immediately and exactly once.
 3. If locked, register one process-scoped `ACTION_USER_UNLOCKED` receiver and defer startup.
 4. Close the check/register race by re-reading `isUserUnlocked` after registration.
 5. Duplicate `start()` calls or duplicate unlock signals cannot run startup twice.
 6. Receiver registration is released once startup becomes eligible.
-7. Do not add a manifest boot receiver.
-8. Do not mark the application or workers `directBootAware`.
-9. Do not move Room, Keystore or DataStore state to device-protected storage.
-10. Do not replace WorkManager or create a second scheduling lifecycle.
-11. Existing unique-work reconciliation remains the post-unlock scheduling owner.
-12. `BroadcastReceiver.onReceive()` only signals eligibility; the existing application coroutine owns the actual asynchronous startup work.
+7. CE-bound Application dependencies use Dagger `Lazy` and are resolved only inside the post-unlock startup path.
+8. Do not add a manifest boot receiver.
+9. Do not mark the application or workers `directBootAware`.
+10. Do not move Room, Keystore or DataStore state to device-protected storage.
+11. Do not replace WorkManager or create a second scheduling lifecycle.
+12. Existing unique-work reconciliation remains the post-unlock scheduling owner.
+13. `BroadcastReceiver.onReceive()` only signals eligibility; the existing application coroutine owns the actual asynchronous startup work.
 
 ## Design
 
@@ -52,13 +53,25 @@ The gate uses atomics to make two state transitions idempotent:
 - listener registration requested at most once;
 - credential-encrypted startup started at most once.
 
-The registration handle is retained only long enough to unregister after startup eligibility is established. A post-registration state check handles the race where unlock happens between the first state read and receiver registration.
+The registration handle is retained only long enough to unregister after startup eligibility is established. A post-registration state check handles the race where unlock happens between the first state read and receiver registration. Unlock signals also re-read the authoritative user state before publishing readiness.
+
+### Hilt boundary
+
+Inject the CE-dependent Application fields as `dagger.Lazy<T>`:
+
+- `DatabaseInitializer`;
+- `EpgMatchingStore`;
+- `DurableRemoteSourceOnboarding`;
+- `SourceRefreshScheduler`;
+- `EpgRefreshScheduler`.
+
+Do not call `.get()` until the gate publishes user-unlocked readiness. `HiltWorkerFactory` and the application coroutine scope remain ordinary injected infrastructure; worker dependencies continue to be created through Hilt/WorkManager when work actually executes.
 
 ### Android adapter
 
-`MuxTvApplication` owns the dynamic receiver because its lifetime is the application process. It registers only for the protected system action `Intent.ACTION_USER_UNLOCKED`; API 33+ uses `Context.RECEIVER_NOT_EXPORTED`. The broadcast callback re-checks `UserManager.isUserUnlocked` before allowing the gate to publish readiness, matching Android's guidance that user state may have changed by delivery time.
+`MuxTvApplication` owns the dynamic receiver because its lifetime is the application process. It registers only for `Intent.ACTION_USER_UNLOCKED`, which Android documents as a registered-receiver-only signal for credential-encrypted storage availability. API 33+ uses `Context.RECEIVER_NOT_EXPORTED`; the gate re-checks `UserManager.isUserUnlocked` because Android explicitly warns that user state may have changed by broadcast delivery time.
 
-The existing startup coroutine is moved behind `launchCredentialEncryptedStartup()` without changing its ordering or failure semantics.
+The existing startup coroutine is moved behind `launchCredentialEncryptedStartup()` without changing operation ordering or EPG matching best-effort failure semantics.
 
 ## Test-first contract
 
@@ -66,10 +79,11 @@ Add JVM tests before production code for:
 
 1. already-unlocked startup -> callback once, no receiver registration;
 2. locked startup -> no callback until unlock;
-3. duplicate `start()` while locked -> one registration;
-4. duplicate unlock signals -> one callback and one unregister;
-5. unlock between pre-check and post-registration check -> callback once and registration released;
-6. synchronous signal during listener registration -> callback once and eventual unregister.
+3. locked/spurious signal -> still no callback;
+4. duplicate `start()` while locked -> one registration;
+5. duplicate unlock signals -> one callback and one unregister;
+6. unlock between pre-check and post-registration check -> callback once and registration released;
+7. synchronous signal during listener registration -> callback once and eventual unregister.
 
 Because the self-hosted runner is unavailable, these tests are authored test-first but **RED is not claimed as executed**. Exact execution is deferred to the acceptance section below.
 
@@ -83,12 +97,13 @@ Exact PR head must pass, at minimum:
 
 1. app JVM unit tests, including `UserUnlockedStartupGateTest`;
 2. app debug compilation and Hilt/KSP wiring;
-3. Product DeviceMatrix on API26 and current API;
-4. a locked-user/unlock lifecycle scenario where the environment supports it;
-5. existing source/EPG unique-work reconciliation checks;
-6. no Room schema change;
-7. no new manifest receiver/directBootAware component;
-8. unresolved review threads = 0.
+3. static/diff review confirming CE Application fields remain lazy and no CE `.get()` occurs before the gate;
+4. Product DeviceMatrix on API26 and current API;
+5. a locked-user/unlock lifecycle scenario where the environment supports it;
+6. existing source/EPG unique-work reconciliation checks;
+7. no Room schema change;
+8. no new manifest receiver/directBootAware component;
+9. unresolved review threads = 0.
 
 If the emulator cannot faithfully simulate pre-unlock credential storage, that limitation must be recorded and the physical-device reboot/unlock check remains part of #31 release hardening.
 
