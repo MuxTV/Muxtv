@@ -8,16 +8,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -183,7 +179,7 @@ private fun GuideContent(
     val rowCells = remember(state) {
         state.rows.map { row -> row.toCells(state.viewport) }
     }
-    val requesterShape = remember(rowCells) { rowCells.map(List<GuideCellUi>::size) }
+    val requesterShape = remember(rowCells) { rowCells.map { cells -> cells.size } }
     val requesters = remember(requesterShape) {
         requesterShape.map { count -> List(count) { FocusRequester() } }
     }
@@ -572,7 +568,8 @@ private data class GuideCellUi(
     val title: String,
 ) {
     fun detailLabel(channelName: String): String = when (state) {
-        GuideProjectionState.READY -> "$channelName · $title · ${formatTime(startEpochMillis)}–${formatTime(endEpochMillis)}"
+        GuideProjectionState.READY ->
+            "$channelName · $title · ${formatTime(startEpochMillis)}–${formatTime(endEpochMillis)}"
         GuideProjectionState.NO_GUIDE -> "$channelName · программа не найдена"
         GuideProjectionState.SOURCE_CONFLICT -> "$channelName · конфликт источников программы"
     }
