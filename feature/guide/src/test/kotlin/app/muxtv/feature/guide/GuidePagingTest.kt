@@ -135,6 +135,34 @@ class GuidePagingTest {
         assertThat(repository.channelQueries.last().after).isNull()
     }
 
+    @Test
+    fun `empty later page can reset to first bounded window`() = runTest {
+        val firstCursor = cursor("channel-30", 30)
+        val repository = PagingRepository(
+            pages = mapOf(
+                null to page("first", firstCursor),
+                firstCursor to GuideChannelWindow(
+                    channels = emptyList(),
+                    nextCursor = null,
+                    isTruncated = false,
+                ),
+            ),
+        )
+        val viewModel = createViewModel(repository)
+        runCurrent()
+
+        viewModel.loadNextPage()
+        runCurrent()
+        assertThat(viewModel.uiState.value).isEqualTo(GuideUiState.Empty)
+
+        viewModel.resetToFirstPage()
+        runCurrent()
+
+        val state = viewModel.uiState.value as GuideUiState.Content
+        assertThat(state.rows.map { it.channel.channelId }).containsExactly("first-1")
+        assertThat(repository.channelQueries.last().after).isNull()
+    }
+
     private fun createViewModel(repository: GuideWindowRepository): GuideViewModel {
         val store = ViewModelStore().also(stores::add)
         val factory = viewModelFactory {
