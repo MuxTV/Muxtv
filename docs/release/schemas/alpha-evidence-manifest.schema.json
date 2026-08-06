@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://muxtv.app/schemas/alpha-evidence-manifest.schema.json",
+  "title": "MuxTV alpha release evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repository",
+    "commit",
+    "releaseVersion",
+    "generatedAtUtc",
+    "claimEligible",
+    "gates",
+    "artifacts",
+    "knownLimitations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "repository": {
+      "const": "MuxTV/Muxtv"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sourceRef": {
+      "type": ["string", "null"],
+      "maxLength": 200
+    },
+    "releaseVersion": {
+      "type": "string",
+      "pattern": "^0\\.1\\.0-alpha(?:[.+-][0-9A-Za-z.-]+)?$"
+    },
+    "generatedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claimEligible": {
+      "type": "boolean"
+    },
+    "gates": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/gate"
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "knownLimitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "PASSED", "FAILED", "BLOCKED", "DEFERRED"]
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "WORKFLOW_RUN_ID",
+            "WORKFLOW_JOB_ID",
+            "CI_ARTIFACT_NAME",
+            "REPOSITORY_PATH",
+            "DEVICE_REPORT",
+            "MEASUREMENT_REPORT",
+            "OTHER"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "not": {
+            "pattern": "(?i)(authorization|cookie|bearer|token=|password=|sig=|signature=)"
+          }
+        }
+      }
+    },
+    "defer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issueNumber", "rationale", "scopeEffect"],
+      "properties": {
+        "issueNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "scopeEffect": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "status", "evidence"],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "evidenceCommit": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceReference"
+          }
+        },
+        "facts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "integer", "boolean", "null"]
+          }
+        },
+        "defer": {
+          "$ref": "#/$defs/defer"
+        },
+        "note": {
+          "type": ["string", "null"],
+          "maxLength": 2000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "PASSED" }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["evidenceCommit"],
+            "properties": {
+              "evidenceCommit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "evidence": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "DEFERRED" }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["defer"]
+          }
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "sourceCommit"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "APK",
+            "AAB",
+            "SBOM",
+            "DEPENDENCY_REPORT",
+            "BASELINE_PROFILE_EVIDENCE",
+            "TEST_EVIDENCE",
+            "MEASUREMENT_EVIDENCE",
+            "OTHER"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "not": {
+            "pattern": "(?i)(authorization|cookie|bearer|token=|password=|sig=|signature=)"
+          }
+        },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "byteCount": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    }
+  }
+}
