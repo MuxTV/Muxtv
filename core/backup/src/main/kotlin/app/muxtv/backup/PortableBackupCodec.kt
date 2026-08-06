@@ -44,7 +44,6 @@ object PortableBackupCodec {
         return try {
             val text = decodeUtf8Strict(bytes)
             val root = Json.parseToJsonElement(text).asObject()
-            root.requireExactFields(ROOT_FIELDS)
 
             val formatVersion = root.requiredInt("formatVersion")
             if (formatVersion != PortableBackupDocument.CURRENT_FORMAT_VERSION) {
@@ -52,6 +51,7 @@ object PortableBackupCodec {
                     PortableBackupRejectReason.UNSUPPORTED_VERSION,
                 )
             }
+            root.requireExactFields(ROOT_FIELDS)
 
             val snapshot = PortableBackupSnapshot(
                 createdAtEpochMillis = root.requiredLong("createdAtEpochMillis"),
@@ -65,13 +65,17 @@ object PortableBackupCodec {
             if (!MessageDigest.isEqual(expectedDigest, actualDigest)) {
                 PortableBackupDecodeResult.Rejected(PortableBackupRejectReason.INTEGRITY_MISMATCH)
             } else {
-                PortableBackupDecodeResult.Success(
-                    PortableBackupDocument(
-                        formatVersion = formatVersion,
-                        snapshot = snapshot,
-                        integrity = integrity,
-                    ),
+                val document = PortableBackupDocument(
+                    formatVersion = formatVersion,
+                    snapshot = snapshot,
+                    integrity = integrity,
                 )
+                val canonicalDocumentBytes = encode(snapshot)
+                if (!bytes.contentEquals(canonicalDocumentBytes)) {
+                    PortableBackupDecodeResult.Rejected(PortableBackupRejectReason.MALFORMED)
+                } else {
+                    PortableBackupDecodeResult.Success(document)
+                }
             }
         } catch (error: PortableBackupValidationException) {
             PortableBackupDecodeResult.Rejected(error.reason)
