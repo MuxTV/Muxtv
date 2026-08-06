@@ -27,6 +27,7 @@ include(
     ":core:testing",
     ":core:network",
     ":core:credentials",
+    ":core:backup",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
