@@ -113,7 +113,11 @@ private fun GuideScreen(
 
         when (state) {
             GuideUiState.Loading -> GuideMessage("Загружаем программу…")
-            GuideUiState.Empty -> GuideMessage("Нет доступных каналов.")
+            GuideUiState.Empty -> GuideFailure(
+                message = "Нет доступных каналов.",
+                onRetry = onRetry,
+                onResetToFirstPage = onResetToFirstPage,
+            )
             GuideUiState.Failed -> GuideFailure(
                 message = "Не удалось загрузить программу.",
                 onRetry = onRetry,
