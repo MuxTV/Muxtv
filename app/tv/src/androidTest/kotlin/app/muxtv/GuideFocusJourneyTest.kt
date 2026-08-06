@@ -2,10 +2,14 @@ package app.muxtv
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -20,8 +24,8 @@ import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.feature.guide.GuideRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Rule
@@ -45,7 +49,7 @@ class GuideFocusJourneyTest {
                 )
             }
         }
-        composeRule.waitUntilGuideCell()
+        waitUntilGuideCell()
 
         composeRule.onNodeWithTag("guide-cell-0-0")
             .assertIsFocused()
@@ -77,20 +81,19 @@ class GuideFocusJourneyTest {
                 }
             }
         }
-        composeRule.waitUntilGuideCell()
+        waitUntilGuideCell()
 
         composeRule.onNodeWithTag("guide-cell-0-0")
             .assertIsFocused()
             .press(Key.Enter)
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onNodeWithTag("guide-test-player-back")
-                .fetchSemanticsNodeOrNull() != null
+            composeRule.onAllNodesWithTag("guide-test-player-back")
+                .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("guide-test-player-back")
             .assertIsFocused()
             .press(Key.Enter)
-        composeRule.waitUntilGuideCell()
-        composeRule.waitForIdle()
+        waitUntilGuideCell()
 
         composeRule.onNodeWithTag("guide-cell-0-0").assertIsFocused()
     }
@@ -113,18 +116,19 @@ class GuideFocusJourneyTest {
                 )
             }
         }
-        composeRule.waitUntilGuideCell()
+        waitUntilGuideCell()
 
         composeRule.onNodeWithText("Нет программы").assertExists()
         composeRule.onNodeWithText("Конфликт источников").assertExists()
         composeRule.onNodeWithTag("guide-cell-0-0").assertIsFocused()
     }
 
-    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilGuideCell() {
-        waitUntil(timeoutMillis = 5_000) {
-            onNodeWithTag("guide-cell-0-0").fetchSemanticsNodeOrNull() != null
+    private fun waitUntilGuideCell() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("guide-cell-0-0")
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        waitForIdle()
+        composeRule.waitForIdle()
     }
 }
 
