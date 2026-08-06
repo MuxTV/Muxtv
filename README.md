@@ -6,7 +6,7 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Принятый `main` — `7af053ca14281d9e63a51470fbeb3cb8d708c318` (PR #107 Recent / Room v10).
+Проект находится в стадии **functional pre-alpha**. Принятый `main` — `431168a1603dae94dc164a45cd1ac560025ad903` (PR #127/#128/#129: transport classification, bounded Guide data window, bare-host HTTPS normalization).
 
 Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v10**. `minSdk = 26`.
 
@@ -25,37 +25,42 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt
 11. process-owned Media3 Player;
 12. Player/Search/Recent → Back со stable canonical-channel focus restoration;
 13. service-owned first-rendered-frame success boundary;
-14. profile-scoped bounded Recent, записываемый только после accepted first frame.
+14. profile-scoped bounded Recent, записываемый только после accepted first frame;
+15. cross-surface active/current-revision + selected-profile-visible truth contract;
+16. centralized Room migration chain and generated schema guard;
+17. explicit HLS/MPEG-TS/DASH/progressive playback transport classification;
+18. bounded Guide channel/programme data window без full-guide materialization;
+19. bare source host normalization to HTTPS.
 
 ### Последние принятые продуктовые этапы
 
-- PR #104 — bounded remote-first Search TV;
-- PR #106 — service-owned first-rendered-frame success signal;
-- PR #119 — EPG compressed transport hardening и device-matrix ownership для `catalog/refresh/**`;
-- PR #107 — profile-scoped Recent, Channels `Недавние`, Room v10 и exact generated schema.
+- PR #123 — cross-surface active/profile-visible channel truth;
+- PR #124 — centralized Room migration и generated schema guard;
+- PR #129 — bare-host source normalization to HTTPS;
+- PR #128 — bounded Guide channel/programme data window;
+- PR #127 — explicit playback transport classification.
 
-Final acceptance PR #107, exact head `d095fb0e99485f93f9dbed8675c13b0f5ac52537`:
+Final acceptance PR #127/#128/#129, accepted в `431168a1603dae94dc164a45cd1ac560025ad903`:
 
-- Android TV Product DeviceMatrix `31027992936` — success;
-- Full host acceptance выполнен внутри матрицы до AVD;
-- API26 и API36: database 120/120, app 26/26, Media3 12/12, credentials 4/4, importer EPG 1/1, remote EPG 1/1;
-- Room v10 schema SHA-256 `809c0bfa812e5a86a5a84d97fe4f48f1d9ac71e515c5745ef222f24689e926c4` и identity `f6625d546ddfbad62e4e33340b17f490` совпали на host/API26/API36;
+- Full host acceptance зелёный на exact heads `985fbda` (#128), `396424d` (#129), `4bc9e12` (#127);
+- Room v10 schema identity `f6625d546ddfbad62e4e33340b17f490` совпала;
 - unresolved review threads — 0;
-- squash merge — `7af053ca14281d9e63a51470fbeb3cb8d708c318`.
+- squash merge — `431168a1603dae94dc164a45cd1ac560025ad903`.
 
 ## Что ещё не завершено
 
 Текущий product critical path:
 
-1. **issue #114** — один исполняемый active/current-revision + selected-profile-visible truth contract для Playback, Search, Recent и Guide; никаких fake totals/`hasMore`;
-2. **Guide** — bounded channel window × bounded time window, deterministic keys и explicit completeness без full-guide materialization;
-3. **issue #108 → #30** — explicit playback transport classification/raw MPEG-TS contract, затем bounded variant fallback и TV Doctor Lite;
-4. **issues #33/#93** — Lounge Light TV-first polish поверх реальных Search/Recent/Guide routes;
-5. **issue #31** — R8, Baseline/Startup Profiles, endurance, signing, SBOM/release checklist и physical-device evidence.
+1. **issue #29** — Guide TV route/UI поверх принятого bounded Guide data window: sticky axes, lazy viewport, typed `READY`/`NO_GUIDE`/`SOURCE_CONFLICT`, D-pad continuity, Player→Back focus restoration;
+2. **issue #30** — bounded variant fallback и TV Doctor Lite поверх typed transport classification (#108 принят);
+3. **issues #33/#93** — Lounge Light TV-first polish поверх реальных Search/Recent/Guide routes;
+4. **issue #31** — R8, Baseline/Startup Profiles, endurance, signing, SBOM/release checklist и physical-device evidence.
 
 Параллельные hardening/evidence packages:
 
-- **issue #121** — production-owned current migration chain и generated Room schema parity guard;
+- **issue #118** — прямой отказ от refresh до user unlock и идемпотентная WorkManager-инициализация;
+- **issue #111** — TV remote контракты: long-press, dialog scrollability, focus контраст;
+- **issue #113** — portable backup/restore envelope с integrity digest до secrets-модели;
 - **issue #101** — разделение Product/Database connected suites внутри существующего AVD harness, только с before/after runner evidence;
 - **issue #100** — conditional M3U `ETag`/`Last-Modified` и корректный `304 Not Modified`, когда свободен следующий Room schema owner;
 - **issue #27** — repeated `current-normal`, `old-edge-normal`, `current-low-ram` datasets и evidence-driven thresholds;

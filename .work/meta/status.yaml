@@ -1,17 +1,17 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-08-05
+updated_at: 2026-08-06
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
   ci: present_host_before_old_edge_current_device_matrices
-  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_and_measurement_contracts
+  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_window_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_recent_v10
+  documentation: synchronized_post_transport_guide_window
   architecture_version: 5
 active_branch_after_merge: main
-implementation_source_commit: 7af053ca14281d9e63a51470fbeb3cb8d708c318
+implementation_source_commit: 431168a1603dae94dc164a45cd1ac560025ad903
 room_schema: 10
 implemented:
   - android_tv_application_shell
@@ -68,6 +68,16 @@ implemented:
   - bounded_recent_retention_per_profile
   - active_visible_recent_projection
   - channels_recent_filter_and_focus_restoration
+  - cross_surface_active_profile_visible_truth_contract
+  - production_owned_current_migration_chain
+  - generated_room_schema_parity_guard
+  - explicit_playback_transport_classification
+  - ts_extractor_single_pmt_opt_in
+  - bounded_guide_channel_window_keyset_pagination
+  - bounded_guide_programme_time_window
+  - typed_guide_ready_no_guide_source_conflict_states
+  - guide_window_invalidation_flow
+  - bare_host_https_source_normalization
 verified_evidence:
   search_core_merge: fe2f8472776f59712fbdcef7faafdb855cafddcb
   single_player_owner_merge: bd1ff29959e96305ea99b6480f402efebadc9d53
@@ -80,6 +90,12 @@ verified_evidence:
   recent_product_matrix_run: 31027992936
   recent_room_schema_sha256: 809c0bfa812e5a86a5a84d97fe4f48f1d9ac71e515c5745ef222f24689e926c4
   recent_room_identity: f6625d546ddfbad62e4e33340b17f490
+  cross_surface_truth_merge: d78bfb89e11806d27012813b3b36cbb5c062f9eb
+  schema_guard_merge: ec2b7743183b227ef54c16989d061ae5d4775dee
+  bare_host_normalization_head: 396424d8f98b4d949ebc157c79f641168c7f6b79
+  guide_data_window_head: 985fbda8bd90ebde0f29fc1adc0632a8a05704a2
+  transport_classification_head: 4bc9e12c9a29b2fcdacc0df32af7a685e7aa0070
+  combined_squash_merge: 431168a1603dae94dc164a45cd1ac560025ad903
   device_profiles:
     - requested_api: 26
       resolved_api: 26
@@ -94,50 +110,48 @@ verified_evidence:
       database_tests: 120
       app_tests: 26
 active_work:
-  cross_surface_active_truth:
-    issue: 114
-    branch: work/active-channel-truth-contract-114
+  guide_tv_route:
+    issue: 29
+    branch: feat/guide-tv-route-29
     status: implementation_started
     required:
-      - one_in_memory_room_cross_owner_contract
-      - active_revision_swap
-      - selected_profile_visibility_isolation
-      - direct_playback_hidden_stale_rejection
-      - search_recent_guide_membership_agreement
-      - bounded_result_semantics
-      - production_fix_only_on_red
-  guide:
-    issue: 29
-    status: waiting_for_truth_contract
+      - destination_scoped_guide_state
+      - sticky_time_and_channel_axes
+      - bounded_lazy_viewport
+      - typed_ready_no_guide_source_conflict_ui
+      - deterministic_keys_and_dpad_continuity
+      - player_back_focus_restoration
+  playback_recovery:
+    issue: 30
+    status: blocked_on_transport_classification_merge
     required:
-      - bounded_channel_window
-      - bounded_time_window
-      - active_profile_visible_membership
-      - deterministic_keys_and_tie_breaks
-      - explicit_window_completeness
-      - deterministic_focus_restoration
+      - bounded_variant_attempts_and_time_budget
+      - typed_failures_dns_tls_http_redirect_timeout_decoder
+      - secret_free_diagnostics_and_redacted_export
+      - retry_storm_guard_on_activity_recreation
+      - consume_typed_transport_from_108
 next_milestone:
-  id: phase_01_cross_surface_truth_and_guide
+  id: phase_01_guide_tv_route_and_playback_recovery
   issue: 29
   immediate_sequence:
-    - issue_114_cross_surface_truth_contract
-    - bounded_guide_database_window
-    - guide_tv_route
-    - issue_108_transport_classification
+    - issue_29_guide_tv_route_and_dpad_continuity
     - issue_30_playback_recovery_and_tv_doctor
     - issue_33_and_93_lounge_ui_packages
     - issue_31_alpha_hardening
 parallel_work:
-  issue_121:
-    - production_owned_current_migration_chain
-    - current_schema_test_reuse
-    - generated_room_schema_parity_guard
-  issue_27:
-    - five_run_current_normal
-    - five_run_old_edge_normal
-    - five_run_current_low_ram
-    - cross_profile_interpretation
-    - per_operation_threshold_decisions
+  issue_118:
+    - explicit_no_refresh_until_user_unlock
+    - idempotent_workmanager_init_after_unlock
+    - reboot_package_replace_without_duplicate_periodic_work
+    - boot_unlock_tests
+  issue_111:
+    - long_press_not_swallowed_by_on_preview_key_event
+    - dialog_dpad_scrollability_at_720p
+    - focus_selected_playing_contrast
+  issue_113:
+    - versioned_non_secret_envelope_with_integrity_digest
+    - saf_capability_detection
+    - restore_available_on_first_run
   issue_101:
     - connected_suite_selector_product_database
     - database_workflow_migration_owned_modules_only
@@ -147,8 +161,18 @@ parallel_work:
     - wait_for_free_room_schema_owner
     - source_etag_last_modified_binding
     - correct_304_not_modified_semantics
+  issue_27:
+    - five_run_current_normal
+    - five_run_old_edge_normal
+    - five_run_current_low_ram
+    - cross_profile_interpretation
+    - per_operation_threshold_decisions
 closed_or_superseded:
   - issue_110_epg_compressed_transport
+  - issue_114_cross_surface_truth_contract_accepted_as_123
+  - issue_108_playback_transport_classification_accepted_as_127
+  - issue_116_bare_host_normalization_accepted_as_129
+  - issue_121_room_schema_guard_accepted_as_124
   - pr_120_superseded_post_first_frame_truth_sync
   - pr_83_stale_performance_stage1
   - pr_87_measurement_unproven_xmltv_allocation
@@ -160,19 +184,19 @@ closed_or_superseded:
   - pr_98_deferred_baseline_profile_stack
   - pr_99_superseded_player_owner_stack
 known_gaps:
-  - cross_surface_active_profile_truth_contract
   - bounded_guide_screen
-  - explicit_playback_transport_classification
   - playback_variant_fallback
   - tv_doctor_lite
   - final_lounge_tv_modernization
-  - current_migration_chain_and_schema_guard
   - five_run_multi_profile_performance_evidence
   - ci_database_suite_split
   - conditional_m3u_304_refresh
   - r8_baseline_and_startup_profiles
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
+  - direct_boot_user_unlock_startup_gate
+  - tv_remote_long_press_and_dialog_contracts
+  - backup_restore_envelope
 blocked: []
 deferred:
   - xtream
