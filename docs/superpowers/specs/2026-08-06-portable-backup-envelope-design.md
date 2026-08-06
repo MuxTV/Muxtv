@@ -64,6 +64,10 @@ The canonical document is a compact UTF-8 JSON object:
 
 `documentSha256` is SHA-256 over a canonical UTF-8 encoding of the same document **without** the `integrity` object. Canonical output uses fixed field order, compact JSON, stable list order and JSON string escaping.
 
+After successful structural validation and digest verification, decode re-encodes the parsed snapshot and requires the original bytes to match the canonical v1 bytes exactly. This deliberately rejects duplicate JSON object keys, alternate field order, insignificant whitespace, alternate primitive spellings and escape variants that could otherwise be interpreted differently by different parsers. The app-generated backup is the canonical interchange representation; v1 is not a permissive hand-authored JSON format.
+
+JSON primitive types are also exact: quoted numeric/boolean strings are not coerced into numbers/booleans.
+
 This digest detects truncation/corruption and unexpected changes when the digest is not recomputed. It is **not** authentication against an attacker able to rewrite the document and recompute SHA-256. Package A therefore must not describe it as a signature/MAC. A future authenticated portable secret envelope requires its own threat model and is outside this package.
 
 ## Hard limits
@@ -94,13 +98,13 @@ Decode returns a typed `PortableBackupDecodeResult` and never mutates storage.
 Rejection reasons:
 
 - `OVERSIZED` — raw bytes exceed the pre-decode limit;
-- `MALFORMED` — invalid/truncated JSON, wrong primitive type or missing required field;
+- `MALFORMED` — invalid/truncated JSON, wrong primitive type, missing required field or non-canonical/ambiguous v1 representation;
 - `UNKNOWN_FIELD` — any unrecognized key at any v1 object level;
 - `UNSUPPORTED_VERSION` — format version is not exactly 1;
 - `INTEGRITY_MISMATCH` — digest algorithm/value is invalid or digest does not match canonical unsigned content;
 - `LIMIT_EXCEEDED` — count/string/per-profile safety ceiling is exceeded;
 - `INVALID_DATA` — semantic invariant or cross-reference is invalid;
-- `DUPLICATE_IDENTITY` — an identity that must be unique occurs more than once.
+- `DUPLICATE_IDENTITY` — a portable entity identity that must be unique occurs more than once.
 
 Unknown fields fail closed in v1 rather than being silently ignored. A future format version must be explicitly supported before import.
 
@@ -131,6 +135,8 @@ Contract coverage:
 - truncated/malformed JSON is rejected;
 - >2 MiB input is rejected before parse;
 - unknown fields and unsupported versions fail closed;
+- quoted numeric/boolean primitives are rejected instead of coerced;
+- duplicate JSON keys/non-canonical representations are rejected after canonical re-encode;
 - duplicate/cross-reference/count-limit violations are rejected;
 - recent entries are capped at 50 per profile;
 - preview reports conflicts instead of overwriting;
