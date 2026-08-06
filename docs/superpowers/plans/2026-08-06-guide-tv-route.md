@@ -4,6 +4,8 @@
 
 **Base:** stacked child work from PR #128 exact data-layer head `985fbda8bd90ebde0f29fc1adc0632a8a05704a2`. This branch must not be merged before the bounded Guide data layer is accepted on `main`.
 
+**Design craft:** Android TV / Compose TV semantics remain mandatory; for visual craft and interaction polish the primary reference is `https://github.com/emilkowalski/skills`, with Open Design used secondarily for composition/visual exploration. Dense D-pad focus is intentionally immediate and non-animated.
+
 **Status:** implementation and test contracts are authored. Build/unit/instrumentation/device validation has **not** been executed on the current Guide head because the self-hosted runner is unavailable. No RED/GREEN, compile-green or device-green claim is made by this document.
 
 ## Invariants
@@ -20,6 +22,8 @@
 - Player navigation carries only canonical channel ID. No locator/header/credential/EPG source detail enters Navigation3 state.
 - Existing `AppDestination.Guide` remains the route key.
 - Focus styling does not scale/move neighboring rows or programme geometry.
+- D-pad focus movement is not animated; the TV cursor is expressed with immediate outline/tone/luminance.
+- No decorative animation is added merely to make the Guide feel premium; motion must have an explicit spatial/state purpose and is not used for repeated remote navigation.
 - Do not synthesize OK clicks from `onPreviewKeyEvent`; the normal focusable/clickable control owns activation semantics.
 - Empty/failed/incomplete later pages always expose a TV-operable recovery path back to page one.
 
@@ -71,7 +75,7 @@ Authored before the corresponding production behavior; execution is still pendin
 - [x] One hoisted horizontal timeline offset shared as render input; no ambiguous shared `ScrollState` ownership across multiple scroll containers.
 - [x] Programme focus moves the timeline offset while preserving programme time geometry.
 - [x] `NO_GUIDE` and `SOURCE_CONFLICT` render as explicit focusable status cells.
-- [x] Focus uses outline/container tone instead of geometric scale.
+- [x] Focus uses immediate outline/container tone instead of geometric scale or focus animation.
 - [x] Short programme cells retain their actual focus bounds; no gap modifier shrinks a tiny event to near-zero focus width.
 - [x] Stable Compose `key()` is programme identity (or a non-secret status key) rather than cell index.
 - [x] Same-page invalidation requests fallback only when the previous exact identity disappeared.
@@ -89,6 +93,20 @@ Authored before the corresponding production behavior; execution is still pendin
 - [x] Added explicit empty Guide repository to the app navigation instrumentation harness rather than making the production dependency nullable/defaulted.
 - [x] Authored Guide instrumentation journey for canonical OK routing, Player/Back focus restoration, and focusable `NO_GUIDE / SOURCE_CONFLICT` rows.
 
+## Design review contract
+
+Guide visual review follows the same concrete Before/After discipline as the primary craft skill:
+
+| Before | After | Why |
+|---|---|---|
+| Animated/zooming focus on every programme move | Instant outline/tone/luminance focus | Repeated D-pad/keyboard actions should not animate; preserves perceived speed and EPG time geometry |
+| Equal-strength visual edges everywhere | Quiet unfocused surfaces, strong focused edge | Makes the cursor obvious without visual noise |
+| Decorative motion without state purpose | No motion | Premium feel comes from hierarchy/detail, not unnecessary latency |
+| Index as focus identity | Stable channel/programme identity + fallback | EPG data is dynamic and can reorder/remove cells |
+| Touch-only recovery | D-pad reachable Retry / First-page actions | TV reachability is a product invariant |
+
+Open Design may be used to compare hierarchy, density, surface grouping and detail-pane alternatives, but it does not own D-pad semantics, route state, focus restoration or bounded data behavior.
+
 ## Static audit completed in this work session
 
 - [x] Branch is stacked directly on #128 exact head and is not behind that head.
@@ -98,6 +116,7 @@ Authored before the corresponding production behavior; execution is still pendin
 - [x] No raw locator/header/credential field was added to Guide state, semantics or route keys.
 - [x] Removed shared-scroll-state ambiguity: header and rows render from one hoisted bounded timeline offset.
 - [x] Corrected static compile-risk findings discovered during review (Compose imports/test APIs/enum typo/short-cell focus bounds).
+- [x] Guide focus behavior is already aligned with the new primary craft rule: no scale/position animation on repeated D-pad focus movement.
 
 Static audit is **not** compilation or runtime evidence.
 
@@ -115,6 +134,8 @@ Static audit is **not** compilation or runtime evidence.
 - [ ] Verify short events and long Russian labels remain reachable at 720p and 1080p.
 - [ ] Verify no focus stealing on ordinary same-page EPG invalidation when the exact programme survives.
 - [ ] Verify deterministic fallback when the focused programme/channel disappears during Player or invalidation.
+- [ ] Verify rapid D-pad movement has no focus animation queue or perceptible delay on API26/API36.
+- [ ] Review focused/unfocused/selected visual hierarchy using the primary craft Before/After table and 720p/1080p screenshots.
 - [ ] Final secret/diagnostic scan on the validated exact head.
 - [ ] Zero unresolved review threads after PR review.
 
@@ -127,8 +148,9 @@ Static audit is **not** compilation or runtime evidence.
    - `./gradlew.bat :feature:guide:compileDebugKotlin :app:tv:compileDebugKotlin --no-daemon`
 4. Run TV app unit/instrumentation compile and the repository's existing full host verification gate.
 5. Run Guide journey on API26 and API36, including Player/Back and paging/error fixtures.
-6. Inspect artifacts/test counts and changed paths on that exact head.
-7. Only then open/mark a compact Guide UI PR as merge-ready and update #29 acceptance truth.
+6. Inspect 720p/1080p screenshots for focus contrast, surface hierarchy, long labels and no geometry shift; use the primary craft Before/After review format.
+7. Inspect artifacts/test counts and changed paths on that exact head.
+8. Only then open/mark a compact Guide UI PR as merge-ready and update #29 acceptance truth.
 
 ## Merge boundary
 
