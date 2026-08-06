@@ -5,15 +5,16 @@ import org.junit.Test
 
 class TvTokensTest {
     @Test
-    fun `focus state remains visible at television distance`() {
-        assertThat(TvTokens.Focus.scale).isAtLeast(1.04f)
+    fun `dense remote focus keeps geometry stable and fully readable`() {
+        assertThat(TvTokens.Focus.scale).isEqualTo(1f)
         assertThat(TvTokens.Focus.outlineWidth.value).isAtLeast(2f)
         assertThat(TvTokens.Focus.focusedAlpha).isEqualTo(1f)
+        assertThat(TvTokens.Focus.unfocusedAlpha).isEqualTo(1f)
     }
 
     @Test
-    fun `motion does not delay core remote actions`() {
-        assertThat(TvTokens.Motion.focusDurationMillis).isAtMost(180)
+    fun `dense remote focus feedback is immediate while route motion stays bounded`() {
+        assertThat(TvTokens.Motion.focusDurationMillis).isEqualTo(0)
         assertThat(TvTokens.Motion.screenDurationMillis).isAtMost(300)
     }
 }
