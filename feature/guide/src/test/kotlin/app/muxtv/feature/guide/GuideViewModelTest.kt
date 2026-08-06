@@ -207,6 +207,26 @@ class GuideViewModelTest {
     }
 
     @Test
+    fun `mismatched programme identities are rejected as incomplete`() = runTest {
+        val repository = FakeGuideWindowRepository(
+            channelResponse = { channelWindow(channelCount = 2) },
+            programmeResponse = {
+                GuideProgrammeWindow(
+                    channels = listOf(
+                        programmeChannel("channel-1", GuideProjectionState.READY),
+                        programmeChannel("unexpected-channel", GuideProjectionState.READY),
+                    ),
+                    isTruncated = false,
+                )
+            },
+        )
+        val viewModel = createViewModel(repository, nowEpochMillis = { 10_000L })
+        runCurrent()
+
+        assertThat(viewModel.uiState.value).isEqualTo(GuideUiState.Incomplete)
+    }
+
+    @Test
     fun `ordinary repository failure is secret free and retryable`() = runTest {
         var fail = true
         val repository = FakeGuideWindowRepository(
@@ -304,7 +324,7 @@ private fun programmeChannel(
                 key = GuideProgrammeKey(
                     epgSourceId = "epg-source",
                     epgRevisionNumber = 1,
-                    sequenceNumber = channelId.hashCode().toLong().let(::kotlin.math.abs),
+                    sequenceNumber = kotlin.math.abs(channelId.hashCode().toLong()),
                 ),
                 startEpochMillis = 10_000L,
                 endEpochMillis = 20_000L,
