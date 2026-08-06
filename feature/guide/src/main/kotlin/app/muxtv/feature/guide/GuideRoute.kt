@@ -525,7 +525,6 @@ private fun ProgrammeCell(
             .offset(x = epochOffsetDp(start, viewport.fromEpochMillis))
             .width(width)
             .height(GUIDE_ROW_HEIGHT)
-            .padding(end = PROGRAMME_GAP)
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
                 focused = focusState.isFocused
@@ -595,7 +594,7 @@ private data class GuideCellUi(
 }
 
 private fun GuideRow.toCells(viewport: GuideViewport): List<GuideCellUi> {
-    if (state == GuideProjectionState.NO_GUIDIDE) {
+    if (state == GuideProjectionState.NO_GUIDE) {
         return listOf(statusCell(viewport, state, "Нет программы"))
     }
     if (state == GuideProjectionState.SOURCE_CONFLICT) {
@@ -701,6 +700,5 @@ private const val CURRENT_TIME_REFRESH_MILLIS = 60_000L
 private val CHANNEL_RAIL_WIDTH = 260.dp
 private val TIME_HEADER_HEIGHT = 34.dp
 private val GUIDE_ROW_HEIGHT = 72.dp
-private val PROGRAMME_GAP = 4.dp
 private val FOCUS_SCROLL_LEADING_SPACE = 32.dp
 private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
