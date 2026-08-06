@@ -9,6 +9,10 @@ import app.muxtv.catalog.GuideProgrammeWindowQuery
 import app.muxtv.catalog.GuideWindowRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
@@ -17,8 +21,8 @@ internal class GuideViewModel(
     private val profileId: String,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
-    private val mutableUiState = kotlinx.coroutines.flow.MutableStateFlow<GuideUiState>(GuideUiState.Loading)
-    val uiState: kotlinx.coroutines.flow.StateFlow<GuideUiState> = mutableUiState
+    private val mutableUiState = MutableStateFlow<GuideUiState>(GuideUiState.Loading)
+    val uiState: StateFlow<GuideUiState> = mutableUiState.asStateFlow()
 
     private var generation: Long = 0L
     private var loadJob: Job? = null
@@ -74,10 +78,9 @@ internal class GuideViewModel(
             requestGeneration = requestGeneration,
             channelWindow = channelWindow,
             fromEpochMillis = fromEpochMillis,
-        ) ?: return
-
+        )
         if (!isCurrent(requestGeneration)) return
-        if (programmeLoad.window.isTruncated) {
+        if (programmeLoad == null) {
             publishIfCurrent(requestGeneration, GuideUiState.Incomplete)
             return
         }
@@ -118,11 +121,13 @@ internal class GuideViewModel(
         val channelIds = channelWindow.channels.map { it.channelId }
         for (attemptIndex in 0 until GuideViewportPolicy.MAX_PROGRAMME_ATTEMPTS) {
             if (!isCurrent(requestGeneration)) return null
+            val spanMillis = GuideViewportPolicy.timeSpanMillis(attemptIndex)
+            if (fromEpochMillis > Long.MAX_VALUE - spanMillis) return null
             val query = GuideProgrammeWindowQuery(
                 profileId = profileId,
                 canonicalChannelIds = channelIds,
                 fromEpochMillis = fromEpochMillis,
-                toEpochMillis = fromEpochMillis + GuideViewportPolicy.timeSpanMillis(attemptIndex),
+                toEpochMillis = fromEpochMillis + spanMillis,
             )
             val window = repository.getProgrammeWindow(query)
             if (!isCurrent(requestGeneration)) return null
@@ -130,16 +135,7 @@ internal class GuideViewModel(
                 return ProgrammeLoad(query = query, window = window)
             }
         }
-        return ProgrammeLoad(
-            query = GuideProgrammeWindowQuery(
-                profileId = profileId,
-                canonicalChannelIds = channelIds,
-                fromEpochMillis = fromEpochMillis,
-                toEpochMillis = fromEpochMillis +
-                    GuideViewportPolicy.timeSpanMillis(GuideViewportPolicy.MAX_PROGRAMME_ATTEMPTS - 1),
-            ),
-            window = GuideProgrammeWindow(channels = emptyList(), isTruncated = true),
-        )
+        return null
     }
 
     private fun publishIfCurrent(
