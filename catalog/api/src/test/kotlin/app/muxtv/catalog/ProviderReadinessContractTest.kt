@@ -175,7 +175,9 @@ class ProviderReadinessContractTest {
             }.exceptionOrNull(),
         )
 
-        assertThat(failures).allMatch { it is IllegalArgumentException }
+        failures.forEach { failure ->
+            assertThat(failure).isInstanceOf(IllegalArgumentException::class.java)
+        }
     }
 
     private fun usableSnapshot(
