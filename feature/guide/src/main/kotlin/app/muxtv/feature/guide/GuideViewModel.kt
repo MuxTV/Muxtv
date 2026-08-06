@@ -72,6 +72,7 @@ internal class GuideViewModel(
         previousStarts.addLast(PageStart(currentStartCursor))
         currentStartCursor = continuation
         focusAnchor = null
+        mutableUiState.value = GuideUiState.Loading
         reload()
     }
 
@@ -79,14 +80,16 @@ internal class GuideViewModel(
         val previous = previousStarts.pollLast() ?: return
         currentStartCursor = previous.cursor
         focusAnchor = null
+        mutableUiState.value = GuideUiState.Loading
         reload()
     }
 
     fun resetToFirstPage() {
-        if (currentStartCursor == null && previousStarts.isEmpty()) return
         currentStartCursor = null
+        nextCursor = null
         previousStarts.clear()
         focusAnchor = null
+        mutableUiState.value = GuideUiState.Loading
         reload()
     }
 
