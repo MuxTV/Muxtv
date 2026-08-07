@@ -25,6 +25,7 @@ import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
+import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
@@ -33,6 +34,7 @@ import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
+import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.sources.AddSourceRoute
@@ -48,6 +50,7 @@ fun AppNavigation(
     channelSearchRepository: ChannelSearchRepository,
     recentChannelsRepository: RecentChannelsRepository,
     epgGuideRepository: EpgGuideRepository,
+    guideWindowRepository: GuideWindowRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
@@ -111,7 +114,14 @@ fun AppNavigation(
                             },
                         )
 
-                        AppDestination.Guide -> PlaceholderRoute("Телепрограмма")
+                        AppDestination.Guide -> GuideRoute(
+                            repository = guideWindowRepository,
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                            onOpenChannel = { channelId ->
+                                open(AppDestination.Player(channelId))
+                            },
+                        )
+
                         AppDestination.Search -> SearchRoute(
                             repository = channelSearchRepository,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
@@ -169,7 +179,7 @@ private fun NavigationRow(
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
             val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
+                Modifier.focusRequester(initialNavigationFocusRequester)
             } else {
                 Modifier
             }
@@ -185,24 +195,6 @@ private fun NavigationRow(
             text = "Основной",
             modifier = Modifier.padding(start = 24.dp, top = 12.dp),
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun PlaceholderRoute(
-    title: String,
-    message: String = "Раздел заложен в навигацию и будет реализован на следующем этапе.",
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(56.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
-    ) {
-        Text(title, style = MaterialTheme.typography.displaySmall)
-        Text(
-            message,
-            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
