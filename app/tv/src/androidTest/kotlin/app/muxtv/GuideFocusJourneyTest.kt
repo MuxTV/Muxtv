@@ -1,6 +1,7 @@
 package app.muxtv
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -133,7 +134,7 @@ class GuideFocusJourneyTest {
 
 @androidx.compose.runtime.Composable
 private fun GuideTestPlayer(onBack: () -> Unit) {
-    val requester = androidx.compose.ui.focus.FocusRequester()
+    val requester = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         androidx.compose.runtime.withFrameNanos { }
         requester.requestFocus()
