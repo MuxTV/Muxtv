@@ -37,6 +37,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
@@ -73,6 +74,12 @@ jobs:
             "workspace_clean=true"
             "clean_output=$cleanOutput"
           ) | Set-Content -Path (Join-Path $evidenceDirectory "workspace-cleanup.log") -Encoding utf8
+
+      - name: Verify evidence commit provenance
+        shell: pwsh
+        run: |
+          $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
       - name: Inspect runner environment
         shell: pwsh
