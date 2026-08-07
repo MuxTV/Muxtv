@@ -78,6 +78,7 @@ class AppNavigationSourceJourneyTest {
                         channelSearchRepository = NoChannelSearchRepository,
                         recentChannelsRepository = NoRecentChannelsRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
+                        guideWindowRepository = TestGuideWindowRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
                         sourceRefreshScheduler = scheduler,

@@ -38,6 +38,7 @@ include(
     ":player:fake",
     ":feature:home",
     ":feature:channels",
+    ":feature:guide",
     ":feature:search",
     ":feature:player",
     ":feature:sources",

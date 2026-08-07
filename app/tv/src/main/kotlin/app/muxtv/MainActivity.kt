@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
+import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
@@ -36,6 +37,9 @@ class MainActivity : ComponentActivity() {
     lateinit var epgGuideRepository: EpgGuideRepository
 
     @Inject
+    lateinit var guideWindowRepository: GuideWindowRepository
+
+    @Inject
     lateinit var controllerConnector: MuxTvMediaControllerConnector
 
     @Inject
@@ -60,6 +64,7 @@ class MainActivity : ComponentActivity() {
                     channelSearchRepository = channelSearchRepository,
                     recentChannelsRepository = recentChannelsRepository,
                     epgGuideRepository = epgGuideRepository,
+                    guideWindowRepository = guideWindowRepository,
                     controllerConnector = controllerConnector,
                     sourceRefreshStore = sourceRefreshStore,
                     sourceRefreshScheduler = sourceRefreshScheduler,
