@@ -11,16 +11,19 @@ implementation_source_commit: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
 
 MuxTV находится в стадии **functional pre-alpha**. Принятый Android TV контур покрывает безопасное добавление источника, immutable catalog/EPG revisions, Channels + Now/Next/Favorites/Recent, bounded Search, полноценный bounded Guide TV route и service-owned Media3 Player с explicit transport classification и точной границей успешного playback по first rendered frame.
 
-Guide (#29) завершён и влит в `main` через PR #131. Текущий критический путь после повторной сверки зависимостей:
+Guide (#29) завершён и влит в `main` через PR #131. Повторный аудит CI provenance выявил отдельный инфраструктурный gate #136: существующие `pull_request` workflows по умолчанию checkout'или synthetic merge ref, но evidence маркировался `pull_request.head.sha`. До исправления такие run остаются полезными integration signals, но не являются строгим source-head evidence.
+
+Текущий критический путь:
 
 ```text
-#27 deterministic corpus + repeated measurement evidence
+#136/#137 exact evidence provenance
+→ #27/#134 deterministic corpus + repeated measurement evidence
 → #30 bounded variant fallback / TV Doctor Lite
 → #33/#93 Lounge UI packages
 → #31 alpha hardening + physical-device evidence
 ```
 
-Issue #26 (Media3 OkHttp transport/reconnect hardening), от которой зависит #30, уже закрыта как completed. Поэтому единственный незакрытый evidence-gate перед полноценным #30 — #27. Архитектурный/TDD slice #30 можно готовить параллельно с тяжёлыми measurement runs, но performance/compatibility решения не должны опережать повторяемые #27 evidence.
+Issue #26 (Media3 OkHttp transport/reconnect hardening), от которой зависит #30, уже закрыта как completed. После #136 единственный продуктовый evidence-gate перед полноценным #30 — #27. Архитектурный/TDD slice #30 можно готовить параллельно с тяжёлыми measurement runs, но performance/compatibility решения не должны опережать повторяемые #27 evidence.
 
 ## Принятая база
 
@@ -82,31 +85,41 @@ Issue #26 (Media3 OkHttp transport/reconnect hardening), от которой з�
 - Media3 OkHttp transport/reconnect hardening (#26);
 - bare source host normalization to HTTPS to prevent downgrade (#116).
 
-## Последняя acceptance
+## Последняя принятая product acceptance
 
-PR #131 exact head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773` принят и влит squash/merge-коммитом `286ece017445b811a7adddd4ba7e85cacc5dd3ea`.
+PR #131 source head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773` влит squash/merge-коммитом `286ece017445b811a7adddd4ba7e85cacc5dd3ea`.
 
-На exact head перед merge:
+Связанные PR validation runs перед merge:
 
 - Self-hosted validation run `31210637363` — success;
 - Android TV product device matrix run `31210636241` — success;
-- Guide route/UI acceptance была выполнена на том же exact head;
+- Guide route/UI acceptance функционально прошла на PR integration tree;
 - Room schema/migrations, player transport и CI topology PR #131 не менял.
+
+**Provenance caveat:** до #136 `pull_request` workflows использовали default `actions/checkout`, то есть GitHub merge ref, но передавали в manifests `pull_request.head.sha`. Поэтому эти исторические runs подтверждают успешную PR integration acceptance, но не должны называться строгим exact-source-head evidence.
 
 ## Активная реализация
 
-### P0 — deterministic corpus / repeated evidence (#27, PR #134)
+### P0 — CI evidence provenance (#136, PR #137)
+
+- evidence-producing PR workflows должны checkout'ить ровно тот commit, который передают как `SourceCommit`;
+- для PR это `pull_request.head.sha`, для manual dispatch — `github.sha`;
+- перед evidence-producing командами repository-owned assertion проверяет `git rev-parse HEAD == ExpectedCommit`;
+- static harness contract защищает self-hosted validation, Product/Database device matrices и measurement variance smoke от повторного drift;
+- после landing #136 активные #133/#134 необходимо прогнать заново на принятом CI baseline перед строгими exact-head claims.
+
+### P0-next — deterministic corpus / repeated evidence (#27, PR #134)
 
 Текущий незавершённый evidence lane:
 
 - deterministic 1k/10k/50k M3U corpus уже является repository-owned contract;
-- PR #134 добавляет последовательную measurement series с exact source-commit/profile/seed provenance;
+- PR #134 добавляет последовательную measurement series с source-commit/profile/seed provenance;
 - один series evidence directory должен иметь единственного владельца и никогда не перетираться;
 - повторения обязаны подтверждать одинаковые corpus SHA-256/byte-count/expected counts;
 - initial reports остаются descriptive; regression thresholds вводятся только после repeated variance evidence;
-- после GREEN harness нужны реальные 5×10k и 5×50k серии и review analyzer provenance перед performance claims.
+- после #136 и GREEN harness нужны реальные 5×10k и 5×50k серии и review analyzer provenance перед performance claims.
 
-### P0-next — bounded playback recovery / TV Doctor Lite (#30)
+### P0-after-evidence — bounded playback recovery / TV Doctor Lite (#30)
 
 После наличия измеримого #27 baseline:
 
@@ -121,7 +134,7 @@ PR #131 exact head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773` принят и в
 
 ### Параллельные hardening дорожки
 
-- PR #133 / issue #112 — provider-readiness snapshot/contract для будущих native/provider-specific источников без подмены active catalog truth;
+- PR #133 / issue #112 — provider-readiness snapshot/contract для будущих native/provider-specific источников без подмены active catalog truth; final acceptance после #136 rerun;
 - issue #118 — Direct Boot/WorkManager: explicit no-refresh до user unlock, идемпотентная инициализация после unlock, reboot/package-replace без дублей periodic work;
 - issue #111 — TV remote контракты: long-press, dialog scrollability на 720p, focus/selected/playing contrast;
 - issue #113 — portable backup envelope: versioned non-secret envelope + integrity digest до secrets-модели, SAF capability detection, restore на first-run;
@@ -131,14 +144,15 @@ PR #131 exact head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773` принят и в
 
 ## Порядок следующих работ
 
-1. Довести PR #134 до GREEN и сохранить fail-closed ownership всей measurement evidence series.
-2. Выполнить repeated #27 baseline (минимум 5×10k и 5×50k), проверить variance/provenance; не вводить structural optimization без измеренного bottleneck.
-3. Параллельно завершить PR #133, если exact-head host/device checks подтверждают provider-readiness invariants.
-4. Начать #30 с отдельного TDD-контракта bounded same-channel candidate policy и typed redacted diagnostics; не смешивать policy, UI Doctor и engine changes в один неразделимый diff.
-5. После core #30 добавить TV Doctor Lite presentation/export и fixture/device evidence.
-6. Затем выполнять #33/#93 Lounge Light packages поверх реально принятых Channels/Search/Recent/Guide/Player contracts.
-7. Перед alpha закрыть #31 hardening, #39/#40 docs/release gates и physical Android/Google TV/Fire TV evidence.
-8. Параллельные #118/#111/#113/#101/#100 брать отдельными PR по свободным ownership boundaries, не блокируя основной playback critical path без доказанной зависимости.
+1. Довести #136/PR #137 до GREEN и merge: commit provenance должен совпадать с реально checkout'нутым кодом.
+2. Restack/reconcile #133 и #134 на принятом CI baseline и повторить нужные host/device/variance gates с проверяемым `git HEAD == SourceCommit`.
+3. Довести PR #134 до GREEN и выполнить repeated #27 baseline: минимум 5×10k и 5×50k, затем проверить variance/provenance; не вводить structural optimization без измеренного bottleneck.
+4. Параллельно завершить PR #133 после нового verified source-head host/device evidence.
+5. Начать #30 с отдельного TDD-контракта bounded same-channel candidate policy и typed redacted diagnostics; не смешивать policy, UI Doctor и engine changes в один неразделимый diff.
+6. После core #30 добавить TV Doctor Lite presentation/export и fixture/device evidence.
+7. Затем выполнять #33/#93 Lounge Light packages поверх реально принятых Channels/Search/Recent/Guide/Player contracts.
+8. Перед alpha закрыть #31 hardening, #39/#40 docs/release gates и physical Android/Google TV/Fire TV evidence.
+9. Параллельные #118/#111/#113/#101/#100 брать отдельными PR по свободным ownership boundaries, не блокируя основной playback critical path без доказанной зависимости.
 
 ## Native/Rust decision gate
 
