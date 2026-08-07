@@ -5,10 +5,10 @@ phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
-  ci: present_host_before_old_edge_current_device_matrices
+  ci: present_with_pr_commit_provenance_fix_in_review
   tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_guide_route
+  documentation: synchronized_post_guide_route_and_ci_provenance_audit
   architecture_version: 5
 active_branch_after_merge: main
 implementation_source_commit: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
@@ -90,50 +90,69 @@ verified_evidence:
   search_tv_merge: d12bad2c0acc0a0dbeeffbc2c25308d1143329d8
   first_frame_merge: 8fced4dc282eaf07e8160f463c8276d7e48ba01b
   epg_transport_hardening_merge: 158210876251a95869463208da9491d7f46f0663
-  recent_exact_head: d095fb0e99485f93f9dbed8675c13b0f5ac52537
   recent_merge: 7af053ca14281d9e63a51470fbeb3cb8d708c318
-  recent_product_matrix_run: 31027992936
-  recent_room_schema_sha256: 809c0bfa812e5a86a5a84d97fe4f48f1d9ac71e515c5745ef222f24689e926c4
-  recent_room_identity: f6625d546ddfbad62e4e33340b17f490
   cross_surface_truth_merge: d78bfb89e11806d27012813b3b36cbb5c062f9eb
   schema_guard_merge: ec2b7743183b227ef54c16989d061ae5d4775dee
-  bare_host_normalization_head: 396424d8f98b4d949ebc157c79f641168c7f6b79
-  guide_data_window_head: 985fbda8bd90ebde0f29fc1adc0632a8a05704a2
-  transport_classification_head: 4bc9e12c9a29b2fcdacc0df32af7a685e7aa0070
   transport_guide_data_squash_merge: 431168a1603dae94dc164a45cd1ac560025ad903
-  guide_tv_route_head: a5e42d6aaa628b9fe09d6afb37e25ecb7d368773
+  guide_tv_route_source_head: a5e42d6aaa628b9fe09d6afb37e25ecb7d368773
   guide_tv_route_merge: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
-  guide_host_acceptance_run: 31210637363
-  guide_product_matrix_run: 31210636241
+  guide_host_integration_run: 31210637363
+  guide_product_matrix_integration_run: 31210636241
+  historical_pr_run_provenance: merge_ref_executed_but_head_sha_recorded_before_issue_136
+  historical_pr_run_claim_limit: integration_acceptance_not_strict_exact_source_head
   device_profiles:
     - requested_api: 26
       resolved_api: 26
       image: system-images;android-26;android-tv;x86
-      status: passed
+      status: passed_in_historical_pr_integration_run
       database_tests: 120
       app_tests: 26
     - requested_api: 36
       resolved_api: 36
       image: system-images;android-36;android-tv;x86_64
-      status: passed
+      status: passed_in_historical_pr_integration_run
       database_tests: 120
       app_tests: 26
 active_work:
+  ci_evidence_commit_provenance:
+    issue: 136
+    pull_request: 137
+    branch: fix/136-pr-evidence-provenance
+    status: implementation_in_review
+    required:
+      - explicit_pr_head_checkout_for_source_head_evidence
+      - manual_dispatch_checkout_matches_github_sha
+      - git_head_equals_source_commit_assertion
+      - static_workflow_provenance_contract
+      - rerun_active_evidence_prs_after_acceptance
   deterministic_m3u_measurement_evidence:
     issue: 27
     pull_request: 134
     branch: work/measurement-large-m3u-series-27-v2
-    status: implementation_in_progress
+    status: implementation_in_progress_blocked_for_strict_claims_on_issue_136
     required:
       - fail_closed_series_evidence_directory_ownership
       - exact_profile_seed_source_commit_provenance
       - repeated_corpus_sha256_byte_count_expected_count_consistency
+      - rerun_host_and_variance_checks_after_issue_136
       - five_run_medium_10k_baseline
       - five_run_large_50k_baseline
       - analyzer_provenance_review_before_performance_claims
+  provider_readiness:
+    issue: 112
+    pull_request: 133
+    branch: work/provider-readiness-contract-112-v2
+    status: implementation_in_progress_requires_post_136_verified_rerun
+    required:
+      - previous_good_primary_catalog_remains_usable
+      - independent_secondary_enrichment_readiness
+      - typed_auth_rate_limit_timeout_network_failures
+      - cancellation_and_supersession_invariants
+      - successful_attempt_revision_consistency
+      - verified_source_head_host_and_device_acceptance
   playback_recovery:
     issue: 30
-    status: blocked_on_issue_27_repeated_measurement_evidence
+    status: blocked_on_issue_27_repeated_measurement_evidence_after_issue_136
     satisfied_dependencies:
       - issue_26_media3_okhttp_transport_and_reconnect_hardening
       - issue_108_playback_transport_classification
@@ -143,21 +162,12 @@ active_work:
       - secret_free_diagnostics_and_redacted_export
       - retry_storm_guard_on_activity_recreation
       - no_alternate_playback_engine
-  provider_readiness:
-    issue: 112
-    pull_request: 133
-    branch: work/provider-readiness-contract-112-v2
-    status: implementation_in_progress
-    required:
-      - previous_good_primary_catalog_remains_usable
-      - independent_secondary_enrichment_readiness
-      - typed_auth_rate_limit_timeout_network_failures
-      - cancellation_and_supersession_invariants
-      - successful_attempt_revision_consistency
 next_milestone:
-  id: phase_01_measurement_and_playback_recovery
-  issue: 27
+  id: phase_01_evidence_integrity_measurement_and_playback_recovery
+  issue: 136
   immediate_sequence:
+    - issue_136_exact_pr_evidence_commit_provenance
+    - restack_and_rerun_pr_133_and_pr_134_on_verified_ci_baseline
     - issue_27_repeated_m3u_measurement_evidence
     - issue_30_playback_recovery_and_tv_doctor
     - issue_33_and_93_lounge_ui_packages
@@ -210,6 +220,7 @@ closed_or_superseded:
   - pr_98_deferred_baseline_profile_stack
   - pr_99_superseded_player_owner_stack
 known_gaps:
+  - pr_evidence_commit_provenance_until_issue_136_lands
   - repeated_m3u_measurement_evidence
   - playback_variant_fallback
   - tv_doctor_lite
@@ -223,7 +234,15 @@ known_gaps:
   - direct_boot_user_unlock_startup_gate
   - tv_remote_long_press_and_dialog_contracts
   - backup_restore_envelope
-blocked: []
+blocked:
+  strict_source_head_evidence_claims:
+    on: issue_136
+  parser_performance_thresholds:
+    on:
+      - issue_136
+      - issue_27_repeated_variance
+  playback_recovery_defaults:
+    on: issue_27_repeated_variance
 deferred:
   - xtream
   - stalker_ministra
