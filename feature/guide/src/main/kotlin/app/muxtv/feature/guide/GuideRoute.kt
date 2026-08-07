@@ -654,7 +654,10 @@ private fun statusCell(
 )
 
 private fun timelineTicks(viewport: GuideViewport): List<Long> {
-    val first = nextHalfHour(viewport.fromEpochMillis)
+    val first = nextLocalHalfHourEpochMillis(
+        epochMillis = viewport.fromEpochMillis,
+        zoneId = ZoneId.systemDefault(),
+    )
     if (first > viewport.toEpochMillis) return emptyList()
     val ticks = mutableListOf<Long>()
     var tick = first
@@ -664,11 +667,6 @@ private fun timelineTicks(viewport: GuideViewport): List<Long> {
         tick += HALF_HOUR_MILLIS
     }
     return ticks
-}
-
-private fun nextHalfHour(epochMillis: Long): Long {
-    val remainder = Math.floorMod(epochMillis, HALF_HOUR_MILLIS)
-    return if (remainder == 0L) epochMillis else epochMillis + (HALF_HOUR_MILLIS - remainder)
 }
 
 private fun timelineWidth(spanMillis: Long): Dp = durationWidth(spanMillis)
