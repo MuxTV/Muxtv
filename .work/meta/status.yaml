@@ -1,17 +1,17 @@
 schema_version: 2
 state: implementation_current
-updated_at: 2026-08-06
+updated_at: 2026-08-08
 phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
   ci: present_host_before_old_edge_current_device_matrices
-  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_window_and_measurement_contracts
+  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_transport_guide_window
+  documentation: synchronized_post_guide_route
   architecture_version: 5
 active_branch_after_merge: main
-implementation_source_commit: 431168a1603dae94dc164a45cd1ac560025ad903
+implementation_source_commit: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
 room_schema: 10
 implemented:
   - android_tv_application_shell
@@ -77,6 +77,11 @@ implemented:
   - bounded_guide_programme_time_window
   - typed_guide_ready_no_guide_source_conflict_states
   - guide_window_invalidation_flow
+  - bounded_guide_tv_viewport
+  - guide_dpad_and_focus_restoration
+  - guide_player_navigation
+  - local_half_hour_guide_timeline_alignment
+  - media3_okhttp_transport_and_reconnect_hardening
   - bare_host_https_source_normalization
 verified_evidence:
   search_core_merge: fe2f8472776f59712fbdcef7faafdb855cafddcb
@@ -95,7 +100,11 @@ verified_evidence:
   bare_host_normalization_head: 396424d8f98b4d949ebc157c79f641168c7f6b79
   guide_data_window_head: 985fbda8bd90ebde0f29fc1adc0632a8a05704a2
   transport_classification_head: 4bc9e12c9a29b2fcdacc0df32af7a685e7aa0070
-  combined_squash_merge: 431168a1603dae94dc164a45cd1ac560025ad903
+  transport_guide_data_squash_merge: 431168a1603dae94dc164a45cd1ac560025ad903
+  guide_tv_route_head: a5e42d6aaa628b9fe09d6afb37e25ecb7d368773
+  guide_tv_route_merge: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
+  guide_host_acceptance_run: 31210637363
+  guide_product_matrix_run: 31210636241
   device_profiles:
     - requested_api: 26
       resolved_api: 26
@@ -110,31 +119,46 @@ verified_evidence:
       database_tests: 120
       app_tests: 26
 active_work:
-  guide_tv_route:
-    issue: 29
-    branch: feat/guide-tv-route-29
-    status: implementation_started
+  deterministic_m3u_measurement_evidence:
+    issue: 27
+    pull_request: 134
+    branch: work/measurement-large-m3u-series-27-v2
+    status: implementation_in_progress
     required:
-      - destination_scoped_guide_state
-      - sticky_time_and_channel_axes
-      - bounded_lazy_viewport
-      - typed_ready_no_guide_source_conflict_ui
-      - deterministic_keys_and_dpad_continuity
-      - player_back_focus_restoration
+      - fail_closed_series_evidence_directory_ownership
+      - exact_profile_seed_source_commit_provenance
+      - repeated_corpus_sha256_byte_count_expected_count_consistency
+      - five_run_medium_10k_baseline
+      - five_run_large_50k_baseline
+      - analyzer_provenance_review_before_performance_claims
   playback_recovery:
     issue: 30
-    status: blocked_on_transport_classification_merge
+    status: blocked_on_issue_27_repeated_measurement_evidence
+    satisfied_dependencies:
+      - issue_26_media3_okhttp_transport_and_reconnect_hardening
+      - issue_108_playback_transport_classification
     required:
-      - bounded_variant_attempts_and_time_budget
-      - typed_failures_dns_tls_http_redirect_timeout_decoder
+      - bounded_same_channel_variant_attempts_and_time_budget
+      - typed_failures_dns_tls_http_redirect_timeout_manifest_decoder_playback
       - secret_free_diagnostics_and_redacted_export
       - retry_storm_guard_on_activity_recreation
-      - consume_typed_transport_from_108
+      - no_alternate_playback_engine
+  provider_readiness:
+    issue: 112
+    pull_request: 133
+    branch: work/provider-readiness-contract-112-v2
+    status: implementation_in_progress
+    required:
+      - previous_good_primary_catalog_remains_usable
+      - independent_secondary_enrichment_readiness
+      - typed_auth_rate_limit_timeout_network_failures
+      - cancellation_and_supersession_invariants
+      - successful_attempt_revision_consistency
 next_milestone:
-  id: phase_01_guide_tv_route_and_playback_recovery
-  issue: 29
+  id: phase_01_measurement_and_playback_recovery
+  issue: 27
   immediate_sequence:
-    - issue_29_guide_tv_route_and_dpad_continuity
+    - issue_27_repeated_m3u_measurement_evidence
     - issue_30_playback_recovery_and_tv_doctor
     - issue_33_and_93_lounge_ui_packages
     - issue_31_alpha_hardening
@@ -161,13 +185,15 @@ parallel_work:
     - wait_for_free_room_schema_owner
     - source_etag_last_modified_binding
     - correct_304_not_modified_semantics
-  issue_27:
-    - five_run_current_normal
-    - five_run_old_edge_normal
-    - five_run_current_low_ram
-    - cross_profile_interpretation
-    - per_operation_threshold_decisions
+  issue_39:
+    - source_configuration_user_guide
+    - failure_recovery_user_guide
+  issue_40:
+    - pre_release_checklist
+    - app_store_requirements
 closed_or_superseded:
+  - issue_26_media3_okhttp_transport_and_reconnect_hardening
+  - issue_29_guide_tv_route_accepted_as_131
   - issue_110_epg_compressed_transport
   - issue_114_cross_surface_truth_contract_accepted_as_123
   - issue_108_playback_transport_classification_accepted_as_127
@@ -184,7 +210,7 @@ closed_or_superseded:
   - pr_98_deferred_baseline_profile_stack
   - pr_99_superseded_player_owner_stack
 known_gaps:
-  - bounded_guide_screen
+  - repeated_m3u_measurement_evidence
   - playback_variant_fallback
   - tv_doctor_lite
   - final_lounge_tv_modernization
