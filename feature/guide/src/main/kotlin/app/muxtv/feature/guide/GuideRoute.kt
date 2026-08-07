@@ -526,7 +526,7 @@ private fun ProgrammeCell(
     val borderColor = if (focused) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.outline
+        MaterialTheme.colorScheme.border
     }
     val start = maxOf(cell.startEpochMillis, viewport.fromEpochMillis)
     val end = minOf(cell.endEpochMillis, viewport.toEpochMillis)
