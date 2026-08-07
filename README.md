@@ -6,7 +6,7 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Принятый `main` — `431168a1603dae94dc164a45cd1ac560025ad903` (PR #127/#128/#129: transport classification, bounded Guide data window, bare-host HTTPS normalization).
+Проект находится в стадии **functional pre-alpha**. Принятый `main` — `286ece017445b811a7adddd4ba7e85cacc5dd3ea` (PR #131: завершённый bounded Guide TV route поверх принятого Guide data window).
 
 Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v10**. `minSdk = 26`.
 
@@ -30,43 +30,45 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt
 16. centralized Room migration chain and generated schema guard;
 17. explicit HLS/MPEG-TS/DASH/progressive playback transport classification;
 18. bounded Guide channel/programme data window без full-guide materialization;
-19. bare source host normalization to HTTPS.
+19. bounded Guide TV viewport с deterministic D-pad/focus restoration и Guide → Player navigation;
+20. bare source host normalization to HTTPS.
 
 ### Последние принятые продуктовые этапы
 
-- PR #123 — cross-surface active/profile-visible channel truth;
-- PR #124 — centralized Room migration и generated schema guard;
+- PR #131 — завершённый Guide TV route/UI (#29);
 - PR #129 — bare-host source normalization to HTTPS;
 - PR #128 — bounded Guide channel/programme data window;
-- PR #127 — explicit playback transport classification.
+- PR #127 — explicit playback transport classification;
+- PR #124 — centralized Room migration и generated schema guard;
+- PR #123 — cross-surface active/profile-visible channel truth.
 
-Final acceptance PR #127/#128/#129, accepted в `431168a1603dae94dc164a45cd1ac560025ad903`:
+Final acceptance PR #131 exact head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773`, merged as `286ece017445b811a7adddd4ba7e85cacc5dd3ea`:
 
-- Full host acceptance зелёный на exact heads `985fbda` (#128), `396424d` (#129), `4bc9e12` (#127);
-- Room v10 schema identity `f6625d546ddfbad62e4e33340b17f490` совпала;
-- unresolved review threads — 0;
-- squash merge — `431168a1603dae94dc164a45cd1ac560025ad903`.
+- Self-hosted validation `31210637363` — success;
+- Android TV product device matrix `31210636241` — success;
+- PR #131 не менял Room schema/migrations, player transport или CI topology.
 
 ## Что ещё не завершено
 
 Текущий product critical path:
 
-1. **issue #29** — Guide TV route/UI поверх принятого bounded Guide data window: sticky axes, lazy viewport, typed `READY`/`NO_GUIDE`/`SOURCE_CONFLICT`, D-pad continuity, Player→Back focus restoration;
-2. **issue #30** — bounded variant fallback и TV Doctor Lite поверх typed transport classification (#108 принят);
+1. **issue #27 / PR #134** — deterministic 1k/10k/50k M3U measurement series и repeated variance/provenance evidence; initial reports descriptive, thresholds только после повторяемых прогонов;
+2. **issue #30** — bounded same-channel variant fallback и TV Doctor Lite; issue #26 transport/reconnect dependency уже закрыта, поэтому #27 остаётся незакрытым evidence-gate;
 3. **issues #33/#93** — Lounge Light TV-first polish поверх реальных Search/Recent/Guide routes;
 4. **issue #31** — R8, Baseline/Startup Profiles, endurance, signing, SBOM/release checklist и physical-device evidence.
 
 Параллельные hardening/evidence packages:
 
+- **issue #112 / PR #133** — provider-neutral readiness contract для будущих native/provider-specific источников;
 - **issue #118** — прямой отказ от refresh до user unlock и идемпотентная WorkManager-инициализация;
 - **issue #111** — TV remote контракты: long-press, dialog scrollability, focus контраст;
 - **issue #113** — portable backup/restore envelope с integrity digest до secrets-модели;
 - **issue #101** — разделение Product/Database connected suites внутри существующего AVD harness, только с before/after runner evidence;
 - **issue #100** — conditional M3U `ETag`/`Last-Modified` и корректный `304 Not Modified`, когда свободен следующий Room schema owner;
-- **issue #27** — repeated `current-normal`, `old-edge-normal`, `current-low-ram` datasets и evidence-driven thresholds;
+- **issues #39/#40** — user guide/recovery и pre-release/app-store checklist;
 - **issues #109/#117** — buffer/FFmpeg decisions только после реального corpus/physical-device evidence.
 
-**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence и отдельного ADR.
+**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence и отдельного ADR. Issue #30 также прямо исключает alternate playback engine.
 
 ## Архитектурные принципы
 
@@ -118,13 +120,24 @@ Deterministic M3U corpus:
   -PcorpusSourceCommit=<full-lowercase-40-character-git-sha>
 ```
 
-Measurement series:
+General measurement series:
 
 ```powershell
 pwsh -NoProfile -File .\tools\measurements\Invoke-MeasurementSeries.ps1 `
   -SourceBranch local `
   -SourceCommit <full-lowercase-40-character-git-sha> `
   -ProfileId current-normal `
+  -Repetitions 5 `
+  -NoDaemon
+```
+
+Focused M3U corpus series (PR #134 / issue #27):
+
+```powershell
+pwsh -NoProfile -File .\tools\measurements\Invoke-M3uCorpusSeries.ps1 `
+  -SourceBranch local `
+  -SourceCommit <full-lowercase-40-character-git-sha> `
+  -M3uProfile medium-10k `
   -Repetitions 5 `
   -NoDaemon
 ```
