@@ -11,6 +11,7 @@ on:
       - core/database/src/androidTest/kotlin/app/muxtv/database/**
       - core/database/schemas/**
       - tools/android/**
+      - tools/ci/**
 
 permissions:
   contents: read
@@ -30,6 +31,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
@@ -57,6 +59,12 @@ jobs:
           if ($dirty) {
             throw "Workspace remains dirty after explicit reset/clean.`n$dirty"
           }
+
+      - name: Verify evidence commit provenance
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-EvidenceCommit.ps1 `
+            -ExpectedCommit "${{ github.event.pull_request.head.sha }}"
 
       - name: Inspect runner environment
         shell: pwsh
