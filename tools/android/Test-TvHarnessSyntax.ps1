@@ -16,7 +16,8 @@ $files = @(
     (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"),
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"),
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
-    (Join-Path $repositoryRoot "tools\verify-local.ps1")
+    (Join-Path $repositoryRoot "tools\verify-local.ps1"),
+    (Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1")
 )
 
 $messages = @()
@@ -84,6 +85,57 @@ if ($androidSdkContent -notmatch 'Get-InstalledTvSystemImages') {
 $verifyLocalContent = Get-Content -Path $files[7] -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
     $messages += "verify-local must expose DeviceOnly connected-test mode."
+}
+
+$provenanceAssertContent = Get-Content -Path $files[8] -Raw
+foreach ($requiredProvenanceFragment in @(
+    'git rev-parse HEAD',
+    'Evidence commit provenance mismatch',
+    'ExpectedCommit'
+)) {
+    if ($provenanceAssertContent -notmatch [regex]::Escape($requiredProvenanceFragment)) {
+        $messages += "Evidence commit assertion is missing required behavior: " + $requiredProvenanceFragment
+    }
+}
+
+$workflowContracts = @(
+    [pscustomobject]@{
+        Path = Join-Path $repositoryRoot ".github\workflows\self-hosted-validation.yml"
+        CheckoutRef = "ref: `${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        SourceCommit = "github.event.pull_request.head.sha || github.sha"
+    },
+    [pscustomobject]@{
+        Path = Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml"
+        CheckoutRef = "ref: `${{ github.event.pull_request.head.sha }}"
+        SourceCommit = "github.event.pull_request.head.sha"
+    },
+    [pscustomobject]@{
+        Path = Join-Path $repositoryRoot ".github\workflows\database-migration-device-matrix.yml"
+        CheckoutRef = "ref: `${{ github.event.pull_request.head.sha }}"
+        SourceCommit = "github.event.pull_request.head.sha"
+    },
+    [pscustomobject]@{
+        Path = Join-Path $repositoryRoot ".github\workflows\measurement-variance-smoke.yml"
+        CheckoutRef = "ref: `${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+        SourceCommit = "github.event.pull_request.head.sha || github.sha"
+    }
+)
+foreach ($contract in $workflowContracts) {
+    if (-not (Test-Path $contract.Path -PathType Leaf)) {
+        $messages += "Missing evidence workflow: " + $contract.Path
+        continue
+    }
+
+    $workflowContent = Get-Content -Path $contract.Path -Raw
+    if ($workflowContent -notmatch [regex]::Escape($contract.CheckoutRef)) {
+        $messages += "Evidence workflow must explicitly check out its claimed source commit: " + $contract.Path
+    }
+    if ($workflowContent -notmatch [regex]::Escape($contract.SourceCommit)) {
+        $messages += "Evidence workflow does not preserve the expected SourceCommit expression: " + $contract.Path
+    }
+    if ($workflowContent -notmatch [regex]::Escape('Assert-EvidenceCommit.ps1')) {
+        $messages += "Evidence workflow must verify git HEAD before producing evidence: " + $contract.Path
+    }
 }
 
 $tvValidationContent = Get-Content -Path $files[2] -Raw
