@@ -53,7 +53,11 @@ $seriesDirectory = Join-Path $resolvedEvidenceRoot "$timestamp-$shortCommit-m3u-
 $inputDirectory = Join-Path $seriesDirectory "input"
 $outputDirectory = Join-Path $seriesDirectory "output"
 $requestDirectory = Join-Path $seriesDirectory "requests"
-New-Item -ItemType Directory -Force -Path $inputDirectory, $outputDirectory, $requestDirectory | Out-Null
+if (Test-Path -LiteralPath $seriesDirectory) {
+    throw "M3U series evidence directory already exists."
+}
+New-Item -ItemType Directory -Path $seriesDirectory | Out-Null
+New-Item -ItemType Directory -Path $inputDirectory, $outputDirectory, $requestDirectory | Out-Null
 
 $manifestPath = Join-Path $seriesDirectory "m3u-series-run-manifest.json"
 $manifest = [ordered]@{
