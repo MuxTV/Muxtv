@@ -85,6 +85,9 @@ sealed interface ProviderSecondaryAttempt {
     data class Failed(
         val failure: ProviderSyncFailure,
     ) : ProviderSecondaryAttempt
+
+    data object Cancelled : ProviderSecondaryAttempt
+    data object Superseded : ProviderSecondaryAttempt
 }
 
 data class ProviderSecondaryState(
@@ -93,6 +96,9 @@ data class ProviderSecondaryState(
 ) {
     init {
         require(activeRevisionNumber == null || activeRevisionNumber > 0)
+        if (latestAttempt is ProviderSecondaryAttempt.Succeeded) {
+            require(activeRevisionNumber == latestAttempt.revisionNumber)
+        }
     }
 
     val hasActiveData: Boolean
@@ -105,6 +111,12 @@ data class ProviderReadinessSnapshot(
     val latestCatalogAttempt: ProviderCatalogSyncAttempt = ProviderCatalogSyncAttempt.Idle,
     val epg: ProviderSecondaryState = ProviderSecondaryState(),
 ) {
+    init {
+        if (latestCatalogAttempt is ProviderCatalogSyncAttempt.Succeeded) {
+            require(activeCatalog?.revisionNumber == latestCatalogAttempt.revisionNumber)
+        }
+    }
+
     val usability: ProviderUsability
         get() = if (activeCatalog == null) {
             ProviderUsability.NOT_USABLE
@@ -136,4 +148,6 @@ private fun ProviderSecondaryAttempt.diagnosticName(): String = when (this) {
     ProviderSecondaryAttempt.Running -> "RUNNING"
     is ProviderSecondaryAttempt.Succeeded -> "SUCCEEDED"
     is ProviderSecondaryAttempt.Failed -> "FAILED"
+    ProviderSecondaryAttempt.Cancelled -> "CANCELLED"
+    ProviderSecondaryAttempt.Superseded -> "SUPERSEDED"
 }
