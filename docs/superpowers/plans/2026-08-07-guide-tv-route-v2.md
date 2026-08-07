@@ -45,13 +45,13 @@ Expected scope: 17 changed paths, 35 commits, 0 behind relative to its historica
 
 Expected result: current-main changes do not overlap any of the 17 Guide UI paths, so whole-file porting cannot overwrite accepted transport/source/Room work.
 
-- [ ] **Step 4: Port only the historical Guide UI paths**
+- [x] **Step 4: Port only the historical Guide UI paths**
 
-Net branch diff must contain Guide feature/app wiring/tests/module registration only; no `core/database/**`, `core/network/**`, `player/media3/**`, Room schema JSON, migrations, or workflow changes.
+Mechanical port commit `4e3ea449d78fce9153ce377bf05c68adf11fec9d` was created from exact historical blobs. Net scope excludes `core/database/**`, `core/network/**`, `player/media3/**`, Room schema JSON, migrations, and workflow changes.
 
-- [ ] **Step 5: Commit the mechanical port separately**
+- [x] **Step 5: Commit the mechanical port separately**
 
-Commit message: `feat(guide): restack TV Guide route on accepted main`.
+Committed as `feat(guide): restack TV Guide route on accepted main`.
 
 ---
 
@@ -71,17 +71,17 @@ Commit message: `feat(guide): restack TV Guide route on accepted main`.
 - Consumes: `GuideWindowRepository`, `GuideChannelCursor`, programme/window API already accepted via #128.
 - Produces: `GuideRoute(...)`, destination-scoped `GuideViewModel`, bounded viewport/focus policies.
 
-- [ ] **Step 1: Port the module and production feature files byte-for-byte from the historical UI branch**
+- [x] **Step 1: Port the module and production feature files byte-for-byte from the historical UI branch**
 
-Do not rewrite behavior during this step; migration and correction must remain review-separable.
+The mechanical port remains review-separable from later integration corrections.
 
-- [ ] **Step 2: Port module registration/dependency wiring**
+- [x] **Step 2: Port module registration/dependency wiring**
 
-`settings.gradle.kts` must include `:feature:guide`; `app/tv` must depend on the module exactly once.
+`settings.gradle.kts` includes `:feature:guide`; `app/tv` depends on the module exactly once in the authored diff.
 
-- [ ] **Step 3: Static contract review while runner is offline**
+- [x] **Step 3: Static contract review while runner is offline**
 
-Verify manually from source that `GuideViewModel` still enforces: 30-channel page, four time-only truncation attempts, generation cancellation/suppression, bounded previous-page history, secret-free failure state, and explicit `Incomplete` on identity mismatch/persistent truncation.
+Source review confirmed the authored `GuideViewModel` keeps a 30-channel page, four time-only truncation attempts, generation cancellation/suppression, bounded previous-page history, secret-free failure state, and explicit `Incomplete` on identity mismatch/persistent truncation. These are source-level findings only until executed.
 
 ---
 
@@ -93,44 +93,31 @@ Verify manually from source that `GuideViewModel` still enforces: 30-channel pag
 - Modify/port: `app/tv/src/androidTest/kotlin/app/muxtv/AppNavigationSourceJourneyTest.kt`
 - Create/port: `app/tv/src/androidTest/kotlin/app/muxtv/TestGuideWindowRepository.kt`
 - Create/port: `app/tv/src/androidTest/kotlin/app/muxtv/GuideFocusJourneyTest.kt`
+- Modify: `app/tv/src/androidTest/kotlin/app/muxtv/MainActivitySmokeTest.kt`
 
 **Interfaces:**
 - Consumes: Hilt-provided accepted `GuideWindowRepository` and existing `AppDestination.Guide` / `AppDestination.Player(channelId)`.
 - Produces: real Guide destination and canonical Guide -> Player -> Back journey.
 
-- [ ] **Step 1: Port app wiring and instrumentation fixtures unchanged**
+- [x] **Step 1: Port app wiring and instrumentation fixtures unchanged**
 
-- [ ] **Step 2: Add a compile-risk regression test before correcting known navigation symbol drift**
+- [x] **Step 2: Isolate the navigation symbol risk and add app-level integration coverage**
 
-The test/compile gate must require `NavigationRow` to use the `initialFocusRequester` parameter actually present in its signature; no second similarly named requester is allowed.
+Static review found the ported `NavigationRow` referenced `initialNavigationFocusRequester` outside its scope even though the function owns an `initialFocusRequester` parameter. A separate MainActivity D-pad smoke contract now covers real Hilt/MainActivity/Navigation3 entry into `Программа`; it is authored but not yet executed.
 
-- [ ] **Step 3: When a RED can be executed, correct the known symbol defect minimally**
+- [x] **Step 3: Correct the known symbol defect minimally and separately**
 
-Production correction:
+Commit `1ab86b106d3590fd06d0cedf74fcf1662ad731e4` changes only:
 
 ```kotlin
 .focusRequester(initialFocusRequester)
 ```
 
-and remove the invalid reference:
+No compile-GREEN or RED/GREEN claim is made because the runner is unavailable.
 
-```kotlin
-initialNavigationFocusRequester
-```
+- [x] **Step 4: Preserve canonical-only Player navigation**
 
-Do not make unrelated navigation refactors in the same commit.
-
-- [ ] **Step 4: Preserve canonical-only Player navigation**
-
-The Guide activation callback must remain equivalent to:
-
-```kotlin
-onChannelSelected = { channelId ->
-    navigate(AppDestination.Player(channelId))
-}
-```
-
-No playback locator or source metadata may be added to the destination.
+Guide activation still opens `AppDestination.Player(channelId)` with canonical channel ID only. No locator or source metadata is added to navigation state.
 
 ---
 
@@ -147,13 +134,13 @@ No playback locator or source metadata may be added to the destination.
 - Consumes: stable canonical channel IDs and `GuideProgrammeKey` from accepted data API.
 - Produces: deterministic exact-focus survival and fallback after EPG/page changes.
 
-- [ ] **Step 1: Port the existing test-first contracts**
+- [x] **Step 1: Port the existing test-first contracts**
 
-They must cover stale generation suppression, current-page invalidation, truncation retries, persistent truncation -> `Incomplete`, keyset next/previous/reset, exact programme focus survival, removed-programme fallback, and later-page recovery to page one.
+Authored contracts cover stale generation suppression, current-page invalidation, truncation retries, persistent truncation -> `Incomplete`, keyset next/previous/reset, exact programme focus survival, removed-programme fallback, and later-page recovery to page one.
 
-- [ ] **Step 2: Do not change production state behavior until the corresponding focused test has been observed failing on the v2 head**
+- [x] **Step 2: Keep production state behavior frozen until executable evidence exists**
 
-Runner-off state may add/review test contracts, but does not permit claiming the production behavior validated.
+No paging/focus/ViewModel behavioral rewrite has been added after the mechanical port. Runner-off review only identified evidence-gated UI/timeline edge cases.
 
 - [ ] **Step 3: After runner returns, execute focused RED/GREEN cycles before any behavioral correction**
 
@@ -177,21 +164,28 @@ Any failing contract gets one minimal production correction and an immediate rer
 - Consumes: `GuideUiState.Content`, stable focus anchor, bounded programme geometry.
 - Produces: fixed channel rail, absolute-time programme lane, current-time marker, focusable status cells, bounded pager/recovery controls.
 
-- [ ] **Step 1: Static review of geometry ownership**
+- [x] **Step 1: Static review of geometry ownership**
 
-Require one hoisted horizontal timeline offset used as render input; do not create one independent horizontal `ScrollState` per row.
+The authored route uses one hoisted horizontal timeline offset for header and rows; there is no per-row horizontal `ScrollState`.
 
-- [ ] **Step 2: Static review of focus craft**
+- [x] **Step 2: Static review of focus craft**
 
-Repeated D-pad moves must use immediate outline/tone/luminance; no scale/translation animation and no `onPreviewKeyEvent` synthesized OK activation.
+Programme-cell focus uses immediate outline/tone state with no scale/translation animation and no `onPreviewKeyEvent` synthesized activation.
 
-- [ ] **Step 3: Static review of accessibility/privacy**
+- [x] **Step 3: Static review of accessibility/privacy**
 
-Semantics/test tags may contain static action names or row/cell indices, never profile/channel/source/credential/URL/header identifiers.
+Authored test tags are static names or row/cell indices; navigation remains canonical-ID only and error state does not surface repository exception text.
 
-- [ ] **Step 4: Keep status/recovery states TV-operable**
+- [x] **Step 4: Keep status/recovery states TV-operable**
 
-`NO_GUIDE`, `SOURCE_CONFLICT`, Empty, Failed, and Incomplete must expose reachable focus targets; later-page failures must expose a first-page recovery path.
+`NO_GUIDE` and `SOURCE_CONFLICT` use focusable status cells; Empty/Failed/Incomplete expose retry/reset actions, including a first-page recovery path for a later-page failure.
+
+### Evidence-gated observations
+
+Do not patch these without an executable contract/device observation:
+
+1. **Very short programmes:** programme width is proportional to real time and can become very narrow. Do not add a fake minimum width that overlaps adjacent absolute-time cells. Validate focus outline/detail-strip behavior at 720p/1080p first.
+2. **Local half-hour grid:** timeline tick alignment currently derives from epoch modulo 30 minutes while labels use the system `ZoneId`. A non-30-minute UTC offset (for example `+05:45`) can expose `:15/:45` local labels. Add a focused pure timeline-math contract before changing production tick alignment.
 
 ---
 
@@ -240,16 +234,23 @@ Open or mark one compact Guide UI PR ready only after exact-head evidence is gre
 
 ## Current execution state
 
-Completed now:
+Runner-off implementation completed:
 - hygiene PR/issue ownership cleanup for accepted #127/#128/#129;
-- new v2 branch created from accepted `main@ef9f008a17e5e8fb8519d8e0bc05446ede675a99`;
+- v2 branch rebuilt from accepted `main@ef9f008a17e5e8fb8519d8e0bc05446ede675a99`;
 - failed restack probe #130 closed without merge;
-- historical Guide UI delta proven to be exactly 17 paths;
-- current-main delta proven not to overlap those 17 paths;
-- updated v2 implementation plan committed before the mechanical production port.
+- historical Guide UI delta proven to be exactly 17 paths and non-overlapping with accepted post-#128 main work;
+- mechanical Guide UI restack committed as `4e3ea449d78fce9153ce377bf05c68adf11fec9d`;
+- navigation requester symbol correction isolated in `1ab86b106d3590fd06d0cedf74fcf1662ad731e4`;
+- real MainActivity D-pad -> Guide integration contract authored in `bc67a55eba394c2e29607a346b3a39fd453995cd`;
+- bounded state/focus/paging/privacy/layout contracts reviewed statically;
+- original #29 slices already accepted on main were revalidated from history: Now/Next, Favorites, Search TV, Recent, cross-surface active truth, and bounded Guide data.
 
-Still open while runner is unavailable:
-- mechanical 17-path Guide UI port;
-- static integration review and test-contract hardening;
-- known `initialFocusRequester` production correction only after an executable RED is available;
-- all compile/unit/instrumentation/device evidence.
+Current blocker is executable evidence, not missing Guide architecture:
+- focused Guide unit execution;
+- Kotlin/Hilt/androidTest compile;
+- exact-head Full acceptance;
+- API old-edge/current Guide product journeys;
+- 720p/1080p visual/runtime evidence;
+- final PR review/merge and #29 closure.
+
+The current branch must not be called GREEN or merge-ready until those gates execute on one exact head.
