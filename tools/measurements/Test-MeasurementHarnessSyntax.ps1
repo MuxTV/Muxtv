@@ -11,8 +11,9 @@ $diagnosticPath = Join-Path $evidenceDirectory "measurement-harness-syntax.log"
 $profileScript = Join-Path $PSScriptRoot "MeasurementProfiles.ps1"
 $seriesEntryScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
 $seriesCoreScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeriesCore.ps1"
+$m3uSeriesScript = Join-Path $PSScriptRoot "Invoke-M3uCorpusSeries.ps1"
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
-$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $finalizerScript)
+$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $m3uSeriesScript, $finalizerScript)
 $messages = [System.Collections.Generic.List[string]]::new()
 
 foreach ($file in $files) {
@@ -105,6 +106,30 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
     foreach ($token in $forbiddenTokens) {
         if ($seriesContent -match [regex]::Escape($token)) {
             $messages.Add("Measurement series core contains forbidden parallel execution: $token")
+        }
+    }
+}
+
+if (Test-Path $m3uSeriesScript -PathType Leaf) {
+    $m3uSeriesContent = Get-Content -Path $m3uSeriesScript -Raw -Encoding utf8
+    $requiredTokens = @(
+        'ValidateSet("small-1k", "medium-10k", "large-50k")',
+        '[int]$Repetitions = 5',
+        ':core:testing:measureM3uParse',
+        ':core:testing:analyzeMeasurementSeries',
+        'corpusSha256',
+        'claimEligible',
+        'M3U corpus identity drifted between repetitions.',
+        'M3U series evidence directory already exists.'
+    )
+    foreach ($token in $requiredTokens) {
+        if ($m3uSeriesContent -notmatch [regex]::Escape($token)) {
+            $messages.Add("M3U corpus series is missing required contract token: $token")
+        }
+    }
+    foreach ($token in @("ForEach-Object -Parallel", "Start-Job", "Start-ThreadJob")) {
+        if ($m3uSeriesContent -match [regex]::Escape($token)) {
+            $messages.Add("M3U corpus series contains forbidden parallel execution: $token")
         }
     }
 }
