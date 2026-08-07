@@ -6,7 +6,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -118,8 +117,8 @@ class GuideFocusJourneyTest {
         }
         waitUntilGuideCell()
 
-        composeRule.onNodeWithText("Нет программы").assertExists()
-        composeRule.onNodeWithText("Конфликт источников").assertExists()
+        composeRule.onNodeWithText("Нет программы").fetchSemanticsNode()
+        composeRule.onNodeWithText("Конфликт источников").fetchSemanticsNode()
         composeRule.onNodeWithTag("guide-cell-0-0").assertIsFocused()
     }
 
