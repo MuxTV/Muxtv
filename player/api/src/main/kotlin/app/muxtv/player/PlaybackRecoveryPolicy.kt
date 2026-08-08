@@ -17,6 +17,11 @@ data class PlaybackRecoveryBudget(
     }
 }
 
+enum class PlaybackRecoveryDisposition {
+    TRY_NEXT_CANDIDATE,
+    STOP_RECOVERY,
+}
+
 class PlaybackRecoveryPlan private constructor(
     val canonicalChannelId: CanonicalChannelId,
     val orderedCandidates: List<PlaybackRecoveryCandidate>,
@@ -32,6 +37,25 @@ class PlaybackRecoveryPlan private constructor(
             return null
         }
         return orderedCandidates.getOrNull(attemptIndex)
+    }
+
+    fun candidateAfterFailure(
+        failedAttemptIndex: Int,
+        elapsedRecoveryMillis: Long,
+        disposition: PlaybackRecoveryDisposition,
+    ): PlaybackRecoveryCandidate? {
+        require(failedAttemptIndex >= 0)
+        require(elapsedRecoveryMillis >= 0)
+        if (disposition == PlaybackRecoveryDisposition.STOP_RECOVERY) {
+            return null
+        }
+        if (failedAttemptIndex >= orderedCandidates.lastIndex) {
+            return null
+        }
+        return candidateAt(
+            attemptIndex = failedAttemptIndex + 1,
+            elapsedRecoveryMillis = elapsedRecoveryMillis,
+        )
     }
 
     companion object {
