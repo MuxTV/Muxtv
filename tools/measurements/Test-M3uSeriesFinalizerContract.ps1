@@ -40,7 +40,7 @@ function Write-FocusedFixtureManifest {
         [AllowNull()][string]$CompletedAtUtc,
         [AllowNull()][string]$AnalysisOutput,
         [AllowNull()][string]$FailureType,
-        [AllowNull()][Nullable[int]]$FailureLine
+        [AllowNull()][object]$FailureLine
     )
 
     $directory = Join-Path $testRoot $DirectoryName
