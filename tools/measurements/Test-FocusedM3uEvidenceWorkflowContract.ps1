@@ -6,8 +6,12 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $workflowPath = Join-Path $repositoryRoot ".github\workflows\focused-m3u-evidence.yml"
+$eligibilityContract = Join-Path $PSScriptRoot "Test-M3uSeriesEligibilityContract.ps1"
 if (-not (Test-Path $workflowPath -PathType Leaf)) {
     throw "Accepted-main focused M3U evidence workflow is missing."
+}
+if (-not (Test-Path $eligibilityContract -PathType Leaf)) {
+    throw "Focused M3U claim-eligibility contract is missing."
 }
 
 $content = Get-Content -LiteralPath $workflowPath -Raw -Encoding utf8
@@ -59,3 +63,4 @@ if ($mediumIndex -lt 0 -or $largeIndex -lt 0 -or $mediumIndex -gt $largeIndex) {
 }
 
 Write-Host "Accepted-main focused M3U evidence workflow contract is valid."
+& $eligibilityContract
