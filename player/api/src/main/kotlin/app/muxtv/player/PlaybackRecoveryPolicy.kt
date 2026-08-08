@@ -22,6 +22,15 @@ enum class PlaybackRecoveryDisposition {
     STOP_RECOVERY,
 }
 
+@JvmInline
+value class PlaybackRecoveryGeneration(
+    val value: Long,
+) {
+    init {
+        require(value > 0)
+    }
+}
+
 class PlaybackRecoveryPlan private constructor(
     val canonicalChannelId: CanonicalChannelId,
     val orderedCandidates: List<PlaybackRecoveryCandidate>,
@@ -91,5 +100,61 @@ class PlaybackRecoveryPlan private constructor(
                 budget = budget,
             )
         }
+    }
+}
+
+class PlaybackRecoverySession private constructor(
+    val generation: PlaybackRecoveryGeneration,
+    val plan: PlaybackRecoveryPlan,
+    val isCancelled: Boolean,
+) {
+    fun candidateAfterFailure(
+        callbackGeneration: PlaybackRecoveryGeneration,
+        failedAttemptIndex: Int,
+        elapsedRecoveryMillis: Long,
+        disposition: PlaybackRecoveryDisposition,
+    ): PlaybackRecoveryCandidate? {
+        if (isCancelled || callbackGeneration != generation) {
+            return null
+        }
+        return plan.candidateAfterFailure(
+            failedAttemptIndex = failedAttemptIndex,
+            elapsedRecoveryMillis = elapsedRecoveryMillis,
+            disposition = disposition,
+        )
+    }
+
+    fun cancel(callbackGeneration: PlaybackRecoveryGeneration): PlaybackRecoverySession {
+        if (callbackGeneration != generation || isCancelled) {
+            return this
+        }
+        return PlaybackRecoverySession(
+            generation = generation,
+            plan = plan,
+            isCancelled = true,
+        )
+    }
+
+    fun supersede(
+        newGeneration: PlaybackRecoveryGeneration,
+        newPlan: PlaybackRecoveryPlan,
+    ): PlaybackRecoverySession {
+        require(newGeneration.value > generation.value)
+        return PlaybackRecoverySession(
+            generation = newGeneration,
+            plan = newPlan,
+            isCancelled = false,
+        )
+    }
+
+    companion object {
+        fun create(
+            generation: PlaybackRecoveryGeneration,
+            plan: PlaybackRecoveryPlan,
+        ): PlaybackRecoverySession = PlaybackRecoverySession(
+            generation = generation,
+            plan = plan,
+            isCancelled = false,
+        )
     }
 }
