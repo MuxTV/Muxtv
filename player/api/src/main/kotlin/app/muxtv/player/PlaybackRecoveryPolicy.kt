@@ -24,7 +24,7 @@ class PlaybackRecoveryPlan private constructor(
             preferredVariantId: StreamVariantId?,
             budget: PlaybackRecoveryBudget,
         ): PlaybackRecoveryPlan {
-            val snapshot = candidates.toList()
+            val snapshot = candidates.distinctBy { candidate -> candidate.variantId }
             val preferredIndex = snapshot.indexOfFirst { candidate ->
                 candidate.variantId == preferredVariantId
             }
