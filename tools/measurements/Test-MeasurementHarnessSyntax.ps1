@@ -103,6 +103,7 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
         "Remove-MeasurementAvd",
         "Invoke-CatalogDatabaseMeasurement.ps1",
         "Invoke-PlayerProxyMeasurement.ps1",
+        "Stop-MeasurementGradleDaemons",
         ":core:testing:analyzeMeasurementSeries"
     )
     foreach ($token in $requiredTokens) {
@@ -119,6 +120,20 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
         if ($seriesContent -match [regex]::Escape($token)) {
             $messages.Add("Measurement series core contains forbidden parallel execution: $token")
         }
+    }
+    $catalogChildIndex = $seriesContent.IndexOf('-File", $catalogMeasurementScript')
+    $daemonHandoffIndex = $seriesContent.IndexOf(
+        'Stop-MeasurementGradleDaemons -GradleWrapper',
+        [Math]::Max(0, $catalogChildIndex),
+        [System.StringComparison]::Ordinal
+    )
+    $playerChildIndex = $seriesContent.IndexOf('-File", $playerMeasurementScript')
+    if ($catalogChildIndex -lt 0 -or
+        $daemonHandoffIndex -lt 0 -or
+        $playerChildIndex -lt 0 -or
+        $daemonHandoffIndex -lt $catalogChildIndex -or
+        $daemonHandoffIndex -gt $playerChildIndex) {
+        $messages.Add("Measurement series must complete the Gradle daemon handoff between catalog and player child builds.")
     }
 }
 

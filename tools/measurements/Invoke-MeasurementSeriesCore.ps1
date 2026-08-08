@@ -76,6 +76,21 @@ function Invoke-MeasurementNativeChild {
     }
 }
 
+function Stop-MeasurementGradleDaemons {
+    param(
+        [Parameter(Mandatory)][string]$GradleWrapper,
+        [Parameter(Mandatory)][string]$LogPath
+    )
+
+    $output = @(& $GradleWrapper --stop 2>&1)
+    $exitCode = $LASTEXITCODE
+    $output | Add-Content -Path $LogPath -Encoding utf8
+    "exit_code=$exitCode" | Add-Content -Path $LogPath -Encoding utf8
+    if ($exitCode -ne 0) {
+        throw "Gradle daemon handoff failed."
+    }
+}
+
 function Write-MeasurementSeriesRequest {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -387,6 +402,11 @@ try {
                 -Arguments $roomArguments `
                 -LogPath (Join-Path $repetitionDirectory "catalog-database-child.log") `
                 -FailureMessage "Catalog database measurement repetition failed."
+
+            if ($NoDaemon) {
+                Stop-MeasurementGradleDaemons -GradleWrapper $gradleWrapper `
+                    -LogPath (Join-Path $repetitionDirectory "gradle-daemon-handoff.log")
+            }
 
             $playerArguments = @(
                 "-NoProfile",
