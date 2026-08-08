@@ -41,6 +41,7 @@ function Write-FocusedFixtureManifest {
         [Parameter(Mandatory)][string]$Commit,
         [Parameter(Mandatory)][string]$Profile,
         [Parameter(Mandatory)][string]$Status,
+        [Parameter(Mandatory)][bool]$ClaimEligible,
         [AllowNull()][string]$CompletedAtUtc,
         [AllowNull()][string]$AnalysisOutput,
         [AllowNull()][string]$FailureType,
@@ -61,7 +62,7 @@ function Write-FocusedFixtureManifest {
         warmups = 2
         iterations = 5
         runnerLabel = "self-hosted-windows-x64-v1"
-        claimEligible = $true
+        claimEligible = $ClaimEligible
         thresholdApplied = $false
         status = $Status
         startedAtUtc = "2026-08-08T00:00:00.0000000Z"
@@ -80,6 +81,7 @@ $runningManifestPath = Write-FocusedFixtureManifest `
     -Commit ("1" * 40) `
     -Profile "medium-10k" `
     -Status "running" `
+    -ClaimEligible $true `
     -CompletedAtUtc $null `
     -AnalysisOutput $null `
     -FailureType $null `
@@ -89,6 +91,7 @@ $passedManifestPath = Write-FocusedFixtureManifest `
     -Commit ("2" * 40) `
     -Profile "large-50k" `
     -Status "passed" `
+    -ClaimEligible $true `
     -CompletedAtUtc "2026-08-08T00:01:00.0000000Z" `
     -AnalysisOutput "m3u-large-50k-variance.json" `
     -FailureType $null `
@@ -98,6 +101,7 @@ $failedManifestPath = Write-FocusedFixtureManifest `
     -Commit ("3" * 40) `
     -Profile "medium-10k" `
     -Status "failed" `
+    -ClaimEligible $false `
     -CompletedAtUtc "2026-08-08T00:02:00.0000000Z" `
     -AnalysisOutput $null `
     -FailureType "System.InvalidOperationException" `
@@ -107,6 +111,7 @@ $interruptedManifestPath = Write-FocusedFixtureManifest `
     -Commit ("4" * 40) `
     -Profile "large-50k" `
     -Status "interrupted" `
+    -ClaimEligible $false `
     -CompletedAtUtc "2026-08-08T00:03:00.0000000Z" `
     -AnalysisOutput $null `
     -FailureType $null `
@@ -126,6 +131,9 @@ try {
 
     if ([string]$running.status -cne "interrupted") {
         throw "Focused M3U running manifest was not finalized as interrupted."
+    }
+    if ([bool]$running.claimEligible) {
+        throw "Focused M3U interrupted manifest remained claim-eligible."
     }
     if ([string]::IsNullOrWhiteSpace([string]$running.completedAtUtc)) {
         throw "Focused M3U interrupted manifest is missing completedAtUtc."
