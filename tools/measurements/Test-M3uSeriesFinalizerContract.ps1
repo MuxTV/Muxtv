@@ -6,8 +6,12 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
+$atomicPublicationContract = Join-Path $PSScriptRoot "Test-M3uSeriesManifestPublicationContract.ps1"
 if (-not (Test-Path $finalizerScript -PathType Leaf)) {
     throw "Measurement series finalizer was not found."
+}
+if (-not (Test-Path $atomicPublicationContract -PathType Leaf)) {
+    throw "Focused M3U manifest publication contract was not found."
 }
 
 $testRoot = Join-Path $repositoryRoot ".work\evidence\m3u-finalizer-contract"
@@ -147,6 +151,7 @@ try {
         throw "Focused M3U finalizer modified an already-interrupted manifest."
     }
 
+    & $atomicPublicationContract
     Write-Host "Focused M3U series finalizer contract is valid."
 } finally {
     Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
