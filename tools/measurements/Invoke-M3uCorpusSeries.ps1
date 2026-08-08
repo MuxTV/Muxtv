@@ -41,6 +41,11 @@ $gradleWrapper = Join-Path $repositoryRoot "gradlew.bat"
 if (-not (Test-Path $gradleWrapper -PathType Leaf)) {
     throw "Gradle wrapper was not found."
 }
+$assertEvidenceCommit = Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1"
+if (-not (Test-Path $assertEvidenceCommit -PathType Leaf)) {
+    throw "Evidence commit provenance assertion was not found."
+}
+& $assertEvidenceCommit -ExpectedCommit $SourceCommit
 
 $resolvedEvidenceRoot = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
     $EvidenceRoot
