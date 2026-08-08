@@ -69,6 +69,14 @@ private sealed interface PlayerRouteState {
     ) : PlayerRouteState
 }
 
+fun interface PlaybackStartGateway {
+    suspend fun start(
+        controller: MediaController,
+        request: PlaybackStartRequest,
+        timeoutMillis: Long,
+    ): PlaybackStartResult
+}
+
 @AndroidXOptIn(UnstableApi::class)
 @Composable
 fun PlayerRoute(
@@ -78,8 +86,18 @@ fun PlayerRoute(
     channelId: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    playbackStartGateway: PlaybackStartGateway? = null,
 ) {
     val connectionEpoch by controllerConnector.connectionEpoch.collectAsState()
+    val startGateway = playbackStartGateway ?: remember(controllerConnector) {
+        PlaybackStartGateway { controller, request, timeoutMillis ->
+            controllerConnector.awaitPlaybackStart(
+                controller = controller,
+                request = request,
+                timeoutMillis = timeoutMillis,
+            )
+        }
+    }
     val approvalScope = rememberCoroutineScope()
     var approvalGeneration by remember(profileId, channelId) { mutableIntStateOf(0) }
     var approvalInProgress by remember(profileId, channelId) { mutableStateOf(false) }
@@ -88,6 +106,7 @@ fun PlayerRoute(
         initialValue = PlayerRouteState.Connecting,
         playbackCatalog,
         controllerConnector,
+        startGateway,
         connectionEpoch,
         approvalGeneration,
         profileId,
@@ -121,7 +140,7 @@ fun PlayerRoute(
 
         currentCoroutineContext().ensureActive()
         val startResult = try {
-            controllerConnector.awaitPlaybackStart(
+            startGateway.start(
                 controller = controller,
                 request = PlaybackStartRequest(profileId, channelId),
                 timeoutMillis = COMMAND_TIMEOUT_MILLIS,
