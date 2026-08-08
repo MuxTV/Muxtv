@@ -85,7 +85,7 @@ Android TV rules:
 - [ ] Guarantee emulator, ADB and temporary-output cleanup; retain only dependency caches.
 - [x] Cancel superseded PR runs while preserving manual/accepted-main runs.
 - [ ] Enforce global emulator/device serialization through the dedicated runner label and verify that release runs are never cancelled.
-- [ ] Validate configuration cache with fail-on-problems before making it a permanent gate.
+- [x] Validate configuration cache with fail-on-problems before making it a permanent gate.
 - [ ] Apply and verify dedicated runner labels `muxtv-android` and `muxtv-device` in GitHub runner administration before workflows depend on them.
 - [ ] Re-run PR #145 exact head and require substantive API 26/API 36 plus artifact publication to be green.
 
@@ -190,6 +190,8 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-08: external design input pinned to `emilkowalski/skills@de33dbed000212b54400a33767d1e4d03654db2a`.
 - 2026-08-08: accepted main already contains D1 through PR #138 / `d109ad6a`; historical `work/tv-design-craft-111` remains provenance only.
 - 2026-08-08: no prior alpha artifact or signing lineage exists; release hardening must create a controlled same-key seed before the required signed-upgrade test.
+- 2026-08-08: configuration-cache create/reuse passed locally with fail-on-problems; permanent CI enablement remains a later isolated workflow change.
+- 2026-08-08: PR #149 exact head `21d043a7862e5befb1225d1c70ab1b6e14b779fc` passed Product Matrix run `31267144994`, including API 26/API 36 and artifact `9024665699` (`sha256:3a49b866ffc22eb778d18d3ceac2ebadbbb69795a2214d5090cf597bfd2da20d`).
 
 ## Stop conditions
 
