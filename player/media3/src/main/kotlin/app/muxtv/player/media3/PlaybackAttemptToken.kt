@@ -6,6 +6,7 @@ internal data class PlaybackAttemptToken(
     val setupId: PlaybackSetupId,
     val generation: Long,
     val candidate: PlaybackCandidateIdentity,
+    val attempt: Int = 0,
 ) {
     fun matches(
         setupId: PlaybackSetupId?,

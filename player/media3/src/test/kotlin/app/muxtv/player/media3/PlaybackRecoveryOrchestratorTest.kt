@@ -135,7 +135,8 @@ class PlaybackRecoveryOrchestratorTest {
             .isEqualTo(
                 PlaybackRecoveryAction.Failed(
                     generation,
-                    PlaybackRecoveryFailure.BudgetExhausted,
+                    PlaybackRecoveryFailure.DeadlineExceeded,
+                    attempt = 2,
                 ),
             )
     }
@@ -157,7 +158,27 @@ class PlaybackRecoveryOrchestratorTest {
         assertThat(orchestrator.onRenderedFirstFrame(generation, first)).isEqualTo(
             PlaybackRecoveryAction.Failed(
                 generation,
-                PlaybackRecoveryFailure.BudgetExhausted,
+                PlaybackRecoveryFailure.DeadlineExceeded,
+            ),
+        )
+    }
+
+    @Test
+    fun `candidate exhaustion is distinct from deadline expiry`() {
+        val orchestrator = orchestrator(now = { 0L })
+        val first = candidate("variant-first", 0)
+        val generation = orchestrator.start(request(), listOf(first)).generation()
+        orchestrator.onCandidateResolved(
+            generation = generation,
+            candidate = first,
+            resolution = PlaybackVariantResolution.Ready(resolvedRequest(first.variantId)),
+        )
+
+        assertThat(orchestrator.onPlayerError(generation, first)).isEqualTo(
+            PlaybackRecoveryAction.Failed(
+                generation = generation,
+                failure = PlaybackRecoveryFailure.CandidatesExhausted,
+                attempt = 0,
             ),
         )
     }

@@ -15,6 +15,10 @@ import app.muxtv.catalog.PlaybackCandidateIdentity
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.player.PlaybackFailureCategory
+import app.muxtv.player.PlaybackObservation
+import app.muxtv.player.PlaybackObservationKind
+import app.muxtv.player.PlaybackObservationRecorder
 import app.muxtv.player.PlaybackStartFailure
 import app.muxtv.player.PlaybackStartRequest
 import app.muxtv.player.PlaybackStartResult
@@ -44,6 +48,9 @@ class MuxTvPlaybackService : MediaSessionService() {
     @Inject
     lateinit var playbackCandidateResolver: PlaybackCandidateResolver
 
+    @Inject
+    lateinit var playbackObservationRecorder: PlaybackObservationRecorder
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
@@ -55,6 +62,8 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeRequest: PlaybackStartRequest? = null
     private var activeCandidate: PlaybackCandidateIdentity? = null
     private var activeGeneration: Long? = null
+    private var activeAttemptNumber = 0
+    private var lastFailure: Media3Failure? = null
     private val callbackGate = PlaybackCallbackGate()
     private var activePlayerListener: Player.Listener? = null
     private var activeFuture: SettableFuture<SessionResult>? = null
@@ -102,10 +111,13 @@ class MuxTvPlaybackService : MediaSessionService() {
         activeSetupId = command.id
         activeRequest = command.request
         activeFuture = future
+        activeAttemptNumber = 0
+        lastFailure = null
         val deadlineAtMillis = SystemClock.elapsedRealtime() + MAX_RECOVERY_DURATION_MILLIS
         deadlineJob = serviceScope.launch {
             delay((deadlineAtMillis - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
             if (activeSetupId == command.id) {
+                recordRecoveryFailure(PlaybackFailureCategory.TIMEOUT)
                 recovery.cancel()
                 activeJob?.cancel()
                 activeJob = null
@@ -167,6 +179,8 @@ class MuxTvPlaybackService : MediaSessionService() {
                     clearInstalled()
                     activeGeneration = action.generation
                     activeCandidate = action.candidate
+                    activeAttemptNumber = action.attempt + 1
+                    recordObservation(PlaybackObservationKind.ATTEMPT_STARTED)
                     val request = activeRequest ?: return
                     val resolution = try {
                         playbackCandidateResolver.resolveCandidate(
@@ -182,11 +196,22 @@ class MuxTvPlaybackService : MediaSessionService() {
                         activeGeneration != action.generation ||
                         activeCandidate != action.candidate
                     ) return
+                    val resolutionAccepted = resolution.matches(action.candidate)
                     action = recovery.onCandidateResolved(
                         generation = action.generation,
                         candidate = action.candidate,
                         resolution = resolution,
                     )
+                    if (!resolutionAccepted &&
+                        action != PlaybackRecoveryAction.Ignored
+                    ) {
+                        recordAttemptFailure(
+                            Media3Failure(
+                                category = PlaybackFailureCategory.CREDENTIAL_ACCESS,
+                                media3ErrorCode = PlaybackException.ERROR_CODE_UNSPECIFIED,
+                            ),
+                        )
+                    }
                 }
 
                 is PlaybackRecoveryAction.Install -> {
@@ -194,11 +219,14 @@ class MuxTvPlaybackService : MediaSessionService() {
                         activeCandidate != action.candidate
                     ) return
                     activeGeneration = action.generation
+                    activeAttemptNumber = action.attempt + 1
                     install(ownerSetupId, action)
                     return
                 }
 
                 is PlaybackRecoveryAction.ApprovalRequired -> {
+                    activeAttemptNumber = action.attempt + 1
+                    recordObservation(PlaybackObservationKind.APPROVAL_REQUIRED)
                     complete(
                         PlaybackStartResult.InsecureHttpApprovalRequired(
                             displayOrigin = action.displayOrigin,
@@ -209,19 +237,34 @@ class MuxTvPlaybackService : MediaSessionService() {
                 }
 
                 is PlaybackRecoveryAction.Succeeded -> {
+                    activeAttemptNumber = action.attempt + 1
                     complete(PlaybackStartResult.Started)
                     return
                 }
 
                 is PlaybackRecoveryAction.Failed -> {
+                    activeAttemptNumber = if (
+                        action.failure == PlaybackRecoveryFailure.NoCandidates
+                    ) 0 else action.attempt + 1
+                    val terminalCategory = when (action.failure) {
+                        PlaybackRecoveryFailure.NoCandidates,
+                        PlaybackRecoveryFailure.AccessUnavailable,
+                        -> lastFailure?.category ?: PlaybackFailureCategory.CREDENTIAL_ACCESS
+                        PlaybackRecoveryFailure.CandidatesExhausted ->
+                            lastFailure?.category ?: PlaybackFailureCategory.UNKNOWN
+                        PlaybackRecoveryFailure.DeadlineExceeded ->
+                            PlaybackFailureCategory.TIMEOUT
+                    }
+                    recordRecoveryFailure(terminalCategory)
                     clearInstalled()
                     val failure = when (action.failure) {
                         PlaybackRecoveryFailure.NoCandidates ->
                             PlaybackStartFailure.ChannelUnavailable
                         PlaybackRecoveryFailure.AccessUnavailable ->
                             PlaybackStartFailure.AccessUnavailable
-                        PlaybackRecoveryFailure.BudgetExhausted ->
-                            PlaybackStartFailure.RecoveryExhausted
+                        PlaybackRecoveryFailure.CandidatesExhausted,
+                        PlaybackRecoveryFailure.DeadlineExceeded,
+                        -> PlaybackStartFailure.RecoveryExhausted
                     }
                     complete(PlaybackStartResult.Rejected(failure))
                     return
@@ -249,9 +292,15 @@ class MuxTvPlaybackService : MediaSessionService() {
             requestHeaders = resolved.requestHeaders,
             insecureHttpApproved = resolved.insecureHttpApproved,
         )
-        val token = PlaybackAttemptToken(setupId, action.generation, action.candidate)
+        val token = PlaybackAttemptToken(
+            setupId = setupId,
+            generation = action.generation,
+            candidate = action.candidate,
+            attempt = action.attempt,
+        )
         try {
             clearInstalled()
+            activeAttemptNumber = action.attempt + 1
             callbackGate.activate(token)
             activePlayerListener = createPlayerListener(token).also(player::addListener)
             player.setMediaSource(mediaSourceFactory.create(sessionRequest))
@@ -260,6 +309,12 @@ class MuxTvPlaybackService : MediaSessionService() {
             player.play()
         } catch (_: Exception) {
             if (callbackGate.isCurrent(token)) {
+                recordAttemptFailure(
+                    Media3Failure(
+                        category = PlaybackFailureCategory.UNKNOWN,
+                        media3ErrorCode = PlaybackException.ERROR_CODE_UNSPECIFIED,
+                    ),
+                )
                 processCallback(
                     token,
                     recovery.onPlayerError(action.generation, action.candidate),
@@ -278,9 +333,14 @@ class MuxTvPlaybackService : MediaSessionService() {
                     setupId = token.setupId,
                     currentMediaId = player.currentMediaItem?.mediaId,
                 ) ?: return
+                val action = recovery.onRenderedFirstFrame(token.generation, token.candidate)
+                if (action is PlaybackRecoveryAction.Succeeded) {
+                    activeAttemptNumber = token.attempt + 1
+                    recordObservation(PlaybackObservationKind.RECOVERY_SUCCEEDED)
+                }
                 processCallback(
                     token,
-                    recovery.onRenderedFirstFrame(token.generation, token.candidate),
+                    action,
                 )
             }
 
@@ -288,6 +348,8 @@ class MuxTvPlaybackService : MediaSessionService() {
                 if (!token.matches(activeSetupId, activeGeneration, activeCandidate) ||
                     !callbackGate.isCurrent(token)
                 ) return
+                activeAttemptNumber = token.attempt + 1
+                recordAttemptFailure(Media3FailureClassifier.classify(error))
                 processCallback(
                     token,
                     recovery.onPlayerError(token.generation, token.candidate),
@@ -306,6 +368,8 @@ class MuxTvPlaybackService : MediaSessionService() {
             activeRequest = null
             activeCandidate = null
             activeGeneration = null
+            activeAttemptNumber = 0
+            lastFailure = null
             callbackGate.clear()
         }
     }
@@ -322,6 +386,8 @@ class MuxTvPlaybackService : MediaSessionService() {
         activeRequest = null
         activeCandidate = null
         activeGeneration = null
+        activeAttemptNumber = 0
+        lastFailure = null
         callbackGate.clear()
         if (::player.isInitialized) clearInstalled()
     }
@@ -337,6 +403,48 @@ class MuxTvPlaybackService : MediaSessionService() {
     private fun removeActivePlayerListener() {
         activePlayerListener?.let(player::removeListener)
         activePlayerListener = null
+    }
+
+    private fun recordAttemptFailure(failure: Media3Failure) {
+        lastFailure = failure
+        recordObservation(
+            kind = PlaybackObservationKind.ATTEMPT_FAILED,
+            failure = failure,
+        )
+    }
+
+    private fun recordRecoveryFailure(category: PlaybackFailureCategory) {
+        val detail = lastFailure?.takeIf { it.category == category }
+        recordObservation(
+            kind = PlaybackObservationKind.RECOVERY_FAILED,
+            failure = Media3Failure(
+                category = category,
+                media3ErrorCode = detail?.media3ErrorCode
+                    ?: PlaybackException.ERROR_CODE_UNSPECIFIED,
+                httpStatusCode = detail?.httpStatusCode,
+            ),
+        )
+    }
+
+    private fun recordObservation(
+        kind: PlaybackObservationKind,
+        failure: Media3Failure? = null,
+    ) {
+        try {
+            playbackObservationRecorder.record(
+                PlaybackObservation(
+                    kind = kind,
+                    failureCategory = failure?.category,
+                    attemptNumber = activeAttemptNumber,
+                    attemptLimit = MAX_ATTEMPTS,
+                    timestampEpochMillis = System.currentTimeMillis(),
+                    httpStatusCode = failure?.httpStatusCode,
+                    media3ErrorCode = failure?.media3ErrorCode,
+                ),
+            )
+        } catch (_: Exception) {
+            // Diagnostics must never affect playback state or recovery ownership.
+        }
     }
 
     private inner class SessionCallback : MediaSession.Callback {
@@ -391,4 +499,16 @@ class MuxTvPlaybackService : MediaSessionService() {
         const val MAX_RECOVERY_DURATION_MILLIS = 20_000L
         const val MAX_CANCELLED_SETUP_IDS = 64
     }
+}
+
+private fun app.muxtv.catalog.PlaybackVariantResolution?.matches(
+    candidate: PlaybackCandidateIdentity,
+): Boolean = when (this) {
+    is app.muxtv.catalog.PlaybackVariantResolution.Ready ->
+        request.channelId == candidate.channelId && request.variantId == candidate.variantId
+    is app.muxtv.catalog.PlaybackVariantResolution.InsecureTransportApprovalRequired ->
+        channelId == candidate.channelId && variantId == candidate.variantId
+    is app.muxtv.catalog.PlaybackVariantResolution.AccessUnavailable,
+    null,
+    -> false
 }
