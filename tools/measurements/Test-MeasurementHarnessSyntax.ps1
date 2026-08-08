@@ -13,7 +13,15 @@ $seriesEntryScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
 $seriesCoreScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeriesCore.ps1"
 $m3uSeriesScript = Join-Path $PSScriptRoot "Invoke-M3uCorpusSeries.ps1"
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
-$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $m3uSeriesScript, $finalizerScript)
+$m3uFinalizerContractScript = Join-Path $PSScriptRoot "Test-M3uSeriesFinalizerContract.ps1"
+$files = @(
+    $profileScript,
+    $seriesEntryScript,
+    $seriesCoreScript,
+    $m3uSeriesScript,
+    $finalizerScript,
+    $m3uFinalizerContractScript
+)
 $messages = [System.Collections.Generic.List[string]]::new()
 
 foreach ($file in $files) {
@@ -175,6 +183,14 @@ if (Test-Path $finalizerScript -PathType Leaf) {
         if ($finalizerContent -notmatch [regex]::Escape($token)) {
             $messages.Add("Measurement finalizer is missing required contract token: $token")
         }
+    }
+}
+
+if ($messages.Count -eq 0 -and (Test-Path $m3uFinalizerContractScript -PathType Leaf)) {
+    try {
+        & $m3uFinalizerContractScript
+    } catch {
+        $messages.Add("Focused M3U finalizer contract failed: $($_.Exception.Message)")
     }
 }
 
