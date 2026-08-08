@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: muxtv-measurement-variance-smoke
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   current-profile-smoke:
@@ -33,9 +33,10 @@ jobs:
 
     steps:
       - name: Checkout without pre-clean
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+          persist-credentials: false
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Clean workspace with Windows long paths
@@ -67,6 +68,11 @@ jobs:
         run: |
           $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
+
+      - name: Preflight dedicated self-hosted runner
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 -RequireNoConnectedDevice
 
       - name: Resolve Android SDK and validate harness
         shell: pwsh
@@ -125,7 +131,7 @@ jobs:
 
       - name: Upload variance evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: measurement-variance-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -135,6 +141,7 @@ jobs:
             .work/evidence/**/*.png
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
-          if-no-files-found: warn
+          if-no-files-found: error
           include-hidden-files: true
+          compression-level: 0
           retention-days: 14
