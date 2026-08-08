@@ -143,6 +143,30 @@ if (Test-Path $m3uSeriesScript -PathType Leaf) {
             $messages.Add("M3U corpus series contains forbidden parallel execution: $token")
         }
     }
+
+    $negativeEvidenceRoot = Join-Path $evidenceDirectory "wrong-source-commit"
+    Remove-Item -LiteralPath $negativeEvidenceRoot -Recurse -Force -ErrorAction SilentlyContinue
+    $wrongSourceCommit = "0" * 40
+    $negativeFailure = $null
+    try {
+        & $m3uSeriesScript `
+            -SourceCommit $wrongSourceCommit `
+            -SourceBranch "measurement-harness-negative" `
+            -M3uProfile "small-1k" `
+            -Repetitions 2 `
+            -EvidenceRoot $negativeEvidenceRoot `
+            -NoDaemon
+        $messages.Add("M3U corpus series accepted a SourceCommit that does not match the checked-out Git HEAD.")
+    } catch {
+        $negativeFailure = $_.Exception.Message
+    }
+    if ($null -ne $negativeFailure -and
+        $negativeFailure -notlike "Evidence commit provenance mismatch:*") {
+        $messages.Add("M3U corpus series wrong-commit smoke failed for an unexpected reason: $negativeFailure")
+    }
+    if (Test-Path -LiteralPath $negativeEvidenceRoot) {
+        $messages.Add("M3U corpus series created evidence before rejecting a mismatched SourceCommit.")
+    }
 }
 
 if (Test-Path $finalizerScript -PathType Leaf) {
