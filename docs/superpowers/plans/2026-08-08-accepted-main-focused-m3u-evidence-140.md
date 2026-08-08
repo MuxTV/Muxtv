@@ -25,10 +25,7 @@ Current production finalizer only discovers `measurement-series-run-manifest.jso
 
 ### RED
 
-`Test-M3uSeriesFinalizerContract.ps1` creates:
-
-- one partial focused manifest with `status=running`, one completed run and corpus identity;
-- one focused manifest already `status=passed`.
+`Test-M3uSeriesFinalizerContract.ps1` creates focused fixtures for `running`, `passed`, `failed` and already-`interrupted` states. The running fixture contains one completed repetition plus corpus identity.
 
 It invokes the existing finalizer and requires:
 
@@ -36,7 +33,7 @@ It invokes the existing finalizer and requires:
 - non-empty completion timestamp;
 - partial run evidence preserved;
 - corpus identity preserved;
-- passed manifest unchanged.
+- passed/failed/already-interrupted manifests unchanged.
 
 Current production must RED because it never discovers the focused manifest.
 
@@ -51,9 +48,31 @@ Refactor `Finalize-MeasurementSeriesEvidence.ps1` into bounded schema-aware hand
 - stage the replacement in the same directory and replace the original;
 - preserve partial evidence fields.
 
-After GREEN, add a second RED/GREEN for an explicit focused interruption code only if the evidence schema needs one; do not conflate schema evolution with the discovery bug.
+`status=interrupted` is already the bounded terminal marker needed for this first GREEN. Do not introduce a second failure-code schema merely to solve discovery/finalization.
 
-## TDD 2 — workflow contract
+## TDD 2 — atomic focused manifest publication
+
+Current `Write-M3uSeriesManifest` rewrites the live JSON through direct `Set-Content`. A runner/process termination during that write can truncate the only manifest, after which the finalizer cannot recover its state.
+
+### RED
+
+Add a repository-owned contract that rejects direct in-place publication for the focused run manifest and requires a same-directory stage/replace path.
+
+### GREEN
+
+Change only focused manifest publication:
+
+1. serialize the complete next JSON before replacing the live path;
+2. write to a deterministic/safely unique stage file in the same series directory;
+3. move/replace the stage file over `m3u-series-run-manifest.json` without deleting the previous valid manifest first;
+4. best-effort remove an abandoned stage file in `finally`;
+5. preserve current manifest schema/fields.
+
+The focused finalizer uses the same durability principle when publishing `interrupted` state.
+
+Do not combine this with parser/report schema changes.
+
+## TDD 3 — workflow contract
 
 Before creating the workflow, extend repository static harness tests to require:
 
@@ -161,6 +180,7 @@ Stop rather than publish claim-eligible evidence if:
 - checked-out SHA differs from manifest source commit;
 - tracked source is dirty for a manual claim-eligible run;
 - focused manifest remains `running` after interrupted finalization;
+- focused manifest publication can truncate the only valid JSON in place;
 - either profile has fewer/more than five accepted reports;
 - corpus identity changes across repetitions;
 - analyzer audit does not bind exactly the intended five inputs;
