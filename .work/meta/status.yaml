@@ -5,14 +5,18 @@ phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
-  ci: present_exact_source_head_host_and_old_edge_current_device_matrices
-  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_designsystem_and_measurement_contracts
+  ci: present_exact_source_head_tracked_worktree_host_and_old_edge_current_device_matrices
+  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_designsystem_recovery_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_guide_route_and_exact_ci_provenance
-  architecture_version: 5
+  documentation: synchronized_accepted_evidence_and_active_playback_recovery
+  architecture_version: 6
 active_branch_after_merge: main
-implementation_source_commit: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
+implementation_source_commit: e9dd0336716e27e9b51f4eb10da82169112e71d1
 room_schema: 10
+versions:
+  min_sdk: 26
+  media3: 1.10.1
+  room3: 3.0.0
 implemented:
   - android_tv_application_shell
   - navigation3_top_level_routes
@@ -85,149 +89,153 @@ implemented:
   - bare_host_https_source_normalization
   - explicit_pr_source_head_checkout_for_evidence
   - fail_closed_git_head_source_commit_assertion
-  - static_ci_provenance_drift_guard
+  - fail_closed_tracked_worktree_claim_assertion
+  - accepted_main_focused_m3u_5x10k_5x50k_evidence
+  - immediate_dense_focus_d1
 verified_evidence:
   search_core_merge: fe2f8472776f59712fbdcef7faafdb855cafddcb
   single_player_owner_merge: bd1ff29959e96305ea99b6480f402efebadc9d53
-  ci_phase1_merge: 275732cd0115442271d5c6765e9795de7839af7f
-  search_tv_merge: d12bad2c0acc0a0dbeeffbc2c25308d1143329d8
-  first_frame_merge: 8fced4dc282eaf07e8160f463c8276d7e48ba01b
-  epg_transport_hardening_merge: 158210876251a95869463208da9491d7f46f0663
-  recent_merge: 7af053ca14281d9e63a51470fbeb3cb8d708c318
-  cross_surface_truth_merge: d78bfb89e11806d27012813b3b36cbb5c062f9eb
-  schema_guard_merge: ec2b7743183b227ef54c16989d061ae5d4775dee
-  transport_guide_data_squash_merge: 431168a1603dae94dc164a45cd1ac560025ad903
-  guide_tv_route_source_head: a5e42d6aaa628b9fe09d6afb37e25ecb7d368773
   guide_tv_route_merge: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
-  guide_host_integration_run: 31210637363
-  guide_product_matrix_integration_run: 31210636241
-  historical_pr_run_provenance: merge_ref_executed_but_head_sha_recorded_before_issue_136
-  historical_pr_run_claim_limit: integration_acceptance_not_strict_exact_source_head
-  ci_provenance_source_head: 02d6ee4b2641e12d88ace83bcd6af510f18bac08
-  ci_provenance_merge: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
-  ci_provenance_host: success
-  ci_provenance_database_matrix: success
-  ci_provenance_product_matrix: success
-  ci_provenance_measurement_variance: success
+  exact_source_head_provenance_merge: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
+  focused_m3u_harness_merge: 5ce34b53a3f82e83d162235b99d822f50395009e
+  provider_readiness_merge: 8fadb411e20c6a854fafd2005c5c5b17e868f858
+  dense_focus_d1_merge: d109ad6a4fc68bfb3083edccdf469a67ddb3352f
+  accepted_main_focused_evidence_merge: b1da13e882b8ca6403846c4a108ba503f5a02e18
+  tracked_worktree_provenance_merge: e9dd0336716e27e9b51f4eb10da82169112e71d1
+  accepted_main_focused_evidence:
+    run: 31254022042
+    status: success
+    source_commit: e9dd0336716e27e9b51f4eb10da82169112e71d1
+    artifact_id: 9021482310
+    artifact_name: focused-m3u-evidence-31254022042-1
+    artifact_sha256: ae7973542757c1f94844a4ba92daf22ad2dbcd3978108c1f224ccf21e0a4a0d4
+    medium_10k_repetitions: 5
+    large_50k_repetitions: 5
+    threshold_applied: false
+    rust_native_rewrite_justified: false
   device_profiles:
     - requested_api: 26
       resolved_api: 26
       image: system-images;android-26;android-tv;x86
-      status: accepted_in_exact_source_head_ci_baseline
+      status: accepted_exact_source_head_ci_profile
     - requested_api: 36
       resolved_api: 36
       image: system-images;android-36;android-tv;x86_64
-      status: accepted_in_exact_source_head_ci_baseline
+      status: accepted_exact_source_head_ci_profile
 active_work:
   repository_truth_sync:
-    pull_request: 135
-    branch: docs/truth-sync-2026-08-08
-    status: restacked_on_exact_evidence_baseline_requires_fresh_full
-    required:
-      - point_in_time_truth_uses_5bb6ee1_baseline
-      - summer_2026_execution_addendum
-      - fresh_exact_source_head_full_acceptance
-  tv_design_immediate_focus:
-    issue: 111
-    pull_request: 138
-    branch: work/111-tv-design-craft-restack
-    status: tdd_red_observed_minimal_green_in_validation
-    red_source_head: 89e428fb4dadfb75671be172e76cf6adadd72ca6
-    red_host_run: 31216247036
-    green_source_head: 4b5c9c526f7bae28096fc259474a412cf3c8efe4
-    required:
-      - exact_source_head_full_green
-      - api26_api36_product_matrix_green
-      - remove_dead_scale_animation_after_green
-      - d2_native_ok_long_press_repeat_contracts
-      - d3_state_and_reduced_motion_contracts
-      - d4_720p_1080p_dialog_reachability
-  deterministic_m3u_measurement_evidence:
-    issue: 27
-    pull_request: 134
-    branch: work/measurement-large-m3u-series-27-v2
-    status: implementation_requires_restack_on_5bb6ee1
-    required:
-      - fail_closed_series_evidence_directory_ownership
-      - exact_profile_seed_source_commit_provenance
-      - repeated_corpus_sha256_byte_count_expected_count_consistency
-      - exact_source_head_host_and_variance_rerun
-      - five_run_medium_10k_baseline
-      - five_run_large_50k_baseline
-      - analyzer_provenance_review_before_performance_claims
-  provider_readiness:
-    issue: 112
-    pull_request: 133
-    branch: work/provider-readiness-contract-112-v2
-    status: implementation_requires_restack_on_5bb6ee1
-    required:
-      - previous_good_primary_catalog_remains_usable
-      - independent_secondary_enrichment_readiness
-      - typed_auth_rate_limit_timeout_network_failures
-      - cancellation_and_supersession_invariants
-      - successful_attempt_revision_consistency
-      - verified_source_head_host_and_device_acceptance
-  playback_recovery:
+    issue: 147
+    branch: docs/147-truth-sync
+    status: in_progress
+    base_commit: e9dd0336716e27e9b51f4eb10da82169112e71d1
+    scope:
+      - README.md
+      - .work/CURRENT-STATE.md
+      - .work/meta/status.yaml
+  playback_recovery_30a:
     issue: 30
-    status: blocked_for_product_defaults_on_issue_27_repeated_measurement_evidence
-    satisfied_dependencies:
-      - issue_26_media3_okhttp_transport_and_reconnect_hardening
-      - issue_108_playback_transport_classification
-      - issue_136_exact_evidence_provenance
+    pull_request: 145
+    branch: work/30a-playback-recovery-policy
+    source_head: 4c0074bb5417da261561250a75328cf9739eb9ab
+    status: pure_policy_implemented_draft_final_acceptance_pending
+    implemented:
+      - preferred_first_stable_order
+      - duplicate_variant_suppression
+      - canonical_channel_boundary
+      - explicit_positive_attempt_budget_and_cap
+      - explicit_positive_total_duration_budget
+      - deadline_aware_candidate_lookup
+      - try_next_or_stop_disposition
+      - stale_generation_inertness
+      - fallback_success_preserves_preferred_variant
+    boundary:
+      - identity_only_canonical_channel_and_variant_ids
+      - no_playable_variant_locator_headers_credentials
+      - no_media3_android_room_ui_ownership
+    tdd_red:
+      source_head: 37c1158ea74abd4db4f7716b184c804b6118ce2f
+      full_run: 31254880823
+      expected_failure: missing_recovery_candidate_budget_plan_types
+    current_validation:
+      full_run: 31258501384
+      full_status: success
+      full_artifact_id: 9021984903
+      full_artifact_sha256: 2acd95e877699383759b669daf2bd954775248465533a636b23b165e8210d42f1
+      product_run: 31258501378
+      product_api26_api36_matrix_step: success
+      product_workflow_status: artifact_upload_failure_after_matrix
+  playback_recovery_30b:
+    issue: 30
+    status: queued_after_30a_acceptance
     required:
-      - pure_same_channel_candidate_policy_before_media3_runtime
-      - bounded_variant_attempts_and_total_wall_clock_budget
-      - media3_loader_retry_time_counted_inside_total_recovery_budget
-      - no_media3_resource_fallback_across_muxtv_catalog_variants
-      - typed_failures_dns_tls_http_redirect_timeout_network_manifest_decoder_render_access
-      - secret_free_diagnostics_and_redacted_export
-      - retry_storm_guard_on_activity_recreation
-      - no_alternate_playback_engine
+      - preserve_single_media_session_service_and_exoplayer_owner
+      - distinguish_media3_loader_retry_from_muxtv_candidate_switching
+      - one_total_user_visible_recovery_deadline
+      - contextual_typed_sanitized_observation_to_recovery_disposition
+      - no_activity_viewmodel_workmanager_retry_owner
+  playback_diagnostics_30c:
+    issue: 30
+    status: conditional_after_30b_only_if_durability_required
+    room_schema_owner_required: true
+  tv_doctor_30d:
+    issue: 30
+    status: queued_after_typed_runtime_observations
+  tv_design_accessibility:
+    issue: 111
+    status: d1_accepted_d2_d4_pending
+    required:
+      - d2_native_ok_enter_long_press_repeat
+      - d3_focused_selected_playing_disabled_and_reduced_motion
+      - d4_720p_1080p_dialog_reachability
+  artifact_upload_reliability:
+    issue: 141
+    status: open
+    latest_example:
+      workflow_run: 31258501378
+      substantive_product_matrix: success
+      artifact_upload: failure
+    invariant: artifact_publication_remains_mandatory
+  ci_path_routing:
+    issue: 144
+    status: open
+    evidence: pure_player_api_policy_pr_145_triggered_api26_api36_product_matrix
+    invariant: narrow_routing_without_weakening_runtime_coverage
   room3_dependency_hardening:
-    status: queued_after_active_branch_reconciliation
+    issue: 146
+    status: open_dependency_only
     from: 3.0.0
     to: 3.0.1
     schema_version_change: false
-    required:
-      - database_unit_acceptance
-      - generated_schema_parity
-      - old_edge_current_database_matrix
+    preferred_ordering: before_next_room_owned_30c_or_100_if_practical
 next_milestone:
-  id: phase_01_reconciled_exact_evidence_measurement_and_playback_recovery
+  id: phase_01_bounded_playback_recovery_and_alpha_hardening
   immediate_sequence:
-    - finish_pr_138_d1_exact_source_green
-    - finish_pr_135_truth_sync_exact_source_green
-    - restack_and_rerun_pr_133_and_pr_134_on_5bb6ee1
-    - issue_27_repeated_m3u_measurement_evidence
-    - issue_30a_pure_recovery_policy
+    - finish_pr_145_30a_acceptance
+    - finish_issue_147_truth_sync
     - issue_30b_media3_bounded_recovery
-    - issue_30c_redacted_diagnostics_if_required
+    - issue_144_ci_routing_if_runner_throughput_blocks_tdd
+    - issue_146_room3_patch_before_next_room_owner_when_practical
+    - issue_30c_redacted_diagnostics_only_if_required
     - issue_30d_tv_doctor
-    - issue_33_and_93_lounge_ui_packages
+    - issue_111_d2_d4
+    - lounge_d5_d7
+    - low_ram_end_to_end_ingest_gc_retained_heap_evidence
     - issue_31_alpha_hardening
 parallel_work:
   issue_118:
     - explicit_no_refresh_until_user_unlock
     - idempotent_workmanager_init_after_unlock
     - reboot_package_replace_without_duplicate_periodic_work
-    - boot_unlock_tests
-  issue_111:
-    - immediate_dense_focus_d1
-    - long_press_and_repeat_d2
-    - focused_selected_playing_disabled_d3
-    - reduced_motion_d3
-    - dialog_dpad_scrollability_720p_1080p_d4
   issue_113:
     - versioned_non_secret_envelope_with_integrity_digest
     - saf_capability_detection
     - restore_available_on_first_run
   issue_101:
     - connected_suite_selector_product_database
-    - database_workflow_migration_owned_modules_only
     - nonzero_selected_module_counts
     - equivalent_run_wall_time_evidence
   issue_100:
-    - wait_for_free_room_schema_owner
+    - coordinate_next_room_schema_owner
     - source_etag_last_modified_binding
     - correct_304_not_modified_semantics
   issue_39:
@@ -240,41 +248,28 @@ closed_or_superseded:
   - issue_26_media3_okhttp_transport_and_reconnect_hardening
   - issue_29_guide_tv_route_accepted_as_131
   - issue_136_exact_pr_evidence_commit_provenance_accepted_as_137
-  - issue_110_epg_compressed_transport
-  - issue_114_cross_surface_truth_contract_accepted_as_123
-  - issue_108_playback_transport_classification_accepted_as_127
-  - issue_116_bare_host_normalization_accepted_as_129
-  - issue_121_room_schema_guard_accepted_as_124
-  - pr_120_superseded_post_first_frame_truth_sync
-  - pr_83_stale_performance_stage1
-  - pr_87_measurement_unproven_xmltv_allocation
-  - pr_88_superseded_truth_sync
-  - pr_89_measurement_unproven_epg_allocation
-  - pr_91_superseded_favorites_stack
-  - pr_94_superseded_search_stack
-  - pr_97_superseded_ci_stack
-  - pr_98_deferred_baseline_profile_stack
-  - pr_99_superseded_player_owner_stack
+  - issue_140_accepted_main_focused_m3u_evidence_accepted_as_142
+  - issue_139_tracked_worktree_provenance_accepted_as_143
+  - pr_133_provider_readiness_accepted
+  - pr_134_focused_m3u_harness_accepted
+  - pr_138_dense_focus_d1_accepted
 known_gaps:
-  - repeated_m3u_measurement_evidence
-  - playback_variant_fallback
-  - tv_doctor_lite
+  - playback_runtime_variant_fallback_30b
+  - tv_doctor_lite_30d
+  - conditional_durable_redacted_playback_diagnostics_30c
+  - artifact_publication_retry_141
+  - ci_path_routing_144
+  - room3_3_0_1_patch_hardening_146
+  - tv_remote_long_press_repeat_dialog_contracts_111_d2_d4
   - final_lounge_tv_modernization
-  - five_run_multi_profile_performance_evidence
-  - ci_database_suite_split
-  - conditional_m3u_304_refresh
-  - room3_3_0_1_patch_hardening
+  - low_ram_end_to_end_ingest_retained_heap_gc_evidence
+  - conditional_m3u_304_refresh_100
+  - direct_boot_user_unlock_startup_gate_118
+  - backup_restore_envelope_113
   - r8_baseline_and_startup_profiles
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
-  - direct_boot_user_unlock_startup_gate
-  - tv_remote_long_press_and_dialog_contracts
-  - backup_restore_envelope
-blocked:
-  parser_performance_thresholds:
-    on: issue_27_repeated_variance
-  playback_recovery_product_defaults:
-    on: issue_27_repeated_variance
+blocked: {}
 deferred:
   - xtream
   - stalker_ministra
