@@ -199,6 +199,10 @@ if ($messages.Count -eq 0 -and (Test-Path $m3uFinalizerContractScript -PathType 
 if ($messages.Count -eq 0 -and (Test-Path $worktreeContractScript -PathType Leaf)) {
     try {
         & $worktreeContractScript
+        # The contract intentionally executes failing native Git commands for negative cases.
+        # Any real contract failure is promoted to an exception, so a successful return owns
+        # resetting native-command status before this harness returns to its caller.
+        $global:LASTEXITCODE = 0
     } catch {
         $messages.Add("Evidence worktree provenance contract failed: $($_.Exception.Message)")
     }
