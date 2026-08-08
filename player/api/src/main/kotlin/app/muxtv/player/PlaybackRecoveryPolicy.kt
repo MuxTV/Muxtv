@@ -33,6 +33,7 @@ value class PlaybackRecoveryGeneration(
 
 class PlaybackRecoveryPlan private constructor(
     val canonicalChannelId: CanonicalChannelId,
+    val preferredVariantId: StreamVariantId?,
     val orderedCandidates: List<PlaybackRecoveryCandidate>,
     val budget: PlaybackRecoveryBudget,
 ) {
@@ -96,6 +97,7 @@ class PlaybackRecoveryPlan private constructor(
 
             return PlaybackRecoveryPlan(
                 canonicalChannelId = canonicalChannelId,
+                preferredVariantId = preferredVariantId,
                 orderedCandidates = orderedCandidates,
                 budget = budget,
             )
