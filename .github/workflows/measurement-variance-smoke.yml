@@ -15,6 +15,7 @@ on:
       - tools/android/Initialize-AndroidSdkEnvironment.ps1
       - tools/android/Invoke-CatalogDatabaseMeasurement.ps1
       - tools/android/Invoke-PlayerProxyMeasurement.ps1
+      - tools/ci/**
 
 permissions:
   contents: read
@@ -35,6 +36,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           clean: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
@@ -59,6 +61,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $dirty) {
             throw "Workspace is not clean after reset and clean."
           }
+
+      - name: Verify evidence commit provenance
+        shell: pwsh
+        run: |
+          $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
       - name: Resolve Android SDK and validate harness
         shell: pwsh
