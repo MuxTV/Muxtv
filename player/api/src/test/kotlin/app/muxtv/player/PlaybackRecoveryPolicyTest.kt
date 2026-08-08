@@ -83,4 +83,39 @@ class PlaybackRecoveryPolicyTest {
             )
         }
     }
+
+    @Test
+    fun `attempt budget must be positive`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            PlaybackRecoveryBudget(
+                maxAttempts = 0,
+                maxRecoveryDurationMillis = 10_000L,
+            )
+        }
+    }
+
+    @Test
+    fun `ordered candidates are capped by maximum attempts after preferred ordering`() {
+        val channelId = CanonicalChannelId("channel-a")
+        val variantA = StreamVariantId("variant-a")
+        val preferredVariantId = StreamVariantId("variant-b")
+        val variantC = StreamVariantId("variant-c")
+        val plan = PlaybackRecoveryPlan.create(
+            canonicalChannelId = channelId,
+            candidates = listOf(
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantA),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = preferredVariantId),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantC),
+            ),
+            preferredVariantId = preferredVariantId,
+            budget = PlaybackRecoveryBudget(
+                maxAttempts = 2,
+                maxRecoveryDurationMillis = 10_000L,
+            ),
+        )
+
+        assertThat(plan.orderedCandidates.map { it.variantId })
+            .containsExactly(preferredVariantId, variantA)
+            .inOrder()
+    }
 }
