@@ -26,24 +26,20 @@ function Invoke-TrackedDiffCheck {
 
     $output = @(& git -C $resolvedRepositoryRoot @Arguments 2>&1)
     $exitCode = $LASTEXITCODE
-    if ($exitCode -eq 0) {
-        return
+    if ($exitCode -ne 0) {
+        throw "Unable to inspect tracked worktree provenance."
     }
-    if ($exitCode -eq 1) {
+    if ($output.Count -gt 0) {
         throw $DirtyMessage
     }
-
-    $details = ($output | Out-String).Trim()
-    $suffix = if ($details) { " $details" } else { "" }
-    throw "Unable to inspect tracked worktree provenance:${suffix}"
 }
 
 Invoke-TrackedDiffCheck `
-    -Arguments @("diff", "--quiet", "--no-ext-diff", "--") `
+    -Arguments @("diff", "--name-only", "--no-ext-diff", "--") `
     -DirtyMessage "Tracked worktree provenance mismatch: unstaged tracked changes detected."
 
 Invoke-TrackedDiffCheck `
-    -Arguments @("diff", "--cached", "--quiet", "--no-ext-diff", "--") `
+    -Arguments @("diff", "--cached", "--name-only", "--no-ext-diff", "--") `
     -DirtyMessage "Tracked worktree provenance mismatch: staged tracked changes detected."
 
 Write-Host "Tracked evidence worktree provenance verified."
