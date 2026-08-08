@@ -23,6 +23,7 @@ concurrency:
 jobs:
   validate:
     name: Database migration device matrix
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 180
 
@@ -31,6 +32,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
+          persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Clean workspace with Windows long paths
@@ -65,6 +67,11 @@ jobs:
         run: |
           & .\tools\ci\Assert-EvidenceCommit.ps1 `
             -ExpectedCommit "${{ github.event.pull_request.head.sha }}"
+
+      - name: Preflight dedicated self-hosted runner
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 -RequireNoConnectedDevice
 
       - name: Inspect runner environment
         shell: pwsh
@@ -115,6 +122,7 @@ jobs:
             core/database/schemas/**/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
-          if-no-files-found: warn
+          if-no-files-found: error
           include-hidden-files: true
+          compression-level: 0
           retention-days: 7

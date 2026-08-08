@@ -17,7 +17,8 @@ $files = @(
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"),
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
     (Join-Path $repositoryRoot "tools\verify-local.ps1"),
-    (Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1")
+    (Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1"),
+    (Join-Path $repositoryRoot "tools\ci\Assert-SelfHostedRunnerPreflight.ps1")
 )
 
 $messages = @()
@@ -96,6 +97,11 @@ foreach ($requiredProvenanceFragment in @(
     if ($provenanceAssertContent -notmatch [regex]::Escape($requiredProvenanceFragment)) {
         $messages += "Evidence commit assertion is missing required behavior: " + $requiredProvenanceFragment
     }
+}
+
+$runnerPreflightContract = Join-Path $repositoryRoot "tools\ci\Test-SelfHostedRunnerPreflightContract.ps1"
+if (-not (Test-Path -LiteralPath $runnerPreflightContract -PathType Leaf)) {
+    $messages += "Self-hosted runner preflight contract test was not found."
 }
 
 $workflowContracts = @(
@@ -205,6 +211,7 @@ if (-not (Test-Path $measurementHarnessCheck -PathType Leaf)) {
     throw "Measurement harness syntax checker was not found."
 }
 & $measurementHarnessCheck
+& $runnerPreflightContract
 
 $message = "Android TV and measurement harness PowerShell syntax and function surfaces are valid."
 Set-Content -Path $diagnosticPath -Value $message -Encoding utf8

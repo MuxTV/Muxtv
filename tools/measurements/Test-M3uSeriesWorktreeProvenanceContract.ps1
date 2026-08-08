@@ -178,7 +178,10 @@ exit /b 17
     }
 
     $workflowContent = Get-Content -LiteralPath $focusedWorkflow -Raw -Encoding utf8
-    if ($workflowContent.IndexOf("tools/ci/Assert-EvidenceWorktree.ps1", [System.StringComparison]::Ordinal) -lt 0) {
+    if (
+        $workflowContent.IndexOf("tools/ci/Assert-EvidenceWorktree.ps1", [System.StringComparison]::Ordinal) -lt 0 -and
+        $workflowContent.IndexOf("tools/ci/**", [System.StringComparison]::Ordinal) -lt 0
+    ) {
         throw "Accepted-main focused workflow does not trigger on worktree provenance helper changes."
     }
 
