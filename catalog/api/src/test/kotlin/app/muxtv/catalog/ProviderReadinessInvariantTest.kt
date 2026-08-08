@@ -16,6 +16,43 @@ class ProviderReadinessInvariantTest {
     }
 
     @Test
+    fun `cancelled and superseded catalog attempts preserve previous good usability`() {
+        listOf(
+            ProviderCatalogSyncAttempt.Cancelled,
+            ProviderCatalogSyncAttempt.Superseded,
+        ).forEach { attempt ->
+            val snapshot = ProviderReadinessSnapshot(
+                sourceId = SourceId("source-redacted"),
+                activeCatalog = ProviderActiveCatalog(
+                    revisionNumber = 5,
+                    channelCount = 10,
+                    activatedAtEpochMillis = 100,
+                ),
+                latestCatalogAttempt = attempt,
+            )
+
+            assertThat(snapshot.usability).isEqualTo(ProviderUsability.USABLE)
+            assertThat(snapshot.activeCatalog?.revisionNumber).isEqualTo(5)
+        }
+    }
+
+    @Test
+    fun `cancelled and superseded secondary attempts preserve previous good epg`() {
+        listOf(
+            ProviderSecondaryAttempt.Cancelled,
+            ProviderSecondaryAttempt.Superseded,
+        ).forEach { attempt ->
+            val state = ProviderSecondaryState(
+                activeRevisionNumber = 7,
+                latestAttempt = attempt,
+            )
+
+            assertThat(state.hasActiveData).isTrue()
+            assertThat(state.activeRevisionNumber).isEqualTo(7)
+        }
+    }
+
+    @Test
     fun `successful secondary attempt requires matching active revision`() {
         val missingActive = runCatching {
             ProviderSecondaryState(
