@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,7 @@ fun SourcesRoute(
     refreshStore: SourceRefreshStore,
     refreshScheduler: SourceRefreshScheduler,
     onAddSource: () -> Unit,
+    topNavigationFocusRequester: FocusRequester? = null,
     playbackApprovalActions: SourcePlaybackApprovalActions =
         SourcePlaybackApprovalActions.Unavailable,
     modifier: Modifier = Modifier,
@@ -112,6 +114,7 @@ fun SourcesRoute(
         SourcesUiState.Loading -> MessageRoute(
             message = "Загрузка источников…",
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -119,6 +122,7 @@ fun SourcesRoute(
         SourcesUiState.Empty -> MessageRoute(
             message = "Импортированных источников пока нет.",
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -126,6 +130,7 @@ fun SourcesRoute(
         SourcesUiState.Failed -> MessageRoute(
             message = "Не удалось прочитать список источников.",
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -135,6 +140,7 @@ fun SourcesRoute(
             busySources = busySources,
             mutationError = mutationError,
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
             onRefreshNow = refreshScheduler::refreshNow,
             onUpdatePolicy = { policy ->
@@ -167,6 +173,7 @@ private fun SourcesContent(
     busySources: Map<String, Boolean>,
     mutationError: String?,
     addSourceFocusRequester: FocusRequester,
+    topNavigationFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
@@ -180,6 +187,7 @@ private fun SourcesContent(
     ) {
         SourcesHeader(
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
         )
         mutationError?.let { message ->
@@ -213,6 +221,7 @@ private fun SourcesContent(
 @Composable
 private fun SourcesHeader(
     addSourceFocusRequester: FocusRequester,
+    topNavigationFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
 ) {
     Row(
@@ -225,6 +234,13 @@ private fun SourcesHeader(
             onClick = onAddSource,
             modifier = Modifier
                 .testTag(SOURCES_ADD_TEST_TAG)
+                .then(
+                    if (topNavigationFocusRequester != null) {
+                        Modifier.focusProperties { up = topNavigationFocusRequester }
+                    } else {
+                        Modifier
+                    },
+                )
                 .focusRequester(addSourceFocusRequester),
         )
     }
@@ -341,6 +357,7 @@ private fun SourceCard(
 private fun MessageRoute(
     message: String,
     addSourceFocusRequester: FocusRequester,
+    topNavigationFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
     modifier: Modifier,
 ) {
@@ -350,6 +367,7 @@ private fun MessageRoute(
     ) {
         SourcesHeader(
             addSourceFocusRequester = addSourceFocusRequester,
+            topNavigationFocusRequester = topNavigationFocusRequester,
             onAddSource = onAddSource,
         )
         Text(

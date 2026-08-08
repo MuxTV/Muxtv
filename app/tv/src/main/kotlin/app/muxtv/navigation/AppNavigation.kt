@@ -149,6 +149,7 @@ fun AppNavigation(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,
                             playbackApprovalActions = sourcePlaybackApprovalActions,
+                            topNavigationFocusRequester = initialNavigationFocusRequester,
                             onAddSource = { open(AppDestination.AddSource) },
                         )
 
