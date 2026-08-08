@@ -31,21 +31,20 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
-import androidx.media3.session.SessionResult
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.PlaybackAccessMutationResult
-import app.muxtv.catalog.PlaybackAccessUnavailableReason
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.player.media3.MediaControllerOperationException
 import app.muxtv.player.media3.MediaControllerOperationFailure
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
-import app.muxtv.player.media3.PlaybackSessionRequest
+import app.muxtv.player.PlaybackStartFailure
+import app.muxtv.player.PlaybackStartRequest
+import app.muxtv.player.PlaybackStartResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -115,71 +114,43 @@ fun PlayerRoute(
         } catch (_: Exception) {
             null
         }
-        val resolution = try {
-            playbackCatalog.resolveVariant(profileId = profileId, channelId = channelId)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        if (channel == null || resolution == null) {
+        if (channel == null) {
             value = PlayerRouteState.Failed("Канал больше не доступен в активном каталоге.")
             return@produceState
         }
 
-        when (resolution) {
-            is PlaybackVariantResolution.InsecureTransportApprovalRequired -> {
+        currentCoroutineContext().ensureActive()
+        val startResult = try {
+            controllerConnector.awaitPlaybackStart(
+                controller = controller,
+                request = PlaybackStartRequest(profileId, channelId),
+                timeoutMillis = COMMAND_TIMEOUT_MILLIS,
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: MediaControllerOperationException) {
+            value = PlayerRouteState.Failed(commandFailureMessage(error.failure))
+            return@produceState
+        } catch (_: Exception) {
+            value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
+            return@produceState
+        }
+
+        when (startResult) {
+            is PlaybackStartResult.InsecureHttpApprovalRequired -> {
                 value = PlayerRouteState.HttpApprovalRequired(
-                    displayOrigin = resolution.displayOrigin,
-                    variantId = resolution.variantId,
+                    displayOrigin = startResult.displayOrigin,
+                    variantId = startResult.variantId,
                 )
                 return@produceState
             }
 
-            is PlaybackVariantResolution.AccessUnavailable -> {
-                value = PlayerRouteState.Failed(accessFailureMessage(resolution.reason))
+            is PlaybackStartResult.Rejected -> {
+                value = PlayerRouteState.Failed(startFailureMessage(startResult.reason))
                 return@produceState
             }
 
-            is PlaybackVariantResolution.Ready -> {
-                val request = resolution.request
-                val sessionRequest = try {
-                    PlaybackSessionRequest(
-                        profileId = profileId,
-                        mediaId = request.channelId,
-                        variantId = request.variantId,
-                        locator = request.locator,
-                        displayName = channel.summary.displayName,
-                        artworkUri = channel.summary.logoUrl,
-                        requestHeaders = request.requestHeaders,
-                        insecureHttpApproved = request.insecureHttpApproved,
-                    )
-                } catch (_: IllegalArgumentException) {
-                    value = PlayerRouteState.Failed("Данные выбранного потока недействительны.")
-                    return@produceState
-                }
-
-                currentCoroutineContext().ensureActive()
-                val setupResult = try {
-                    controllerConnector.awaitPlaybackRequest(
-                        controller = controller,
-                        request = sessionRequest,
-                        timeoutMillis = COMMAND_TIMEOUT_MILLIS,
-                    )
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: MediaControllerOperationException) {
-                    value = PlayerRouteState.Failed(commandFailureMessage(error.failure))
-                    return@produceState
-                } catch (_: Exception) {
-                    value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
-                    return@produceState
-                }
-                if (setupResult.resultCode != SessionResult.RESULT_SUCCESS) {
-                    value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
-                    return@produceState
-                }
-
+            PlaybackStartResult.Started -> {
                 currentCoroutineContext().ensureActive()
                 value = PlayerRouteState.Ready(
                     controller = controller,
@@ -424,16 +395,14 @@ private fun PlayerMessage(
     }
 }
 
-private fun accessFailureMessage(reason: PlaybackAccessUnavailableReason): String = when (reason) {
-    PlaybackAccessUnavailableReason.InvalidLocator ->
-        "Данные выбранного потока недействительны."
-
-    PlaybackAccessUnavailableReason.CredentialNotFound ->
-        "Доступ к источнику не найден. Добавьте источник заново."
-
-    PlaybackAccessUnavailableReason.CredentialCorrupted,
-    PlaybackAccessUnavailableReason.CredentialUnavailable,
-    -> "Защищённые данные источника недоступны."
+private fun startFailureMessage(reason: PlaybackStartFailure): String = when (reason) {
+    PlaybackStartFailure.ChannelUnavailable ->
+        "Канал больше не доступен в активном каталоге."
+    PlaybackStartFailure.AccessUnavailable ->
+        "Защищённые данные источника недоступны."
+    PlaybackStartFailure.RecoveryExhausted ->
+        "Не удалось воспроизвести доступные варианты канала."
+    PlaybackStartFailure.CommandFailed -> COMMAND_FAILED_MESSAGE
 }
 
 private fun connectionFailureMessage(failure: MediaControllerOperationFailure): String = when (failure) {
@@ -475,4 +444,4 @@ private const val PLAYER_PRIMARY_ACTION_TEST_TAG = "player-primary-action"
 private const val PLAYER_HTTP_APPROVE_TEST_TAG = "player-http-approve"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
-private const val COMMAND_TIMEOUT_MILLIS = 10_000L
+private const val COMMAND_TIMEOUT_MILLIS = 25_000L

@@ -28,6 +28,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":catalog:api"))
     implementation(project(":core:common"))
     implementation(project(":core:network"))
     implementation(project(":player:api"))

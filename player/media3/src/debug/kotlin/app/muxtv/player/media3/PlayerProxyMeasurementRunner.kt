@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import app.muxtv.player.PlaybackStartRequest
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
@@ -125,7 +126,7 @@ internal class PlayerProxyMeasurementRunner(
         operationCount: Int,
         fixture: RequestFixture,
     ): BatchResult {
-        val request = fixture.newRequest(0)
+        val request = fixture.newStartRequest(0)
         val ids = setupIds(sampleToken, operationCount)
         var successful = 0
         val startedAt = nanoTime()
@@ -323,6 +324,12 @@ internal class PlayerProxyMeasurementRunner(
             artworkUri = artworkUri,
             requestHeaders = headers,
             insecureHttpApproved = insecureHttpApproved,
+        )
+
+        fun newStartRequest(index: Int): PlaybackStartRequest = PlaybackStartRequest(
+            profileId = MEASUREMENT_PROFILE_ID,
+            channelId = "$mediaIdPrefix-${index % ID_VARIANTS}",
+            preferredVariantId = "$variantIdPrefix-${index % ID_VARIANTS}",
         )
 
         companion object {

@@ -1,6 +1,7 @@
 package app.muxtv.database
 
 import app.muxtv.catalog.ChannelQuery
+import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlayableVariant
@@ -8,6 +9,8 @@ import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackAccessUnavailableReason
+import app.muxtv.catalog.PlaybackCandidateIdentity
+import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.ResolvedPlaybackRequest
@@ -17,7 +20,7 @@ import kotlinx.coroutines.flow.map
 internal class RoomPlaybackCatalog(
     private val dao: PlaybackCatalogDao,
     private val accessPolicyResolver: PlaybackAccessPolicyResolver,
-) : PlaybackCatalog {
+) : PlaybackCatalog, PlaybackCandidateResolver {
     override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
         dao.observeActiveChannels(
             profileId = query.profileId,
@@ -46,29 +49,72 @@ internal class RoomPlaybackCatalog(
         channelId: String,
         preferredVariantId: String?,
     ): PlaybackVariantResolution? {
-        val selection = selectVariant(
+        val candidates = getCandidates(
             profileId = profileId,
             channelId = channelId,
             preferredVariantId = preferredVariantId,
+            limit = 1,
+        )
+        val candidate = if (preferredVariantId == null) {
+            candidates.firstOrNull()
+        } else {
+            candidates.firstOrNull { it.variantId == preferredVariantId }
+        } ?: return null
+        return resolveCandidate(profileId, candidate)
+    }
+
+    override suspend fun getCandidates(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+        limit: Int,
+    ): List<PlaybackCandidateIdentity> {
+        require(profileId.isNotBlank())
+        require(channelId.isNotBlank())
+        require(limit in 1..MAX_PLAYBACK_CANDIDATES)
+        return dao.getActiveVariantIdentities(
+            profileId = profileId,
+            channelId = channelId,
+            preferredVariantId = preferredVariantId,
+            limit = limit,
+        ).map { row ->
+            PlaybackCandidateIdentity(row.channelId, row.variantId)
+        }
+    }
+
+    override suspend fun resolveCandidate(
+        profileId: String,
+        candidate: PlaybackCandidateIdentity,
+    ): PlaybackVariantResolution? {
+        require(profileId.isNotBlank())
+        val variant = dao.findActiveVariantAccess(
+            profileId = profileId,
+            channelId = candidate.channelId,
+            variantId = candidate.variantId,
         ) ?: return null
-        return when (
-            val decision = accessPolicyResolver.resolve(
-                credentialRef = selection.variant.credentialRef.orEmpty(),
-                playbackLocator = selection.variant.locator,
-            )
-        ) {
+        return resolveAccess(variant)
+    }
+
+    private suspend fun resolveAccess(
+        variant: ActiveVariantAccessRow,
+    ): PlaybackVariantResolution = when (
+        val decision = accessPolicyResolver.resolve(
+            credentialRef = variant.credentialRef.orEmpty(),
+            playbackLocator = variant.locator,
+        )
+    ) {
             PlaybackAccessDecision.SecureTransport -> PlaybackVariantResolution.Ready(
-                selection.toRequest(insecureHttpApproved = false),
+                variant.toRequest(insecureHttpApproved = false),
             )
 
             PlaybackAccessDecision.Approved -> PlaybackVariantResolution.Ready(
-                selection.toRequest(insecureHttpApproved = true),
+                variant.toRequest(insecureHttpApproved = true),
             )
 
             is PlaybackAccessDecision.ApprovalRequired ->
                 PlaybackVariantResolution.InsecureTransportApprovalRequired(
-                    channelId = selection.channelId,
-                    variantId = selection.variant.variantId,
+                    channelId = variant.channelId,
+                    variantId = variant.variantId,
                     displayOrigin = decision.displayOrigin,
                 )
 
@@ -88,18 +134,17 @@ internal class RoomPlaybackCatalog(
                 PlaybackAccessUnavailableReason.CredentialUnavailable,
             )
         }
-    }
 
     override suspend fun approveInsecurePlayback(
         profileId: String,
         channelId: String,
         variantId: String,
     ): PlaybackAccessMutationResult {
-        val selection = selectVariant(profileId, channelId, variantId)
+        val variant = dao.findActiveVariantAccess(profileId, channelId, variantId)
             ?: return PlaybackAccessMutationResult.NotFound
-        val credentialRef = selection.variant.credentialRef
+        val credentialRef = variant.credentialRef
             ?: return PlaybackAccessMutationResult.NotFound
-        return accessPolicyResolver.approve(credentialRef, selection.variant.locator)
+        return accessPolicyResolver.approve(credentialRef, variant.locator)
     }
 
     override suspend fun revokeInsecurePlayback(
@@ -107,52 +152,27 @@ internal class RoomPlaybackCatalog(
         channelId: String,
         variantId: String,
     ): PlaybackAccessMutationResult {
-        val selection = selectVariant(profileId, channelId, variantId)
+        val variant = dao.findActiveVariantAccess(profileId, channelId, variantId)
             ?: return PlaybackAccessMutationResult.NotFound
-        val credentialRef = selection.variant.credentialRef
+        val credentialRef = variant.credentialRef
             ?: return PlaybackAccessMutationResult.NotFound
-        return accessPolicyResolver.revoke(credentialRef, selection.variant.locator)
-    }
-
-    private suspend fun selectVariant(
-        profileId: String,
-        channelId: String,
-        preferredVariantId: String?,
-    ): VariantSelection? {
-        require(profileId.isNotBlank())
-        require(channelId.isNotBlank())
-        require(preferredVariantId == null || preferredVariantId.isNotBlank())
-        val summary = dao.findActiveChannel(profileId, channelId) ?: return null
-        val variants = dao.getActiveVariants(channelId)
-        if (variants.isEmpty()) return null
-        val variant = if (preferredVariantId == null) {
-            variants.firstOrNull()
-        } else {
-            variants.firstOrNull { it.variantId == preferredVariantId }
-        } ?: return null
-        return VariantSelection(
-            channelId = summary.channelId,
-            variant = variant,
-        )
-    }
-
-    private data class VariantSelection(
-        val channelId: String,
-        val variant: ActiveVariantRow,
-    ) {
-        fun toRequest(insecureHttpApproved: Boolean): ResolvedPlaybackRequest =
-            ResolvedPlaybackRequest(
-                channelId = channelId,
-                variantId = variant.variantId,
-                locator = variant.locator,
-                requestHeaders = buildMap {
-                    variant.userAgent?.takeIf(String::isNotBlank)?.let { put("User-Agent", it) }
-                    variant.referrer?.takeIf(String::isNotBlank)?.let { put("Referer", it) }
-                },
-                insecureHttpApproved = insecureHttpApproved,
-            )
+        return accessPolicyResolver.revoke(credentialRef, variant.locator)
     }
 }
+
+
+private fun ActiveVariantAccessRow.toRequest(
+    insecureHttpApproved: Boolean,
+): ResolvedPlaybackRequest = ResolvedPlaybackRequest(
+    channelId = channelId,
+    variantId = variantId,
+    locator = locator,
+    requestHeaders = buildMap {
+        userAgent?.takeIf(String::isNotBlank)?.let { put("User-Agent", it) }
+        referrer?.takeIf(String::isNotBlank)?.let { put("Referer", it) }
+    },
+    insecureHttpApproved = insecureHttpApproved,
+)
 
 private fun ActiveChannelSummaryRow.toModel(): PlayableChannelSummary = PlayableChannelSummary(
     channelId = channelId,

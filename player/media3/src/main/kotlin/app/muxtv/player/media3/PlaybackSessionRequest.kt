@@ -1,6 +1,5 @@
 package app.muxtv.player.media3
 
-import android.os.Bundle
 import app.muxtv.player.PlaybackRequest
 import java.util.Collections
 
@@ -83,22 +82,6 @@ class PlaybackSessionRequest(
         return result
     }
 
-    fun toBundle(): Bundle = Bundle().apply {
-        putString(KEY_PROFILE_ID, profileId)
-        putString(KEY_MEDIA_ID, mediaId)
-        putString(KEY_VARIANT_ID, variantId)
-        putString(KEY_LOCATOR, locator)
-        displayName?.let { putString(KEY_DISPLAY_NAME, it) }
-        artworkUri?.let { putString(KEY_ARTWORK_URI, it) }
-        putBoolean(KEY_INSECURE_HTTP_APPROVED, insecureHttpApproved)
-        putBundle(
-            KEY_HEADERS,
-            Bundle().apply {
-                requestHeaders.forEach { (name, value) -> putString(name, value) }
-            },
-        )
-    }
-
     override fun toString(): String =
         "PlaybackSessionRequest(profileId=<redacted>, mediaId=<redacted>, " +
             "variantId=<redacted>, locator=<redacted>, " +
@@ -106,15 +89,6 @@ class PlaybackSessionRequest(
             "headerCount=${requestHeaders.size}, insecureHttpApproved=$insecureHttpApproved)"
 
     companion object {
-        private const val KEY_PROFILE_ID = "profile_id"
-        private const val KEY_MEDIA_ID = "media_id"
-        private const val KEY_VARIANT_ID = "variant_id"
-        private const val KEY_LOCATOR = "locator"
-        private const val KEY_DISPLAY_NAME = "display_name"
-        private const val KEY_ARTWORK_URI = "artwork_uri"
-        private const val KEY_HEADERS = "headers"
-        private const val KEY_INSECURE_HTTP_APPROVED = "insecure_http_approved"
-
         private const val MAX_ID_LENGTH = 512
         private const val MAX_LOCATOR_LENGTH = 8_192
         private const val MAX_DISPLAY_NAME_LENGTH = 512
@@ -122,28 +96,6 @@ class PlaybackSessionRequest(
         private const val MAX_HEADER_NAME_LENGTH = 256
         private const val MAX_HEADER_VALUE_LENGTH = 8_192
 
-        fun fromBundle(bundle: Bundle): PlaybackSessionRequest? = runCatching {
-            val profileId = bundle.getString(KEY_PROFILE_ID) ?: return null
-            val mediaId = bundle.getString(KEY_MEDIA_ID) ?: return null
-            val variantId = bundle.getString(KEY_VARIANT_ID) ?: return null
-            val locator = bundle.getString(KEY_LOCATOR) ?: return null
-            val headersBundle = bundle.getBundle(KEY_HEADERS)
-            val headers = headersBundle
-                ?.keySet()
-                ?.associateWith { key -> headersBundle.getString(key) ?: return null }
-                .orEmpty()
-
-            PlaybackSessionRequest(
-                profileId = profileId,
-                mediaId = mediaId,
-                variantId = variantId,
-                locator = locator,
-                displayName = bundle.getString(KEY_DISPLAY_NAME),
-                artworkUri = bundle.getString(KEY_ARTWORK_URI),
-                requestHeaders = headers,
-                insecureHttpApproved = bundle.getBoolean(KEY_INSECURE_HTTP_APPROVED, false),
-            )
-        }.getOrNull()
     }
 }
 

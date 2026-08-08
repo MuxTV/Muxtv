@@ -137,6 +137,39 @@ class PlaybackCatalogTest {
     }
 
     @Test
+    fun candidateEnumerationReturnsOnlyDeterministicRedactedIdentities() = runTest {
+        insertProfile()
+        activateSource(
+            sourceId = "source-b",
+            sourceName = "Provider B",
+            providerChannelId = "provider-b",
+            variantId = "variant-b",
+            locator = "https://b.example/live?token=secret-b",
+        )
+        activateSource(
+            sourceId = "source-a",
+            sourceName = "Provider A",
+            providerChannelId = "provider-a",
+            variantId = "variant-a",
+            locator = "https://a.example/live?token=secret-a",
+        )
+
+        val candidates = playbackCatalog.getCandidates(
+            profileId = PROFILE_ID,
+            channelId = CHANNEL_ID,
+            preferredVariantId = "variant-b",
+            limit = 1,
+        )
+
+        assertThat(candidates.map { it.variantId })
+            .containsExactly("variant-b")
+            .inOrder()
+        assertThat(candidates.joinToString()).doesNotContain("secret-a")
+        assertThat(candidates.joinToString()).doesNotContain("secret-b")
+        assertThat(candidates.joinToString()).doesNotContain("https://")
+    }
+
+    @Test
     fun unapprovedHTTPVariantReturnsOnlySanitizedOriginAndApprovalRequeriesActiveVariant() = runTest {
         insertProfile()
         activateSource(

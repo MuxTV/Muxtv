@@ -6,6 +6,7 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.importer.EpgRevisionImporter
@@ -117,6 +118,11 @@ object AppModule {
     fun providePlaybackCatalog(
         components: MuxTvDatabaseComponents,
     ): PlaybackCatalog = components.playbackCatalog
+
+    @Provides
+    fun providePlaybackCandidateResolver(
+        components: MuxTvDatabaseComponents,
+    ): PlaybackCandidateResolver = components.playbackCandidateResolver
 
     @Provides
     @Singleton

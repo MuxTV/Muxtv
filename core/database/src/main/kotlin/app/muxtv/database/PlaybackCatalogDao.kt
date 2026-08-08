@@ -24,6 +24,20 @@ internal data class ActiveVariantRow(
     val referrer: String?,
 )
 
+internal data class ActiveVariantIdentityRow(
+    val channelId: String,
+    val variantId: String,
+)
+
+internal data class ActiveVariantAccessRow(
+    val channelId: String,
+    val variantId: String,
+    val credentialRef: String?,
+    val locator: String,
+    val userAgent: String?,
+    val referrer: String?,
+)
+
 @Dao
 internal interface PlaybackCatalogDao {
     @Query(
@@ -129,4 +143,62 @@ internal interface PlaybackCatalogDao {
         """,
     )
     suspend fun getActiveVariants(channelId: String): List<ActiveVariantRow>
+
+    @Query(
+        """
+        SELECT stream_variants.canonicalChannelId AS channelId,
+               stream_variants.id AS variantId
+        FROM stream_variants
+        INNER JOIN provider_channels
+            ON provider_channels.id = stream_variants.providerChannelId
+        INNER JOIN sources
+            ON sources.id = provider_channels.sourceId
+        LEFT JOIN user_channel_overlays
+            ON user_channel_overlays.profileId = :profileId
+           AND user_channel_overlays.canonicalChannelId = stream_variants.canonicalChannelId
+        WHERE stream_variants.canonicalChannelId = :channelId
+          AND provider_channels.revisionNumber = sources.activeRevision
+          AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+        ORDER BY CASE WHEN stream_variants.id = :preferredVariantId THEN 0 ELSE 1 END,
+                 sources.name COLLATE NOCASE,
+                 provider_channels.rawName COLLATE NOCASE,
+                 stream_variants.id
+        LIMIT :limit
+        """,
+    )
+    suspend fun getActiveVariantIdentities(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+        limit: Int,
+    ): List<ActiveVariantIdentityRow>
+
+    @Query(
+        """
+        SELECT stream_variants.canonicalChannelId AS channelId,
+               stream_variants.id AS variantId,
+               sources.credentialRef AS credentialRef,
+               stream_variants.locator AS locator,
+               stream_variants.userAgent AS userAgent,
+               stream_variants.referrer AS referrer
+        FROM stream_variants
+        INNER JOIN provider_channels
+            ON provider_channels.id = stream_variants.providerChannelId
+        INNER JOIN sources
+            ON sources.id = provider_channels.sourceId
+        LEFT JOIN user_channel_overlays
+            ON user_channel_overlays.profileId = :profileId
+           AND user_channel_overlays.canonicalChannelId = stream_variants.canonicalChannelId
+        WHERE stream_variants.canonicalChannelId = :channelId
+          AND stream_variants.id = :variantId
+          AND provider_channels.revisionNumber = sources.activeRevision
+          AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+        LIMIT 1
+        """,
+    )
+    suspend fun findActiveVariantAccess(
+        profileId: String,
+        channelId: String,
+        variantId: String,
+    ): ActiveVariantAccessRow?
 }

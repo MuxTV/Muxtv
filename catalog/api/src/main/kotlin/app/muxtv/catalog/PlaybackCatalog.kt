@@ -2,6 +2,8 @@ package app.muxtv.catalog
 
 import kotlinx.coroutines.flow.Flow
 
+const val MAX_PLAYBACK_CANDIDATES: Int = 3
+
 data class ChannelQuery(
     val profileId: String,
     val searchText: String? = null,
@@ -130,6 +132,33 @@ sealed interface PlaybackVariantResolution {
     data class AccessUnavailable(
         val reason: PlaybackAccessUnavailableReason,
     ) : PlaybackVariantResolution
+}
+
+data class PlaybackCandidateIdentity(
+    val channelId: String,
+    val variantId: String,
+) {
+    init {
+        require(channelId.isNotBlank())
+        require(variantId.isNotBlank())
+    }
+
+    override fun toString(): String =
+        "PlaybackCandidateIdentity(channelId=<redacted>, variantId=<redacted>)"
+}
+
+interface PlaybackCandidateResolver {
+    suspend fun getCandidates(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+        limit: Int,
+    ): List<PlaybackCandidateIdentity>
+
+    suspend fun resolveCandidate(
+        profileId: String,
+        candidate: PlaybackCandidateIdentity,
+    ): PlaybackVariantResolution?
 }
 
 interface PlaybackCatalog {
