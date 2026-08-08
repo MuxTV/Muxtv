@@ -1,8 +1,11 @@
 # Emil Design Engineering — Muxtv Android TV checklist
 
-**Source:** [`emilkowalski/skills`, `skills/emil-design-eng/SKILL.md`](https://github.com/emilkowalski/skills/blob/de33dbed000212b54400a33767d1e4d03654db2a/skills/emil-design-eng/SKILL.md)  
-**Pinned revision:** `de33dbed000212b54400a33767d1e4d03654db2a`  
-**Upstream license:** MIT  
+**Source:** [`emilkowalski/skills`, `skills/emil-design-eng/SKILL.md`](https://github.com/emilkowalski/skills/blob/de33dbed000212b54400a33767d1e4d03654db2a/skills/emil-design-eng/SKILL.md)
+
+**Pinned revision:** `de33dbed000212b54400a33767d1e4d03654db2a`
+
+**Upstream license:** MIT
+
 **Adaptation date:** 2026-08-08
 
 This checklist adapts the pinned upstream design-engineering review method to remote-first Android TV. It is a review aid, not permission to copy a mobile interaction model or to override Muxtv product, accessibility, privacy, architecture or performance contracts. Updating the source revision requires a separate PR.

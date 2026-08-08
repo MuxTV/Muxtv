@@ -1,8 +1,11 @@
 # Muxtv closed MVP `0.1.0-alpha.1` execution plan
 
-**Date:** 2026-08-08  
-**Baseline:** `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`  
-**Working branch:** `upd/mvp-alpha-1`  
+**Date:** 2026-08-08
+
+**Baseline:** `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`
+
+**Working branch:** `upd/mvp-alpha-1`
+
 **Status:** active canonical ExecPlan
 
 ## Goal and authority
