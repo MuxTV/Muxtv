@@ -5,13 +5,13 @@ phase: phase_01_functional_pre_alpha
 repository_state:
   application_code: present
   gradle_project: present_modular
-  ci: present_with_pr_commit_provenance_fix_in_review
-  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_and_measurement_contracts
+  ci: present_exact_source_head_host_and_old_edge_current_device_matrices
+  tests: present_unit_android_instrumentation_migration_search_recent_playback_epg_guide_designsystem_and_measurement_contracts
   release_pipeline: partial_unsigned_artifacts_only
-  documentation: synchronized_post_guide_route_and_ci_provenance_audit
+  documentation: synchronized_post_guide_route_and_exact_ci_provenance
   architecture_version: 5
 active_branch_after_merge: main
-implementation_source_commit: 286ece017445b811a7adddd4ba7e85cacc5dd3ea
+implementation_source_commit: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
 room_schema: 10
 implemented:
   - android_tv_application_shell
@@ -83,6 +83,9 @@ implemented:
   - local_half_hour_guide_timeline_alignment
   - media3_okhttp_transport_and_reconnect_hardening
   - bare_host_https_source_normalization
+  - explicit_pr_source_head_checkout_for_evidence
+  - fail_closed_git_head_source_commit_assertion
+  - static_ci_provenance_drift_guard
 verified_evidence:
   search_core_merge: fe2f8472776f59712fbdcef7faafdb855cafddcb
   single_player_owner_merge: bd1ff29959e96305ea99b6480f402efebadc9d53
@@ -100,41 +103,55 @@ verified_evidence:
   guide_product_matrix_integration_run: 31210636241
   historical_pr_run_provenance: merge_ref_executed_but_head_sha_recorded_before_issue_136
   historical_pr_run_claim_limit: integration_acceptance_not_strict_exact_source_head
+  ci_provenance_source_head: 02d6ee4b2641e12d88ace83bcd6af510f18bac08
+  ci_provenance_merge: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
+  ci_provenance_host: success
+  ci_provenance_database_matrix: success
+  ci_provenance_product_matrix: success
+  ci_provenance_measurement_variance: success
   device_profiles:
     - requested_api: 26
       resolved_api: 26
       image: system-images;android-26;android-tv;x86
-      status: passed_in_historical_pr_integration_run
-      database_tests: 120
-      app_tests: 26
+      status: accepted_in_exact_source_head_ci_baseline
     - requested_api: 36
       resolved_api: 36
       image: system-images;android-36;android-tv;x86_64
-      status: passed_in_historical_pr_integration_run
-      database_tests: 120
-      app_tests: 26
+      status: accepted_in_exact_source_head_ci_baseline
 active_work:
-  ci_evidence_commit_provenance:
-    issue: 136
-    pull_request: 137
-    branch: fix/136-pr-evidence-provenance
-    status: implementation_in_review
+  repository_truth_sync:
+    pull_request: 135
+    branch: docs/truth-sync-2026-08-08
+    status: restacked_on_exact_evidence_baseline_requires_fresh_full
     required:
-      - explicit_pr_head_checkout_for_source_head_evidence
-      - manual_dispatch_checkout_matches_github_sha
-      - git_head_equals_source_commit_assertion
-      - static_workflow_provenance_contract
-      - rerun_active_evidence_prs_after_acceptance
+      - point_in_time_truth_uses_5bb6ee1_baseline
+      - summer_2026_execution_addendum
+      - fresh_exact_source_head_full_acceptance
+  tv_design_immediate_focus:
+    issue: 111
+    pull_request: 138
+    branch: work/111-tv-design-craft-restack
+    status: tdd_red_observed_minimal_green_in_validation
+    red_source_head: 89e428fb4dadfb75671be172e76cf6adadd72ca6
+    red_host_run: 31216247036
+    green_source_head: 4b5c9c526f7bae28096fc259474a412cf3c8efe4
+    required:
+      - exact_source_head_full_green
+      - api26_api36_product_matrix_green
+      - remove_dead_scale_animation_after_green
+      - d2_native_ok_long_press_repeat_contracts
+      - d3_state_and_reduced_motion_contracts
+      - d4_720p_1080p_dialog_reachability
   deterministic_m3u_measurement_evidence:
     issue: 27
     pull_request: 134
     branch: work/measurement-large-m3u-series-27-v2
-    status: implementation_in_progress_blocked_for_strict_claims_on_issue_136
+    status: implementation_requires_restack_on_5bb6ee1
     required:
       - fail_closed_series_evidence_directory_ownership
       - exact_profile_seed_source_commit_provenance
       - repeated_corpus_sha256_byte_count_expected_count_consistency
-      - rerun_host_and_variance_checks_after_issue_136
+      - exact_source_head_host_and_variance_rerun
       - five_run_medium_10k_baseline
       - five_run_large_50k_baseline
       - analyzer_provenance_review_before_performance_claims
@@ -142,7 +159,7 @@ active_work:
     issue: 112
     pull_request: 133
     branch: work/provider-readiness-contract-112-v2
-    status: implementation_in_progress_requires_post_136_verified_rerun
+    status: implementation_requires_restack_on_5bb6ee1
     required:
       - previous_good_primary_catalog_remains_usable
       - independent_secondary_enrichment_readiness
@@ -152,24 +169,40 @@ active_work:
       - verified_source_head_host_and_device_acceptance
   playback_recovery:
     issue: 30
-    status: blocked_on_issue_27_repeated_measurement_evidence_after_issue_136
+    status: blocked_for_product_defaults_on_issue_27_repeated_measurement_evidence
     satisfied_dependencies:
       - issue_26_media3_okhttp_transport_and_reconnect_hardening
       - issue_108_playback_transport_classification
+      - issue_136_exact_evidence_provenance
     required:
-      - bounded_same_channel_variant_attempts_and_time_budget
-      - typed_failures_dns_tls_http_redirect_timeout_manifest_decoder_playback
+      - pure_same_channel_candidate_policy_before_media3_runtime
+      - bounded_variant_attempts_and_total_wall_clock_budget
+      - media3_loader_retry_time_counted_inside_total_recovery_budget
+      - no_media3_resource_fallback_across_muxtv_catalog_variants
+      - typed_failures_dns_tls_http_redirect_timeout_network_manifest_decoder_render_access
       - secret_free_diagnostics_and_redacted_export
       - retry_storm_guard_on_activity_recreation
       - no_alternate_playback_engine
+  room3_dependency_hardening:
+    status: queued_after_active_branch_reconciliation
+    from: 3.0.0
+    to: 3.0.1
+    schema_version_change: false
+    required:
+      - database_unit_acceptance
+      - generated_schema_parity
+      - old_edge_current_database_matrix
 next_milestone:
-  id: phase_01_evidence_integrity_measurement_and_playback_recovery
-  issue: 136
+  id: phase_01_reconciled_exact_evidence_measurement_and_playback_recovery
   immediate_sequence:
-    - issue_136_exact_pr_evidence_commit_provenance
-    - restack_and_rerun_pr_133_and_pr_134_on_verified_ci_baseline
+    - finish_pr_138_d1_exact_source_green
+    - finish_pr_135_truth_sync_exact_source_green
+    - restack_and_rerun_pr_133_and_pr_134_on_5bb6ee1
     - issue_27_repeated_m3u_measurement_evidence
-    - issue_30_playback_recovery_and_tv_doctor
+    - issue_30a_pure_recovery_policy
+    - issue_30b_media3_bounded_recovery
+    - issue_30c_redacted_diagnostics_if_required
+    - issue_30d_tv_doctor
     - issue_33_and_93_lounge_ui_packages
     - issue_31_alpha_hardening
 parallel_work:
@@ -179,9 +212,11 @@ parallel_work:
     - reboot_package_replace_without_duplicate_periodic_work
     - boot_unlock_tests
   issue_111:
-    - long_press_not_swallowed_by_on_preview_key_event
-    - dialog_dpad_scrollability_at_720p
-    - focus_selected_playing_contrast
+    - immediate_dense_focus_d1
+    - long_press_and_repeat_d2
+    - focused_selected_playing_disabled_d3
+    - reduced_motion_d3
+    - dialog_dpad_scrollability_720p_1080p_d4
   issue_113:
     - versioned_non_secret_envelope_with_integrity_digest
     - saf_capability_detection
@@ -204,6 +239,7 @@ parallel_work:
 closed_or_superseded:
   - issue_26_media3_okhttp_transport_and_reconnect_hardening
   - issue_29_guide_tv_route_accepted_as_131
+  - issue_136_exact_pr_evidence_commit_provenance_accepted_as_137
   - issue_110_epg_compressed_transport
   - issue_114_cross_surface_truth_contract_accepted_as_123
   - issue_108_playback_transport_classification_accepted_as_127
@@ -220,7 +256,6 @@ closed_or_superseded:
   - pr_98_deferred_baseline_profile_stack
   - pr_99_superseded_player_owner_stack
 known_gaps:
-  - pr_evidence_commit_provenance_until_issue_136_lands
   - repeated_m3u_measurement_evidence
   - playback_variant_fallback
   - tv_doctor_lite
@@ -228,6 +263,7 @@ known_gaps:
   - five_run_multi_profile_performance_evidence
   - ci_database_suite_split
   - conditional_m3u_304_refresh
+  - room3_3_0_1_patch_hardening
   - r8_baseline_and_startup_profiles
   - signed_release_artifacts_and_sbom
   - physical_android_google_tv_and_fire_tv_evidence
@@ -235,13 +271,9 @@ known_gaps:
   - tv_remote_long_press_and_dialog_contracts
   - backup_restore_envelope
 blocked:
-  strict_source_head_evidence_claims:
-    on: issue_136
   parser_performance_thresholds:
-    on:
-      - issue_136
-      - issue_27_repeated_variance
-  playback_recovery_defaults:
+    on: issue_27_repeated_variance
+  playback_recovery_product_defaults:
     on: issue_27_repeated_variance
 deferred:
   - xtream
