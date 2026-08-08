@@ -53,6 +53,13 @@ function Assert-GitFixtureDrift {
     }
 }
 
+function Normalize-Diagnostic {
+    param([Parameter(Mandatory)][string]$Value)
+
+    $withoutAnsi = [regex]::Replace($Value, "`e\[[0-9;?]*[ -/]*[@-~]", "")
+    return $withoutAnsi.Trim()
+}
+
 function Assert-GuardFailsLike {
     param(
         [Parameter(Mandatory)][string]$ExpectedPrefix,
@@ -63,13 +70,13 @@ function Assert-GuardFailsLike {
     try {
         & $assertWorktreeScript -RepositoryRoot $Repository
     } catch {
-        $failure = [string]$_.Exception.Message
+        $failure = Normalize-Diagnostic -Value ([string]$_.Exception.Message)
     }
 
     if ($null -eq $failure) {
         throw "Evidence worktree provenance guard unexpectedly accepted repository state: $ExpectedPrefix"
     }
-    if (-not $failure.Contains($ExpectedPrefix, [System.StringComparison]::Ordinal)) {
+    if ($failure.IndexOf($ExpectedPrefix, [System.StringComparison]::Ordinal) -lt 0) {
         throw "Evidence worktree provenance guard failed for an unexpected reason: $failure"
     }
 }
