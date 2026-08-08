@@ -77,7 +77,7 @@ $manifest = [ordered]@{
     warmups = $Warmups
     iterations = $Iterations
     runnerLabel = $RunnerLabel
-    claimEligible = ($Repetitions -ge 5)
+    claimEligible = $false
     thresholdApplied = $false
     status = "running"
     startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
@@ -250,6 +250,7 @@ try {
     }
 
     $manifest.analysisOutput = $analysisOutputName
+    $manifest.claimEligible = ($Repetitions -ge 5)
     $manifest.status = "passed"
     Write-Host "M3U measurement series passed."
     Write-Host "profile=$M3uProfile"
@@ -259,6 +260,7 @@ try {
     Write-Host "thresholdApplied=false"
 } catch {
     $manifest.status = "failed"
+    $manifest.claimEligible = $false
     $manifest.failureType = $_.Exception.GetType().FullName
     $manifest.failureLine = [int]$_.InvocationInfo.ScriptLineNumber
     Write-Host "M3U measurement series failed. See evidence."
