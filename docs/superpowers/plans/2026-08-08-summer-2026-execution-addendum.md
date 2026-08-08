@@ -1,176 +1,216 @@
 # Summer 2026 execution addendum
 
 **Date:** 2026-08-08  
-**Accepted baseline:** `main@5bb6ee1f754785b2b236d6dcb52fd4458780e758`  
+**Accepted repository head at this update:** `main@8fadb411e20c6a854fafd2005c5c5b17e868f858`  
 **Parent plan:** `docs/superpowers/plans/2026-08-08-post-guide-evidence-and-playback-recovery.md`
 
-This addendum records execution facts and official-documentation decisions that changed after the parent plan was authored. It does not replace the parent plan; it advances its Phase 0 state and tightens later implementation contracts.
+This addendum records execution facts and current implementation ordering after the Guide milestone, exact-source CI provenance fix, D1 TV-focus acceptance and provider-readiness contract acceptance. It also corrects one earlier dependency assumption: as of 2026-08-08 the official Android Developers Room3 release page still lists **3.0.0** as the stable Room3 release. There is no verified Room3 `3.0.1` target to implement.
 
-## 1. Accepted state after #136/#137
+## 1. Accepted state
 
-PR #137 is accepted and merged as `5bb6ee1f754785b2b236d6dcb52fd4458780e758`.
+Accepted sequence on `main`:
 
-Its source head passed all required evidence lanes before merge:
+- PR #131 / Guide TV route → `286ece017445b811a7adddd4ba7e85cacc5dd3ea`;
+- PR #137 / exact PR evidence provenance → `5bb6ee1f754785b2b236d6dcb52fd4458780e758`;
+- PR #135 / repository truth + execution plan → `2ea7da253ed5c216099f77c3288474d87816616a`;
+- PR #138 / immediate dense-TV custom focus D1 → `d109ad6a4fc68bfb3083edccdf469a67ddb3352f`;
+- PR #133 / provider-readiness pure API contract → `8fadb411e20c6a854fafd2005c5c5b17e868f858`.
 
-- Self-hosted Full validation — success;
-- Database old-edge/current Android TV matrix — success;
-- Android TV product old-edge/current matrix — success;
-- Measurement variance smoke — success;
-- unresolved review threads — 0.
+PR #137 established executable evidence identity: evidence-producing PR workflows checkout the exact source head they claim and fail closed when `git rev-parse HEAD != SourceCommit`.
 
-The repository now has an executable exact-source provenance contract: evidence-producing PR workflows explicitly checkout the source head they claim and fail closed when `git rev-parse HEAD` differs from `SourceCommit`.
+PR #138 accepted D1 only. It removed queued scale animation from the shared dense custom focus surface, retained native Compose click ownership and added real-key app instrumentation. Issue #111 remains open for D2–D4.
 
-All active PRs created before this baseline must be restacked/reconciled before their runs are treated as exact-source-head acceptance.
+PR #133 accepted a provider-neutral readiness API where an active live catalog is enough for `USABLE`, secondary enrichment is independent, cancellation/supersession preserves previous-good state, and successful attempt revisions must match accepted active truth. Issue #112 remains open as an integration umbrella until a real provider-neutral orchestration path consumes that contract.
 
-## 2. Immediate execution sequence
+## 2. Current critical path
 
-### E1 — Finish #111 D1 / PR #138
+```text
+#134 manual exact-head provenance RED → GREEN
+→ #140 accepted-main focused 5×10k + 5×50k evidence lane
+→ #27 repeated evidence review
+→ #139 clean tracked-worktree provenance hardening
+→ #30A pure same-channel recovery policy
+→ #30B Media3 bounded recovery runtime
+→ #30C durable redacted diagnostics only if persistence is required
+→ #30D TV Doctor Lite
+→ #111 D2–D4 in parallel
+→ #33/#93 Lounge Light D5–D7
+→ #31 alpha hardening + physical-device evidence
+```
 
-TDD state already observed:
+Issue #101 remains the CI-efficiency umbrella for eliminating duplicate host/device work only after before/after runner evidence.
 
-- RED source head: `89e428fb4dadfb75671be172e76cf6adadd72ca6`;
-- RED Full run: `31216247036`;
-- exact failures:
-  - `dense focus preserves geometry and full content visibility`;
-  - `repeated dpad focus has no geometric transition delay`.
+## 3. #134 — focused deterministic M3U series
 
-The RED branch was restacked onto `main@5bb6ee1...` while preserving RED ancestry.
+PR #134 remains the active evidence-harness PR. Existing behavior includes:
 
-Minimal GREEN changes only the contract values:
+- sequential 1k/10k/50k focused series;
+- fixed seed/source-commit provenance fields;
+- five repetitions by default;
+- fail-closed ownership of the complete series evidence directory;
+- exact corpus SHA-256/byte-count/expected-count consistency across repetitions;
+- threshold-free analyzer reuse;
+- no parallel execution.
 
-- focus scale `1.06 -> 1.0`;
-- unfocused alpha `0.84 -> 1.0`;
-- dense focus geometry duration `140 ms -> 0 ms`;
-- focused alpha remains `1.0`;
-- outline remains `3dp`;
-- screen transition budget remains `240 ms`.
+A second provenance defect was found during review: the manual `Invoke-M3uCorpusSeries.ps1` entrypoint accepted `-SourceCommit`, but did not itself verify that the checked-out Git HEAD equaled that SHA. CI workflows are protected by #137, but the README-published manual entrypoint was not self-contained.
 
-Do not broad-redesign the theme in this package.
+Current #134 RED therefore requires the entrypoint to invoke repository-owned `tools/ci/Assert-EvidenceCommit.ps1 -ExpectedCommit $SourceCommit` **before** creating the series evidence directory. Production must remain unchanged until the RED is actually observed.
 
-After GREEN:
+After observed RED, minimal GREEN is only the provenance-helper existence check + call before evidence creation. Then rerun exact-source Full/variance on the combined current-main tree.
 
-1. remove dead focus-scale animation code as a behavior-preserving refactor;
-2. rerun exact-source Full and Product matrix;
-3. only then consider D1 complete.
+## 4. #140 — accepted-main focused evidence lane
 
-### E2 — Restack and close repository truth PR #135
+The existing `measurement-variance-smoke.yml` runs the general two-repetition `current-normal` variance series. It does not produce the focused claim-eligible 5× `medium-10k` + 5× `large-50k` M3U datasets.
 
-- include the accepted #137 workflow tree;
-- update point-in-time truth from `286ece...` to `5bb6ee1...`;
-- mark #136/#137 completed rather than active;
-- record #138 D1 as active parallel design work;
-- run fresh exact-source Full acceptance.
+Issue #140 owns the next CI slice after #134:
 
-### E3 — Restack #133 / provider readiness
+- dedicated self-hosted Windows evidence lane;
+- accepted `main` commit, not only a PR head;
+- exact checkout + `Assert-EvidenceCommit.ps1`;
+- sequential 5× `medium-10k` and 5× `large-50k` with seed `20260728`;
+- `cancel-in-progress: false` for claim-eligible execution;
+- finalize interrupted manifests;
+- upload JSON/log evidence;
+- no threshold and no parser/runtime change.
 
-No broad redesign is needed. Preserve the implemented invariants:
+Do not make these expensive runs part of every PR.
 
-- primary previous-good catalog remains usable;
-- secondary enrichment is independent;
-- `Cancelled` / `Superseded` are explicit;
-- successful primary/secondary attempts must target accepted active revision truth.
+## 5. #139 — tracked-worktree provenance
 
-Required acceptance after restack:
+`HEAD == SourceCommit` does not by itself prove that a manual checkout has no staged or unstaged **tracked** edits. CI already resets/cleans its workspace, but claim-eligible manual evidence needs an explicit tracked-worktree guard.
 
-- Full host;
-- Product API26;
-- Product API36;
-- exact `HEAD == SourceCommit`;
-- issue #112 acceptance reconciliation.
+After #134:
 
-### E4 — Restack #134 / measurement series
+- reject `git diff --quiet` failure;
+- reject `git diff --cached --quiet` failure;
+- allow unrelated untracked evidence output;
+- run before claim-eligible evidence production;
+- preserve the existing exact-head assertion.
 
-Preserve fail-closed evidence ownership and rerun exact-source host/variance checks.
+Keep this separate from #134 so its provenance RED→GREEN stays reviewable.
 
-Then produce sequential baseline evidence on accepted `main`:
+## 6. #30A — pure recovery policy
 
-- 5 x `medium-10k`;
-- 5 x `large-50k`;
-- one controlled runner class;
-- fixed seed;
-- identical corpus hash/bytes/expected counts across repetitions;
-- analyzer provenance reviewed before thresholds are introduced.
+A clean branch `work/30a-playback-recovery-policy` has been started from accepted main with a plan and **RED-only** JVM test. No production recovery code exists yet.
 
-### E5 — #30A pure recovery policy
+The first RED requires an explicitly preferred same-channel candidate to be first in a deterministic recovery plan. Production types are added only after that RED executes.
 
-Implement before Media3 runtime changes and without Room/UI changes.
+Policy sequence:
 
-Contracts:
+1. preferred same-channel candidate first;
+2. deterministic remaining source order;
+3. duplicate variant identity cannot create repeated attempts;
+4. foreign canonical-channel candidate is rejected;
+5. explicit positive attempt budget;
+6. explicit maximum recovery duration; runtime derives monotonic deadline rather than reading wall clock inside the pure policy;
+7. terminal vs retryable typed failure disposition;
+8. cancellation/supersession invalidates the current generation;
+9. stale generation cannot advance a newer generation;
+10. temporary fallback success reports the successful candidate without mutating preferred identity.
 
-- same canonical channel only;
-- preferred variant first;
-- deterministic remaining order;
-- no duplicate candidate attempt within one recovery generation;
-- explicit max candidate attempts;
-- explicit total wall-clock recovery budget;
-- terminal vs retryable failure families;
-- cancellation/supersession invalidates the generation;
-- temporary fallback success never persists a new preferred variant;
-- first rendered frame remains the only playback-success boundary.
+No hidden retry/deadline defaults are chosen in #30A. M3U parser timing evidence is not sufficient to choose network/playback recovery milliseconds.
 
-### E6 — #30B Media3 runtime with two-layer retry accounting
+## 7. #30B — Media3 runtime boundary
 
-The process-owned `MediaSessionService` / single `ExoPlayer` remains the only runtime owner.
+The process-owned `MediaSessionService` / single `ExoPlayer` remains the only player/recovery owner.
 
-Media3 already has loader retry/fallback behavior through `LoadErrorHandlingPolicy`. MuxTV same-channel variants are a higher-level catalog concept and must not be implemented as Media3 resource fallback.
+Media3 loader retries and MuxTV same-channel candidate switching are distinct layers. Media3 resource fallback must not be used to cross MuxTV catalog/source/credential boundaries.
 
-Required rule:
+One total user-visible recovery deadline must include:
 
-`total recovery budget >= all Media3 loader retry time + all MuxTV candidate-switch time`
+- Media3 loader retry/backoff time;
+- candidate setup/resolution time;
+- MuxTV candidate switching time.
 
-Implementation consequences:
+Activity, ViewModel, WorkManager and TV Doctor must never become additional playback retry owners. First rendered frame remains the accepted success boundary.
 
-- only one active MuxTV recovery generation;
-- internal Media3 loader retries must be bounded/understood;
-- variant advancement occurs only after a candidate reaches a terminal failure according to the app policy;
-- do not let default loader retries multiplied by N candidates create an unbounded user-visible wait;
-- if a custom `LoadErrorHandlingPolicy` is introduced, it must be narrowly scoped, tested and counted inside the same recovery deadline;
-- do not use Media3 resource `FallbackSelection` to cross the catalog/credential boundary between MuxTV variants.
+Typed resolution failures must not be collapsed with `getOrNull()`/nullable generic failure where recovery meaning would be lost.
 
-### E7 — #30C diagnostics and Room schema ownership
+## 8. #30C / #30D
 
-Before any schema migration:
+### Durable diagnostics
 
-- reserve the next Room schema owner;
-- coordinate #30C with #100;
-- upgrade Room dependency separately from schema evolution.
+Only add persistence if product acceptance requires history/export beyond process lifetime. Before any Room schema change:
 
-Durable records remain typed, bounded and redacted. Never store raw locator, Authorization/Cookie, unrestricted headers or raw exception messages that can embed URLs/tokens.
+- reserve the next schema owner;
+- coordinate with #100;
+- persist only bounded typed/redacted observations;
+- never persist raw locator, Authorization/Cookie, unrestricted headers, credentials or raw exception text containing URLs/tokens.
 
-### E8 — #30D TV Doctor Lite
+### TV Doctor Lite
 
-Doctor is presentation over typed observations, not a second network/player engine.
+Doctor is presentation over typed observations, not a second probe/player engine.
 
-Required TV acceptance:
+Acceptance:
 
 - D-pad reachable;
 - no focus traps;
-- 720p long content scrollable;
-- 1080p layout verified;
+- 720p/1080p reachability;
+- long Russian text remains actionable/scrollable;
 - Back predictable;
 - export explicit and redacted;
-- failed export cannot alter playback/catalog state.
+- export failure cannot mutate playback/catalog state.
 
-### E9 — Lounge Light D5-D7
+## 9. TV design/accessibility after D1
+
+PR #138 D1 is accepted. Remaining #111 work:
+
+- **D2:** native short-press/long-press/repeat ownership only where product controls actually need long click; no global preview-key synthetic clicks;
+- migrate representative deprecated Compose Test JUnit4 v1 journeys to v2 with explicit coroutine scheduling where needed;
+- **D3:** independent focused/selected/playing/disabled cues + reduced-motion behavior;
+- **D4:** 720p/1080p scrolling/reachability, dynamic-removal safe focus fallback and long Russian labels.
+
+Android TV platform behavior remains authoritative. Focus scale is not globally forbidden: it is a valid platform cue when it does not destabilize dense neighboring geometry or queue under rapid D-pad input.
+
+## 10. Lounge Light D5–D7
 
 Only after interaction primitives and playback/Doctor contracts are stable:
 
-- D5: light tokens/theme, system typography, shell/rail, reduced motion;
-- D6: Channels, Search, Recent, Guide one surface per reviewable package;
-- D7: Player, Doctor, Sources/settings.
+- D5 — light theme/tokens, system typography, shell/rail, reduced motion;
+- D6 — Channels, Search, Recent, Guide one real surface per reviewable package;
+- D7 — Player, Doctor, Sources/settings.
 
-Visual work styles existing state machines; it does not replace focus anchors, active-catalog truth, Player/Back identity or feature ViewModels.
+Visual work styles accepted state/navigation contracts; it does not replace focus anchors, active catalog truth, Player/Back identity or feature ViewModels.
 
-### E10 — Alpha hardening
+## 11. Dependency decisions — corrected 2026-08-08
 
-Before any alpha-quality claim:
+Current stable stack remains the preferred product path:
 
-- R8/minification and keep-rule analysis;
-- Baseline Profile module and CUJs;
-- Startup Profiles / DEX layout optimization;
-- TTID + TTFD measurement;
-- frame timing/jank measurement;
-- low-RAM/endurance/zapping/recreation tests;
+- Compose BOM `2026.06.00`;
+- Compose for TV `tv-material 1.1.0` / `tv-foundation 1.0.0`;
+- Media3 `1.10.1`;
+- Room3 `3.0.0`;
+- AGP `9.3.0` / Gradle `9.5.0` / JDK 17 compatibility as currently configured.
+
+### Room3 correction
+
+Do **not** create or implement a `3.0.0 → 3.0.1` hardening task unless the official AndroidX Room3 release page actually publishes that version. The earlier addendum statement claiming a stable Room3 `3.0.1` release on 2026-07-29 was not supported by the current official release page and is superseded by this correction.
+
+Dependency version and MuxTV Room schema version remain independent concepts. Room schema stays v10 until a real product migration reserves the next schema owner.
+
+Do not upgrade Media3 to an RC merely because it exists; keep stable unless a concrete fix/feature justifies prerelease risk.
+
+## 12. CI efficiency
+
+Product DeviceMatrix currently runs repository `verify-local -Mode Full` before starting AVDs. A separate Self-hosted validation workflow can therefore duplicate Full host work on the same single Windows runner for product/catalog changes.
+
+This is now recorded under #101. Do not remove coverage ad hoc. Any routing/suite split must prove:
+
+- unchanged required host modules;
+- unchanged Product API26/API36 coverage;
+- corpus/measurement evidence still runs where relevant;
+- lower queue-to-completion / runner wall-time over comparable runs.
+
+## 13. Alpha hardening
+
+Before an alpha-quality claim:
+
+- R8/minification + keep-rule review;
+- Baseline Profile module from real TV Critical User Journeys;
+- Startup Profiles / DEX layout optimization where supported;
+- TTID + TTFD;
+- frame timing/jank;
+- low-RAM/endurance/repeated-zapping/recreation tests;
 - signed release artifact;
 - SBOM/provenance;
 - physical Android TV / Google TV;
@@ -178,63 +218,21 @@ Before any alpha-quality claim:
 - Fire TV/Fire OS;
 - codec/HDR/audio claims limited to observed hardware.
 
-## 3. Summer 2026 dependency decisions
-
-### Keep current stable versions
-
-Current repository versions already match the summer-2026 stable AndroidX line for the main UI/player stack:
-
-- Compose BOM `2026.06.00`;
-- Compose for TV `tv-material 1.1.0` / `tv-foundation 1.0.0`;
-- Media3 `1.10.1`;
-- AGP `9.3.0` with Gradle `9.5.0` / JDK 17 compatibility.
-
-Do not upgrade Media3 to the 1.11 RC line merely because it exists. Use stable `1.10.1` until a concrete fix/feature justifies prerelease risk.
-
-### Room3 patch hardening
-
-Repository currently uses Room3 `3.0.0`; stable `3.0.1` was released on 2026-07-29 with bug fixes including transaction-related behavior.
-
-Create a separate dependency-only hardening PR after the current active branch queue is reconciled:
-
-1. RED/guard: record current dependency and run database host/migration baseline;
-2. bump `room3 = 3.0.1` only;
-3. run Room unit tests;
-4. verify generated schema parity is unchanged unless generation legitimately differs;
-5. run old-edge/current Database migration matrix;
-6. do not claim a schema version bump: dependency version and MuxTV Room schema version are independent.
-
-## 4. Official Android guidance translated into repository rules
-
-### Compose for TV
-
-Leanback UI is deprecated; continue Compose for TV. Do not introduce a Leanback/View fallback architecture.
-
-### Focus/input
-
-Use default Compose focus search whenever it is sufficient. Use destination-scoped `FocusRequester`, `focusProperties`, focus groups or targeted `onPreviewKeyEvent` only where the default is demonstrably wrong. Preview handlers return `false` for keys they do not own. Do not manufacture global DPAD_CENTER/ENTER clicks.
-
-### Media playback
-
-Keep `Player` + `MediaSession` in `MediaSessionService`; Activity/ViewModel remain UI/controllers, not playback owners. One playback service owns recovery generation and player lifecycle.
-
-### Performance
-
-Do not add Baseline Profiles as an unmeasured file drop. Define real TV Critical User Journeys, generate profiles, benchmark enabled vs disabled, and measure on physical hardware. For Compose asynchronous destinations, explicitly report fully drawn state when the content required for interaction is ready.
-
-## 5. Stop conditions
+## 14. Stop conditions
 
 Stop and reassess if:
 
-- source-head evidence identity breaks again;
-- D-pad focus queues geometry animation;
-- a preview-key handler globally owns OK/Enter;
+- source-head/evidence identity breaks;
+- claim-eligible manual evidence runs on staged/unstaged tracked changes;
+- dense D-pad focus queues geometry animation;
+- a preview-key wrapper globally owns OK/Enter;
 - Media3 internal retries plus app retries exceed the declared recovery budget;
-- a candidate from another canonical channel can enter fallback;
+- a foreign canonical channel can enter fallback;
 - temporary fallback rewrites preference;
 - a second player/retry owner appears outside the service;
 - diagnostics require secrets/raw locators;
 - two branches claim the same Room migration version;
 - visual work rewrites accepted feature state machines;
 - emulator evidence is presented as physical decoder/HDR/Fire OS proof;
-- a dependency upgrade is mixed with unrelated product behavior without a measured need.
+- an unverified dependency version is added to the roadmap;
+- Rust/UniFFI/libmpv/another engine is introduced without a measured residual problem and separate ADR.
