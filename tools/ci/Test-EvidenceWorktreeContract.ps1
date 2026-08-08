@@ -27,7 +27,7 @@ function Invoke-GitFixture {
     $output = @(& git -C $Repository @Arguments 2>&1)
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
-        throw "Git fixture command failed with exit code $exitCode: git -C $Repository $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
+        throw "Git fixture command failed with exit code ${exitCode}: git -C $Repository $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
     }
 }
 
