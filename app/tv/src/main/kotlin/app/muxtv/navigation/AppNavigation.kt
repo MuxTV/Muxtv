@@ -35,13 +35,17 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.channels.ChannelsRoute
 import app.muxtv.feature.guide.GuideRoute
+import app.muxtv.feature.doctor.DoctorExportStatus
+import app.muxtv.feature.doctor.DoctorRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import app.muxtv.player.PlaybackObservationReader
 
 @Composable
 fun AppNavigation(
@@ -57,6 +61,10 @@ fun AppNavigation(
     sourceEntryOnboarding: SourceEntryOnboarding,
     sourcePlaybackApprovalActions: SourcePlaybackApprovalActions =
         SourcePlaybackApprovalActions.Unavailable,
+    playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
+    doctorExportStatus: DoctorExportStatus = DoctorExportStatus.IDLE,
+    onExportDoctorReport: (String) -> Unit = {},
+    playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
@@ -68,6 +76,13 @@ fun AppNavigation(
 
     fun goBack() {
         if (backStack.size > 1) backStack.removeLastOrNull()
+    }
+
+    fun openDoctorFromPlayer() {
+        if (backStack.lastOrNull() is AppDestination.Player) {
+            backStack.removeLastOrNull()
+        }
+        open(AppDestination.Doctor)
     }
 
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
@@ -134,7 +149,14 @@ fun AppNavigation(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,
                             playbackApprovalActions = sourcePlaybackApprovalActions,
+                            topNavigationFocusRequester = initialNavigationFocusRequester,
                             onAddSource = { open(AppDestination.AddSource) },
+                        )
+
+                        AppDestination.Doctor -> DoctorRoute(
+                            observationReader = playbackObservationReader,
+                            exportStatus = doctorExportStatus,
+                            onExport = onExportDoctorReport,
                         )
 
                         AppDestination.AddSource -> AddSourceRoute(
@@ -150,6 +172,8 @@ fun AppNavigation(
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             channelId = destination.channelId,
                             onBack = ::goBack,
+                            onOpenDoctor = ::openDoctorFromPlayer,
+                            playbackStartGateway = playbackStartGateway,
                         )
                     }
                 }
@@ -175,6 +199,7 @@ private fun NavigationRow(
                 AppDestination.Guide -> "Программа"
                 AppDestination.Search -> "Поиск"
                 AppDestination.Sources -> "Источники"
+                AppDestination.Doctor -> "Диагностика"
                 AppDestination.AddSource -> error("AddSource is not a top-level destination.")
                 is AppDestination.Player -> error("Player is not a top-level destination.")
             }
@@ -206,6 +231,7 @@ private fun AppDestination.navigationTestTag(): String = when (this) {
     AppDestination.Guide -> "nav-guide"
     AppDestination.Search -> "nav-search"
     AppDestination.Sources -> "nav-sources"
+    AppDestination.Doctor -> "nav-doctor"
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }

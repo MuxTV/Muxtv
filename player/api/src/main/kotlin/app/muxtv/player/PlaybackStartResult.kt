@@ -18,6 +18,7 @@ sealed interface PlaybackStartResult {
 
     data class Rejected(
         val reason: PlaybackStartFailure,
+        val observationAvailable: Boolean = false,
     ) : PlaybackStartResult
 }
 

@@ -66,6 +66,7 @@ private sealed interface PlayerRouteState {
 
     data class Failed(
         val message: String,
+        val doctorAvailable: Boolean = false,
     ) : PlayerRouteState
 }
 
@@ -85,6 +86,7 @@ fun PlayerRoute(
     profileId: String,
     channelId: String,
     onBack: () -> Unit,
+    onOpenDoctor: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     playbackStartGateway: PlaybackStartGateway? = null,
 ) {
@@ -165,7 +167,10 @@ fun PlayerRoute(
             }
 
             is PlaybackStartResult.Rejected -> {
-                value = PlayerRouteState.Failed(startFailureMessage(startResult.reason))
+                value = PlayerRouteState.Failed(
+                    message = startFailureMessage(startResult.reason),
+                    doctorAvailable = startResult.observationAvailable,
+                )
                 return@produceState
             }
 
@@ -245,6 +250,7 @@ fun PlayerRoute(
         is PlayerRouteState.Failed -> PlayerMessage(
             title = current.message,
             onBack = onBack,
+            onOpenDoctor = onOpenDoctor.takeIf { current.doctorAvailable },
             modifier = modifier,
         )
 
@@ -391,12 +397,13 @@ private fun PlayerContent(
 private fun PlayerMessage(
     title: String,
     onBack: () -> Unit,
+    onOpenDoctor: (() -> Unit)? = null,
     modifier: Modifier,
 ) {
-    val backFocusRequester = remember { FocusRequester() }
+    val primaryFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        backFocusRequester.requestFocus()
+        primaryFocusRequester.requestFocus()
     }
 
     Column(
@@ -404,13 +411,30 @@ private fun PlayerMessage(
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
-        MuxTvActionButton(
-            text = "Назад к каналам",
-            onClick = onBack,
-            modifier = Modifier
-                .testTag(PLAYER_BACK_TEST_TAG)
-                .focusRequester(backFocusRequester),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+            onOpenDoctor?.let { openDoctor ->
+                MuxTvActionButton(
+                    text = "Диагностика",
+                    onClick = openDoctor,
+                    modifier = Modifier
+                        .testTag(PLAYER_DOCTOR_TEST_TAG)
+                        .focusRequester(primaryFocusRequester),
+                )
+            }
+            MuxTvActionButton(
+                text = "Назад к каналам",
+                onClick = onBack,
+                modifier = Modifier
+                    .testTag(PLAYER_BACK_TEST_TAG)
+                    .then(
+                        if (onOpenDoctor == null) {
+                            Modifier.focusRequester(primaryFocusRequester)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            )
+        }
     }
 }
 
@@ -462,5 +486,6 @@ private const val HTTP_APPROVAL_FAILED_MESSAGE = "Не удалось сохра
 private const val PLAYER_PRIMARY_ACTION_TEST_TAG = "player-primary-action"
 private const val PLAYER_HTTP_APPROVE_TEST_TAG = "player-http-approve"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
+private const val PLAYER_DOCTOR_TEST_TAG = "player-doctor"
 private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
 private const val COMMAND_TIMEOUT_MILLIS = 25_000L

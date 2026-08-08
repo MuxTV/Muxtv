@@ -24,6 +24,7 @@ import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -36,6 +37,8 @@ internal fun PlayerFavoriteRoute(
     profileId: String,
     channelId: String,
     onBack: () -> Unit,
+    onOpenDoctor: () -> Unit,
+    playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -67,6 +70,8 @@ internal fun PlayerFavoriteRoute(
             profileId = profileId,
             channelId = channelId,
             onBack = onBack,
+            onOpenDoctor = onOpenDoctor,
+            playbackStartGateway = playbackStartGateway,
             modifier = Modifier.fillMaxSize(),
         )
 

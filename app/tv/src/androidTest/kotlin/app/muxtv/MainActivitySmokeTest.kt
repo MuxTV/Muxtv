@@ -5,7 +5,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -41,6 +41,23 @@ class MainActivitySmokeTest {
 
         composeRule.onNodeWithText("Телепрограмма")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun opensDoctorFromPrimaryNavigationWithDpad() {
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("nav-home")
+            .assertIsFocused()
+            .press(Key.DirectionRight, count = 5)
+        composeRule.onNodeWithTag("nav-doctor")
+            .assertIsFocused()
+            .press(Key.Enter)
+
+        composeRule.onNodeWithTag("doctor-title")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("doctor-refresh")
+            .assertIsFocused()
     }
 }
 

@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -141,6 +141,120 @@ class PlayerHttpApprovalTest {
                 .assertIsFocused()
                 .assertTextContains("Разрешить для этого адреса")
             check(catalog.revocationCalls == 1)
+        } finally {
+            connector.close()
+        }
+    }
+
+    @Test
+    fun rejectedPlaybackOffersFocusedDoctorAction() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val catalog = ApprovalJourneyCatalog(initiallyApproved = true)
+        val connector = MuxTvMediaControllerConnector(context)
+        var doctorOpenCount = 0
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    PlayerRoute(
+                        playbackCatalog = catalog,
+                        controllerConnector = connector,
+                        profileId = PROFILE_ID,
+                        channelId = CHANNEL_ID,
+                        onBack = {},
+                        onOpenDoctor = { doctorOpenCount += 1 },
+                        playbackStartGateway = PlaybackStartGateway { _, _, _ ->
+                            PlaybackStartResult.Rejected(
+                                reason = PlaybackStartFailure.RecoveryExhausted,
+                                observationAvailable = true,
+                            )
+                        },
+                    )
+                }
+            }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-doctor")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-doctor")
+                .assertIsFocused()
+                .performKeyInput {
+                    keyDown(Key.Enter)
+                    keyUp(Key.Enter)
+                }
+            composeRule.runOnIdle { check(doctorOpenCount == 1) }
+        } finally {
+            connector.close()
+        }
+    }
+
+    @Test
+    fun commandFailureDoesNotOfferUnrelatedDoctorEvidence() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val catalog = ApprovalJourneyCatalog(initiallyApproved = true)
+        val connector = MuxTvMediaControllerConnector(context)
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    PlayerRoute(
+                        playbackCatalog = catalog,
+                        controllerConnector = connector,
+                        profileId = PROFILE_ID,
+                        channelId = CHANNEL_ID,
+                        onBack = {},
+                        onOpenDoctor = {},
+                        playbackStartGateway = PlaybackStartGateway { _, _, _ ->
+                            PlaybackStartResult.Rejected(PlaybackStartFailure.CommandFailed)
+                        },
+                    )
+                }
+            }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-back")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-back").assertIsFocused()
+            composeRule.onNodeWithTag("player-doctor").assertDoesNotExist()
+        } finally {
+            connector.close()
+        }
+    }
+
+    @Test
+    fun missingCatalogChannelDoesNotOfferUnrelatedDoctorEvidence() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val delegate = ApprovalJourneyCatalog(initiallyApproved = true)
+        val catalog = object : PlaybackCatalog by delegate {
+            override suspend fun getChannel(
+                profileId: String,
+                channelId: String,
+            ): PlayableChannel? = null
+        }
+        val connector = MuxTvMediaControllerConnector(context)
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    PlayerRoute(
+                        playbackCatalog = catalog,
+                        controllerConnector = connector,
+                        profileId = PROFILE_ID,
+                        channelId = CHANNEL_ID,
+                        onBack = {},
+                        onOpenDoctor = {},
+                    )
+                }
+            }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-back")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-back").assertIsFocused()
+            composeRule.onNodeWithTag("player-doctor").assertDoesNotExist()
         } finally {
             connector.close()
         }

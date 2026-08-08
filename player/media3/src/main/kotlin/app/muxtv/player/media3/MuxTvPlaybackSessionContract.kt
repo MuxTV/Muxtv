@@ -34,6 +34,7 @@ object MuxTvPlaybackSessionContract {
     private const val KEY_DISPLAY_ORIGIN = "display_origin"
     private const val KEY_VARIANT_ID = "variant_id"
     private const val KEY_FAILURE = "failure"
+    private const val KEY_OBSERVATION_AVAILABLE = "observation_available"
 
     val setPlaybackRequestCommand: SessionCommand
         get() = SessionCommand(ACTION_SET_PLAYBACK_REQUEST, Bundle.EMPTY)
@@ -101,6 +102,7 @@ object MuxTvPlaybackSessionContract {
                 is PlaybackStartResult.Rejected -> {
                     putString(KEY_RESULT_KIND, "rejected")
                     putString(KEY_FAILURE, result.reason.name)
+                    putBoolean(KEY_OBSERVATION_AVAILABLE, result.observationAvailable)
                 }
             }
         },
@@ -128,11 +130,19 @@ object MuxTvPlaybackSessionContract {
                 }.getOrNull()
             }
             "rejected" -> {
-                if (extras.keySet() != setOf(KEY_RESULT_KIND, KEY_FAILURE)) return null
+                if (extras.keySet() != setOf(
+                        KEY_RESULT_KIND,
+                        KEY_FAILURE,
+                        KEY_OBSERVATION_AVAILABLE,
+                    )
+                ) return null
                 val failure = runCatching {
                     PlaybackStartFailure.valueOf(extras.getString(KEY_FAILURE) ?: return null)
                 }.getOrNull() ?: return null
-                PlaybackStartResult.Rejected(failure)
+                PlaybackStartResult.Rejected(
+                    reason = failure,
+                    observationAvailable = extras.getBoolean(KEY_OBSERVATION_AVAILABLE),
+                )
             }
             else -> null
         }

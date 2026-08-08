@@ -14,6 +14,7 @@ class AppNavigationModelTest {
                 AppDestination.Guide,
                 AppDestination.Search,
                 AppDestination.Sources,
+                AppDestination.Doctor,
             )
             .inOrder()
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.AddSource)

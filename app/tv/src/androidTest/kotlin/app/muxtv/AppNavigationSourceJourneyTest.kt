@@ -1,13 +1,14 @@
 package app.muxtv
 
 import android.content.Context
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -43,7 +44,14 @@ import app.muxtv.database.SourceRefreshTarget
 import app.muxtv.database.SourceRefreshTrigger
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.sources.SourceEntryOnboarding
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.navigation.AppNavigation
+import app.muxtv.player.PlaybackFailureCategory
+import app.muxtv.player.PlaybackObservation
+import app.muxtv.player.PlaybackObservationKind
+import app.muxtv.player.PlaybackObservationReader
+import app.muxtv.player.PlaybackStartFailure
+import app.muxtv.player.PlaybackStartResult
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +61,7 @@ import org.junit.Test
 
 class AppNavigationSourceJourneyTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun httpsSourceCanBeAddedAndAppearsInSourcesAndChannelsWithoutTouch() {
@@ -148,6 +156,94 @@ class AppNavigationSourceJourneyTest {
             controllerConnector.close()
         }
     }
+
+    @Test
+    fun doctorBackAfterPlaybackRejectionReturnsToChannelsWithoutRetry() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceStore = JourneySourceRefreshStore()
+        val playbackCatalog = JourneyPlaybackCatalog().apply { publish("Домашний IPTV") }
+        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val controllerConnector = MuxTvMediaControllerConnector(context)
+        var playbackStartCount = 0
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    AppNavigation(
+                        playbackCatalog = playbackCatalog,
+                        channelPreferencesRepository = NoChannelPreferencesRepository,
+                        channelSearchRepository = NoChannelSearchRepository,
+                        recentChannelsRepository = NoRecentChannelsRepository,
+                        epgGuideRepository = NoGuideEpgGuideRepository,
+                        guideWindowRepository = TestGuideWindowRepository,
+                        controllerConnector = controllerConnector,
+                        sourceRefreshStore = sourceStore,
+                        sourceRefreshScheduler = scheduler,
+                        sourceEntryOnboarding = UnusedSourceEntryOnboarding,
+                        playbackObservationReader = PlaybackObservationReader {
+                            listOf(
+                                PlaybackObservation(
+                                    kind = PlaybackObservationKind.RECOVERY_FAILED,
+                                    failureCategory = PlaybackFailureCategory.TIMEOUT,
+                                    attemptNumber = 3,
+                                    attemptLimit = 3,
+                                    timestampEpochMillis = 1L,
+                                ),
+                            )
+                        },
+                        playbackStartGateway = PlaybackStartGateway { _, _, _ ->
+                            playbackStartCount += 1
+                            PlaybackStartResult.Rejected(
+                                reason = PlaybackStartFailure.RecoveryExhausted,
+                                observationAvailable = true,
+                            )
+                        },
+                    )
+                }
+            }
+
+            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionRight)
+            composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("channel-row-0").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-doctor").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-doctor").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("doctor-export").fetchSemanticsNodes().size == 1
+            }
+
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
+
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
+            }
+            composeRule.runOnIdle { check(playbackStartCount == 1) }
+        } finally {
+            controllerConnector.close()
+        }
+    }
+}
+
+private object UnusedSourceEntryOnboarding : SourceEntryOnboarding {
+    override suspend fun prepare(input: RemoteSourceOnboardingInput): RemoteSourcePreparationResult =
+        error("Source entry is not part of this journey")
+
+    override suspend fun activate(
+        token: RemoteSourcePreparationToken,
+        sourceName: String,
+    ): RemoteSourceActivationResult = error("Source entry is not part of this journey")
+
+    override suspend fun cancel(
+        token: RemoteSourcePreparationToken,
+    ): RemoteSourceCancellationResult = error("Source entry is not part of this journey")
+
+    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = null
 }
 
 private fun SemanticsNodeInteraction.press(
