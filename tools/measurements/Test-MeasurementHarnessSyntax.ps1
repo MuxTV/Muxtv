@@ -11,8 +11,9 @@ $diagnosticPath = Join-Path $evidenceDirectory "measurement-harness-syntax.log"
 $profileScript = Join-Path $PSScriptRoot "MeasurementProfiles.ps1"
 $seriesEntryScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeries.ps1"
 $seriesCoreScript = Join-Path $PSScriptRoot "Invoke-MeasurementSeriesCore.ps1"
+$m3uSeriesScript = Join-Path $PSScriptRoot "Invoke-M3uCorpusSeries.ps1"
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
-$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $finalizerScript)
+$files = @($profileScript, $seriesEntryScript, $seriesCoreScript, $m3uSeriesScript, $finalizerScript)
 $messages = [System.Collections.Generic.List[string]]::new()
 
 foreach ($file in $files) {
@@ -106,6 +107,65 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
         if ($seriesContent -match [regex]::Escape($token)) {
             $messages.Add("Measurement series core contains forbidden parallel execution: $token")
         }
+    }
+}
+
+if (Test-Path $m3uSeriesScript -PathType Leaf) {
+    $m3uSeriesContent = Get-Content -Path $m3uSeriesScript -Raw -Encoding utf8
+    $requiredTokens = @(
+        'ValidateSet("small-1k", "medium-10k", "large-50k")',
+        '[int]$Repetitions = 5',
+        ':core:testing:measureM3uParse',
+        ':core:testing:analyzeMeasurementSeries',
+        'corpusSha256',
+        'claimEligible',
+        'M3U corpus identity drifted between repetitions.',
+        'M3U series evidence directory already exists.',
+        'Assert-EvidenceCommit.ps1',
+        '-ExpectedCommit $SourceCommit'
+    )
+    foreach ($token in $requiredTokens) {
+        if ($m3uSeriesContent -notmatch [regex]::Escape($token)) {
+            $messages.Add("M3U corpus series is missing required contract token: $token")
+        }
+    }
+
+    $provenanceIndex = $m3uSeriesContent.IndexOf('Assert-EvidenceCommit.ps1', [System.StringComparison]::Ordinal)
+    $evidenceCreationIndex = $m3uSeriesContent.IndexOf('New-Item -ItemType Directory -Path $seriesDirectory', [System.StringComparison]::Ordinal)
+    if ($provenanceIndex -lt 0 -or
+        $evidenceCreationIndex -lt 0 -or
+        $provenanceIndex -gt $evidenceCreationIndex) {
+        $messages.Add("M3U corpus series must verify exact source-head provenance before creating the series evidence directory.")
+    }
+
+    foreach ($token in @("ForEach-Object -Parallel", "Start-Job", "Start-ThreadJob")) {
+        if ($m3uSeriesContent -match [regex]::Escape($token)) {
+            $messages.Add("M3U corpus series contains forbidden parallel execution: $token")
+        }
+    }
+
+    $negativeEvidenceRoot = Join-Path $evidenceDirectory "wrong-source-commit"
+    Remove-Item -LiteralPath $negativeEvidenceRoot -Recurse -Force -ErrorAction SilentlyContinue
+    $wrongSourceCommit = "0" * 40
+    $negativeFailure = $null
+    try {
+        & $m3uSeriesScript `
+            -SourceCommit $wrongSourceCommit `
+            -SourceBranch "measurement-harness-negative" `
+            -M3uProfile "small-1k" `
+            -Repetitions 2 `
+            -EvidenceRoot $negativeEvidenceRoot `
+            -NoDaemon
+        $messages.Add("M3U corpus series accepted a SourceCommit that does not match the checked-out Git HEAD.")
+    } catch {
+        $negativeFailure = $_.Exception.Message
+    }
+    if ($null -ne $negativeFailure -and
+        $negativeFailure -notlike "Evidence commit provenance mismatch:*") {
+        $messages.Add("M3U corpus series wrong-commit smoke failed for an unexpected reason: $negativeFailure")
+    }
+    if (Test-Path -LiteralPath $negativeEvidenceRoot) {
+        $messages.Add("M3U corpus series created evidence before rejecting a mismatched SourceCommit.")
     }
 }
 
