@@ -65,6 +65,7 @@ New-Item -ItemType Directory -Path $seriesDirectory | Out-Null
 New-Item -ItemType Directory -Path $inputDirectory, $outputDirectory, $requestDirectory | Out-Null
 
 $manifestPath = Join-Path $seriesDirectory "m3u-series-run-manifest.json"
+$manifestStagePath = Join-Path $seriesDirectory ".m3u-series-run-manifest.stage"
 $manifest = [ordered]@{
     schemaVersion = 1
     repository = "MuxTV/Muxtv"
@@ -89,7 +90,19 @@ $manifest = [ordered]@{
 }
 
 function Write-M3uSeriesManifest {
-    $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath -Encoding utf8
+    $serializedManifest = $manifest | ConvertTo-Json -Depth 10
+    try {
+        Set-Content `
+            -LiteralPath $manifestStagePath `
+            -Value $serializedManifest `
+            -Encoding utf8
+        Move-Item `
+            -LiteralPath $manifestStagePath `
+            -Destination $manifestPath `
+            -Force
+    } finally {
+        Remove-Item -LiteralPath $manifestStagePath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Invoke-M3uSeriesGradle {
