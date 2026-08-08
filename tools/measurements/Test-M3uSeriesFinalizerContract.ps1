@@ -15,13 +15,6 @@ Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
 $canonicalSha = "a" * 64
-$runningDirectory = Join-Path $testRoot "running"
-$passedDirectory = Join-Path $testRoot "passed"
-New-Item -ItemType Directory -Path $runningDirectory, $passedDirectory | Out-Null
-
-$runningManifestPath = Join-Path $runningDirectory "m3u-series-run-manifest.json"
-$passedManifestPath = Join-Path $passedDirectory "m3u-series-run-manifest.json"
-
 $partialRuns = @(
     [ordered]@{
         repetitionId = "host-01"
@@ -38,57 +31,90 @@ $corpus = [ordered]@{
     expectedWarningCount = 1
 }
 
-[ordered]@{
-    schemaVersion = 1
-    repository = "MuxTV/Muxtv"
-    branch = "finalizer-contract"
-    commit = "1" * 40
-    profile = "medium-10k"
-    seed = 20260728
-    repetitions = 5
-    warmups = 2
-    iterations = 5
-    runnerLabel = "self-hosted-windows-x64-v1"
-    claimEligible = $true
-    thresholdApplied = $false
-    status = "running"
-    startedAtUtc = "2026-08-08T00:00:00.0000000Z"
-    completedAtUtc = $null
-    corpus = $corpus
-    runs = $partialRuns
-    analysisOutput = $null
-    failureType = $null
-    failureLine = $null
-} | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $runningManifestPath -Encoding utf8
+function Write-FocusedFixtureManifest {
+    param(
+        [Parameter(Mandatory)][string]$DirectoryName,
+        [Parameter(Mandatory)][string]$Commit,
+        [Parameter(Mandatory)][string]$Profile,
+        [Parameter(Mandatory)][string]$Status,
+        [AllowNull()][string]$CompletedAtUtc,
+        [AllowNull()][string]$AnalysisOutput,
+        [AllowNull()][string]$FailureType,
+        [AllowNull()][Nullable[int]]$FailureLine
+    )
 
-[ordered]@{
-    schemaVersion = 1
-    repository = "MuxTV/Muxtv"
-    branch = "finalizer-contract"
-    commit = "2" * 40
-    profile = "large-50k"
-    seed = 20260728
-    repetitions = 5
-    warmups = 2
-    iterations = 5
-    runnerLabel = "self-hosted-windows-x64-v1"
-    claimEligible = $true
-    thresholdApplied = $false
-    status = "passed"
-    startedAtUtc = "2026-08-08T00:00:00.0000000Z"
-    completedAtUtc = "2026-08-08T00:01:00.0000000Z"
-    corpus = $corpus
-    runs = $partialRuns
-    analysisOutput = "m3u-large-50k-variance.json"
-    failureType = $null
-    failureLine = $null
-} | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $passedManifestPath -Encoding utf8
+    $directory = Join-Path $testRoot $DirectoryName
+    New-Item -ItemType Directory -Path $directory | Out-Null
+    $path = Join-Path $directory "m3u-series-run-manifest.json"
+    [ordered]@{
+        schemaVersion = 1
+        repository = "MuxTV/Muxtv"
+        branch = "finalizer-contract"
+        commit = $Commit
+        profile = $Profile
+        seed = 20260728
+        repetitions = 5
+        warmups = 2
+        iterations = 5
+        runnerLabel = "self-hosted-windows-x64-v1"
+        claimEligible = $true
+        thresholdApplied = $false
+        status = $Status
+        startedAtUtc = "2026-08-08T00:00:00.0000000Z"
+        completedAtUtc = $CompletedAtUtc
+        corpus = $corpus
+        runs = $partialRuns
+        analysisOutput = $AnalysisOutput
+        failureType = $FailureType
+        failureLine = $FailureLine
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path -Encoding utf8
+    return $path
+}
+
+$runningManifestPath = Write-FocusedFixtureManifest `
+    -DirectoryName "running" `
+    -Commit ("1" * 40) `
+    -Profile "medium-10k" `
+    -Status "running" `
+    -CompletedAtUtc $null `
+    -AnalysisOutput $null `
+    -FailureType $null `
+    -FailureLine $null
+$passedManifestPath = Write-FocusedFixtureManifest `
+    -DirectoryName "passed" `
+    -Commit ("2" * 40) `
+    -Profile "large-50k" `
+    -Status "passed" `
+    -CompletedAtUtc "2026-08-08T00:01:00.0000000Z" `
+    -AnalysisOutput "m3u-large-50k-variance.json" `
+    -FailureType $null `
+    -FailureLine $null
+$failedManifestPath = Write-FocusedFixtureManifest `
+    -DirectoryName "failed" `
+    -Commit ("3" * 40) `
+    -Profile "medium-10k" `
+    -Status "failed" `
+    -CompletedAtUtc "2026-08-08T00:02:00.0000000Z" `
+    -AnalysisOutput $null `
+    -FailureType "System.InvalidOperationException" `
+    -FailureLine 42
+$interruptedManifestPath = Write-FocusedFixtureManifest `
+    -DirectoryName "interrupted" `
+    -Commit ("4" * 40) `
+    -Profile "large-50k" `
+    -Status "interrupted" `
+    -CompletedAtUtc "2026-08-08T00:03:00.0000000Z" `
+    -AnalysisOutput $null `
+    -FailureType $null `
+    -FailureLine $null
 
 try {
     & $finalizerScript -EvidenceRoot $testRoot
 
     $running = Get-Content -LiteralPath $runningManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
     $passed = Get-Content -LiteralPath $passedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
+    $failed = Get-Content -LiteralPath $failedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
+    $interrupted = Get-Content -LiteralPath $interruptedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
 
     if ([string]$running.status -cne "interrupted") {
         throw "Focused M3U running manifest was not finalized as interrupted."
@@ -109,6 +135,16 @@ try {
         [string]$passed.completedAtUtc -cne "2026-08-08T00:01:00.0000000Z" -or
         [string]$passed.analysisOutput -cne "m3u-large-50k-variance.json") {
         throw "Focused M3U finalizer modified an already-passed manifest."
+    }
+    if ([string]$failed.status -cne "failed" -or
+        [string]$failed.completedAtUtc -cne "2026-08-08T00:02:00.0000000Z" -or
+        [string]$failed.failureType -cne "System.InvalidOperationException" -or
+        [int]$failed.failureLine -ne 42) {
+        throw "Focused M3U finalizer modified an already-failed manifest."
+    }
+    if ([string]$interrupted.status -cne "interrupted" -or
+        [string]$interrupted.completedAtUtc -cne "2026-08-08T00:03:00.0000000Z") {
+        throw "Focused M3U finalizer modified an already-interrupted manifest."
     }
 
     Write-Host "Focused M3U series finalizer contract is valid."
