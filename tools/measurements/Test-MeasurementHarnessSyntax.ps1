@@ -15,6 +15,7 @@ $m3uSeriesScript = Join-Path $PSScriptRoot "Invoke-M3uCorpusSeries.ps1"
 $finalizerScript = Join-Path $PSScriptRoot "Finalize-MeasurementSeriesEvidence.ps1"
 $m3uFinalizerContractScript = Join-Path $PSScriptRoot "Test-M3uSeriesFinalizerContract.ps1"
 $worktreeContractScript = Join-Path $repositoryRoot "tools\ci\Test-EvidenceWorktreeContract.ps1"
+$m3uWorktreeIntegrationContractScript = Join-Path $PSScriptRoot "Test-M3uSeriesWorktreeProvenanceContract.ps1"
 $files = @(
     $profileScript,
     $seriesEntryScript,
@@ -22,7 +23,8 @@ $files = @(
     $m3uSeriesScript,
     $finalizerScript,
     $m3uFinalizerContractScript,
-    $worktreeContractScript
+    $worktreeContractScript,
+    $m3uWorktreeIntegrationContractScript
 )
 $messages = [System.Collections.Generic.List[string]]::new()
 
@@ -205,6 +207,15 @@ if ($messages.Count -eq 0 -and (Test-Path $worktreeContractScript -PathType Leaf
         $global:LASTEXITCODE = 0
     } catch {
         $messages.Add("Evidence worktree provenance contract failed: $($_.Exception.Message)")
+    }
+}
+
+if ($messages.Count -eq 0 -and (Test-Path $m3uWorktreeIntegrationContractScript -PathType Leaf)) {
+    try {
+        & $m3uWorktreeIntegrationContractScript
+        $global:LASTEXITCODE = 0
+    } catch {
+        $messages.Add("Claim-eligible M3U worktree provenance integration contract failed: $($_.Exception.Message)")
     }
 }
 
