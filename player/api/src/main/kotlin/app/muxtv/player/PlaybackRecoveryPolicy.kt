@@ -24,6 +24,8 @@ class PlaybackRecoveryPlan private constructor(
             preferredVariantId: StreamVariantId?,
             budget: PlaybackRecoveryBudget,
         ): PlaybackRecoveryPlan {
+            require(candidates.all { candidate -> candidate.channelId == canonicalChannelId })
+
             val snapshot = candidates.distinctBy { candidate -> candidate.variantId }
             val preferredIndex = snapshot.indexOfFirst { candidate ->
                 candidate.variantId == preferredVariantId
