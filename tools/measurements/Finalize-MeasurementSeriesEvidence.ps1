@@ -96,6 +96,7 @@ foreach ($manifestFile in $focusedManifests) {
     }
 
     $manifest.status = "interrupted"
+    $manifest.claimEligible = $false
     if ([string]::IsNullOrWhiteSpace([string]$manifest.completedAtUtc)) {
         $manifest.completedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     }
