@@ -2,6 +2,7 @@ package app.muxtv.player
 
 import app.muxtv.common.CanonicalChannelId
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class PlaybackRecoveryPolicyTest {
@@ -54,5 +55,32 @@ class PlaybackRecoveryPolicyTest {
         assertThat(plan.orderedCandidates.map { it.variantId })
             .containsExactly(preferredVariantId, variantA, variantC)
             .inOrder()
+    }
+
+    @Test
+    fun `candidate from another canonical channel is rejected`() {
+        val channelId = CanonicalChannelId("channel-a")
+        val foreignChannelId = CanonicalChannelId("channel-b")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            PlaybackRecoveryPlan.create(
+                canonicalChannelId = channelId,
+                candidates = listOf(
+                    PlaybackRecoveryCandidate(
+                        channelId = channelId,
+                        variantId = StreamVariantId("variant-a"),
+                    ),
+                    PlaybackRecoveryCandidate(
+                        channelId = foreignChannelId,
+                        variantId = StreamVariantId("variant-b"),
+                    ),
+                ),
+                preferredVariantId = null,
+                budget = PlaybackRecoveryBudget(
+                    maxAttempts = 2,
+                    maxRecoveryDurationMillis = 10_000L,
+                ),
+            )
+        }
     }
 }
