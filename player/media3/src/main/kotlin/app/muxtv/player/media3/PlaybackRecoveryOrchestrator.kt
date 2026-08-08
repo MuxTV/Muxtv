@@ -8,7 +8,8 @@ import app.muxtv.player.PlaybackStartRequest
 internal enum class PlaybackRecoveryFailure {
     NoCandidates,
     AccessUnavailable,
-    BudgetExhausted,
+    CandidatesExhausted,
+    DeadlineExceeded,
 }
 
 internal sealed interface PlaybackRecoveryAction {
@@ -22,22 +23,26 @@ internal sealed interface PlaybackRecoveryAction {
         val generation: Long,
         val candidate: PlaybackCandidateIdentity,
         val request: ResolvedPlaybackRequest,
+        val attempt: Int = 0,
     ) : PlaybackRecoveryAction
 
     data class ApprovalRequired(
         val generation: Long,
         val candidate: PlaybackCandidateIdentity,
         val displayOrigin: String,
+        val attempt: Int = 0,
     ) : PlaybackRecoveryAction
 
     data class Succeeded(
         val generation: Long,
         val candidate: PlaybackCandidateIdentity,
+        val attempt: Int = 0,
     ) : PlaybackRecoveryAction
 
     data class Failed(
         val generation: Long,
         val failure: PlaybackRecoveryFailure,
+        val attempt: Int = 0,
     ) : PlaybackRecoveryAction
 
     data object Cancelled : PlaybackRecoveryAction
@@ -67,7 +72,7 @@ internal class PlaybackRecoveryOrchestrator(
             active = null
             return PlaybackRecoveryAction.Failed(
                 generation = generation,
-                failure = PlaybackRecoveryFailure.BudgetExhausted,
+                failure = PlaybackRecoveryFailure.DeadlineExceeded,
             )
         }
         val ordered = candidates
@@ -109,14 +114,19 @@ internal class PlaybackRecoveryOrchestrator(
     ): PlaybackRecoveryAction {
         val state = current(generation, candidate, Phase.Resolving)
             ?: return PlaybackRecoveryAction.Ignored
-        if (isExpired(state)) return fail(state, PlaybackRecoveryFailure.BudgetExhausted)
+        if (isExpired(state)) return fail(state, PlaybackRecoveryFailure.DeadlineExceeded)
         return when (resolution) {
             is PlaybackVariantResolution.Ready -> {
                 if (!resolution.request.matches(candidate)) {
                     return advance(state, PlaybackRecoveryFailure.AccessUnavailable)
                 }
                 state.phase = Phase.Installed
-                PlaybackRecoveryAction.Install(generation, candidate, resolution.request)
+                PlaybackRecoveryAction.Install(
+                    generation = generation,
+                    candidate = candidate,
+                    request = resolution.request,
+                    attempt = state.attempt,
+                )
             }
             is PlaybackVariantResolution.InsecureTransportApprovalRequired -> {
                 if (resolution.channelId != candidate.channelId ||
@@ -129,6 +139,7 @@ internal class PlaybackRecoveryOrchestrator(
                     generation = generation,
                     candidate = candidate,
                     displayOrigin = resolution.displayOrigin,
+                    attempt = state.attempt,
                 )
             }
             is PlaybackVariantResolution.AccessUnavailable,
@@ -143,7 +154,7 @@ internal class PlaybackRecoveryOrchestrator(
     ): PlaybackRecoveryAction {
         val state = current(generation, candidate, Phase.Installed)
             ?: return PlaybackRecoveryAction.Ignored
-        return advance(state, PlaybackRecoveryFailure.BudgetExhausted)
+        return advance(state, PlaybackRecoveryFailure.CandidatesExhausted)
     }
 
     fun onRenderedFirstFrame(
@@ -152,9 +163,9 @@ internal class PlaybackRecoveryOrchestrator(
     ): PlaybackRecoveryAction {
         val state = current(generation, candidate, Phase.Installed)
             ?: return PlaybackRecoveryAction.Ignored
-        if (isExpired(state)) return fail(state, PlaybackRecoveryFailure.BudgetExhausted)
+        if (isExpired(state)) return fail(state, PlaybackRecoveryFailure.DeadlineExceeded)
         active = null
-        return PlaybackRecoveryAction.Succeeded(generation, candidate)
+        return PlaybackRecoveryAction.Succeeded(generation, candidate, state.attempt)
     }
 
     fun cancel(): PlaybackRecoveryAction {
@@ -177,7 +188,10 @@ internal class PlaybackRecoveryOrchestrator(
         state: Active,
         terminalFailure: PlaybackRecoveryFailure,
     ): PlaybackRecoveryAction {
-        if (isExpired(state) || state.attempt + 1 >= state.candidates.size) {
+        if (isExpired(state)) {
+            return fail(state, PlaybackRecoveryFailure.DeadlineExceeded)
+        }
+        if (state.attempt + 1 >= state.candidates.size) {
             return fail(state, terminalFailure)
         }
         state.attempt += 1
@@ -193,7 +207,7 @@ internal class PlaybackRecoveryOrchestrator(
         failure: PlaybackRecoveryFailure,
     ): PlaybackRecoveryAction {
         active = null
-        return PlaybackRecoveryAction.Failed(state.generation, failure)
+        return PlaybackRecoveryAction.Failed(state.generation, failure, state.attempt)
     }
 
     private data class Active(
