@@ -120,13 +120,24 @@ if (Test-Path $m3uSeriesScript -PathType Leaf) {
         'corpusSha256',
         'claimEligible',
         'M3U corpus identity drifted between repetitions.',
-        'M3U series evidence directory already exists.'
+        'M3U series evidence directory already exists.',
+        'Assert-EvidenceCommit.ps1',
+        '-ExpectedCommit $SourceCommit'
     )
     foreach ($token in $requiredTokens) {
         if ($m3uSeriesContent -notmatch [regex]::Escape($token)) {
             $messages.Add("M3U corpus series is missing required contract token: $token")
         }
     }
+
+    $provenanceIndex = $m3uSeriesContent.IndexOf('Assert-EvidenceCommit.ps1', [System.StringComparison]::Ordinal)
+    $evidenceCreationIndex = $m3uSeriesContent.IndexOf('New-Item -ItemType Directory -Path $seriesDirectory', [System.StringComparison]::Ordinal)
+    if ($provenanceIndex -lt 0 -or
+        $evidenceCreationIndex -lt 0 -or
+        $provenanceIndex -gt $evidenceCreationIndex) {
+        $messages.Add("M3U corpus series must verify exact source-head provenance before creating the series evidence directory.")
+    }
+
     foreach ($token in @("ForEach-Object -Parallel", "Start-Job", "Start-ThreadJob")) {
         if ($m3uSeriesContent -match [regex]::Escape($token)) {
             $messages.Add("M3U corpus series contains forbidden parallel execution: $token")
