@@ -5,8 +5,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $m3uSeriesScript = Join-Path $PSScriptRoot "Invoke-M3uCorpusSeries.ps1"
+$workflowContract = Join-Path $PSScriptRoot "Test-FocusedM3uEvidenceWorkflowContract.ps1"
 if (-not (Test-Path $m3uSeriesScript -PathType Leaf)) {
     throw "Focused M3U series entry point was not found."
+}
+if (-not (Test-Path $workflowContract -PathType Leaf)) {
+    throw "Accepted-main focused M3U workflow contract was not found."
 }
 
 $content = Get-Content -LiteralPath $m3uSeriesScript -Raw -Encoding utf8
@@ -35,3 +39,4 @@ if ($stageIndex -lt 0 -or $publishIndex -lt 0 -or $stageIndex -gt $publishIndex)
 }
 
 Write-Host "Focused M3U manifest atomic-publication contract is valid."
+& $workflowContract
