@@ -118,4 +118,14 @@ class PlaybackRecoveryPolicyTest {
             .containsExactly(preferredVariantId, variantA)
             .inOrder()
     }
+
+    @Test
+    fun `total recovery duration budget must be positive`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            PlaybackRecoveryBudget(
+                maxAttempts = 1,
+                maxRecoveryDurationMillis = 0L,
+            )
+        }
+    }
 }
