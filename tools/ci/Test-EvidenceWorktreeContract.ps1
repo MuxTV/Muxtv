@@ -69,7 +69,7 @@ function Assert-GuardFailsLike {
     if ($null -eq $failure) {
         throw "Evidence worktree provenance guard unexpectedly accepted repository state: $ExpectedPrefix"
     }
-    if ($failure -notlike ($ExpectedPrefix + "*")) {
+    if (-not $failure.StartsWith($ExpectedPrefix, [System.StringComparison]::Ordinal)) {
         throw "Evidence worktree provenance guard failed for an unexpected reason: $failure"
     }
 }
