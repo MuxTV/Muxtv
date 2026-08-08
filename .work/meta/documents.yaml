@@ -1,6 +1,6 @@
 schema_version: 1
 status: accepted
-last_reviewed: 2026-07-25
+last_reviewed: 2026-08-08
 
 roots:
   project: .work/PROJECT.md
@@ -65,7 +65,7 @@ normative:
 
 plans:
   phase_00_baseline: .work/plans/2026-07-19-phase-00-foundation.md
-  current_execution: docs/superpowers/plans/2026-07-25-next-execution.md
+  current_execution: docs/superpowers/plans/2026-08-08-mvp-alpha-1-execution.md
 
 machine_metadata:
   - .work/meta/project.yaml
