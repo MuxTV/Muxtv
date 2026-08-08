@@ -172,7 +172,10 @@ class PlaybackSetupCommandCodecTest {
                 displayOrigin = "http://cdn.example:8080",
                 variantId = "variant-http",
             ),
-            PlaybackStartResult.Rejected(PlaybackStartFailure.RecoveryExhausted),
+            PlaybackStartResult.Rejected(
+                reason = PlaybackStartFailure.RecoveryExhausted,
+                observationAvailable = true,
+            ),
         )
 
         results.forEach { expected ->

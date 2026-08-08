@@ -43,6 +43,7 @@ import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.PlaybackObservationReader
 
@@ -63,6 +64,7 @@ fun AppNavigation(
     playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
     doctorExportStatus: DoctorExportStatus = DoctorExportStatus.IDLE,
     onExportDoctorReport: (String) -> Unit = {},
+    playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
@@ -74,6 +76,13 @@ fun AppNavigation(
 
     fun goBack() {
         if (backStack.size > 1) backStack.removeLastOrNull()
+    }
+
+    fun openDoctorFromPlayer() {
+        if (backStack.lastOrNull() is AppDestination.Player) {
+            backStack.removeLastOrNull()
+        }
+        open(AppDestination.Doctor)
     }
 
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
@@ -162,6 +171,8 @@ fun AppNavigation(
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             channelId = destination.channelId,
                             onBack = ::goBack,
+                            onOpenDoctor = ::openDoctorFromPlayer,
+                            playbackStartGateway = playbackStartGateway,
                         )
                     }
                 }

@@ -124,7 +124,11 @@ class MuxTvPlaybackService : MediaSessionService() {
                 clearInstalled()
                 complete(
                     PlaybackStartResult.Rejected(
-                        PlaybackStartFailure.RecoveryExhausted,
+                        reason = PlaybackStartFailure.RecoveryExhausted,
+                        observationAvailable = hasPlaybackAttemptEvidence(
+                            failure = PlaybackRecoveryFailure.DeadlineExceeded,
+                            attemptNumber = activeAttemptNumber,
+                        ),
                     ),
                 )
             }
@@ -266,7 +270,15 @@ class MuxTvPlaybackService : MediaSessionService() {
                         PlaybackRecoveryFailure.DeadlineExceeded,
                         -> PlaybackStartFailure.RecoveryExhausted
                     }
-                    complete(PlaybackStartResult.Rejected(failure))
+                    complete(
+                        PlaybackStartResult.Rejected(
+                            reason = failure,
+                            observationAvailable = hasPlaybackAttemptEvidence(
+                                failure = action.failure,
+                                attemptNumber = activeAttemptNumber,
+                            ),
+                        ),
+                    )
                     return
                 }
 
