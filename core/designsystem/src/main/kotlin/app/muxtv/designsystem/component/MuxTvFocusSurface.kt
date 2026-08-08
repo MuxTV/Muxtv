@@ -1,7 +1,5 @@
 package app.muxtv.designsystem.component
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -26,6 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import app.muxtv.designsystem.TvTokens
 
+/**
+ * Shared dense-TV focus surface.
+ *
+ * Repeated D-pad traversal keeps measured geometry stable and updates focus feedback immediately.
+ * Activation remains owned by Compose clickable semantics; this wrapper does not synthesize
+ * DPAD_CENTER/ENTER events in preview-key handlers.
+ */
 @Composable
 fun MuxTvFocusSurface(
     onClick: () -> Unit,
@@ -33,15 +37,9 @@ fun MuxTvFocusSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (focused) TvTokens.Focus.scale else 1f,
-        animationSpec = tween(TvTokens.Motion.focusDurationMillis),
-        label = "focus-scale",
-    )
     val shape = RoundedCornerShape(TvTokens.Shape.cardCorner)
     Box(
         modifier = modifier
-            .scale(scale)
             .alpha(if (focused) TvTokens.Focus.focusedAlpha else TvTokens.Focus.unfocusedAlpha)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
