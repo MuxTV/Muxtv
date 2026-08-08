@@ -6,24 +6,17 @@ import org.junit.Test
 
 class PlaybackRecoveryPolicyTest {
     @Test
-    fun `preferred same-channel candidate is attempted first`() {
+    fun `preferred same-channel candidate is attempted first and remainder stays stable`() {
         val channelId = CanonicalChannelId("channel-a")
+        val variantA = StreamVariantId("variant-a")
         val preferredVariantId = StreamVariantId("variant-b")
+        val variantC = StreamVariantId("variant-c")
         val plan = PlaybackRecoveryPlan.create(
             canonicalChannelId = channelId,
             candidates = listOf(
-                PlaybackRecoveryCandidate(
-                    channelId = channelId,
-                    variantId = StreamVariantId("variant-a"),
-                ),
-                PlaybackRecoveryCandidate(
-                    channelId = channelId,
-                    variantId = preferredVariantId,
-                ),
-                PlaybackRecoveryCandidate(
-                    channelId = channelId,
-                    variantId = StreamVariantId("variant-c"),
-                ),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantA),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = preferredVariantId),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantC),
             ),
             preferredVariantId = preferredVariantId,
             budget = PlaybackRecoveryBudget(
@@ -32,6 +25,34 @@ class PlaybackRecoveryPolicyTest {
             ),
         )
 
-        assertThat(plan.orderedCandidates.first().variantId).isEqualTo(preferredVariantId)
+        assertThat(plan.orderedCandidates.map { it.variantId })
+            .containsExactly(preferredVariantId, variantA, variantC)
+            .inOrder()
+    }
+
+    @Test
+    fun `duplicate same-channel variant identity is attempted once using first occurrence`() {
+        val channelId = CanonicalChannelId("channel-a")
+        val variantA = StreamVariantId("variant-a")
+        val preferredVariantId = StreamVariantId("variant-b")
+        val variantC = StreamVariantId("variant-c")
+        val plan = PlaybackRecoveryPlan.create(
+            canonicalChannelId = channelId,
+            candidates = listOf(
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantA),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = preferredVariantId),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = preferredVariantId),
+                PlaybackRecoveryCandidate(channelId = channelId, variantId = variantC),
+            ),
+            preferredVariantId = preferredVariantId,
+            budget = PlaybackRecoveryBudget(
+                maxAttempts = 4,
+                maxRecoveryDurationMillis = 10_000L,
+            ),
+        )
+
+        assertThat(plan.orderedCandidates.map { it.variantId })
+            .containsExactly(preferredVariantId, variantA, variantC)
+            .inOrder()
     }
 }
