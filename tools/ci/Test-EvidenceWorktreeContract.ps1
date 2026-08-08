@@ -31,6 +31,28 @@ function Invoke-GitFixture {
     }
 }
 
+function Assert-GitFixtureDrift {
+    param(
+        [Parameter(Mandatory)][string]$Repository,
+        [Parameter(Mandatory)][ValidateSet("unstaged", "staged")][string]$Kind
+    )
+
+    $arguments = if ($Kind -ceq "staged") {
+        @("diff", "--cached", "--name-only", "--no-ext-diff", "--", "tracked.txt")
+    } else {
+        @("diff", "--name-only", "--no-ext-diff", "--", "tracked.txt")
+    }
+    $output = @(& git -C $Repository @arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Git fixture drift inspection failed with exit code ${exitCode}."
+    }
+    $paths = @($output | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($paths -notcontains "tracked.txt") {
+        throw "Git fixture did not materialize expected $Kind tracked drift."
+    }
+}
+
 function Assert-GuardFailsLike {
     param(
         [Parameter(Mandatory)][string]$ExpectedPrefix,
@@ -76,16 +98,18 @@ try {
     Set-Content -LiteralPath $untrackedEvidence -Value "{}" -Encoding utf8
     & $assertWorktreeScript -RepositoryRoot $fixtureRepository
 
-    # Unstaged tracked drift must fail closed.
+    # Unstaged tracked drift must fail closed. Prove Git sees the fixture drift before invoking the guard.
     Set-Content -LiteralPath (Join-Path $fixtureRepository "tracked.txt") -Value "unstaged drift" -Encoding utf8
+    Assert-GitFixtureDrift -Repository $fixtureRepository -Kind "unstaged"
     Assert-GuardFailsLike `
         -Repository $fixtureRepository `
         -ExpectedPrefix "Tracked worktree provenance mismatch: unstaged tracked changes detected."
     Invoke-GitFixture -Repository $fixtureRepository -Arguments @("reset", "--hard", "--quiet", "HEAD")
 
-    # Staged tracked drift must also fail closed.
+    # Staged tracked drift must also fail closed. Prove the index contains the intended fixture drift first.
     Set-Content -LiteralPath (Join-Path $fixtureRepository "tracked.txt") -Value "staged drift" -Encoding utf8
     Invoke-GitFixture -Repository $fixtureRepository -Arguments @("add", "tracked.txt")
+    Assert-GitFixtureDrift -Repository $fixtureRepository -Kind "staged"
     Assert-GuardFailsLike `
         -Repository $fixtureRepository `
         -ExpectedPrefix "Tracked worktree provenance mismatch: staged tracked changes detected."
