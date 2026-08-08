@@ -6,9 +6,9 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 
 ## Статус
 
-Проект находится в стадии **functional pre-alpha**. Принятый `main` — `5bb6ee1f754785b2b236d6dcb52fd4458780e758`: exact source-head CI/evidence provenance fix PR #137 поверх принятого Guide TV baseline `286ece017445b811a7adddd4ba7e85cacc5dd3ea`.
+Проект находится в стадии **functional pre-alpha**. Принятый `main` на момент этой синхронизации — `8fadb411e20c6a854fafd2005c5c5b17e868f858`: provider-readiness pure API contract PR #133 поверх exact-evidence CI, Guide и D1 TV-focus baseline.
 
-Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp и Media3. Room schema на принятом `main` — **v10**. `minSdk = 26`.
+Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room3, WorkManager, OkHttp и Media3. Room schema — **v10**. `minSdk = 26`.
 
 Рабочий продуктовый контур:
 
@@ -32,10 +32,15 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt
 18. bounded Guide channel/programme data window без full-guide materialization;
 19. bounded Guide TV viewport с deterministic D-pad/focus restoration и Guide → Player navigation;
 20. bare source host normalization to HTTPS;
-21. exact source-head CI/evidence provenance contract для host/device/measurement PR workflows.
+21. exact source-head CI/evidence provenance contract для host/device/measurement PR workflows;
+22. immediate dense custom D-pad focus без queued scale animation, с real-key API26/API36 acceptance;
+23. provider-neutral readiness contract: active live catalog делает provider `USABLE`, secondary enrichment не откатывает previous-good live/EPG state.
 
 ### Последние принятые этапы
 
+- PR #133 — provider-neutral readiness API contract (#112 umbrella remains open);
+- PR #138 — immediate dense-TV custom focus D1 (#111 remains open for D2–D4);
+- PR #135 — post-Guide/post-provenance repository truth and execution plan;
 - PR #137 — exact PR source-head evidence provenance (#136);
 - PR #131 — завершённый Guide TV route/UI (#29);
 - PR #129 — bare-host source normalization to HTTPS;
@@ -44,39 +49,41 @@ Production baseline: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt
 - PR #124 — centralized Room migration и generated schema guard;
 - PR #123 — cross-surface active/profile-visible channel truth.
 
-PR #137 source head `02d6ee4b2641e12d88ace83bcd6af510f18bac08` перед merge прошёл:
+PR #137 сделал совпадение `git HEAD == SourceCommit` исполняемым контрактом для evidence-producing PR workflows. Исторические pre-#136 PR runs считаются integration acceptance, но не strict exact-source-head evidence.
 
-- Self-hosted Full — success;
-- Android TV Product old-edge/current matrix — success;
-- Database old-edge/current matrix — success;
-- Measurement variance smoke — success;
-- unresolved review threads — 0.
+PR #138 source head перед merge прошёл fresh Self-hosted Full и Android TV Product API26/API36 matrix. D1 не является глобальным запретом platform focus scale: правило stable geometry применяется к dense custom surfaces, где scale/queued motion нарушает пространственную стабильность.
 
-Исторические pre-#136 PR runs по-прежнему считаются integration acceptance, но не strict exact-source-head evidence: именно #137 сделал совпадение `git HEAD == SourceCommit` исполняемым контрактом.
+PR #133 source head `13ac65c77e8b33538bdd28bf7d16bac8c8b0eda3` прошёл Product DeviceMatrix `31245990038`; внутри `Invoke-TvDeviceValidation.ps1` выполняется Full host acceptance до API26/API36 AVD. Issue #112 остаётся integration umbrella для будущего provider-neutral orchestration layer.
 
 ## Что ещё не завершено
 
 Текущий critical path:
 
-1. **PR #135** — завершить repository truth sync на новом exact-evidence baseline;
-2. **issue #112 / PR #133** и **issue #27 / PR #134** — restack на `5bb6ee1...` и повторить required exact-source gates;
-3. **issue #27** — после принятия #134 выполнить deterministic 5×10k + 5×50k measurement series и проверить variance/provenance;
-4. **issue #30** — bounded same-channel variant fallback + typed recovery/diagnostics + TV Doctor Lite; Media3 loader retries и MuxTV variant switching обязаны укладываться в один total recovery budget;
-5. **issues #33/#93** — Lounge Light TV-first polish поверх реальных Channels/Search/Recent/Guide/Player/Doctor contracts;
-6. **issue #31** — R8, Baseline/Startup Profiles, endurance, signing, SBOM/release checklist и physical-device evidence.
+1. **issue #27 / PR #134** — завершить manual exact-head provenance RED→GREEN для focused M3U series;
+2. **issue #140** — после #134 добавить accepted-main focused evidence lane и выполнить sequential 5× `medium-10k` + 5× `large-50k`;
+3. **issue #27** — проверить corpus identity, analyzer provenance и variance; не вводить threshold без устойчивой repeated evidence;
+4. **issue #139** — fail-closed reject staged/unstaged tracked changes для claim-eligible manual evidence;
+5. **issue #30A** — pure bounded same-channel recovery policy без Media3/Room/UI и без hidden product defaults;
+6. **issue #30B** — process-owned Media3 recovery runtime, где loader retries + candidate switching входят в один total user-visible deadline;
+7. **issue #30C/#30D** — typed redacted diagnostics при доказанной необходимости persistence + TV Doctor Lite;
+8. **issues #33/#93** — Lounge Light TV-first polish поверх стабильных interaction/recovery contracts;
+9. **issue #31** — R8, Baseline/Startup Profiles, endurance, signing, SBOM/release checklist и physical-device evidence.
 
 Параллельные hardening/evidence packages:
 
-- **issue #111 / PR #138** — D1 immediate dense focus уже прошёл наблюдённый RED и minimal GREEN находится в exact-source validation; далее native OK/long-press/repeat, state/reduced-motion и 720p/1080p reachability;
+- **issue #111** — D2 native OK/long-press/repeat + representative Compose Test JUnit4 v2 migration; D3 independent focus/selected/playing/disabled + reduced motion; D4 720p/1080p reachability и long Russian labels;
 - **issue #118** — прямой отказ от refresh до user unlock и идемпотентная WorkManager-инициализация;
 - **issue #113** — portable backup/restore envelope с integrity digest до secrets-модели;
-- **issue #101** — разделение Product/Database connected suites внутри существующего AVD harness, только с before/after runner evidence;
+- **issue #101** — убрать доказанное дублирование Product/Database/standalone host work только с before/after runner wall-time evidence;
 - **issue #100** — conditional M3U `ETag`/`Last-Modified` и корректный `304 Not Modified`, когда свободен следующий Room schema owner;
-- **Room3 3.0.1** — отдельный dependency-only hardening PR без изменения MuxTV Room schema version;
 - **issues #39/#40** — user guide/recovery и pre-release/app-store checklist;
 - **issues #109/#117/#132** — buffer/FFmpeg/seek-cache decisions только после реального corpus/physical-device evidence и без второго player owner.
 
-**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible bottleneck/compatibility evidence и отдельного ADR. Issue #30 прямо исключает alternate playback engine.
+### Dependency note
+
+На 2026-08-08 официальный Android Developers Room3 release page по-прежнему указывает **Room3 3.0.0** как stable. Ранее записанный план `3.0.0 → 3.0.1` отменён как неподтверждённый; отдельный Room3 patch upgrade не выполняется, пока такой релиз не появится в официальном источнике.
+
+**Rust/UniFFI, bundled SQLite, libmpv и второй player engine не являются текущими задачами реализации.** Они допускаются только после reproducible residual bottleneck/compatibility evidence и отдельного ADR. Issue #30 прямо исключает alternate playback engine.
 
 ## Архитектурные принципы
 
@@ -93,8 +100,11 @@ PR #137 source head `02d6ee4b2641e12d88ace83bcd6af510f18bac08` перед merge 
 - UI не выполняет full-catalog/full-guide materialization;
 - emulator/API matrix проверяет Android contracts, но не заменяет physical-device validation;
 - evidence-producing CI обязан исполнять тот commit, который записывает как `SourceCommit`;
+- claim-eligible manual evidence также должно отклонять staged/unstaged tracked source drift;
 - Media3 internal loader retry и MuxTV same-channel variant recovery — разные уровни, но входят в один bounded user-visible recovery deadline;
-- D-pad focus не должен ставить в очередь scale/translation motion.
+- temporary fallback не переписывает preferred variant;
+- dense custom D-pad focus не должен ставить в очередь scale/translation motion;
+- стандартное Android TV focus scale поведение не заменяется глобально без evidence.
 
 ## Сборка и проверка
 
@@ -154,6 +164,8 @@ pwsh -NoProfile -File .\tools\measurements\Invoke-M3uCorpusSeries.ps1 `
   -Repetitions 5 `
   -NoDaemon
 ```
+
+После #134 этот entrypoint обязан сам fail-closed проверить exact Git HEAD до создания claim evidence. Issue #140 добавит repository-owned accepted-main lane для последовательных 5×10k + 5×50k runs.
 
 ## Документация
 
