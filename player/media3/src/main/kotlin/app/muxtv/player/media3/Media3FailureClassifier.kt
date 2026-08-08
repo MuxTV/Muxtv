@@ -1,6 +1,8 @@
 package app.muxtv.player.media3
 
+import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import app.muxtv.player.PlaybackFailureCategory
 import java.net.UnknownHostException
@@ -12,6 +14,7 @@ internal data class Media3Failure(
     val media3ErrorCode: Int,
 )
 
+@AndroidXOptIn(UnstableApi::class)
 internal object Media3FailureClassifier {
     fun classify(exception: PlaybackException): Media3Failure {
         return classify(exception.errorCode, exception)
