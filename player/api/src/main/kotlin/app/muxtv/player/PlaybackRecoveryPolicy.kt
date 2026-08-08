@@ -10,7 +10,11 @@ data class PlaybackRecoveryCandidate(
 data class PlaybackRecoveryBudget(
     val maxAttempts: Int,
     val maxRecoveryDurationMillis: Long,
-)
+) {
+    init {
+        require(maxAttempts > 0)
+    }
+}
 
 class PlaybackRecoveryPlan private constructor(
     val canonicalChannelId: CanonicalChannelId,
@@ -30,7 +34,7 @@ class PlaybackRecoveryPlan private constructor(
             val preferredIndex = snapshot.indexOfFirst { candidate ->
                 candidate.variantId == preferredVariantId
             }
-            val orderedCandidates = if (preferredIndex > 0) {
+            val preferredFirstCandidates = if (preferredIndex > 0) {
                 buildList(snapshot.size) {
                     add(snapshot[preferredIndex])
                     snapshot.forEachIndexed { index, candidate ->
@@ -42,6 +46,7 @@ class PlaybackRecoveryPlan private constructor(
             } else {
                 snapshot
             }
+            val orderedCandidates = preferredFirstCandidates.take(budget.maxAttempts)
 
             return PlaybackRecoveryPlan(
                 canonicalChannelId = canonicalChannelId,
