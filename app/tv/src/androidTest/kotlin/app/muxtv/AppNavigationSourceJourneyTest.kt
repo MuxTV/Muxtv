@@ -1,6 +1,7 @@
 package app.muxtv
 
 import android.content.Context
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -60,7 +61,7 @@ import org.junit.Test
 
 class AppNavigationSourceJourneyTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun httpsSourceCanBeAddedAndAppearsInSourcesAndChannelsWithoutTouch() {
