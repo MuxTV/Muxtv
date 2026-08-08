@@ -8,6 +8,7 @@ on:
     paths:
       - .github/workflows/focused-m3u-evidence.yml
       - tools/ci/Assert-EvidenceCommit.ps1
+      - tools/ci/Assert-EvidenceWorktree.ps1
       - tools/measurements/Invoke-M3uCorpusSeries.ps1
       - tools/measurements/Finalize-MeasurementSeriesEvidence.ps1
       - tools/measurements/Test-MeasurementHarnessSyntax.ps1

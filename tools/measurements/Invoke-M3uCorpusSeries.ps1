@@ -47,6 +47,14 @@ if (-not (Test-Path $assertEvidenceCommit -PathType Leaf)) {
 }
 & $assertEvidenceCommit -ExpectedCommit $SourceCommit
 
+if ($Repetitions -ge 5) {
+    $assertEvidenceWorktree = Join-Path $repositoryRoot "tools\ci\Assert-EvidenceWorktree.ps1"
+    if (-not (Test-Path $assertEvidenceWorktree -PathType Leaf)) {
+        throw "Evidence worktree provenance assertion was not found."
+    }
+    & $assertEvidenceWorktree -RepositoryRoot $repositoryRoot
+}
+
 $resolvedEvidenceRoot = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
     $EvidenceRoot
 } else {
