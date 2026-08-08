@@ -13,6 +13,7 @@ data class PlaybackRecoveryBudget(
 ) {
     init {
         require(maxAttempts > 0)
+        require(maxRecoveryDurationMillis > 0)
     }
 }
 
