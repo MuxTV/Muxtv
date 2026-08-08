@@ -112,13 +112,17 @@ $interruptedManifestPath = Write-FocusedFixtureManifest `
     -FailureType $null `
     -FailureLine $null
 
+$passedBefore = Get-Content -LiteralPath $passedManifestPath -Raw -Encoding utf8
+$failedBefore = Get-Content -LiteralPath $failedManifestPath -Raw -Encoding utf8
+$interruptedBefore = Get-Content -LiteralPath $interruptedManifestPath -Raw -Encoding utf8
+
 try {
     & $finalizerScript -EvidenceRoot $testRoot
 
     $running = Get-Content -LiteralPath $runningManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
-    $passed = Get-Content -LiteralPath $passedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
-    $failed = Get-Content -LiteralPath $failedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
-    $interrupted = Get-Content -LiteralPath $interruptedManifestPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
+    $passedAfter = Get-Content -LiteralPath $passedManifestPath -Raw -Encoding utf8
+    $failedAfter = Get-Content -LiteralPath $failedManifestPath -Raw -Encoding utf8
+    $interruptedAfter = Get-Content -LiteralPath $interruptedManifestPath -Raw -Encoding utf8
 
     if ([string]$running.status -cne "interrupted") {
         throw "Focused M3U running manifest was not finalized as interrupted."
@@ -135,19 +139,13 @@ try {
         throw "Focused M3U finalization did not preserve corpus identity."
     }
 
-    if ([string]$passed.status -cne "passed" -or
-        [string]$passed.completedAtUtc -cne "2026-08-08T00:01:00.0000000Z" -or
-        [string]$passed.analysisOutput -cne "m3u-large-50k-variance.json") {
+    if ($passedAfter -cne $passedBefore) {
         throw "Focused M3U finalizer modified an already-passed manifest."
     }
-    if ([string]$failed.status -cne "failed" -or
-        [string]$failed.completedAtUtc -cne "2026-08-08T00:02:00.0000000Z" -or
-        [string]$failed.failureType -cne "System.InvalidOperationException" -or
-        [int]$failed.failureLine -ne 42) {
+    if ($failedAfter -cne $failedBefore) {
         throw "Focused M3U finalizer modified an already-failed manifest."
     }
-    if ([string]$interrupted.status -cne "interrupted" -or
-        [string]$interrupted.completedAtUtc -cne "2026-08-08T00:03:00.0000000Z") {
+    if ($interruptedAfter -cne $interruptedBefore) {
         throw "Focused M3U finalizer modified an already-interrupted manifest."
     }
 
