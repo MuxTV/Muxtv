@@ -36,8 +36,15 @@ if ($successEligibilityIndex -lt 0 -or
 }
 
 $failedStatusIndex = $seriesContent.IndexOf('$manifest.status = "failed"', [System.StringComparison]::Ordinal)
-$failedEligibilityIndex = $seriesContent.IndexOf('$manifest.claimEligible = $false', $failedStatusIndex, [System.StringComparison]::Ordinal)
-if ($failedStatusIndex -lt 0 -or $failedEligibilityIndex -lt $failedStatusIndex) {
+if ($failedStatusIndex -lt 0) {
+    throw "Focused M3U failed status publication contract is missing."
+}
+$failedEligibilityIndex = $seriesContent.IndexOf(
+    '$manifest.claimEligible = $false',
+    $failedStatusIndex,
+    [System.StringComparison]::Ordinal
+)
+if ($failedEligibilityIndex -lt $failedStatusIndex) {
     throw "Focused M3U failed evidence must explicitly remain non-claim-eligible."
 }
 
