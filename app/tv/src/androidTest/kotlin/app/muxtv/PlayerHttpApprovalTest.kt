@@ -22,6 +22,10 @@ import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.ResolvedPlaybackRequest
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.feature.player.PlaybackStartGateway
+import app.muxtv.player.PlaybackStartFailure
+import app.muxtv.player.PlaybackStartRequest
+import app.muxtv.player.PlaybackStartResult
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -34,7 +38,7 @@ class PlayerHttpApprovalTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun exactOriginIsConfirmedBeforeThePlaybackRequestIsInstalled() {
+    fun exactOriginIsConfirmedBeforeIdentityOnlyPlaybackIsRetried() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val catalog = ApprovalJourneyCatalog()
         val connector = MuxTvMediaControllerConnector(context)
@@ -48,6 +52,7 @@ class PlayerHttpApprovalTest {
                         profileId = PROFILE_ID,
                         channelId = CHANNEL_ID,
                         onBack = {},
+                        playbackStartGateway = catalog.playbackStartGateway,
                     )
                 }
             }
@@ -66,6 +71,7 @@ class PlayerHttpApprovalTest {
             composeRule.onNodeWithText("private-query", substring = true).assertDoesNotExist()
             check(catalog.approvalCalls == 0)
             check(catalog.readyResolutionCalls == 0)
+            check(catalog.startRequests == listOf(PlaybackStartRequest(PROFILE_ID, CHANNEL_ID)))
 
             composeRule.onNodeWithTag("player-http-approve").performKeyInput {
                 keyDown(Key.Enter)
@@ -79,6 +85,10 @@ class PlayerHttpApprovalTest {
             composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
             check(catalog.approvalCalls == 1)
             check(catalog.readyResolutionCalls >= 1)
+            check(catalog.startRequests.size >= 2)
+            check(catalog.startRequests.all { request ->
+                request == PlaybackStartRequest(PROFILE_ID, CHANNEL_ID)
+            })
         } finally {
             connector.close()
         }
@@ -101,6 +111,7 @@ class PlayerHttpApprovalTest {
                             profileId = PROFILE_ID,
                             channelId = CHANNEL_ID,
                             onBack = {},
+                            playbackStartGateway = catalog.playbackStartGateway,
                         )
                     }
                 }
@@ -141,7 +152,29 @@ class PlayerHttpApprovalTest {
         var approvalCalls: Int = 0
         var revocationCalls: Int = 0
         var readyResolutionCalls: Int = 0
+        val startRequests = mutableListOf<PlaybackStartRequest>()
         private var approved: Boolean = initiallyApproved
+
+        val playbackStartGateway = PlaybackStartGateway { _, request, _ ->
+            startRequests += request
+            when (
+                val resolution = resolveVariant(
+                    profileId = request.profileId,
+                    channelId = request.channelId,
+                    preferredVariantId = request.preferredVariantId,
+                )
+            ) {
+                is PlaybackVariantResolution.Ready -> PlaybackStartResult.Started
+                is PlaybackVariantResolution.InsecureTransportApprovalRequired ->
+                    PlaybackStartResult.InsecureHttpApprovalRequired(
+                        displayOrigin = resolution.displayOrigin,
+                        variantId = resolution.variantId,
+                    )
+
+                is PlaybackVariantResolution.AccessUnavailable ->
+                    PlaybackStartResult.Rejected(PlaybackStartFailure.AccessUnavailable)
+            }
+        }
 
         override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
             flowOf(listOf(summary()))

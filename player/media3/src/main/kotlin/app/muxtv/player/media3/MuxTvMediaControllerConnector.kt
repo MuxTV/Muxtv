@@ -13,6 +13,9 @@ import androidx.media3.session.SessionToken
 import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
+import app.muxtv.player.PlaybackStartFailure
+import app.muxtv.player.PlaybackStartRequest
+import app.muxtv.player.PlaybackStartResult
 import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CancellationException
@@ -98,9 +101,9 @@ class MuxTvMediaControllerConnector(
         throw MediaControllerOperationException(connectionFailureFor(error))
     }
 
-    fun sendPlaybackRequest(
+    fun sendPlaybackStart(
         controller: MediaController,
-        request: PlaybackSessionRequest,
+        request: PlaybackStartRequest,
     ): ListenableFuture<SessionResult> = sendPlaybackRequest(
         controller = controller,
         setupId = PlaybackSetupId.create(),
@@ -110,20 +113,20 @@ class MuxTvMediaControllerConnector(
     fun sendPlaybackRequest(
         controller: MediaController,
         setupId: PlaybackSetupId,
-        request: PlaybackSessionRequest,
+        request: PlaybackStartRequest,
     ): ListenableFuture<SessionResult> = controller.sendCustomCommand(
         MuxTvPlaybackSessionContract.setPlaybackRequestCommand,
         MuxTvPlaybackSessionContract.setupArgs(setupId, request),
     )
 
-    suspend fun awaitPlaybackRequest(
+    suspend fun awaitPlaybackStart(
         controller: MediaController,
-        request: PlaybackSessionRequest,
+        request: PlaybackStartRequest,
         timeoutMillis: Long,
-    ): SessionResult {
+    ): PlaybackStartResult {
         val setupId = PlaybackSetupId.create()
         return try {
-            awaitPlaybackSetup(
+            val result = awaitPlaybackSetup(
                 future = sendPlaybackRequest(
                     controller = controller,
                     setupId = setupId,
@@ -132,6 +135,8 @@ class MuxTvMediaControllerConnector(
                 timeoutMillis = timeoutMillis,
                 cancelSetup = { postCancel(controller, setupId) },
             )
+            MuxTvPlaybackSessionContract.parseResult(result)
+                ?: PlaybackStartResult.Rejected(PlaybackStartFailure.CommandFailed)
         } catch (timeout: TimeoutCancellationException) {
             throw MediaControllerOperationException(commandFailureFor(timeout))
         } catch (cancelled: CancellationException) {

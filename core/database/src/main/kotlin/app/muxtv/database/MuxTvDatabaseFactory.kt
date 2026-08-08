@@ -9,6 +9,7 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
 
@@ -19,6 +20,7 @@ class MuxTvDatabaseComponents internal constructor(
     val pendingSourcePreparationStore: PendingSourcePreparationStore,
     val catalogRepository: CatalogRepository,
     val playbackCatalog: PlaybackCatalog,
+    val playbackCandidateResolver: PlaybackCandidateResolver,
     val channelPreferencesRepository: ChannelPreferencesRepository,
     val recentChannelsRepository: RecentChannelsRepository,
     val channelSearchRepository: ChannelSearchRepository,
@@ -47,6 +49,10 @@ object MuxTvDatabaseFactory {
             dao = database.guideWindowDao(),
             invalidationDao = database.guideWindowInvalidationDao(),
         )
+        val roomPlaybackCatalog = RoomPlaybackCatalog(
+            dao = database.playbackCatalogDao(),
+            accessPolicyResolver = playbackAccessPolicyResolver,
+        )
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
@@ -55,10 +61,8 @@ object MuxTvDatabaseFactory {
                 database.pendingSourcePreparationDao(),
             ),
             catalogRepository = RoomCatalogRepository(database.catalogDao()),
-            playbackCatalog = RoomPlaybackCatalog(
-                dao = database.playbackCatalogDao(),
-                accessPolicyResolver = playbackAccessPolicyResolver,
-            ),
+            playbackCatalog = roomPlaybackCatalog,
+            playbackCandidateResolver = roomPlaybackCatalog,
             channelPreferencesRepository = RoomChannelPreferencesRepository(
                 database.channelPreferencesDao(),
             ),
