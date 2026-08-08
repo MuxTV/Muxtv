@@ -1,198 +1,198 @@
 ---
 status: accepted
 last_reviewed: 2026-08-08
-architecture_version: 5
-implementation_source_commit: 5bb6ee1f754785b2b236d6dcb52fd4458780e758
+architecture_version: 6
+implementation_source_commit: e9dd0336716e27e9b51f4eb10da82169112e71d1
 ---
 
 # Текущее состояние
 
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Принятый Android TV контур покрывает безопасное добавление источника, immutable catalog/EPG revisions, Channels + Now/Next/Favorites/Recent, bounded Search, полноценный bounded Guide TV route и service-owned Media3 Player с explicit transport classification и точной границей успешного playback по first rendered frame.
+MuxTV находится в стадии **functional pre-alpha**. Принятый Android TV контур покрывает secure source onboarding, bounded M3U/XMLTV ingest, immutable catalog/EPG revisions, Channels/Favorites/Search/Recent/Guide, process-owned Media3 Player, exact first-rendered-frame success boundary, deterministic old-edge/current Android TV validation и fail-closed evidence provenance.
 
-Guide (#29) завершён и влит через PR #131. CI provenance gap #136 также закрыт: PR #137 влит в `main` как `5bb6ee1f754785b2b236d6dcb52fd4458780e758` после GREEN Full, Product old-edge/current, Database old-edge/current и Measurement variance. Evidence-producing PR workflows теперь явно checkout'ят source commit, который записывают как `SourceCommit`, и fail-closed проверяют `git rev-parse HEAD == ExpectedCommit`.
+Текущий принятый `main` — `e9dd0336716e27e9b51f4eb10da82169112e71d1` (PR #143 / issue #139). Это baseline после завершения exact source-head provenance, deterministic focused M3U evidence lane и tracked-worktree provenance для claim-eligible manual measurements.
 
-Текущий критический путь:
+Текущий critical path:
 
 ```text
-#135 repository truth sync
-→ restack/reconcile #133 + #134 on exact-evidence baseline
-→ #27 deterministic 5×10k + 5×50k measurement evidence
-→ #30A bounded same-channel recovery policy
-→ #30B Media3 recovery runtime + typed observations
-→ #30C durable redacted diagnostics if required
+#30A / PR #145 pure bounded same-channel recovery
+→ #30B Media3 runtime recovery + typed observations
+→ #30C durable redacted diagnostics only if required
 → #30D TV Doctor Lite
-→ #33/#93 Lounge Light packages
+→ #111 D2-D4 interaction/accessibility completion
+→ Lounge Light D5-D7
 → #31 alpha hardening + physical-device evidence
 ```
 
-Параллельно идёт #111/PR #138: D1 immediate dense D-pad focus уже имеет наблюдённый RED и minimal GREEN на exact-evidence baseline. Эта design/accessibility дорожка не должна владеть Room/catalog/playback-recovery state и не блокирует #27, кроме временной конкуренции за self-hosted runner.
-
-Issue #26 (Media3 OkHttp transport/reconnect hardening), от которой зависит #30, уже закрыта. После принятого #137 единственный продуктовый evidence-gate перед полноценным #30 — повторяемый #27 baseline. Pure policy/TDD подготовку #30 можно выполнять параллельно, но performance/compatibility defaults не должны опережать repeated evidence.
+CI reliability/routing (#141/#144) и Room3 patch hardening (#146) идут параллельно и не должны захватывать playback ownership.
 
 ## Принятая база
 
 - Репозиторий: `MuxTV/Muxtv`, default branch `main`, BSD 3-Clause.
-- Текущий принятый `main`: `5bb6ee1f754785b2b236d6dcb52fd4458780e758` — exact evidence provenance fix PR #137 поверх Guide baseline `286ece017445b811a7adddd4ba7e85cacc5dd3ea`.
+- Accepted main: `e9dd0336716e27e9b51f4eb10da82169112e71d1`.
 - Android application: `app.muxtv.tv`, версия `0.0.1`, `minSdk = 26`.
 - Stack: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp, Media3.
 - Room schema: **v10**.
+- Room3 library: **3.0.0**; patch update to 3.0.1 tracked separately in #146 without schema bump.
+- Media3: **1.10.1**.
 - Один process-owned `MediaSessionService` / `ExoPlayer`.
-- Self-hosted topology: Full host acceptance до последовательных old-edge/current Android TV profiles.
-- Evidence-producing PR workflows имеют executable source-head identity assertion.
-- Альтернативный playback engine, Rust/UniFFI и bundled SQLite не являются текущими dependencies.
+- Self-hosted Windows X64 runner; API26 + API36 TV matrices выполняются последовательно.
+- Alternative player engine, Rust/UniFFI, libmpv и bundled SQLite не являются current dependencies.
 
-## Что закрыто
+## Что принято после предыдущего truth baseline
 
-### Source/catalog/security
+### Provider readiness / measurement / design
 
-- Keystore-backed credential isolation и exact-origin HTTP approval;
-- bounded streaming M3U ingest;
-- immutable source revisions, atomic activation и previous-good preservation;
-- durable source refresh lease/run-token ownership;
-- secure remote onboarding и durable pending registry;
-- typed playback catalog resolution.
+- PR #133 / issue #112 — provider-readiness invariants: cancelled/superseded attempts сохраняют previous-good active truth.
+- PR #134 / issue #27 — deterministic focused M3U corpus/series harness для `small-1k`, `medium-10k`, `large-50k`.
+- PR #138 / issue #111 D1 — immediate dense focus: stable geometry/full visibility/0 ms repeated-focus geometry motion; dead animation machinery удалена.
 
-### EPG
+### Evidence integrity
 
-- bounded secure XMLTV parsing;
-- streaming plain/gzip/ZIP decoder;
-- separate compressed/decoded byte ceilings;
-- `Content-Encoding` validation before payload sniffing;
-- conditional EPG refresh с `ETag` / `Last-Modified` и корректным `304`;
-- immutable EPG revisions и durable refresh ownership;
-- previous-good EPG preservation after malformed/oversized refresh;
-- deterministic current-policy channel matching;
-- bounded Now/Next и programme-boundary invalidation.
+- PR #142 / issue #140 — accepted-main focused evidence workflow для 5×10k + 5×50k.
+- PR #143 / issue #139 — tracked-worktree provenance для claim-eligible manual series:
+  - staged tracked drift rejected;
+  - unstaged tracked drift rejected;
+  - untracked `.work/evidence/**` allowed;
+  - non-Git root fails closed;
+  - check runs after exact source-head assertion and before evidence creation;
+  - exploratory `<5` series remain usable on experimental tracked trees.
 
-### Daily-use TV
+## Последняя принятая measurement acceptance
 
-- Channels destination-scoped state and dedicated channel rows;
-- deterministic D-pad graph;
-- canonical Player → Back focus restoration and nearest-previous fallback;
-- profile-scoped Favorites and Channels `Все / Избранное`;
-- Room v9 bounded Unicode Search Core using FTS4 `unicode61`;
-- active-truth Search revalidation and bounded Search TV;
-- Search → Player → Back query/canonical-focus continuity;
-- explicit API26 search-field D-pad Down handling;
-- service-owned `onRenderedFirstFrame()` success boundary;
-- setup-generation + current-media identity protection;
-- exact profile/canonical-channel first-frame identity;
-- direct multi-observer recorder with observer-failure isolation;
-- profile-scoped bounded Recent in Room v10;
-- first-frame-only Recent writes, newer-wins/idempotent delivery and cap 50/profile;
-- active/current-revision + non-hidden Recent projection;
-- Channels `Недавние`, bounded copy and stable D-pad/Player-Back continuity;
-- cross-surface active/current-revision + selected-profile-visible truth contract (#114/#123/#124);
-- bounded Guide channel/programme data window with typed `NO_GUIDE` / `SOURCE_CONFLICT` / `READY` states;
-- bounded Guide TV viewport, deterministic D-pad/focus restoration и Guide → Player navigation (#29/#131);
-- local half-hour Guide timeline alignment, включая quarter-hour-offset time zones;
-- explicit HLS/MPEG-TS/DASH/progressive playback transport classification with `MODE_SINGLE_PMT` opt-in (#108);
-- Media3 OkHttp transport/reconnect hardening (#26);
-- bare source host normalization to HTTPS to prevent downgrade (#116).
+Accepted-main workflow:
 
-### CI/evidence integrity
+- run: `31254022042`;
+- source: `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`;
+- result: **success**;
+- `medium-10k`: 5 sequential repetitions;
+- `large-50k`: 5 sequential repetitions;
+- artifact: `focused-m3u-evidence-31254022042-1`;
+- artifact id: `9021482310`;
+- artifact SHA-256: `ae7973542757c1f94844a4ba92daf22ad2dbcd3978108c1f224ccf21e0a4a0d4`.
 
-- host-before-device validation topology;
-- old-edge API26 + current API36 TV matrices;
-- repository-owned deterministic measurement harness;
-- explicit source-head checkout for evidence PR workflows (#136/#137);
-- repository-owned `Assert-EvidenceCommit.ps1` fail-closed guard;
-- static workflow provenance drift tests;
-- PR #137 accepted only after Full, Product matrix, Database matrix and Measurement variance GREEN.
+Observed host interpretation remains descriptive:
 
-## Последняя принятая acceptance
-
-### Product baseline
-
-PR #131 source head `a5e42d6aaa628b9fe09d6afb37e25ecb7d368773` влит squash/merge-коммитом `286ece017445b811a7adddd4ba7e85cacc5dd3ea`.
-
-Исторические связанные PR validation runs:
-
-- Self-hosted validation run `31210637363` — success;
-- Android TV product device matrix run `31210636241` — success.
-
-**Historical provenance caveat:** эти pre-#136 PR runs подтверждают успешную integration acceptance, но не являются строгим exact-source-head evidence, потому что тогда workflows исполняли default GitHub merge ref, записывая `pull_request.head.sha`.
-
-### Latest CI/evidence baseline
-
-PR #137 source head `02d6ee4b2641e12d88ace83bcd6af510f18bac08` принят в `main` как `5bb6ee1f754785b2b236d6dcb52fd4458780e758` после:
-
-- Self-hosted Full — success;
-- Database old-edge/current matrix — success;
-- Android TV Product old-edge/current matrix — success;
-- Measurement variance smoke — success;
-- unresolved review threads — 0.
-
-Эта точка является первым принятым baseline, где source-head evidence identity исполняется как контракт.
+- CPU parse scaling does not currently justify a Rust/native parser rewrite;
+- allocation growth is closer to corpus growth and makes low-RAM/end-to-end retained-memory evidence more interesting than parser replacement;
+- no performance regression threshold is accepted from this one controlled runner/dataset.
 
 ## Активная реализация
 
-### P0 — truth + active PR reconciliation (#135/#133/#134)
+### P0 — #30A pure bounded playback recovery / PR #145
 
-- PR #135 restack'нут на accepted `5bb6ee1...`; point-in-time truth и execution plan должны пройти fresh exact-source Full перед merge;
-- PR #133 / issue #112 сохраняет provider-readiness invariants и требует повторного Full + Product API26/API36 на новом baseline;
-- PR #134 / issue #27 сохраняет fail-closed series evidence ownership и требует повторного Full + variance acceptance на новом baseline.
+Draft PR #145 current head: `4c0074bb5417da261561250a75328cf9739eb9ab`.
 
-### P0-next — deterministic corpus / repeated evidence (#27, PR #134)
+Pure policy currently implements:
 
-После принятия harness:
+- preferred same-channel candidate first;
+- deterministic stable remainder;
+- duplicate variant identity suppression;
+- foreign canonical-channel rejection;
+- explicit positive `maxAttempts` and candidate cap;
+- explicit positive `maxRecoveryDurationMillis`;
+- deadline-aware candidate lookup;
+- pure `TRY_NEXT_CANDIDATE` / `STOP_RECOVERY` disposition;
+- stale/superseded recovery generation inertness;
+- successful fallback does not mutate stored preferred variant.
 
-- выполнить sequential 5× `medium-10k` и 5× `large-50k`;
-- использовать фиксированный seed и один контролируемый runner class;
-- повторения обязаны подтверждать одинаковые corpus SHA-256/byte-count/expected counts;
-- analyzer inputs обязаны перечислять все ожидаемые reports без silent omission;
-- initial reports остаются descriptive; regression thresholds вводятся только после variance/provenance review.
+Boundary:
 
-### P0-after-evidence — bounded playback recovery / TV Doctor Lite (#30)
+```text
+PlaybackRecoveryPolicy
+  CanonicalChannelId + StreamVariantId + explicit budget/generation only
+        ↓
+PlaybackCatalog.resolveVariant(...)
+        ↓
+locator / headers / access metadata
+        ↓
+Media3 runtime (#30B)
+```
 
-- bounded same-channel variant attempts со stable ordering;
-- explicit max-attempt и total wall-clock budget;
-- Media3 loader retry budget должен учитываться внутри общего recovery deadline и не умножаться бесконтрольно на число variants;
-- typed DNS/TLS/HTTP/redirect/timeout/network/manifest/decoder/render/access observations;
-- никакого cross-channel fallback;
-- preferred variant не изменяется автоматически после временного fallback;
-- Activity recreation / WorkManager / UI не становятся дополнительными retry owners;
-- secret-free durable diagnostics и redacted export;
-- TV Doctor Lite различает actionable failure families;
-- alternate playback engine остаётся explicit non-goal.
+`PlayableVariant`, raw locator, user-agent, referrer, credentials, Media3/Android/Room/UI state не входят в pure policy.
 
-### Parallel — TV design/accessibility (#111 / PR #138)
+TDD initial RED был наблюдён на source head `37c1158ea74abd4db4f7716b184c804b6118ce2f`, Full run `31254880823`: отсутствовали `PlaybackRecoveryPlan`, `PlaybackRecoveryCandidate`, `PlaybackRecoveryBudget`. Дальнейшие contracts добавлялись rolling RED→GREEN slices.
 
-- D1: immediate dense focus, stable geometry, full visibility, 0 ms repeated-focus geometry motion;
-- D2: native OK/Enter, long-press only where required, auto-repeat ownership, no global key interception;
-- D3: independent focused/selected/playing/disabled states + reduced-motion contract;
-- D4: 720p/1080p dialog scrollability and D-pad reachability;
-- D5-D7 broad Lounge Light visual work waits until core playback/Doctor contracts are stable.
+Current-head verification (`4c0074b...`):
 
-### Параллельные hardening дорожки
+- Self-hosted Full run `31258501384` — **success**;
+- artifact `self-hosted-validation-31258501384-1`, id `9021984903`;
+- artifact SHA-256 `2acd95e877699383759b669daf2bd954775248465533a636b23b165e8210d42f1`;
+- Product run `31258501378`: substantive API26/API36 product matrix step — **success**;
+- workflow marked failure only because subsequent `Upload product matrix evidence` failed; this is #141 infrastructure/publication debt, not product regression.
 
-- issue #118 — Direct Boot/WorkManager: no-refresh до user unlock, идемпотентная инициализация после unlock, reboot/package-replace без дублей periodic work;
-- issue #113 — portable backup envelope: versioned non-secret envelope + integrity digest до secrets-модели, SAF capability detection, restore на first-run;
-- issue #101 — разделение Product/Database suites только с before/after wall-time evidence;
-- issue #100 — conditional M3U `ETag`/`304` при свободном Room schema owner;
-- dependency hardening — Room3 `3.0.0 -> 3.0.1` отдельным PR без изменения MuxTV Room schema version;
-- issues #39/#40 — user guide/recovery и pre-release/app-store checklist до alpha/release claims.
+### P0-next — #30B Media3 runtime recovery
+
+After #30A acceptance:
+
+- keep one `MediaSessionService` / one `ExoPlayer` owner;
+- distinguish Media3 internal loader retry from MuxTV catalog candidate switching;
+- count both inside one total user-visible recovery deadline;
+- map contextual typed/sanitized runtime observation to `TRY_NEXT_CANDIDATE` / `STOP_RECOVERY`;
+- do not use coarse `PlaybackError.retryable` alone as same-channel-switch policy;
+- do not globally hardcode a transport status such as HTTP 401 to `STOP_RECOVERY`, because another candidate may have a different access boundary;
+- Activity/ViewModel/WorkManager must not become competing retry owners.
+
+### #30C / #30D
+
+- #30C durable diagnostics is conditional: add persistence only if runtime evidence shows durability is required and a Room schema owner is free.
+- #30D TV Doctor consumes typed sanitized observations and must not expose raw locators/headers/credentials.
+
+## Parallel work
+
+### TV design/accessibility (#111)
+
+D1 accepted. Remaining:
+
+- D2: native OK/Enter semantics, long-press only where real consumer needs it, repeat/held-key ownership, no global preview-key click synthesis;
+- D3: independent focused/selected/playing/disabled semantics + reduced-motion;
+- D4: 720p/1080p dialog scrolling, first/last action reachability, modal focus containment and native Back behavior.
+
+D5-D7 Lounge Light waits for stable interaction/recovery contracts.
+
+### CI artifact reliability (#141)
+
+Repeated evidence publication failures remain infrastructure risk. Product run `31258501378` is the latest example: API26/API36 product matrix passed, then artifact upload failed. Artifact publication remains mandatory; target is bounded retry without recomputing a successful long matrix.
+
+### CI routing (#144)
+
+Current broad path filters unnecessarily wake device matrices for JVM-only/infra-only changes. PR #145 is concrete evidence: pure `player/api` policy work triggered Product API26/API36. Routing must be narrowed without weakening required runtime coverage and should include before/after runner wall-time evidence.
+
+### Room3 dependency patch (#146)
+
+Update `3.0.0 → 3.0.1` in an isolated dependency-only PR:
+
+- no Room schema version change;
+- no entity/DAO/migration redesign;
+- verify no mixed Room3 artifacts;
+- database unit/migration + API26/API36 database matrix;
+- prefer before next real Room-owned #30C or #100 if practical.
+
+### Other open hardening
+
+- #118 — no refresh before user unlock + idempotent WorkManager init after unlock;
+- #113 — portable non-secret backup envelope + integrity digest;
+- #101 — Product/Database connected-suite selector with before/after runtime evidence;
+- #100 — conditional source `ETag`/`Last-Modified` and correct `304 Not Modified` with coordinated Room schema ownership;
+- #39/#40 — user recovery docs and release/app-store checklist.
 
 ## Порядок следующих работ
 
-1. Finish #138 D1 RED→GREEN exact-source Full + Product matrix; после GREEN убрать dead scale-animation machinery отдельным behavior-preserving refactor.
-2. Довести #135 до fresh GREEN и merge как актуальную repository truth.
-3. Restack/reconcile #133 и #134 на `5bb6ee1...`; повторить required exact-source gates.
-4. Завершить #133 независимо, если нет ownership conflict.
-5. Завершить #134, затем выполнить #27 repeated 5×10k + 5×50k evidence и review variance/provenance.
-6. Начать #30A pure recovery policy TDD без Media3/Room/UI coupling.
-7. Реализовать #30B в process-owned `MediaSessionService`, явно разделяя Media3 loader retries и MuxTV variant switching внутри одного total deadline.
-8. Добавить #30C durable diagnostics только при доказанной необходимости и свободном Room schema owner; затем #30D TV Doctor Lite.
-9. Выполнить Room3 `3.0.1` dependency-only hardening в отдельном PR и database matrix.
-10. После стабильных interaction/recovery contracts выполнить #33/#93 D5-D7 Lounge Light packages по одной реальной поверхности за PR.
-11. Перед alpha закрыть #31 hardening, R8/Baseline/Startup Profiles с измерениями, #39/#40 docs/release gates и physical Android/Google TV/Fire TV evidence.
+1. Finish #145 final review/required gates and merge #30A.
+2. Synchronize repository truth (#147).
+3. Implement #30B runtime recovery against accepted pure policy.
+4. Land #144 earlier only if current device-routing overhead materially blocks RED/GREEN throughput.
+5. Land #146 before the next Room-owned change when practical.
+6. Add #30C only if durability is demonstrated; then #30D TV Doctor.
+7. Complete #111 D2-D4, then Lounge Light D5-D7.
+8. Extend #27/#31 performance evidence to constrained Android TV end-to-end ingest → staging → Room transaction → activation → retained heap/GC.
+9. Before alpha: R8, Baseline/Startup Profiles, endurance, signed artifacts/SBOM, physical Android/Google TV/Fire TV codec/HDR/audio/network evidence.
 
 ## Native/Rust decision gate
 
-Rust/UniFFI, bundled SQLite, libmpv и второй playback engine не являются текущими dependencies. Kotlin/Room/Media3 остаются preferred path, пока repeated #27/#31 evidence не докажет конкретный residual hotspot или compatibility gap, достаточный для отдельного ADR.
+Rust/UniFFI, bundled SQLite, libmpv и второй playback engine остаются deferred. Kotlin/Room/Media3 — preferred path, пока reproducible #27/#31/physical-device evidence не докажет конкретный residual hotspot или compatibility gap, достаточный для отдельного ADR.
 
 ## Evidence limits
 
-Old-edge/current emulator gates валидируют Android API, Room/migration, lifecycle, TV focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM, thermal или реальное сетевое поведение. Physical Android/Google TV и Fire TV evidence остаётся обязательным до alpha compatibility claims.
+API26/API36 emulator gates валидируют Android API, Room/migration, lifecycle, TV focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM, thermal throttling или реальное сетевое поведение. Physical Android/Google TV и Fire TV evidence остаётся обязательным до alpha compatibility claims.
