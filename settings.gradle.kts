@@ -42,4 +42,5 @@ include(
     ":feature:search",
     ":feature:player",
     ":feature:sources",
+    ":feature:doctor",
 )
