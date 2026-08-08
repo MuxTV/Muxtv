@@ -22,6 +22,18 @@ class PlaybackRecoveryPlan private constructor(
     val orderedCandidates: List<PlaybackRecoveryCandidate>,
     val budget: PlaybackRecoveryBudget,
 ) {
+    fun candidateAt(
+        attemptIndex: Int,
+        elapsedRecoveryMillis: Long,
+    ): PlaybackRecoveryCandidate? {
+        require(attemptIndex >= 0)
+        require(elapsedRecoveryMillis >= 0)
+        if (elapsedRecoveryMillis >= budget.maxRecoveryDurationMillis) {
+            return null
+        }
+        return orderedCandidates.getOrNull(attemptIndex)
+    }
+
     companion object {
         fun create(
             canonicalChannelId: CanonicalChannelId,
