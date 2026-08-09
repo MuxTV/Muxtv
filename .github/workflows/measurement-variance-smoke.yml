@@ -28,8 +28,11 @@ jobs:
   current-profile-smoke:
     name: Current Android TV variance smoke
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
     timeout-minutes: 180
+    concurrency:
+      group: muxtv-device-global
+      cancel-in-progress: false
 
     steps:
       - name: Checkout without pre-clean
@@ -72,7 +75,10 @@ jobs:
       - name: Preflight dedicated self-hosted runner
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 -RequireNoConnectedDevice
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
+            -RequireNoConnectedDevice `
+            -ExpectedRunnerLabels muxtv-android,muxtv-device `
+            -ExpectedSystemImageApis 36
 
       - name: Resolve Android SDK and validate harness
         shell: pwsh
@@ -145,3 +151,9 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 14
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

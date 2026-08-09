@@ -73,7 +73,7 @@ Android TV rules:
 - [x] Create and verify complete pre-cleanup bundle at `.git/bundles/pre-mvp-20260808.bundle` (470 refs).
 - [x] Inventory 111 worktrees and preserve dirty, unmerged, open-PR and unknown histories.
 - [x] Remove only three clean worktrees proven reachable from `origin/main`; retain all branches.
-- [x] Fast-forward root checkout first to `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`, then to accepted `main@d02ae7c0bc87f7bce49b047579b5a1e1f6820192`; exclude local `worktrees/` through `.git/info/exclude`.
+- [x] Fast-forward root checkout first to `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`, then through accepted release/truth-sync PRs to `main@b30a1d745df80f0c1e6b38ee7947ceff9cdcdb17`; exclude local `worktrees/` through `.git/info/exclude`.
 - [x] Create this canonical ExecPlan; retain `upd/mvp-alpha-1` as historical execution provenance and use isolated vertical-slice branches for remaining work.
 - [x] Preserve the local unpacked Doctor Product Matrix evidence at `.work/doctor-product-31282812126/`; it corresponds to published artifact `9029117392` and is not cleanup residue.
 
@@ -199,6 +199,8 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-09: PR #150 merged service-owned recovery as `965e6bdd46f75fa5c74e18ffe32ab1e3e25ed61f`; PR #151 merged bounded redacted playback observations as `f8a8c84185839ecc1a5cecd64acb9cb3a1836e22`.
 - 2026-08-09: PR #152 exact head `9d8c01a92c1064f0ca6b856a96bd6e4b26cd4c61` passed Product run `31284350989` and Full run `31284350987`, then merged Doctor Lite as `26240e2171421bd73412a61214a1c65d4a46139c`.
 - 2026-08-09: PR #153 exact head `42bcf7558d7a637847d6a776ed9b3f40eda1c961` passed Product run `31285565922` with artifact `9029806912` (`sha256:8674233315e3d598f59713f7a640f3e71ef2677d7ba8b74a00d0fb2841daeb17`) and Full run `31285565929` with artifact `9029868593` (`sha256:d57ed0c8e34deda111f7b2cddce9e79c4319722b8aa0fed3684756c9afa26139`), then merged as `d02ae7c0bc87f7bce49b047579b5a1e1f6820192`.
+- 2026-08-09: PR #154 exact head `dfbd6b7ce10272c86fce84f0fe54d483f0536880` passed Self-hosted validation run `31301806758` with artifact `9034788781` (`sha256:c1607f05d2a2fac2d9b55c0a57305e1912f2825308cfe02f607ee7a9161fd41e`), then merged truth sync as `b30a1d745df80f0c1e6b38ee7947ceff9cdcdb17`.
+- 2026-08-09: S2 is isolated on `upd/self-hosted-runner-hardening`; local runner-preflight/cleanup contracts and the out-of-sandbox Fast build/test pass. GitHub administration must still apply `muxtv-android` and `muxtv-device` before the branch is pushed, otherwise label-routed jobs cannot start.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 
