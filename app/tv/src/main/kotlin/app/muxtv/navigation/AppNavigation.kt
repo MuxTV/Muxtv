@@ -25,11 +25,10 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelPreferencesRepository
+import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.ChannelSearchRepository
-import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
@@ -52,10 +51,9 @@ import app.muxtv.player.PlaybackObservationReader
 @Composable
 fun AppNavigation(
     playbackCatalog: PlaybackCatalog,
+    channelBrowseRepository: ChannelBrowseRepository,
     channelPreferencesRepository: ChannelPreferencesRepository,
     channelSearchRepository: ChannelSearchRepository,
-    recentChannelsRepository: RecentChannelsRepository,
-    epgGuideRepository: EpgGuideRepository,
     guideWindowRepository: GuideWindowRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
@@ -125,9 +123,7 @@ fun AppNavigation(
                         )
 
                         AppDestination.Channels -> ChannelsRoute(
-                            playbackCatalog = playbackCatalog,
-                            recentChannelsRepository = recentChannelsRepository,
-                            epgGuideRepository = epgGuideRepository,
+                            channelBrowseRepository = channelBrowseRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->

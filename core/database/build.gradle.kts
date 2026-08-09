@@ -68,6 +68,8 @@ dependencies {
     implementation(project(":core:model"))
     implementation(libs.coroutines.android)
     implementation(libs.room3.runtime)
+    implementation(libs.room3.paging)
+    implementation(libs.paging.runtime)
     implementation(libs.androidx.tracing)
     ksp(libs.room3.compiler)
     testImplementation(libs.junit)
@@ -78,5 +80,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.coroutines.test)
     androidTestImplementation(libs.room3.testing)
+    androidTestImplementation(libs.paging.testing)
     androidTestImplementation(libs.truth)
 }

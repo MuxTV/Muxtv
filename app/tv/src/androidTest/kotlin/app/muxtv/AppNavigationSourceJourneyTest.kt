@@ -82,10 +82,13 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        channelBrowseRepository = TestChannelBrowseRepository(
+                            playbackCatalog,
+                            NoRecentChannelsRepository,
+                            NoGuideEpgGuideRepository,
+                        ),
                         channelPreferencesRepository = NoChannelPreferencesRepository,
                         channelSearchRepository = NoChannelSearchRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
                         guideWindowRepository = TestGuideWindowRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
@@ -171,10 +174,13 @@ class AppNavigationSourceJourneyTest {
                 MuxTvTheme {
                     AppNavigation(
                         playbackCatalog = playbackCatalog,
+                        channelBrowseRepository = TestChannelBrowseRepository(
+                            playbackCatalog,
+                            NoRecentChannelsRepository,
+                            NoGuideEpgGuideRepository,
+                        ),
                         channelPreferencesRepository = NoChannelPreferencesRepository,
                         channelSearchRepository = NoChannelSearchRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
                         guideWindowRepository = TestGuideWindowRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,

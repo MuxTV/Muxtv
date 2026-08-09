@@ -323,9 +323,11 @@ class ChannelsFocusRestorationTest {
         onOpenChannel: (String) -> Unit = {},
     ) {
         ChannelsRoute(
-            playbackCatalog = playbackCatalog,
-            recentChannelsRepository = recentChannelsRepository,
-            epgGuideRepository = epgGuideRepository,
+            channelBrowseRepository = TestChannelBrowseRepository(
+                playbackCatalog = playbackCatalog,
+                recentChannelsRepository = recentChannelsRepository,
+                epgGuideRepository = epgGuideRepository,
+            ),
             playbackSessionStateSource = NoPlaybackSessionStateSource,
             profileId = "profile-main",
             onOpenChannel = onOpenChannel,
