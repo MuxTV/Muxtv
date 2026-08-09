@@ -86,6 +86,26 @@ function Get-FreeBenchmarkEmulatorPort {
     throw "No free Android Emulator console/ADB port pair was found."
 }
 
+function Wait-BenchmarkAdbRegistration {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [int]$TimeoutSeconds = 150
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        if ($Process.HasExited) {
+            throw "Benchmark emulator exited before ADB registration (exitCode=$($Process.ExitCode))."
+        }
+        $state = & $Tools.Adb -s $Serial get-state 2>$null | Select-Object -First 1
+        if ($LASTEXITCODE -eq 0 -and ([string]$state).Trim() -eq "device") { return }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    throw "Benchmark emulator did not register with ADB as $Serial within $TimeoutSeconds seconds."
+}
+
 try {
     $tools = Get-AndroidSdkTools
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $evidenceDirectory
@@ -100,11 +120,19 @@ try {
         -SystemImagePackage $image.Package `
         -RamMb 2048 `
         -CpuCores 2
+    & $tools.Adb kill-server 2>$null | Out-Null
+    & $tools.Adb start-server 2>&1 | Add-Content -Path (Join-Path $evidenceDirectory "adb-server.log") -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw "Unable to start ADB before benchmark emulator startup." }
     $emulatorProcess = Start-TvEmulator `
         -Tools $tools `
         -AvdName "MuxTV_BENCHMARK_API36" `
         -Port $consolePort `
         -EvidenceDirectory $evidenceDirectory
+    Wait-BenchmarkAdbRegistration `
+        -Tools $tools `
+        -Serial $serial `
+        -Process $emulatorProcess `
+        -TimeoutSeconds 150
     Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
     $env:ANDROID_SERIAL = $serial
     $manifest.deviceSerial = $serial
