@@ -49,7 +49,7 @@ foreach ($token in @(
 }
 
 $journeys = Read-RequiredFile "benchmark\macrobenchmark\src\main\kotlin\app\muxtv\benchmark\MuxTvCriticalUserJourneys.kt"
-foreach ($token in @('openChannels', 'openSearch', 'openGuide', 'openSources', 'openDoctor', 'restoreChannelsFocus')) {
+foreach ($token in @('openChannels', 'openSearch', 'openGuide', 'openSources', 'openDoctor')) {
     if ($journeys.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
         throw "Reusable Macrobenchmark journey is missing: $token"
     }

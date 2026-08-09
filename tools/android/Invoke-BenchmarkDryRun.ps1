@@ -63,6 +63,11 @@ $tools = $null
 $serial = $null
 $emulatorProcess = $null
 $previousAndroidSerial = $env:ANDROID_SERIAL
+$initialEmulatorProcessIds = @(
+    Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -ceq "emulator" -or $_.ProcessName -like "qemu-system-*" } |
+        ForEach-Object Id
+)
 
 function Get-FreeBenchmarkEmulatorPort {
     for ($consolePort = 5680; $consolePort -ge 5554; $consolePort -= 2) {
@@ -213,6 +218,16 @@ try {
             }
         } catch {
             Write-Warning "Unable to stop benchmark emulator cleanly: $($_.Exception.Message)"
+        }
+        $createdProcesses = @(
+            Get-Process -ErrorAction SilentlyContinue |
+                Where-Object {
+                    ($_.ProcessName -ceq "emulator" -or $_.ProcessName -like "qemu-system-*") -and
+                    $_.Id -notin $initialEmulatorProcessIds
+                }
+        )
+        foreach ($process in $createdProcesses) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         }
     }
     if ([string]::IsNullOrWhiteSpace($previousAndroidSerial)) {

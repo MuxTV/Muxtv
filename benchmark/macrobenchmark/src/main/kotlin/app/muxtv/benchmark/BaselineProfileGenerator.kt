@@ -35,6 +35,5 @@ class BaselineProfileGenerator {
         journeys.openGuide()
         journeys.openSources()
         journeys.openDoctor()
-        journeys.restoreChannelsFocus()
     }
 }

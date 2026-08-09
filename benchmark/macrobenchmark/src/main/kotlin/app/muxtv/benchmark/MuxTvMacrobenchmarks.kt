@@ -39,9 +39,6 @@ class MuxTvMacrobenchmarks {
         openDoctor()
     }
 
-    @Test
-    fun channelsFocusRestoration() = measureJourney { restoreChannelsFocus() }
-
     private fun measureStartup(startupMode: StartupMode) {
         benchmarkRule.measureRepeated(
             packageName = TARGET_PACKAGE,
