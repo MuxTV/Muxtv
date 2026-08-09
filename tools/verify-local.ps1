@@ -121,7 +121,7 @@ $evidenceBase = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
 $evidenceDirectory = Join-Path $evidenceBase "$timestamp-$commit-$($Mode.ToLowerInvariant())"
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 
-$commonArguments = @("--stacktrace", "--console=plain")
+$commonArguments = @("--stacktrace", "--console=plain", "--no-problems-report")
 if ($NoDaemon) {
     $commonArguments += "--no-daemon"
 }

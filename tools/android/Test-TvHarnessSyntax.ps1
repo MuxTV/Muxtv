@@ -90,6 +90,9 @@ $verifyLocalContent = Get-Content -Path $files[7] -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
     $messages += "verify-local must expose DeviceOnly connected-test mode."
 }
+if ($verifyLocalContent -notmatch [regex]::Escape('"--no-problems-report"')) {
+    $messages += "verify-local must disable the non-evidence Gradle HTML problems report to avoid Windows report publication races."
+}
 
 $provenanceAssertContent = Get-Content -Path $files[8] -Raw
 foreach ($requiredProvenanceFragment in @(
