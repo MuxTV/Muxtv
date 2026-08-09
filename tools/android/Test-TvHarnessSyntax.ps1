@@ -43,7 +43,9 @@ $initializerContent = Get-Content -Path $files[0] -Raw
 foreach ($requiredInitializerFragment in @(
     "Add-PathEntryIfMissing",
     "System32",
-    "GITHUB_PATH"
+    "GITHUB_PATH",
+    '$env:ADB_MDNS_AUTO_CONNECT = "0"',
+    '"ADB_MDNS_AUTO_CONNECT=0"'
 )) {
     if ($initializerContent -notmatch [regex]::Escape($requiredInitializerFragment)) {
         $messages += "Android SDK initialization does not preserve required Windows runtime PATH behavior: " +
