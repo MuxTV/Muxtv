@@ -22,7 +22,7 @@ foreach ($requiredToken in @(
     'branches:',
     '- main',
     'paths:',
-    'runs-on: [self-hosted, Windows, X64]',
+    'runs-on: [self-hosted, Windows, X64, muxtv-android]',
     'cancel-in-progress: false',
     'ref: ${{ github.sha }}',
     'Assert-EvidenceCommit.ps1',

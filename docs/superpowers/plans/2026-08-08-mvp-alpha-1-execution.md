@@ -85,9 +85,9 @@ Android TV rules:
 - [x] Use unique artifact names, `if-no-files-found: error`, binary-friendly `compression-level: 0`, and bounded PR/release retention.
 - [ ] Guarantee emulator, ADB and temporary-output cleanup; retain only dependency caches.
 - [x] Cancel superseded PR runs while preserving manual/accepted-main runs.
-- [ ] Enforce global emulator/device serialization through the dedicated runner label and verify that release runs are never cancelled.
+- [ ] Enforce emulator/device serialization through the singleton `muxtv-device` runner label and verify that later workflows wait rather than being cancelled; do not use one shared native concurrency group because GitHub retains at most one pending member and cancels the older pending job.
 - [x] Validate configuration cache with fail-on-problems before making it a permanent gate.
-- [ ] Apply and verify dedicated runner labels `muxtv-android` and `muxtv-device` in GitHub runner administration before workflows depend on them.
+- [x] Apply and verify dedicated runner labels `muxtv-android` and `muxtv-device` on online repository runner `DESKTOP-0N5KM3T` before workflows depend on them.
 - [x] Supersede the historical PR #145 upload-only failure with accepted CI hardening in PR #149 and subsequent exact-head Product/Full evidence for PRs #150-#153; do not re-run a merged historical head.
 
 ### M2 — bounded integration queue and truth sync
@@ -200,7 +200,7 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-09: PR #152 exact head `9d8c01a92c1064f0ca6b856a96bd6e4b26cd4c61` passed Product run `31284350989` and Full run `31284350987`, then merged Doctor Lite as `26240e2171421bd73412a61214a1c65d4a46139c`.
 - 2026-08-09: PR #153 exact head `42bcf7558d7a637847d6a776ed9b3f40eda1c961` passed Product run `31285565922` with artifact `9029806912` (`sha256:8674233315e3d598f59713f7a640f3e71ef2677d7ba8b74a00d0fb2841daeb17`) and Full run `31285565929` with artifact `9029868593` (`sha256:d57ed0c8e34deda111f7b2cddce9e79c4319722b8aa0fed3684756c9afa26139`), then merged as `d02ae7c0bc87f7bce49b047579b5a1e1f6820192`.
 - 2026-08-09: PR #154 exact head `dfbd6b7ce10272c86fce84f0fe54d483f0536880` passed Self-hosted validation run `31301806758` with artifact `9034788781` (`sha256:c1607f05d2a2fac2d9b55c0a57305e1912f2825308cfe02f607ee7a9161fd41e`), then merged truth sync as `b30a1d745df80f0c1e6b38ee7947ceff9cdcdb17`.
-- 2026-08-09: S2 is isolated on `upd/self-hosted-runner-hardening`; local runner-preflight/cleanup contracts and the out-of-sandbox Fast build/test pass. GitHub administration must still apply `muxtv-android` and `muxtv-device` before the branch is pushed, otherwise label-routed jobs cannot start.
+- 2026-08-09: S2 exact head `ca203e24de94da0ec6a76273187a21e61aa246a1` passed local Fast evidence at `.work/evidence/20260809T082409Z-ca203e24de94-fast`; repository runner `DESKTOP-0N5KM3T` is online with `muxtv-android` and `muxtv-device`, and draft PR #155 opened. Its first exact-head CI proved that a shared job-level `muxtv-device-global` group cancels an older pending workflow instead of queueing it, so serialization is owned by the singleton device label while per-workflow concurrency only cancels superseded commits.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 

@@ -32,9 +32,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.validation_mode != 'Fast' && inputs.validation_mode != 'Full' && '["self-hosted","Windows","X64","muxtv-android","muxtv-device"]' || '["self-hosted","Windows","X64","muxtv-android"]') }}
     timeout-minutes: 180
-    concurrency:
-      group: ${{ github.event_name == 'workflow_dispatch' && inputs.validation_mode != 'Fast' && inputs.validation_mode != 'Full' && 'muxtv-device-global' || format('muxtv-host-{0}', github.run_id) }}
-      cancel-in-progress: false
 
     steps:
       - name: Checkout without pre-clean

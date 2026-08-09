@@ -30,9 +30,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
     timeout-minutes: 180
-    concurrency:
-      group: muxtv-device-global
-      cancel-in-progress: false
 
     steps:
       - name: Checkout without pre-clean

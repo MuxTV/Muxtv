@@ -355,8 +355,8 @@ try {
         if ($content.IndexOf("runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Device workflow does not require the dedicated device runner label: $workflowPath"
         }
-        if ($content.IndexOf("group: muxtv-device-global", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Device workflow is not serialized through the repository-wide device concurrency group: $workflowPath"
+        if ($content.IndexOf("group: muxtv-device-global", [System.StringComparison]::Ordinal) -ge 0) {
+            throw "Device workflow uses a shared native concurrency group that cancels an already-pending workflow instead of queueing it: $workflowPath"
         }
         if ($content.IndexOf("ExpectedSystemImageApis", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Device workflow does not preflight its expected emulator system image: $workflowPath"
@@ -367,12 +367,14 @@ try {
     foreach ($requiredFragment in @(
         '''["self-hosted","Windows","X64","muxtv-android"]''',
         '''["self-hosted","Windows","X64","muxtv-android","muxtv-device"]''',
-        'runs-on: ${{ fromJSON(',
-        "'muxtv-device-global'"
+        'runs-on: ${{ fromJSON('
     )) {
         if ($selfHostedWorkflow.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
             throw "Self-hosted validation does not route host and device modes to dedicated labels: $requiredFragment"
         }
+    }
+    if ($selfHostedWorkflow.IndexOf("muxtv-device-global", [System.StringComparison]::Ordinal) -ge 0) {
+        throw "Self-hosted validation uses the cancelling shared device concurrency group instead of the singleton device runner label."
     }
     if ($selfHostedWorkflow.IndexOf("matrix.lane", [System.StringComparison]::Ordinal) -ge 0) {
         throw "Self-hosted validation must not use matrix context in a job condition."
