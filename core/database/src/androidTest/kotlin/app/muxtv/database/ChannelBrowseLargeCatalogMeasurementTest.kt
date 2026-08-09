@@ -12,8 +12,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-@CatalogDatabaseMeasurement
-class ChannelBrowseLargeCatalogMeasurementTest {
+class ChannelBrowseLargeCatalogTest {
     private lateinit var database: MuxTvDatabase
     private lateinit var revisionStore: SourceRevisionStore
 
