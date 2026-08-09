@@ -30,6 +30,12 @@ param(
             Version = [string]$version
         }
     },
+    [scriptblock]$RunnerListenerProbe = {
+        if ($env:GITHUB_ACTIONS -ceq "true") {
+            return @(Get-Process -Name "Runner.Listener" -ErrorAction SilentlyContinue).Count
+        }
+        1
+    },
     [scriptblock]$TempPathProbe = {
         param([string]$Path)
         if (-not $Path) {
@@ -131,6 +137,7 @@ $failure = $null
 $freeDiskGb = $null
 $physicalMemoryGb = $null
 $connectedDeviceCount = $null
+$runnerListenerCount = $null
 $runnerVersion = $null
 $runnerTempPath = $null
 $runnerTempWritable = $false
@@ -215,6 +222,11 @@ try {
         if (-not ([string]$runnerMetadata.$propertyName).Trim()) {
             throw "Self-hosted runner preflight failed: runner metadata is incomplete."
         }
+    }
+
+    $runnerListenerCount = [int](& $RunnerListenerProbe)
+    if ($runnerListenerCount -ne 1) {
+        throw "Self-hosted runner preflight failed: expected exactly one Runner.Listener process, found $runnerListenerCount."
     }
 
     $runnerTempPath = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
@@ -316,6 +328,7 @@ $evidence = [ordered]@{
     runner_os = [string]$env:RUNNER_OS
     runner_arch = [string]$env:RUNNER_ARCH
     runner_version = $runnerVersion
+    runner_listener_count = $runnerListenerCount
     runner_temp_path = $runnerTempPath
     runner_temp_writable = $runnerTempWritable
     expected_runner_labels = $normalizedExpectedLabels
