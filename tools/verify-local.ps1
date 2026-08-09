@@ -151,6 +151,7 @@ if ($Mode -ne "DeviceOnly") {
         ":core:testing:test",
         ":catalog:api:test",
         ":catalog:ingest:test",
+        ":benchmark:jvm:jmhClasses",
         ":player:api:test",
         ":player:fake:test"
     )
@@ -179,7 +180,9 @@ if ($Mode -ne "DeviceOnly") {
         ":core:credentials:assembleDebugAndroidTest",
         ":core:database:assembleDebugAndroidTest",
         ":player:media3:assembleDebugAndroidTest",
-        ":app:tv:assembleDebugAndroidTest"
+        ":app:tv:assembleDebugAndroidTest",
+        ":benchmark:macrobenchmark:assembleBenchmarkRelease",
+        ":benchmark:macrobenchmark:assembleNonMinifiedRelease"
     )
     Add-Step -Name "debug-apk" -Arguments @(
         ":app:tv:assembleDebug"

@@ -429,26 +429,29 @@ function Wait-AndroidBoot {
     }
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    $completed = ""
+    $completedText = ""
     do {
         Start-Sleep -Seconds 2
-        $completed = (& $Tools.Adb -s $Serial shell getprop sys.boot_completed 2>$null | Select-Object -First 1)
-        if (([string]$completed).Trim() -eq "1") {
+        $completed = & $Tools.Adb -s $Serial shell getprop sys.boot_completed 2>$null | Select-Object -First 1
+        $completedText = if ($null -eq $completed) { "" } else { ([string]$completed).Trim() }
+        if ($completedText -eq "1") {
             break
         }
     } while ((Get-Date) -lt $deadline)
 
-    if (([string]$completed).Trim() -ne "1") {
+    if ($completedText -ne "1") {
         throw "Android TV emulator $Serial did not complete boot within $TimeoutSeconds seconds."
     }
 
     $packageDeadline = (Get-Date).AddSeconds(60)
+    $androidPackageText = ""
     do {
         $androidPackage = (& $Tools.Adb -s $Serial shell pm path android 2>$null | Select-Object -First 1)
-        if (([string]$androidPackage).Trim().StartsWith("package:")) { break }
+        $androidPackageText = if ($null -eq $androidPackage) { "" } else { ([string]$androidPackage).Trim() }
+        if ($androidPackageText.StartsWith("package:", [System.StringComparison]::Ordinal)) { break }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $packageDeadline)
-    if (-not ([string]$androidPackage).Trim().StartsWith("package:")) {
+    if (-not $androidPackageText.StartsWith("package:", [System.StringComparison]::Ordinal)) {
         throw "Android package manager did not become ready on $Serial."
     }
 

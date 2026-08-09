@@ -92,6 +92,9 @@ if ([string]::IsNullOrWhiteSpace($resolved)) {
 
 $env:ANDROID_SDK_ROOT = $resolved
 $env:ANDROID_HOME = $resolved
+# The runner must not auto-attach paired phones or TVs discovered through mDNS.
+# Explicit emulator/device connections remain available to the owning harness.
+$env:ADB_MDNS_AUTO_CONNECT = "0"
 
 if ($PersistForGitHubActions) {
     if ([string]::IsNullOrWhiteSpace($env:GITHUB_ENV)) {
@@ -100,6 +103,7 @@ if ($PersistForGitHubActions) {
     @(
         "ANDROID_SDK_ROOT=$resolved"
         "ANDROID_HOME=$resolved"
+        "ADB_MDNS_AUTO_CONNECT=0"
     ) | Add-Content -Path $env:GITHUB_ENV -Encoding utf8
 }
 

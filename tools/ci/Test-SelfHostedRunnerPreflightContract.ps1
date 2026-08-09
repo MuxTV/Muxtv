@@ -44,6 +44,7 @@ try {
         -MinimumPhysicalMemoryGb 0 `
         -SkipAndroidToolchain `
         -ExpectedRunnerLabels @("muxtv-android") `
+        -RunnerListenerProbe { 1 } `
         -RunnerMetadataProbe { [pscustomobject]@{ Name = "fixture"; Os = "Windows"; Architecture = "X64"; Version = "2.999.0" } } `
         -TempPathProbe { param([string]$Path) $true } `
         -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
@@ -62,8 +63,36 @@ try {
     if ($success.runner_version -cne "2.999.0" -or $success.runner_temp_writable -ne $true) {
         throw "Runner preflight did not preserve runner version and writable temp evidence."
     }
+    if ($success.runner_listener_count -ne 1) {
+        throw "Runner preflight did not preserve the singleton listener evidence."
+    }
     if ([string]::Join(",", @($success.expected_runner_labels)) -cne "muxtv-android") {
         throw "Runner preflight did not preserve the scheduling label contract."
+    }
+
+    $duplicateListenerEvidence = Join-Path $tempRoot "duplicate-listener-failure.json"
+    $duplicateListenerFailed = $false
+    try {
+        & $preflightScript `
+            -RepositoryRoot $repositoryRoot `
+            -EvidencePath $duplicateListenerEvidence `
+            -MinimumFreeDiskGb 0 `
+            -MinimumPhysicalMemoryGb 0 `
+            -SkipAndroidToolchain `
+            -RunnerListenerProbe { 2 } `
+            -RunnerMetadataProbe { [pscustomobject]@{ Name = "fixture"; Os = "Windows"; Architecture = "X64"; Version = "2.999.0" } } `
+            -TempPathProbe { param([string]$Path) $true } `
+            -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
+            -HttpsProbe { param([uri]$Uri) 200 }
+    } catch {
+        $duplicateListenerFailed = $_.Exception.Message -match "exactly one Runner.Listener"
+    }
+    if (-not $duplicateListenerFailed) {
+        throw "Runner preflight accepted duplicate Runner.Listener processes."
+    }
+    $duplicateListener = Get-Content -LiteralPath $duplicateListenerEvidence -Raw -Encoding utf8 | ConvertFrom-Json
+    if ($duplicateListener.status -cne "failed" -or $duplicateListener.runner_listener_count -ne 2) {
+        throw "Runner preflight did not preserve duplicate listener failure evidence."
     }
 
     $runnerFailureEvidence = Join-Path $tempRoot "runner-failure.json"
