@@ -110,6 +110,7 @@ class ChannelBrowseRepositoryTest {
         assertThat(first.data.single().channelId).isEqualTo("channel-00001")
 
         activateRevision(revisionNumber = 2L, channelCount = 2)
+        database.invalidationTracker.refresh("sources", "provider_channels")
 
         assertThat(source.invalid).isTrue()
         val replacement = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
