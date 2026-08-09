@@ -52,6 +52,7 @@ $manifest = [ordered]@{
     deviceSerial = $null
     systemImage = $null
     testCount = 0
+    skippedCount = 0
     failure = $null
 }
 function Write-Manifest {
@@ -182,12 +183,16 @@ try {
         -LogPath (Join-Path $evidenceDirectory "macrobenchmark-dry-run.log")
 
     $resultFiles = @(Get-ChildItem -Path $resultRoot -Recurse -File -Filter "TEST-*.xml")
-    $testCount = 0
+    $totalTestCount = 0
+    $skippedCount = 0
     foreach ($resultFile in $resultFiles) {
         [xml]$document = Get-Content -Path $resultFile.FullName -Raw
         foreach ($suite in @($document.SelectNodes("//testsuite"))) {
             if ($null -ne $suite.Attributes["tests"]) {
-                $testCount += [int]$suite.Attributes["tests"].Value
+                $totalTestCount += [int]$suite.Attributes["tests"].Value
+            }
+            if ($null -ne $suite.Attributes["skipped"]) {
+                $skippedCount += [int]$suite.Attributes["skipped"].Value
             }
             $failures = if ($null -ne $suite.Attributes["failures"]) { [int]$suite.Attributes["failures"].Value } else { 0 }
             $errors = if ($null -ne $suite.Attributes["errors"]) { [int]$suite.Attributes["errors"].Value } else { 0 }
@@ -196,8 +201,10 @@ try {
             }
         }
     }
+    $testCount = $totalTestCount - $skippedCount
     if ($testCount -lt 1) { throw "Macrobenchmark dry-run executed zero tests." }
     $manifest.testCount = $testCount
+    $manifest.skippedCount = $skippedCount
     $manifest.status = "passed"
 } catch {
     $manifest.status = "failed"

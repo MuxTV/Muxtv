@@ -102,7 +102,8 @@ foreach ($token in @(
     'connectedBenchmarkReleaseAndroidTest',
     'androidx.benchmark.dryRunMode.enable=true',
     'androidx.benchmark.enabledRules=Macrobenchmark',
-    'Benchmark evidence commit mismatch'
+    'Benchmark evidence commit mismatch',
+    '$totalTestCount - $skippedCount'
 )) {
     if ($benchmarkHarness.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
         throw "Benchmark device harness is missing contract token: $token"
