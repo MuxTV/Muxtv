@@ -65,7 +65,7 @@ $emulatorProcess = $null
 $previousAndroidSerial = $env:ANDROID_SERIAL
 
 function Get-FreeBenchmarkEmulatorPort {
-    for ($consolePort = 5554; $consolePort -le 5680; $consolePort += 2) {
+    for ($consolePort = 5680; $consolePort -ge 5554; $consolePort -= 2) {
         $listeners = @()
         try {
             foreach ($port in @($consolePort, ($consolePort + 1))) {
@@ -90,17 +90,27 @@ function Wait-BenchmarkAdbRegistration {
     param(
         [Parameter(Mandatory)]$Tools,
         [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string]$TcpSerial,
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
         [int]$TimeoutSeconds = 150
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $nextConnect = (Get-Date).AddSeconds(15)
     do {
         if ($Process.HasExited) {
             throw "Benchmark emulator exited before ADB registration (exitCode=$($Process.ExitCode))."
         }
         $state = & $Tools.Adb -s $Serial get-state 2>$null | Select-Object -First 1
         if ($LASTEXITCODE -eq 0 -and ([string]$state).Trim() -eq "device") { return }
+        $tcpState = & $Tools.Adb -s $TcpSerial get-state 2>$null | Select-Object -First 1
+        if ($LASTEXITCODE -eq 0 -and ([string]$tcpState).Trim() -eq "device") { return $TcpSerial }
+        if ((Get-Date) -ge $nextConnect) {
+            & $Tools.Adb connect $TcpSerial 2>&1 | Add-Content -Path (
+                Join-Path $evidenceDirectory "adb-registration.log"
+            ) -Encoding utf8
+            $nextConnect = (Get-Date).AddSeconds(10)
+        }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
     throw "Benchmark emulator did not register with ADB as $Serial within $TimeoutSeconds seconds."
@@ -114,6 +124,7 @@ try {
     Install-AndroidPackage -Tools $tools -Package $image.Package -EvidenceDirectory $evidenceDirectory
     $consolePort = Get-FreeBenchmarkEmulatorPort
     $serial = "emulator-$consolePort"
+    $tcpSerial = "127.0.0.1:$($consolePort + 1)"
     New-TvAvd `
         -Tools $tools `
         -Name "MuxTV_BENCHMARK_API36" `
@@ -128,11 +139,15 @@ try {
         -AvdName "MuxTV_BENCHMARK_API36" `
         -Port $consolePort `
         -EvidenceDirectory $evidenceDirectory
-    Wait-BenchmarkAdbRegistration `
+    $registeredSerial = Wait-BenchmarkAdbRegistration `
         -Tools $tools `
         -Serial $serial `
+        -TcpSerial $tcpSerial `
         -Process $emulatorProcess `
         -TimeoutSeconds 150
+    if (-not [string]::IsNullOrWhiteSpace([string]$registeredSerial)) {
+        $serial = [string]$registeredSerial
+    }
     Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
     $env:ANDROID_SERIAL = $serial
     $manifest.deviceSerial = $serial
