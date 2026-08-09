@@ -21,6 +21,17 @@ if (@($parseErrors).Count -gt 0) {
     throw "Self-hosted runner preflight script is not valid PowerShell."
 }
 
+$actionlintConfig = Join-Path $repositoryRoot ".github\actionlint.yaml"
+if (-not (Test-Path -LiteralPath $actionlintConfig -PathType Leaf)) {
+    throw "Repository actionlint configuration was not found."
+}
+$actionlintContent = Get-Content -LiteralPath $actionlintConfig -Raw -Encoding utf8
+foreach ($runnerLabel in @("muxtv-android", "muxtv-device")) {
+    if ($actionlintContent.IndexOf("- $runnerLabel", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Repository actionlint configuration does not declare custom runner label: $runnerLabel"
+    }
+}
+
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("muxtv-runner-preflight-" + [Guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
@@ -32,6 +43,9 @@ try {
         -MinimumFreeDiskGb 0 `
         -MinimumPhysicalMemoryGb 0 `
         -SkipAndroidToolchain `
+        -ExpectedRunnerLabels @("muxtv-android") `
+        -RunnerMetadataProbe { [pscustomobject]@{ Name = "fixture"; Os = "Windows"; Architecture = "X64"; Version = "2.999.0" } } `
+        -TempPathProbe { param([string]$Path) $true } `
         -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
         -HttpsProbe { param([uri]$Uri) 403 }
 
@@ -44,6 +58,52 @@ try {
     }
     if (@($success.endpoints).Count -ne 2) {
         throw "Runner preflight must verify both GitHub results and Azure Blob artifact endpoints."
+    }
+    if ($success.runner_version -cne "2.999.0" -or $success.runner_temp_writable -ne $true) {
+        throw "Runner preflight did not preserve runner version and writable temp evidence."
+    }
+    if ([string]::Join(",", @($success.expected_runner_labels)) -cne "muxtv-android") {
+        throw "Runner preflight did not preserve the scheduling label contract."
+    }
+
+    $runnerFailureEvidence = Join-Path $tempRoot "runner-failure.json"
+    $runnerFailed = $false
+    try {
+        & $preflightScript `
+            -RepositoryRoot $repositoryRoot `
+            -EvidencePath $runnerFailureEvidence `
+            -MinimumFreeDiskGb 0 `
+            -MinimumPhysicalMemoryGb 0 `
+            -SkipAndroidToolchain `
+            -RunnerMetadataProbe { [pscustomobject]@{ Name = "fixture"; Os = "Windows"; Architecture = "X64"; Version = "" } } `
+            -TempPathProbe { param([string]$Path) $true } `
+            -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
+            -HttpsProbe { param([uri]$Uri) 200 }
+    } catch {
+        $runnerFailed = $_.Exception.Message -match "runner version"
+    }
+    if (-not $runnerFailed) {
+        throw "Runner preflight accepted missing runner version evidence."
+    }
+
+    $tempFailureEvidence = Join-Path $tempRoot "temp-failure.json"
+    $tempFailed = $false
+    try {
+        & $preflightScript `
+            -RepositoryRoot $repositoryRoot `
+            -EvidencePath $tempFailureEvidence `
+            -MinimumFreeDiskGb 0 `
+            -MinimumPhysicalMemoryGb 0 `
+            -SkipAndroidToolchain `
+            -RunnerMetadataProbe { [pscustomobject]@{ Name = "fixture"; Os = "Windows"; Architecture = "X64"; Version = "2.999.0" } } `
+            -TempPathProbe { param([string]$Path) $false } `
+            -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
+            -HttpsProbe { param([uri]$Uri) 200 }
+    } catch {
+        $tempFailed = $_.Exception.Message -match "temporary path"
+    }
+    if (-not $tempFailed) {
+        throw "Runner preflight accepted an unwritable temporary path."
     }
 
     $dnsFailureEvidence = Join-Path $tempRoot "dns-failure.json"
@@ -169,6 +229,10 @@ try {
 
     $fakeAdb = Join-Path $tempRoot "adb.exe"
     $fakeEmulator = Join-Path $tempRoot "emulator.exe"
+    $fakeSdkRoot = Join-Path $tempRoot "android-sdk"
+    $fakeSystemImage = Join-Path $fakeSdkRoot "system-images\android-36\android-tv\x86_64"
+    New-Item -ItemType Directory -Force -Path $fakeSystemImage | Out-Null
+    Set-Content -LiteralPath (Join-Path $fakeSystemImage "source.properties") -Value "Pkg.Revision=1" -Encoding ascii
     Set-Content -LiteralPath $fakeAdb -Value "fixture" -Encoding ascii
     Set-Content -LiteralPath $fakeEmulator -Value "fixture" -Encoding ascii
     $adbIntegrationEvidence = Join-Path $tempRoot "adb-integration-failure.json"
@@ -180,16 +244,38 @@ try {
             -MinimumFreeDiskGb 0 `
             -MinimumPhysicalMemoryGb 0 `
             -RequireNoConnectedDevice `
+            -ExpectedSystemImageApis 36 `
             -ResourceProbe { [pscustomobject]@{ FreeDiskGb = 10; PhysicalMemoryGb = 10 } } `
             -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
             -HttpsProbe { param([uri]$Uri) 200 } `
-            -AndroidToolchainProbe { param([string]$Root) [pscustomobject]@{ Adb = $fakeAdb; Emulator = $fakeEmulator } } `
+            -AndroidToolchainProbe { param([string]$Root) [pscustomobject]@{ Root = $fakeSdkRoot; Adb = $fakeAdb; Emulator = $fakeEmulator } } `
             -AdbDeviceProbe { param([string]$AdbPath) [pscustomobject]@{ ExitCode = 0; Output = @("List of devices attached", "emulator-5554`toffline") } }
     } catch {
         $adbIntegrationFailed = $_.Exception.Message -match "unexpected Android device"
     }
     if (-not $adbIntegrationFailed) {
         throw "Runner preflight integration path accepted an offline Android device."
+    }
+
+    $systemImageFailureEvidence = Join-Path $tempRoot "system-image-failure.json"
+    $systemImageFailed = $false
+    try {
+        & $preflightScript `
+            -RepositoryRoot $repositoryRoot `
+            -EvidencePath $systemImageFailureEvidence `
+            -MinimumFreeDiskGb 0 `
+            -MinimumPhysicalMemoryGb 0 `
+            -ExpectedSystemImageApis 26 `
+            -ResourceProbe { [pscustomobject]@{ FreeDiskGb = 10; PhysicalMemoryGb = 10 } } `
+            -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
+            -HttpsProbe { param([uri]$Uri) 200 } `
+            -AndroidToolchainProbe { param([string]$Root) [pscustomobject]@{ Root = $fakeSdkRoot; Adb = $fakeAdb; Emulator = $fakeEmulator } } `
+            -AdbDeviceProbe { param([string]$AdbPath) [pscustomobject]@{ ExitCode = 0; Output = @("List of devices attached") } }
+    } catch {
+        $systemImageFailed = $_.Exception.Message -match "expected emulator system image"
+    }
+    if (-not $systemImageFailed) {
+        throw "Runner preflight accepted a missing emulator system image."
     }
 
     foreach ($workflowPath in @(
@@ -216,6 +302,26 @@ try {
         if ($content.IndexOf("pull_request_target", [System.StringComparison]::Ordinal) -ge 0) {
             throw "Self-hosted workflow must not execute through pull_request_target: $workflowPath"
         }
+        foreach ($unsafeBranchInterpolation in @(
+            '-SourceBranch "${{ github.head_ref',
+            '$branch = "${{ github.head_ref'
+        )) {
+            if ($content.IndexOf($unsafeBranchInterpolation, [System.StringComparison]::Ordinal) -ge 0) {
+                throw "Self-hosted workflow interpolates an untrusted branch name into PowerShell: $workflowPath"
+            }
+        }
+        if ($content.IndexOf("muxtv-android", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Self-hosted workflow does not target the repository Android runner label: $workflowPath"
+        }
+        if ($content.IndexOf("ExpectedRunnerLabels", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Self-hosted workflow does not record its scheduling label contract: $workflowPath"
+        }
+
+        $uploadIndex = $content.IndexOf("actions/upload-artifact@", [System.StringComparison]::Ordinal)
+        $cleanupIndex = $content.IndexOf("Reset-SelfHostedAndroidState.ps1", [System.StringComparison]::Ordinal)
+        if ($cleanupIndex -lt 0 -or $cleanupIndex -lt $uploadIndex) {
+            throw "Self-hosted workflow does not run Android cleanup after artifact publication: $workflowPath"
+        }
     }
 
     foreach ($workflowPath in @(
@@ -237,6 +343,59 @@ try {
     }
     if ($varianceWorkflow.IndexOf("cancel-in-progress: `${{ github.event_name == 'pull_request' }}", [System.StringComparison]::Ordinal) -lt 0) {
         throw "Measurement variance workflow does not preserve manual/release-like runs."
+    }
+
+    foreach ($workflowPath in @(
+        ".github\workflows\android-tv-product-device-matrix.yml",
+        ".github\workflows\database-migration-device-matrix.yml",
+        ".github\workflows\measurement-variance-smoke.yml"
+    )) {
+        $workflow = Join-Path $repositoryRoot $workflowPath
+        $content = Get-Content -LiteralPath $workflow -Raw -Encoding utf8
+        if ($content.IndexOf("runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Device workflow does not require the dedicated device runner label: $workflowPath"
+        }
+        if ($content.IndexOf("group: muxtv-device-global", [System.StringComparison]::Ordinal) -ge 0) {
+            throw "Device workflow uses a shared native concurrency group that cancels an already-pending workflow instead of queueing it: $workflowPath"
+        }
+        if ($content.IndexOf("ExpectedSystemImageApis", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Device workflow does not preflight its expected emulator system image: $workflowPath"
+        }
+    }
+
+    $selfHostedWorkflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\self-hosted-validation.yml") -Raw -Encoding utf8
+    foreach ($requiredFragment in @(
+        '''["self-hosted","Windows","X64","muxtv-android"]''',
+        '''["self-hosted","Windows","X64","muxtv-android","muxtv-device"]''',
+        'runs-on: ${{ fromJSON('
+    )) {
+        if ($selfHostedWorkflow.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Self-hosted validation does not route host and device modes to dedicated labels: $requiredFragment"
+        }
+    }
+    if ($selfHostedWorkflow.IndexOf("muxtv-device-global", [System.StringComparison]::Ordinal) -ge 0) {
+        throw "Self-hosted validation uses the cancelling shared device concurrency group instead of the singleton device runner label."
+    }
+    if ($selfHostedWorkflow.IndexOf("matrix.lane", [System.StringComparison]::Ordinal) -ge 0) {
+        throw "Self-hosted validation must not use matrix context in a job condition."
+    }
+
+    $productWorkflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml") -Raw -Encoding utf8
+    foreach ($requiredPath in @(
+        "feature/home/**",
+        "feature/guide/**",
+        "feature/search/**",
+        "feature/sources/**",
+        "feature/doctor/**",
+        "feature/settings/**",
+        "core/database/**",
+        "catalog/**",
+        "gradle/**",
+        "settings.gradle.kts"
+    )) {
+        if ($productWorkflow.IndexOf($requiredPath, [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Product matrix path filters do not cover MVP UI/data changes: $requiredPath"
+        }
     }
 
     Write-Host "Self-hosted runner preflight contract passed."

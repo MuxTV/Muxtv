@@ -24,13 +24,13 @@ permissions:
 
 concurrency:
   group: self-hosted-validation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
     name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Manual validation' }}
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.validation_mode != 'Fast' && inputs.validation_mode != 'Full' && '["self-hosted","Windows","X64","muxtv-android","muxtv-device"]' || '["self-hosted","Windows","X64","muxtv-android"]') }}
     timeout-minutes: 180
 
     steps:
@@ -86,7 +86,21 @@ jobs:
       - name: Preflight dedicated self-hosted runner
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 -RequireNoConnectedDevice
+          $parameters = @{
+            RequireNoConnectedDevice = $true
+            ExpectedRunnerLabels = @("muxtv-android")
+          }
+          $deviceMode = "${{ github.event_name }}" -ceq "workflow_dispatch" -and `
+            "${{ inputs.validation_mode }}" -notin @("Fast", "Full")
+          if ($deviceMode) {
+            $parameters.ExpectedRunnerLabels += "muxtv-device"
+            $parameters.ExpectedSystemImageApis = if ("${{ inputs.validation_mode }}" -ceq "DeviceMatrix") {
+              @(26, 36)
+            } else {
+              @(36)
+            }
+          }
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 @parameters
 
       - name: Inspect runner environment
         shell: pwsh
@@ -140,10 +154,13 @@ jobs:
 
       - name: Run MuxTV validation
         shell: pwsh
+        env:
+          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $mode = "${{ steps.validation.outputs.mode }}"
-          $branch = "${{ github.head_ref || github.ref_name }}"
-          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $branch = $env:MUXTV_SOURCE_BRANCH
+          $commit = $env:MUXTV_SOURCE_COMMIT
 
           if ($mode -eq "CatalogMeasurement") {
             pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `
@@ -250,3 +267,9 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 7
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

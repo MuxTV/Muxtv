@@ -34,7 +34,7 @@ concurrency:
 jobs:
   focused-m3u:
     name: Accepted main 5x10k + 5x50k M3U evidence
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: [self-hosted, Windows, X64, muxtv-android]
     timeout-minutes: 180
 
     steps:
@@ -94,7 +94,9 @@ jobs:
       - name: Preflight dedicated self-hosted runner
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 -SkipAndroidToolchain
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
+            -SkipAndroidToolchain `
+            -ExpectedRunnerLabels muxtv-android
 
       - name: Inspect runner environment
         shell: pwsh
@@ -167,3 +169,9 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 30
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

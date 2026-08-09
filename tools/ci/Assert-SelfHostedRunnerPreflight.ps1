@@ -6,6 +6,44 @@ param(
     [ValidateRange(0, 1024)][double]$MinimumPhysicalMemoryGb = 4,
     [switch]$SkipAndroidToolchain,
     [switch]$RequireNoConnectedDevice,
+    [string[]]$ExpectedRunnerLabels = @(),
+    [ValidateRange(1, 99)][int[]]$ExpectedSystemImageApis = @(),
+    [scriptblock]$RunnerMetadataProbe = {
+        $version = $null
+        if ($env:GITHUB_ACTIONS -ceq "true") {
+            if (-not $env:RUNNER_TEMP) {
+                throw "RUNNER_TEMP is unavailable."
+            }
+            $runnerRoot = Split-Path (Split-Path $env:RUNNER_TEMP -Parent) -Parent
+            $listener = Join-Path $runnerRoot "bin\Runner.Listener.exe"
+            if (-not (Test-Path -LiteralPath $listener -PathType Leaf)) {
+                throw "Runner.Listener.exe is unavailable."
+            }
+            $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($listener).ProductVersion
+        } else {
+            $version = "local-pwsh-$($PSVersionTable.PSVersion)"
+        }
+        [pscustomobject]@{
+            Name = if ($env:RUNNER_NAME) { $env:RUNNER_NAME } else { "local-contract" }
+            Os = if ($env:RUNNER_OS) { $env:RUNNER_OS } else { "Windows" }
+            Architecture = if ($env:RUNNER_ARCH) { $env:RUNNER_ARCH } else { [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() }
+            Version = [string]$version
+        }
+    },
+    [scriptblock]$TempPathProbe = {
+        param([string]$Path)
+        if (-not $Path) {
+            return $false
+        }
+        New-Item -ItemType Directory -Force -Path $Path | Out-Null
+        $probePath = Join-Path $Path ("muxtv-preflight-" + [Guid]::NewGuid().ToString("N") + ".tmp")
+        try {
+            Set-Content -LiteralPath $probePath -Value "writable" -Encoding ascii
+            Test-Path -LiteralPath $probePath -PathType Leaf
+        } finally {
+            Remove-Item -LiteralPath $probePath -Force -ErrorAction SilentlyContinue
+        }
+    },
     [scriptblock]$ResourceProbe = {
         param([string]$ResolvedRepositoryRoot, [bool]$MeasurePhysicalMemory)
         $driveRoot = [System.IO.Path]::GetPathRoot($ResolvedRepositoryRoot)
@@ -41,6 +79,21 @@ param(
     [scriptblock]$AdbDeviceProbe = {
         param([string]$AdbPath)
         Invoke-PreflightProcess -FilePath $AdbPath -ArgumentList @("devices")
+    },
+    [scriptblock]$SystemImageProbe = {
+        param([object]$Tools, [int[]]$RequiredApis)
+        @(
+            foreach ($api in $RequiredApis) {
+                $apiRoot = Join-Path $Tools.Root "system-images\android-$api"
+                if (Test-Path -LiteralPath $apiRoot -PathType Container) {
+                    $installed = Get-ChildItem -LiteralPath $apiRoot -Recurse -File -Filter "source.properties" -ErrorAction SilentlyContinue |
+                        Select-Object -First 1
+                    if ($null -ne $installed) {
+                        $api
+                    }
+                }
+            }
+        )
     },
     [scriptblock]$DnsResolver = {
         param([string]$HostName)
@@ -78,6 +131,16 @@ $failure = $null
 $freeDiskGb = $null
 $physicalMemoryGb = $null
 $connectedDeviceCount = $null
+$runnerVersion = $null
+$runnerTempPath = $null
+$runnerTempWritable = $false
+$installedSystemImageApis = @()
+$normalizedExpectedLabels = @(
+    $ExpectedRunnerLabels |
+        ForEach-Object { ([string]$_).Trim() } |
+        Where-Object { $_ } |
+        Sort-Object -Unique
+)
 
 $actionsResultsUri = if ($env:ACTIONS_RESULTS_URL) {
     $candidate = [uri]$env:ACTIONS_RESULTS_URL
@@ -143,6 +206,23 @@ function Invoke-PreflightProcess {
 
 try {
     $resolvedRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
+    $runnerMetadata = & $RunnerMetadataProbe
+    $runnerVersion = ([string]$runnerMetadata.Version).Trim()
+    if (-not $runnerVersion) {
+        throw "Self-hosted runner preflight failed: runner version is unavailable."
+    }
+    foreach ($propertyName in @("Name", "Os", "Architecture")) {
+        if (-not ([string]$runnerMetadata.$propertyName).Trim()) {
+            throw "Self-hosted runner preflight failed: runner metadata is incomplete."
+        }
+    }
+
+    $runnerTempPath = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $runnerTempWritable = [bool](& $TempPathProbe $runnerTempPath)
+    if (-not $runnerTempWritable) {
+        throw "Self-hosted runner preflight failed: temporary path is not writable."
+    }
+
     $resourceSnapshot = & $ResourceProbe $resolvedRoot ($MinimumPhysicalMemoryGb -gt 0)
     $freeDiskGb = [double]$resourceSnapshot.FreeDiskGb
     if ($freeDiskGb -lt $MinimumFreeDiskGb) {
@@ -194,6 +274,14 @@ try {
             }
         }
 
+        if ($ExpectedSystemImageApis.Count -gt 0) {
+            $installedSystemImageApis = @(& $SystemImageProbe $tools $ExpectedSystemImageApis | Sort-Object -Unique)
+            $missingApis = @($ExpectedSystemImageApis | Where-Object { $_ -notin $installedSystemImageApis })
+            if ($missingApis.Count -gt 0) {
+                throw "Self-hosted runner preflight failed: expected emulator system image is unavailable for API $([string]::Join(', ', $missingApis))."
+            }
+        }
+
         $adbResult = & $AdbDeviceProbe $tools.Adb
         $deviceLines = @($adbResult.Output)
         if ($adbResult.ExitCode -ne 0) {
@@ -227,6 +315,12 @@ $evidence = [ordered]@{
     runner_name = [string]$env:RUNNER_NAME
     runner_os = [string]$env:RUNNER_OS
     runner_arch = [string]$env:RUNNER_ARCH
+    runner_version = $runnerVersion
+    runner_temp_path = $runnerTempPath
+    runner_temp_writable = $runnerTempWritable
+    expected_runner_labels = $normalizedExpectedLabels
+    expected_system_image_apis = @($ExpectedSystemImageApis | Sort-Object -Unique)
+    installed_system_image_apis = $installedSystemImageApis
     free_disk_gb = $freeDiskGb
     physical_memory_gb = $physicalMemoryGb
     connected_device_count = $connectedDeviceCount
