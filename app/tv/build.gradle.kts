@@ -10,13 +10,17 @@ android {
     namespace = "app.muxtv"
     defaultConfig {
         applicationId = "app.muxtv.tv"
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 1001
+        versionName = "0.1.0-alpha.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
-        release { isMinifyEnabled = false }
+        release {
+            optimization {
+                enable = true
+            }
+        }
     }
     buildFeatures { compose = true }
 }
