@@ -18,7 +18,8 @@ $files = @(
     (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
     (Join-Path $repositoryRoot "tools\verify-local.ps1"),
     (Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1"),
-    (Join-Path $repositoryRoot "tools\ci\Assert-SelfHostedRunnerPreflight.ps1")
+    (Join-Path $repositoryRoot "tools\ci\Assert-SelfHostedRunnerPreflight.ps1"),
+    (Join-Path $PSScriptRoot "Invoke-BenchmarkDryRun.ps1")
 )
 
 $messages = @()
@@ -212,7 +213,12 @@ if (-not (Test-Path $measurementHarnessCheck -PathType Leaf)) {
 }
 & $measurementHarnessCheck
 & $runnerPreflightContract
+$benchmarkFoundationContract = Join-Path $repositoryRoot "tools\ci\Test-BenchmarkFoundationContract.ps1"
+if (-not (Test-Path $benchmarkFoundationContract -PathType Leaf)) {
+    throw "Benchmark foundation contract test was not found."
+}
+& $benchmarkFoundationContract
 
-$message = "Android TV and measurement harness PowerShell syntax and function surfaces are valid."
+$message = "Android TV, measurement, and benchmark harness PowerShell syntax and contracts are valid."
 Set-Content -Path $diagnosticPath -Value $message -Encoding utf8
 Write-Host $message
