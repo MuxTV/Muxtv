@@ -2,9 +2,9 @@
 
 **Date:** 2026-08-08
 
-**Baseline:** `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`
+**Baseline:** `main@d02ae7c0bc87f7bce49b047579b5a1e1f6820192`
 
-**Working branch:** `upd/mvp-alpha-1`
+**Working model:** sequential `upd/*` vertical-slice branches from accepted `origin/main`
 
 **Status:** active canonical ExecPlan
 
@@ -73,8 +73,9 @@ Android TV rules:
 - [x] Create and verify complete pre-cleanup bundle at `.git/bundles/pre-mvp-20260808.bundle` (470 refs).
 - [x] Inventory 111 worktrees and preserve dirty, unmerged, open-PR and unknown histories.
 - [x] Remove only three clean worktrees proven reachable from `origin/main`; retain all branches.
-- [x] Fast-forward root checkout to `main@e9dd0336716e27e9b51f4eb10da82169112e71d1` and exclude local `worktrees/` through `.git/info/exclude`.
-- [x] Create `upd/mvp-alpha-1` and this canonical ExecPlan.
+- [x] Fast-forward root checkout first to `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`, then to accepted `main@d02ae7c0bc87f7bce49b047579b5a1e1f6820192`; exclude local `worktrees/` through `.git/info/exclude`.
+- [x] Create this canonical ExecPlan; retain `upd/mvp-alpha-1` as historical execution provenance and use isolated vertical-slice branches for remaining work.
+- [x] Preserve the local unpacked Doctor Product Matrix evidence at `.work/doctor-product-31282812126/`; it corresponds to published artifact `9029117392` and is not cleanup residue.
 
 ### M1 — reliable self-hosted CI
 
@@ -87,15 +88,16 @@ Android TV rules:
 - [ ] Enforce global emulator/device serialization through the dedicated runner label and verify that release runs are never cancelled.
 - [x] Validate configuration cache with fail-on-problems before making it a permanent gate.
 - [ ] Apply and verify dedicated runner labels `muxtv-android` and `muxtv-device` in GitHub runner administration before workflows depend on them.
-- [ ] Re-run PR #145 exact head and require substantive API 26/API 36 plus artifact publication to be green.
+- [x] Supersede the historical PR #145 upload-only failure with accepted CI hardening in PR #149 and subsequent exact-head Product/Full evidence for PRs #150-#153; do not re-run a merged historical head.
 
 ### M2 — bounded integration queue and truth sync
 
-- [ ] Merge #145 only after exact-head required checks are green; keep it pure #30A.
-- [ ] Integrate identity/path routing from #144 only if #30B requires it.
-- [ ] Accept #146 Room update independently after current-stack validation.
-- [ ] Rebase #148 after code integration and expand truth sync: architecture version, current execution, archived plans, actual issue scope and release state.
-- [ ] Keep each PR to one logical slice: CI, playback contract, runtime recovery, Doctor, UI, performance or release.
+- [x] Merge #145 as the pure #30A recovery-policy slice (`1beaa675`).
+- [x] Keep #144 historical; PR #150 implemented the required identity-only runtime boundary directly on accepted `main` without importing a parallel request path.
+- [x] Remove the fictitious #146 integration item: GitHub has no accessible PR #146, and no Room upgrade is implied by the MVP plan.
+- [x] Supersede stale draft PR #148 with this current-main truth sync instead of rebasing obsolete baseline documentation.
+- [x] Merge CI, runtime recovery, observations, Doctor Lite and release identity as separate PRs #149-#153.
+- [ ] Keep each remaining PR to one logical slice: CI operations, measurement, Channels, Search, Guide, ingestion, source Doctor, shell/UI, Player UX, performance or release.
 
 ### M3 — measurement foundation
 
@@ -107,12 +109,14 @@ Android TV rules:
 
 ### M4 — playback runtime and Doctor
 
-- [ ] Add failing JVM/service tests for candidate order, duplicate/stale callbacks, cancellation, supersession, timeout and first-frame success.
-- [ ] Introduce identity-only `PlaybackStartRequest`, one-at-a-time `PlaybackCandidateResolver`, pure `PlaybackRecoveryPolicy`, safe `PlaybackObservation` and bounded `PlaybackFailureCategory`.
-- [ ] Implement service-owned generation state machine with at most 3 candidates / 20 seconds and one final result.
-- [ ] Map DNS, TLS, HTTP, timeout, network, manifest, codec/render and credential failures without retaining raw exceptions or secrets.
-- [ ] Add bounded durable diagnostics only if Doctor acceptance requires it and only after reserving the next Room schema owner.
-- [ ] Implement Doctor presentation/export as a consumer of typed redacted observations, reachable from source and playback failures.
+- [x] Add JVM/service tests for candidate order, duplicate/stale callbacks, cancellation, supersession, timeout and first-frame success.
+- [x] Introduce identity-only `PlaybackStartRequest`, one-at-a-time candidate resolution, pure `PlaybackRecoveryPolicy`, safe `PlaybackObservation` and bounded `PlaybackFailureCategory`.
+- [x] Implement the service-owned generation state machine with at most 3 candidates / 20 seconds and one final result.
+- [x] Map DNS, TLS, HTTP, timeout, network, manifest, codec/render and credential failures without retaining raw exceptions or secrets.
+- [x] Keep accepted Doctor Lite diagnostics in a bounded in-memory observation buffer; no Room schema change is required for the closed alpha.
+- [x] Implement Doctor presentation/SAF export for typed redacted playback observations and expose it only when actual attempt evidence exists.
+- [ ] Add bounded source-refresh diagnostics to Doctor through a redacted adapter over `SourceRefreshStore`; source names/IDs remain local UI data and are excluded from export.
+- [ ] Complete Player recovery actions and auto-hiding overlay without introducing another player/retry owner.
 
 ### M5 — data and allocation hot paths
 
@@ -136,7 +140,7 @@ Android TV rules:
 
 ### M7 — release hardening
 
-- [ ] Set `versionCode=1001`, `versionName=0.1.0-alpha.1`, R8 minification, resource shrinking and full optimization for release.
+- [x] Set `versionCode=1001`, `versionName=0.1.0-alpha.1`, R8 minification, resource optimization and full optimization for release in PR #153.
 - [ ] Read signing material only from a manually approved GitHub Environment and never persist it in logs/artifacts/caches.
 - [ ] Produce signed APK, mapping, dependency SBOM, SHA-256 checksums, license report, benchmark JSON/traces and toolchain/device/source manifest.
 - [ ] Perform two clean release builds and compare artifact contents; document unavoidable timestamp differences.
@@ -192,6 +196,11 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-08: no prior alpha artifact or signing lineage exists; release hardening must create a controlled same-key seed before the required signed-upgrade test.
 - 2026-08-08: configuration-cache create/reuse passed locally with fail-on-problems; permanent CI enablement remains a later isolated workflow change.
 - 2026-08-08: PR #149 exact head `21d043a7862e5befb1225d1c70ab1b6e14b779fc` passed Product Matrix run `31267144994`, including API 26/API 36 and artifact `9024665699` (`sha256:3a49b866ffc22eb778d18d3ceac2ebadbbb69795a2214d5090cf597bfd2da20d`).
+- 2026-08-09: PR #150 merged service-owned recovery as `965e6bdd46f75fa5c74e18ffe32ab1e3e25ed61f`; PR #151 merged bounded redacted playback observations as `f8a8c84185839ecc1a5cecd64acb9cb3a1836e22`.
+- 2026-08-09: PR #152 exact head `9d8c01a92c1064f0ca6b856a96bd6e4b26cd4c61` passed Product run `31284350989` and Full run `31284350987`, then merged Doctor Lite as `26240e2171421bd73412a61214a1c65d4a46139c`.
+- 2026-08-09: PR #153 exact head `42bcf7558d7a637847d6a776ed9b3f40eda1c961` passed Product run `31285565922` with artifact `9029806912` (`sha256:8674233315e3d598f59713f7a640f3e71ef2677d7ba8b74a00d0fb2841daeb17`) and Full run `31285565929` with artifact `9029868593` (`sha256:d57ed0c8e34deda111f7b2cddce9e79c4319722b8aa0fed3684756c9afa26139`), then merged as `d02ae7c0bc87f7bce49b047579b5a1e1f6820192`.
+- 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
+- 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 
 ## Stop conditions
 
