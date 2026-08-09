@@ -68,7 +68,7 @@ function Get-FreeBenchmarkEmulatorPort {
     for ($consolePort = 5554; $consolePort -le 5680; $consolePort += 2) {
         $listeners = @()
         try {
-            foreach ($port in @($consolePort, $consolePort + 1)) {
+            foreach ($port in @($consolePort, ($consolePort + 1))) {
                 $listener = [System.Net.Sockets.TcpListener]::new(
                     [System.Net.IPAddress]::Loopback,
                     $port
