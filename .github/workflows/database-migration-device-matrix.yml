@@ -106,13 +106,16 @@ jobs:
 
       - name: Run old-edge and current Android TV matrix
         shell: pwsh
+        env:
+          MUXTV_SOURCE_BRANCH: ${{ github.head_ref }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
         run: |
           $ErrorActionPreference = "Stop"
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Invoke-TvDeviceValidation.ps1 `
             -Mode DeviceMatrix `
-            -SourceBranch "${{ github.head_ref }}" `
-            -SourceCommit "${{ github.event.pull_request.head.sha }}" `
+            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
+            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
             -NoDaemon
 
       - name: Upload matrix evidence

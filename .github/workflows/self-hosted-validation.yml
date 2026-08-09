@@ -157,10 +157,13 @@ jobs:
 
       - name: Run MuxTV validation
         shell: pwsh
+        env:
+          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $mode = "${{ steps.validation.outputs.mode }}"
-          $branch = "${{ github.head_ref || github.ref_name }}"
-          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $branch = $env:MUXTV_SOURCE_BRANCH
+          $commit = $env:MUXTV_SOURCE_COMMIT
 
           if ($mode -eq "CatalogMeasurement") {
             pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `

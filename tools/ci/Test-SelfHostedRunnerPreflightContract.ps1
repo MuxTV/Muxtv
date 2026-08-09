@@ -21,6 +21,17 @@ if (@($parseErrors).Count -gt 0) {
     throw "Self-hosted runner preflight script is not valid PowerShell."
 }
 
+$actionlintConfig = Join-Path $repositoryRoot ".github\actionlint.yaml"
+if (-not (Test-Path -LiteralPath $actionlintConfig -PathType Leaf)) {
+    throw "Repository actionlint configuration was not found."
+}
+$actionlintContent = Get-Content -LiteralPath $actionlintConfig -Raw -Encoding utf8
+foreach ($runnerLabel in @("muxtv-android", "muxtv-device")) {
+    if ($actionlintContent.IndexOf("- $runnerLabel", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Repository actionlint configuration does not declare custom runner label: $runnerLabel"
+    }
+}
+
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("muxtv-runner-preflight-" + [Guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
@@ -290,6 +301,14 @@ try {
         }
         if ($content.IndexOf("pull_request_target", [System.StringComparison]::Ordinal) -ge 0) {
             throw "Self-hosted workflow must not execute through pull_request_target: $workflowPath"
+        }
+        foreach ($unsafeBranchInterpolation in @(
+            '-SourceBranch "${{ github.head_ref',
+            '$branch = "${{ github.head_ref'
+        )) {
+            if ($content.IndexOf($unsafeBranchInterpolation, [System.StringComparison]::Ordinal) -ge 0) {
+                throw "Self-hosted workflow interpolates an untrusted branch name into PowerShell: $workflowPath"
+            }
         }
         if ($content.IndexOf("muxtv-android", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Self-hosted workflow does not target the repository Android runner label: $workflowPath"
