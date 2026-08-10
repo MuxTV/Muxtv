@@ -1,5 +1,7 @@
 package app.muxtv
 
+import androidx.paging.LoadState
+import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
@@ -50,8 +52,19 @@ internal class TestChannelBrowseRepository(
                     ),
                 )
             }.associateBy(ChannelNowNext::canonicalChannelId)
-            PagingData.from(rows.map { row -> row.toBrowseItem(guide[row.channelId]) })
+            PagingData.from(
+                data = rows.map { row -> row.toBrowseItem(guide[row.channelId]) },
+                sourceLoadStates = COMPLETED_LOAD_STATES,
+            )
         }
+    }
+
+    private companion object {
+        val COMPLETED_LOAD_STATES = LoadStates(
+            refresh = LoadState.NotLoading(endOfPaginationReached = true),
+            prepend = LoadState.NotLoading(endOfPaginationReached = true),
+            append = LoadState.NotLoading(endOfPaginationReached = true),
+        )
     }
 }
 
