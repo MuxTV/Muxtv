@@ -121,7 +121,7 @@ Android TV rules:
 ### M5 — data and allocation hot paths
 
 - [ ] Add screen-specific Room projections and Room-backed paging with stable keys for large data:
-  - [ ] Channels: active S4 on `upd/channels-paging` from accepted `main@c901dcc5`; remove the 200-row browse limit, enrich only loaded pages and retain bounded focus state.
+  - [x] Channels: S4 implemented on `upd/channels-paging` from accepted `main@c901dcc5`; the 200-row browse limit is removed, only loaded pages are enriched, and focus state remains bounded. GitHub acceptance and physical performance closure remain separate evidence gates.
   - [ ] Search: S5 after accepted Channels slice.
   - [ ] Guide: S6 after accepted Search slice.
 - [ ] Keep parsers streaming with bounded batch transactions, cancellation points and atomic revision publication.
@@ -218,6 +218,7 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-09: S3 measurement foundation is active from `main@d4bd0200`. AGP 9.3 rejects Baseline Profile Gradle Plugin 1.4.1; AndroidX Benchmark `1.5.0-alpha07` is the narrow compatibility exception because it adds AGP 9.x new-DSL support. The producer exposes `benchmarkRelease` and `nonMinifiedRelease`, and local JMH/producer compilation is green. Current executable CUJs cover startup and reachable empty-state navigation; 500-row, Player/HLS, recovery, data-backed focus and full profile generation remain owned by later data/player/performance slices rather than test-only runtime hooks.
 - 2026-08-09: S3 final exact head `aa9d8b8cc5570ec040c23274be3491b77a3e183f` passed Product `31315783500`, Database `31315783509`, Full `31315783501`, Variance `31315783511` and Benchmark `31315783504`; PR #156 merged as `c901dcc55a65f634be0c3e720cc1f9c783e6189e`.
 - 2026-08-09: S4 starts from accepted `main@c901dcc5`. AndroidX Paging is pinned to stable `3.5.0`; Room3 paging uses its explicit `room3-paging` DAO return converter. The browse contract contains only channel identity/display/favorite/playback and now/next projection fields; locators, headers, credentials and source URLs remain excluded. Production page settings are fixed at `64 / 64 / 16 / 256`, with placeholders disabled.
+- 2026-08-10: S4 implementation head `fbaa42204fb9853df679d2a89936162cbe908450` passed exact-head local host validation and API 36 device validation at `.work/evidence/20260810T164346Z-fbaa42204fb9-devicecurrent`: database instrumentation `132/132`, Media3 instrumentation `10/10`, application instrumentation `38/38`, including empty-filter recovery focus and Player/Back restoration. The emulator was stopped by the harness. API 26/API 36 GitHub Product Matrix and physical-TV frame ceilings remain acceptance/performance gates rather than inferred from this local run.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 
