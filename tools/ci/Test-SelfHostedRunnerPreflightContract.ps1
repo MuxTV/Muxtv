@@ -264,6 +264,8 @@ try {
     Set-Content -LiteralPath (Join-Path $fakeSystemImage "source.properties") -Value "Pkg.Revision=1" -Encoding ascii
     Set-Content -LiteralPath $fakeAdb -Value "fixture" -Encoding ascii
     Set-Content -LiteralPath $fakeEmulator -Value "fixture" -Encoding ascii
+
+    $adbPreflightOperations = [System.Collections.Generic.List[string]]::new()
     $adbIntegrationEvidence = Join-Path $tempRoot "adb-integration-failure.json"
     $adbIntegrationFailed = $false
     try {
@@ -278,12 +280,16 @@ try {
             -DnsResolver { param([string]$HostName) @("203.0.113.10") } `
             -HttpsProbe { param([uri]$Uri) 200 } `
             -AndroidToolchainProbe { param([string]$Root) [pscustomobject]@{ Root = $fakeSdkRoot; Adb = $fakeAdb; Emulator = $fakeEmulator } } `
-            -AdbDeviceProbe { param([string]$AdbPath) [pscustomobject]@{ ExitCode = 0; Output = @("List of devices attached", "emulator-5554`toffline") } }
+            -AdbDisconnectProbe { param([string]$AdbPath) $adbPreflightOperations.Add("disconnect"); [pscustomobject]@{ ExitCode = 0; Output = @() } } `
+            -AdbDeviceProbe { param([string]$AdbPath) $adbPreflightOperations.Add("devices"); [pscustomobject]@{ ExitCode = 0; Output = @("List of devices attached", "emulator-5554`toffline") } }
     } catch {
         $adbIntegrationFailed = $_.Exception.Message -match "unexpected Android device"
     }
     if (-not $adbIntegrationFailed) {
         throw "Runner preflight integration path accepted an offline Android device."
+    }
+    if ([string]::Join(",", $adbPreflightOperations) -cne "disconnect,devices") {
+        throw "Runner preflight did not clear stale network transports before enforcing ADB isolation."
     }
 
     $systemImageFailureEvidence = Join-Path $tempRoot "system-image-failure.json"
