@@ -11,9 +11,11 @@ import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.NowNextQuery
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -108,9 +110,12 @@ class ChannelBrowseRepositoryTest {
         val source = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
         val first = source.load(refresh(loadSize = 64)) as PagingSource.LoadResult.Page
         assertThat(first.data.single().channelId).isEqualTo("channel-00001")
+        val invalidated = CompletableDeferred<Unit>()
+        source.registerInvalidatedCallback { invalidated.complete(Unit) }
 
         activateRevision(revisionNumber = 2L, channelCount = 2)
         database.invalidationTracker.refresh("sources", "provider_channels")
+        withTimeout(5_000L) { invalidated.await() }
 
         assertThat(source.invalid).isTrue()
         val replacement = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
