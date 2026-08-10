@@ -2,6 +2,7 @@ package app.muxtv.di
 
 import android.content.Context
 import app.muxtv.catalog.CatalogRepository
+import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
@@ -118,6 +119,11 @@ object AppModule {
     fun providePlaybackCatalog(
         components: MuxTvDatabaseComponents,
     ): PlaybackCatalog = components.playbackCatalog
+
+    @Provides
+    fun provideChannelBrowseRepository(
+        components: MuxTvDatabaseComponents,
+    ): ChannelBrowseRepository = components.channelBrowseRepository
 
     @Provides
     fun providePlaybackCandidateResolver(

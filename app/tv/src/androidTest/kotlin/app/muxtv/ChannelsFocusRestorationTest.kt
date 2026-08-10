@@ -266,7 +266,7 @@ class ChannelsFocusRestorationTest {
 
         openFavoritesFromFirstRowWithDpad()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText("Показать все каналы").fetchSemanticsNodes().size == 1
         }
         composeRule.waitForIdle()
 
@@ -284,7 +284,7 @@ class ChannelsFocusRestorationTest {
 
         openRecentFromFirstRowWithDpad()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithText("Показать все каналы").fetchSemanticsNodes().size == 1
         }
         composeRule.waitForIdle()
 
@@ -323,9 +323,11 @@ class ChannelsFocusRestorationTest {
         onOpenChannel: (String) -> Unit = {},
     ) {
         ChannelsRoute(
-            playbackCatalog = playbackCatalog,
-            recentChannelsRepository = recentChannelsRepository,
-            epgGuideRepository = epgGuideRepository,
+            channelBrowseRepository = TestChannelBrowseRepository(
+                playbackCatalog = playbackCatalog,
+                recentChannelsRepository = recentChannelsRepository,
+                epgGuideRepository = epgGuideRepository,
+            ),
             playbackSessionStateSource = NoPlaybackSessionStateSource,
             profileId = "profile-main",
             onOpenChannel = onOpenChannel,

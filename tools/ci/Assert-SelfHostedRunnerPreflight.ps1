@@ -86,6 +86,10 @@ param(
         param([string]$AdbPath)
         Invoke-PreflightProcess -FilePath $AdbPath -ArgumentList @("devices")
     },
+    [scriptblock]$AdbDisconnectProbe = {
+        param([string]$AdbPath)
+        Invoke-PreflightProcess -FilePath $AdbPath -ArgumentList @("disconnect")
+    },
     [scriptblock]$SystemImageProbe = {
         param([object]$Tools, [int[]]$RequiredApis)
         @(
@@ -291,6 +295,14 @@ try {
             $missingApis = @($ExpectedSystemImageApis | Where-Object { $_ -notin $installedSystemImageApis })
             if ($missingApis.Count -gt 0) {
                 throw "Self-hosted runner preflight failed: expected emulator system image is unavailable for API $([string]::Join(', ', $missingApis))."
+            }
+        }
+
+        if ($RequireNoConnectedDevice) {
+            $adbDisconnectResult = & $AdbDisconnectProbe $tools.Adb
+            $adbDisconnectResult.Output | ForEach-Object { Write-Host $_ }
+            if ($adbDisconnectResult.ExitCode -ne 0) {
+                throw "Self-hosted runner preflight failed: unable to clear stale ADB network transports."
             }
         }
 

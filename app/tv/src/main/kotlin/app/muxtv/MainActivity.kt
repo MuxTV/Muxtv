@@ -7,11 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import app.muxtv.catalog.ChannelPreferencesRepository
+import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.ChannelSearchRepository
-import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.MuxTvTheme
@@ -38,16 +37,13 @@ class MainActivity : ComponentActivity() {
     lateinit var playbackCatalog: PlaybackCatalog
 
     @Inject
+    lateinit var channelBrowseRepository: ChannelBrowseRepository
+
+    @Inject
     lateinit var channelPreferencesRepository: ChannelPreferencesRepository
 
     @Inject
     lateinit var channelSearchRepository: ChannelSearchRepository
-
-    @Inject
-    lateinit var recentChannelsRepository: RecentChannelsRepository
-
-    @Inject
-    lateinit var epgGuideRepository: EpgGuideRepository
 
     @Inject
     lateinit var guideWindowRepository: GuideWindowRepository
@@ -80,10 +76,9 @@ class MainActivity : ComponentActivity() {
             MuxTvTheme {
                 AppNavigation(
                     playbackCatalog = playbackCatalog,
+                    channelBrowseRepository = channelBrowseRepository,
                     channelPreferencesRepository = channelPreferencesRepository,
                     channelSearchRepository = channelSearchRepository,
-                    recentChannelsRepository = recentChannelsRepository,
-                    epgGuideRepository = epgGuideRepository,
                     guideWindowRepository = guideWindowRepository,
                     controllerConnector = controllerConnector,
                     sourceRefreshStore = sourceRefreshStore,

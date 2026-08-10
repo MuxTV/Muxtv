@@ -4,6 +4,7 @@ dependencies {
     api(project(":core:common"))
     api(project(":core:model"))
     api(libs.coroutines.core)
+    api(libs.paging.common)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
