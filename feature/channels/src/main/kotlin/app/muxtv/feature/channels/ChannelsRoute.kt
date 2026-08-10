@@ -169,7 +169,7 @@ private fun ChannelsContent(
         ChannelsFilter.FAVORITES -> favoritesFilterFocusRequester
         ChannelsFilter.RECENT -> recentFilterFocusRequester
     }
-    var restorationCompleted by rememberSaveable(filter) { mutableStateOf(false) }
+    var restorationCompleted by remember(filter) { mutableStateOf(false) }
 
     LaunchedEffect(filter, rows.itemCount, focusAnchor, restorationCompleted) {
         if (restorationCompleted || rows.itemCount == 0) return@LaunchedEffect
@@ -183,7 +183,8 @@ private fun ChannelsContent(
         ) {
             requestedIndex
         } else {
-            findLoadedIndex(rows, focusAnchor.itemKey) ?: requestedIndex
+            findLoadedIndex(rows, focusAnchor.itemKey)
+                ?: minOf(focusAnchor.previousIndex - 1, rows.itemCount - 1).coerceAtLeast(0)
         }
         if (targetIndex != requestedIndex) listState.scrollToItem(targetIndex)
         val targetId = snapshotFlow { rows.peek(targetIndex)?.channelId }
