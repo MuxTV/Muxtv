@@ -1,94 +1,69 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-11
 ---
 
 # Карта модулей
 
-## Начальная физическая структура
+## Фактическая структура
 
-```text
+~~~text
 app/
 └── tv/                    Android TV application и composition root
 
 core/
-├── common/                Result, errors, dispatchers, clock, IDs
-├── model/                 platform-neutral domain models
-├── database/              Room 3 database, DAO, migrations
-├── network/               OkHttp policies, auth, source downloads
-├── designsystem/          TV tokens и reusable focus components
-├── ui/                    generic TV UI primitives
-└── testing/               fakes, fixtures, test DSL
+├── common/                Общие contracts, errors и IDs
+├── model/                 Platform-neutral domain models
+├── database/              Room v10, migrations, catalog/EPG/Search/Recent/Guide projections
+├── designsystem/          TV theme, tokens и focus surfaces
+├── ui/                    Shared Compose TV primitives
+├── testing/               Shared test support
+├── network/               Bounded OkHttp policies и redaction
+└── credentials/           Android Keystore credential store
 
 catalog/
-├── api/                   source/catalog ports
-├── m3u/                   streaming M3U parser и adapter
-├── normalization/         aliases, canonical names, categories
-└── matching/              duplicate candidates и confidence
-
-epg/
-├── api/                   EPG ports и models
-├── xmltv/                 streaming XMLTV parser
-└── matching/              channel-to-EPG matching
+├── api/                   Catalog, browse, search, recent и playback ports
+├── ingest/                Streaming M3U parser
+├── importer/              Source/EPG staging и import
+├── refresh/               Secure remote acquisition
+├── sync/                  WorkManager scheduling и leases
+└── onboarding/            Durable source preparation registry
 
 player/
-├── api/                   PlaybackEngine и diagnostics contracts
-├── media3/                production Media3 adapter
-└── fake/                  deterministic test player
+├── api/                   Playback identity, recovery policy и observations
+├── media3/                Единственный production Media3/service adapter
+└── fake/                  Deterministic test adapter
 
 feature/
-├── onboarding/
 ├── home/
-├── live/
-├── guide/
-├── search/
+├── channels/              Room-backed paged browser
+├── guide/                 Bounded Guide TV
+├── search/                Bounded top-N Search TV
+├── player/
 ├── sources/
-├── doctor/
-├── profiles/
-└── settings/
-
-local-control/
-├── server/                embedded Ktor server и pairing
-└── web/                   static phone control UI
+└── doctor/                Redacted Doctor Lite
 
 benchmark/
-baseline-profile/
-build-logic/
-```
+├── macrobenchmark/        CUJs и Baseline Profile producer
+└── jvm/                   JMH measurements
 
-## Граф зависимостей
+build-logic/               Included build с convention plugins
+~~~
 
-```text
-app-tv
- ├─ feature-*
- ├─ player-media3
- ├─ catalog-*
- ├─ epg-*
- ├─ local-control-server
- └─ core-*
+В settings.gradle.kts включены ровно 27 application/library/benchmark модулей. build-logic является отдельным included build и не считается двадцать восьмым project path.
 
-feature-* → application ports + core-model + core-designsystem
-application ports → domain models
-adapters → ports + platform libraries
-```
+## Границы
 
-Запрещённые зависимости:
+- app:tv содержит composition root и route wiring, но не бизнес-логику ingestion/playback.
+- Pure Kotlin core/catalog/player contracts не импортируют Android, Room, Media3 или Compose.
+- core:database реализует repository ports; feature-модули не используют DAO напрямую.
+- player:media3 — единственный production owner Media3/ExoPlayer.
+- Channels использует Paging для последовательного просмотра больших каталогов.
+- Search сохраняет ranked bounded top-N/truncation contract и не превращается в бесконечный browse feed.
+- Guide, Search и Doctor являются существующими feature-модулями, а не planned structure.
 
-- `core-model → android.*`;
-- `feature-* → Room DAO`;
-- `feature-* → ExoPlayer`;
-- `catalog-* → Compose`;
-- `player-media3 → provider implementation`;
-- любые циклические module dependencies.
+## Ещё не создано
 
-## Правила выделения нового модуля
+Отдельные feature:profiles, feature:settings и local-control modules появятся только при активном release/product scope. Новые epg/search/doctor layers не создаются для симметрии: текущие repository boundaries уже покрывают принятый продукт.
 
-Новый Gradle-модуль создаётся только если выполняется хотя бы одно условие:
-
-1. требуется отдельный platform target;
-2. компонент имеет независимый контракт и альтернативную реализацию;
-3. необходим отдельный test/benchmark boundary;
-4. зависимость тяжёлая и не должна транзитивно попадать в другие features;
-5. компонент может собираться или выпускаться отдельно.
-
-Пакеты внутри модуля предпочтительнее новых модулей, если граница не даёт измеримой пользы.
+Машинно-читаемая карта: [.work/meta/modules.yaml](../meta/modules.yaml).

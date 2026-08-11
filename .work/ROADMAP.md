@@ -1,9 +1,22 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-11
 ---
 
 # Roadmap
+
+## Current alpha checkpoint
+
+Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite.
+
+Текущая последовательность до alpha:
+
+1. repository truth и GitHub/local hygiene;
+2. Search S5 50k+EPG measurement baseline;
+3. Search S5 top-N optimization без Paging/schema/API expansion;
+4. оставшиеся performance, Player/Doctor UX, Lounge/accessibility и release gates из M3/M4/M6/M7 canonical ExecPlan.
+
+Эта секция описывает текущий checkpoint. Фазы ниже остаются capability roadmap и не являются утверждением, что для уже реализованной функции нужно создать отдельный симметричный модуль.
 
 ## Phase 00 — Foundation
 
