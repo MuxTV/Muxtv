@@ -8,10 +8,10 @@ repository_state:
   ci: present_exact_source_head_host_api26_api36_measurement_and_benchmark
   tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_and_measurement
   release_pipeline: alpha_identity_present_signing_and_physical_release_gate_pending
-  documentation: synchronizing_post_channels_paging_for_search_s5
+  documentation: synchronized_after_repository_hygiene_for_search_s5
   architecture_version: 2
 active_branch_after_merge: main
-implementation_source_commit: 6e852d364db6904e80f87deb9deaba58ec58025a
+implementation_source_commit: 1ec2298d7488e5934bdbaaba7b69af917a021484
 room_schema: 10
 implemented:
   - android_tv_application_shell
@@ -53,9 +53,10 @@ verified_evidence:
   runner_hardening_merge: d4bd02006b1d52cb0c5afa4f1c7c933b4ff1a196
   measurement_foundation_merge: c901dcc55a65f634be0c3e720cc1f9c783e6189e
   channels_paging_merge: 6e852d364db6904e80f87deb9deaba58ec58025a
+  repository_truth_hygiene_merge: 1ec2298d7488e5934bdbaaba7b69af917a021484
 active_work:
   repository_truth_hygiene:
-    status: active
+    status: accepted
     base: 6e852d364db6904e80f87deb9deaba58ec58025a
     branch: upd/repository-truth-hygiene
     required:
@@ -64,7 +65,9 @@ active_work:
       - dirty_work_preserved_before_cleanup
       - branch_cleanup_requires_exact_head_or_content_proof
   search_s5_measurement:
-    status: next
+    status: active
+    base: 1ec2298d7488e5934bdbaaba7b69af917a021484
+    branch: upd/search-s5-measurements
     required:
       - deterministic_50k_channels_with_current_next_epg
       - exact_number_broad_selective_programme_and_cross_document_queries
@@ -86,7 +89,6 @@ active_work:
 next_milestone:
   id: search_s5_measure_then_optimize
   immediate_sequence:
-    - repository_truth_hygiene
     - search_s5_measurement_baseline
     - search_s5_top_n_optimization
     - guide_s6_if_still_measured

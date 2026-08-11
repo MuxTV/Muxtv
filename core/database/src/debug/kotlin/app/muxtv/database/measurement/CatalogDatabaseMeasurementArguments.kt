@@ -60,7 +60,7 @@ internal data class CatalogDatabaseMeasurementArguments(
         const val ARGUMENT_ITERATIONS = "measurementIterations"
         const val ARGUMENT_ENTRY_COUNT = "measurementEntryCount"
         const val ARGUMENT_OUTPUT_NAME = "measurementOutputName"
-        const val DEFAULT_ENTRY_COUNT = 10_000
+        const val DEFAULT_ENTRY_COUNT = 50_000
         const val DEFAULT_BATCH_SIZE = 250
         const val DEFAULT_FIRST_PAGE_LIMIT = 100
         const val DEFAULT_SOURCE_OVERVIEW_COUNT = 32

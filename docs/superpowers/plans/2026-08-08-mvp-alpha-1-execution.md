@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 
-**Baseline:** `main@6e852d364db6904e80f87deb9deaba58ec58025a`
+**Baseline:** `main@1ec2298d7488e5934bdbaaba7b69af917a021484`
 
 **Working model:** sequential `upd/*` vertical-slice branches from accepted `origin/main`
 
@@ -92,6 +92,7 @@ Android TV rules:
 - [x] Validate configuration cache with fail-on-problems before making it a permanent gate.
 - [x] Apply and verify dedicated runner labels `muxtv-android` and `muxtv-device` on online repository runner `DESKTOP-0N5KM3T` before workflows depend on them.
 - [x] Supersede the historical PR #145 upload-only failure with accepted CI hardening in PR #149 and subsequent exact-head Product/Full evidence for PRs #150-#153; do not re-run a merged historical head.
+- [x] Merge repository truth/hygiene PR #158, synchronize all then-open issues, classify every historical PR, and perform exact-tip/content-proof cleanup while retaining every uncertain or filesystem-blocked ref.
 
 ### M2 — bounded integration queue and truth sync
 
@@ -145,6 +146,7 @@ Android TV rules:
 ### S5 contract — Search top-N
 
 - First land a descriptive 50k active-channel + current/next EPG baseline using the existing database measurement harness.
+- Active PR2 work extends that harness with six Search scenarios, four separately timed phases, five raw repetitions, row counts, secret-free phase query plans and a golden correctness corpus; it makes no speed claim.
 - Measure candidate resolution, summary materialization/ranking, published now/next and the current global programme-boundary query separately; record counts, median/p95 and secret-free query plans over five repetitions on one device profile.
 - Remove the global boundary scan and derive the next refresh from `ChannelNowNext.nextBoundaryEpochMillis` for published rows only.
 - Empty results and empty token intersections perform no guide/boundary work.
@@ -236,6 +238,7 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-10: S4 accepted through PR #157 as `main@6e852d364db6904e80f87deb9deaba58ec58025a`.
 - 2026-08-11: repository/GitHub review found 114 historical PRs (91 merged, 23 closed-unmerged, no open PR), 144 remote branches, 134 local branches and 117 attached worktrees. Cleanup is exact-head/content-proof based because squash merges make ancestry-only deletion unsafe.
 - 2026-08-11: user reaffirmed S5 but selected the original bounded top-N Search contract over the local Paging prototype. Truth/hygiene, measurement baseline and optimization remain three sequential PRs.
+- 2026-08-11: PR #158 merged repository truth/hygiene as `main@1ec2298d7488e5934bdbaaba7b69af917a021484`; 91 exact-tip remote branches and 72 deletion-proof local worktrees were removed, while all uncertain and five Windows-filesystem-blocked refs were retained in the immutable hygiene review.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 

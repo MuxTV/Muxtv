@@ -13,8 +13,8 @@ param(
     [ValidateRange(5, 100)]
     [int]$Iterations = 5,
 
-    [ValidateSet(10000)]
-    [int]$EntryCount = 10000,
+    [ValidateSet(50000)]
+    [int]$EntryCount = 50000,
 
     [ValidatePattern('^[a-z0-9][a-z0-9._-]{0,63}\.json$')]
     [string]$OutputName = "catalog-database-measurement.json",
@@ -122,7 +122,7 @@ try {
     throw "Catalog database measurement report is not valid JSON."
 }
 
-if ([int]$report.schemaVersion -ne 1 -or [int]$report.methodVersion -ne 2) {
+if ([int]$report.schemaVersion -ne 1 -or [int]$report.methodVersion -ne 3) {
     throw "Catalog database measurement report schema is unsupported."
 }
 if ([string]$report.buildMode -cne "debug-instrumentation") {
@@ -130,6 +130,9 @@ if ([string]$report.buildMode -cne "debug-instrumentation") {
 }
 if ([bool]$report.thresholdApplied) {
     throw "Catalog database measurement unexpectedly applied a threshold."
+}
+if ([string]$report.cacheState -cne "fresh-file-per-repetition-shared-scenarios") {
+    throw "Catalog database measurement cache state is unsupported."
 }
 if ([string]$report.sourceCommit -cne $SourceCommit) {
     throw "Catalog database measurement report commit does not match the requested head."
@@ -151,16 +154,60 @@ if ([int]$report.fixture.entryCount -ne $EntryCount -or
 
 $expectedOperations = [ordered]@{
     "stage-batch-250" = 250
-    "stage-total-10k" = 10000
-    "activate-10k" = 10000
+    "stage-total-50k" = 50000
+    "activate-50k" = 50000
     "active-channel-first-page" = 100
-    "search-exact-number-10k" = 1
-    "search-selective-seed-10k" = 1
     "source-overview-32" = 32
+    "search-exact-number-candidate-resolution" = 1
+    "search-exact-number-summary-materialization-ranking" = 1
+    "search-exact-number-published-now-next" = 1
+    "search-exact-number-global-boundary-scan" = 1
+    "search-selective-multi-token-candidate-resolution" = 803
+    "search-selective-multi-token-summary-materialization-ranking" = 1
+    "search-selective-multi-token-published-now-next" = 1
+    "search-selective-multi-token-global-boundary-scan" = 1
+    "search-broad-multi-token-candidate-resolution" = 2402
+    "search-broad-multi-token-summary-materialization-ranking" = 800
+    "search-broad-multi-token-published-now-next" = 100
+    "search-broad-multi-token-global-boundary-scan" = 1
+    "search-broad-top-100-candidate-resolution" = 801
+    "search-broad-top-100-summary-materialization-ranking" = 800
+    "search-broad-top-100-published-now-next" = 100
+    "search-broad-top-100-global-boundary-scan" = 1
+    "search-programme-title-candidate-resolution" = 1
+    "search-programme-title-summary-materialization-ranking" = 1
+    "search-programme-title-published-now-next" = 1
+    "search-programme-title-global-boundary-scan" = 1
+    "search-cross-document-candidate-resolution" = 803
+    "search-cross-document-summary-materialization-ranking" = 1
+    "search-cross-document-published-now-next" = 1
+    "search-cross-document-global-boundary-scan" = 1
 }
 $operations = @($report.operations)
 if ($operations.Count -ne $expectedOperations.Count) {
     throw "Catalog database measurement report has an unexpected operation count."
+}
+
+$expectedPlans = @(
+    "search-candidate-resolution",
+    "search-summary-materialization-ranking",
+    "search-published-now-next",
+    "search-global-boundary-scan"
+)
+$plans = @($report.queryPlans)
+if ($plans.Count -ne $expectedPlans.Count) {
+    throw "Catalog database measurement query-plan count is invalid."
+}
+for ($index = 0; $index -lt $expectedPlans.Count; $index++) {
+    $plan = $plans[$index]
+    if ([string]$plan.operationId -cne $expectedPlans[$index] -or @($plan.details).Count -eq 0) {
+        throw "Catalog database measurement query-plan contract is invalid."
+    }
+    foreach ($detail in @($plan.details)) {
+        if ([string]::IsNullOrWhiteSpace([string]$detail) -or ([string]$detail).Contains("://")) {
+            throw "Catalog database measurement query plan is not secret-safe."
+        }
+    }
 }
 for ($index = 0; $index -lt $expectedOperations.Count; $index++) {
     $expectedId = @($expectedOperations.Keys)[$index]

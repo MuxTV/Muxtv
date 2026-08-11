@@ -2,16 +2,16 @@
 status: accepted
 last_reviewed: 2026-08-11
 architecture_version: 2
-implementation_source_commit: 6e852d364db6904e80f87deb9deaba58ec58025a
+implementation_source_commit: 1ec2298d7488e5934bdbaaba7b69af917a021484
 ---
 
 # Текущее состояние
 
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Принятый main заканчивается PR #157 и содержит закрытый MVP-контур S0–S4: CI/release contracts, bounded playback recovery, redacted Doctor Lite, measurement foundation и Room-backed Channels Paging.
+MuxTV находится в стадии **functional pre-alpha**. Принятый main заканчивается PR #158 и содержит закрытый MVP-контур S0–S4, repository truth contract и доказуемую GitHub/local hygiene.
 
-Открытых PR на момент ревью нет. Следующий последовательный пакет — repository truth/hygiene, затем Search S5 measurement baseline и Search S5 top-N optimization.
+Открытых PR на принятой базе нет. Активный пакет — Search S5 measurement baseline, затем Search S5 top-N optimization.
 
 ## Принятая база
 
@@ -62,18 +62,18 @@ MuxTV находится в стадии **functional pre-alpha**. Принят�
 - PR #155 — self-hosted runner hardening;
 - PR #156 — measurement foundation;
 - PR #157 — Channels Paging.
+- PR #158 — repository truth contract и GitHub/local hygiene.
 
 ## Активная последовательность
 
-1. Repository truth и доказуемая local/remote hygiene; каждый исторический PR классифицируется, но комментарии добавляются только при реальной metadata-несогласованности.
-2. Search S5 baseline на 50k active channels с current/next EPG, stage timings и query plans.
-3. Search S5 top-N optimization без Paging/API/schema/dependency changes:
+1. Search S5 baseline на 50k active channels с current/next EPG, stage timings и query plans.
+2. Search S5 top-N optimization без Paging/API/schema/dependency changes:
    - удалить глобальный programme-boundary scan;
    - вычислять boundary только по опубликованным top-N rows;
    - не выполнять EPG/boundary работу для пустого результата;
    - вынести готовые labels/result IDs из Compose;
    - сохранить debounce, cancellation, retry, stale-generation и truncation.
-4. Guide S6 и оставшиеся M3/M4/M6/M7 gates продолжаются только после принятого S5 evidence.
+3. Guide S6 и оставшиеся M3/M4/M6/M7 gates продолжаются только после принятого S5 evidence.
 
 ## Открытые дорожки
 
