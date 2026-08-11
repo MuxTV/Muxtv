@@ -165,6 +165,14 @@ if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
     $messages += "TV profile validation must use DeviceOnly inside the profile loop."
 }
 
+$catalogDeviceValidationContent = Get-Content -Path $files[4] -Raw
+if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "50000"') -lt 0) {
+    $messages += "Catalog device validation must run the canonical 50k measurement profile."
+}
+if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "10000"') -ge 0) {
+    $messages += "Catalog device validation still references the obsolete 10k measurement profile."
+}
+
 if ($messages.Count -eq 0) {
     . $files[1]
 

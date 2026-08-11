@@ -189,7 +189,7 @@ try {
         "-RunnerLabel", "self-hosted-android-tv-api$($image.Api)-$($image.Abi)",
         "-Warmups", "1",
         "-Iterations", "5",
-        "-EntryCount", "10000",
+        "-EntryCount", "50000",
         "-OutputName", "catalog-database-measurement.json",
         "-EvidenceDirectory", $evidenceDirectory
     )
@@ -210,7 +210,11 @@ try {
 
     $manifest.status = "passed"
 } catch {
-    $commandName = [string]$_.InvocationInfo.MyCommand.Name
+    $commandName = if ($null -eq $_.InvocationInfo -or $null -eq $_.InvocationInfo.MyCommand) {
+        "unknown"
+    } else {
+        [string]$_.InvocationInfo.MyCommand.Name
+    }
     if ([string]::IsNullOrWhiteSpace($commandName)) {
         $commandName = "unknown"
     }
