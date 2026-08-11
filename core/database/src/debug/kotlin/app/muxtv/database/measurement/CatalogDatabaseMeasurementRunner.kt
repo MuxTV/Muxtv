@@ -753,7 +753,7 @@ internal class CatalogDatabaseMeasurementRunner(
         const val OPERATION_ACTIVE_CHANNELS = "active-channel-first-page"
         const val OPERATION_SOURCE_OVERVIEW = "source-overview-32"
         const val SEARCH_RESULT_LIMIT = 100
-        const val SEARCH_NOW_EPOCH_MILLIS = 3_000L
+        const val SEARCH_NOW_EPOCH_MILLIS = 1_700_000_000_000L
         const val FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS = SEARCH_NOW_EPOCH_MILLIS + 60_000L
         const val SOURCE_ID = "measurement-source"
         const val EPG_SOURCE_ID = "measurement-epg"
