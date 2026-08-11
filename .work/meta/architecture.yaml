@@ -1,4 +1,6 @@
 schema_version: 2
+state: accepted
+last_reviewed: 2026-08-11
 architecture_version: 2
 architecture:
   style: modular_monolith

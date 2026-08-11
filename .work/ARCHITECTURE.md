@@ -1,6 +1,6 @@
 ---
 status: accepted
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-11
 architecture_version: 2
 ---
 

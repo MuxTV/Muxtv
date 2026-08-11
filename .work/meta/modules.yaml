@@ -1,6 +1,6 @@
 schema_version: 2
 state: implementation_current
-last_reviewed: 2026-07-25
+last_reviewed: 2026-08-11
 actual_modules:
   app-tv:
     gradle_path: :app:tv
@@ -17,7 +17,7 @@ actual_modules:
   core-database:
     gradle_path: :core:database
     type: android_library
-    owns: [room_schema_v4, migrations, dao, revisions, staging, activation, playback_catalog, source_refresh_store]
+    owns: [room_schema_v10, migrations, dao, source_epg_revisions, search, recent, guide, channel_browse]
   core-designsystem:
     gradle_path: :core:designsystem
     type: android_compose_library
@@ -41,15 +41,15 @@ actual_modules:
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
-    owns: [catalog_ports, playback_catalog_contracts]
+    owns: [catalog_ports, channel_browse, channel_search, recent_contracts, playback_catalog_contracts]
   catalog-ingest:
     gradle_path: :catalog:ingest
     type: pure_kotlin_library
     owns: [bounded_streaming_m3u_parser, parser_models, warnings]
   catalog-importer:
     gradle_path: :catalog:importer
-    type: pure_kotlin_library
-    owns: [revision_import_pipeline, staging_batches]
+    type: android_library
+    owns: [revision_import_pipeline, staging_batches, epg_import]
   catalog-refresh:
     gradle_path: :catalog:refresh
     type: android_library
@@ -65,12 +65,12 @@ actual_modules:
   player-api:
     gradle_path: :player:api
     type: pure_kotlin_library
-    owns: [playback_requests, stable_playback_models, engine_contracts]
+    owns: [playback_requests, recovery_policy, observations, stable_playback_models, engine_contracts]
     media3_dependency: forbidden
   player-media3:
     gradle_path: :player:media3
     type: android_library
-    owns: [media3_engine_adapter, playback_service, media_session, controller_connector, session_request_boundary]
+    owns: [media3_engine_adapter, playback_service, media_session, controller_connector, recovery_runtime]
   player-fake:
     gradle_path: :player:fake
     type: test_library
@@ -82,34 +82,44 @@ actual_modules:
   feature-channels:
     gradle_path: :feature:channels
     type: android_compose_library
-    owns: [channel_browser, focus_anchor_policy, list_focus_restoration]
+    owns: [paged_channel_browser, favorites_recent_filters, focus_restoration]
+  feature-guide:
+    gradle_path: :feature:guide
+    type: android_compose_library
+    owns: [bounded_guide_route, viewport, guide_focus_restoration]
+  feature-search:
+    gradle_path: :feature:search
+    type: android_compose_library
+    owns: [bounded_search_route, search_state, search_focus_restoration]
   feature-player:
     gradle_path: :feature:player
     type: android_compose_library
-    owns: [player_route, surface, controls, player_state_ui]
+    owns: [player_route, surface, controls, recovery_ui]
   feature-sources:
     gradle_path: :feature:sources
     type: android_compose_library
     owns: [sources_management, source_entry_wizard, source_entry_state_machine]
+  feature-doctor:
+    gradle_path: :feature:doctor
+    type: android_compose_library
+    owns: [redacted_diagnostics, doctor_presentation, saf_export]
+  benchmark-macrobenchmark:
+    gradle_path: :benchmark:macrobenchmark
+    type: android_test_application
+    owns: [macrobenchmark_cujs, baseline_profile_generation]
+  benchmark-jvm:
+    gradle_path: :benchmark:jvm
+    type: jvm_benchmark
+    owns: [jmh_measurements]
   build-logic:
     path: build-logic
     type: gradle_included_build
     owns: [convention_plugins, module_defaults, quality_wiring]
 planned_not_created:
-  - epg_api
-  - epg_xmltv
-  - epg_matching
-  - doctor_api
-  - doctor_runtime
-  - local_control_server
-  - local_control_web
-  - feature_guide
-  - feature_search
-  - feature_doctor
   - feature_profiles
   - feature_settings
-  - benchmark
-  - baseline_profile
+  - local_control_server
+  - local_control_web
 rules:
   - pure_kotlin_modules_must_not_depend_on_android
   - features_must_not_access_room_dao_or_raw_network_clients

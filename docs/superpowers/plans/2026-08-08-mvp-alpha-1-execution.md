@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 
-**Baseline:** `main@c901dcc55a65f634be0c3e720cc1f9c783e6189e`
+**Baseline:** `main@6e852d364db6904e80f87deb9deaba58ec58025a`
 
 **Working model:** sequential `upd/*` vertical-slice branches from accepted `origin/main`
 
@@ -71,11 +71,14 @@ Android TV rules:
 
 - [x] Authenticate Git HTTPS and obtain all branch, tag and PR refs.
 - [x] Create and verify complete pre-cleanup bundle at `.git/bundles/pre-mvp-20260808.bundle` (470 refs).
+- [x] Preserve rejected local Search Paging research as commit `16c8678b56a59a741f68f70f19ac3407a18dfc1d` plus tag `safety/search-paging-prototype-20260811`; do not publish or use it as the S5 base.
+- [x] Move seven exact temporary auth/evidence/dependency-inspection directories into recoverable local `.git/local-quarantine/pre-s5-20260811-205223` without reading their contents.
+- [x] Create and verify complete pre-S5 bundle `.git/bundles/pre-s5-hygiene-20260811.bundle`.
 - [x] Inventory 111 worktrees and preserve dirty, unmerged, open-PR and unknown histories.
 - [x] Remove only three clean worktrees proven reachable from `origin/main`; retain all branches.
 - [x] Fast-forward root checkout first to `main@e9dd0336716e27e9b51f4eb10da82169112e71d1`, then through accepted release/truth-sync PRs to `main@b30a1d745df80f0c1e6b38ee7947ceff9cdcdb17`; exclude local `worktrees/` through `.git/info/exclude`.
 - [x] Create this canonical ExecPlan; retain `upd/mvp-alpha-1` as historical execution provenance and use isolated vertical-slice branches for remaining work.
-- [x] Preserve the local unpacked Doctor Product Matrix evidence at `.work/doctor-product-31282812126/`; it corresponds to published artifact `9029117392` and is not cleanup residue.
+- [x] Preserve the local unpacked Doctor Product Matrix evidence in recoverable local quarantine; published artifact `9029117392` remains the shareable evidence identity.
 
 ### M1 — reliable self-hosted CI
 
@@ -94,7 +97,7 @@ Android TV rules:
 
 - [x] Merge #145 as the pure #30A recovery-policy slice (`1beaa675`).
 - [x] Keep #144 historical; PR #150 implemented the required identity-only runtime boundary directly on accepted `main` without importing a parallel request path.
-- [x] Remove the fictitious #146 integration item: GitHub has no accessible PR #146, and no Room upgrade is implied by the MVP plan.
+- [x] Classify #146 correctly as an open dependency-hardening issue, not a PR; Room3 3.0.0 to 3.0.1 remains an isolated M7 package with no MuxTV schema change.
 - [x] Supersede stale draft PR #148 with this current-main truth sync instead of rebasing obsolete baseline documentation.
 - [x] Merge CI, runtime recovery, observations, Doctor Lite and release identity as separate PRs #149-#153.
 - [ ] Keep each remaining PR to one logical slice: CI operations, measurement, Channels, Search, Guide, ingestion, source Doctor, shell/UI, Player UX, performance or release.
@@ -120,9 +123,9 @@ Android TV rules:
 
 ### M5 — data and allocation hot paths
 
-- [ ] Add screen-specific Room projections and Room-backed paging with stable keys for large data:
-  - [x] Channels: S4 implemented on `upd/channels-paging` from accepted `main@c901dcc5`; the 200-row browse limit is removed, only loaded pages are enriched, and focus state remains bounded. GitHub acceptance and physical performance closure remain separate evidence gates.
-  - [ ] Search: S5 after accepted Channels slice.
+- [ ] Add screen-specific Room projections and Room-backed paging only where the product contract is sequential browsing:
+  - [x] Channels: S4 accepted through PR #157 / `main@6e852d36`; the 200-row browse limit is removed, only loaded pages are enriched, and focus state remains bounded.
+  - [ ] Search: S5 preserves ranked top-N (`100` default / `200` maximum / explicit `isTruncated`); Search Paging is rejected because it changes semantics and removes bounded completion.
   - [ ] Guide: S6 after accepted Search slice.
 - [ ] Keep parsers streaming with bounded batch transactions, cancellation points and atomic revision publication.
 - [ ] Move sorting/filtering/formatting outside composable bodies; use stable keys/content types and narrow state-read scopes.
@@ -138,6 +141,17 @@ Android TV rules:
 | ViewModel rebuilt complete channel/guide row lists on catalog, EPG and playback changes. | Room projects only browse fields, now/next is fetched once per loaded page, and playback identity maps over `PagingData`. | Removes whole-list copying and bounds transient allocations. |
 | Focus restoration depended on a complete channel-ID list. | Restoration stores the stable channel ID plus index and scans only the bounded loaded window through `peek`. | Preserves D-pad return behavior without `itemSnapshotList.items` or a full catalog copy. |
 | A page failure replaced the whole route with a terminal message. | Refresh and append failures expose explicit Retry while already loaded rows stay available. | Keeps TV navigation usable during bounded paging failures. |
+
+### S5 contract — Search top-N
+
+- First land a descriptive 50k active-channel + current/next EPG baseline using the existing database measurement harness.
+- Measure candidate resolution, summary materialization/ranking, published now/next and the current global programme-boundary query separately; record counts, median/p95 and secret-free query plans over five repetitions on one device profile.
+- Remove the global boundary scan and derive the next refresh from `ChannelNowNext.nextBoundaryEpochMillis` for published rows only.
+- Empty results and empty token intersections perform no guide/boundary work.
+- Preserve `ChannelSearchQuery`, `ChannelSearchSnapshot`, `ChannelSearchRepository.observe`, debounce, cancellation, retry, stale-generation protection and truncation.
+- Move result IDs and ready display labels out of composable bodies.
+- Add two-phase summary materialization only if post-boundary measurements show it remains the largest p95 phase and exceeds 40% of total p95 in both broad scenarios.
+- No Paging dependency, Room schema change, multi-token SQL rewrite or ranking rewrite belongs to S5 without failed correctness/evidence gates.
 
 ### M6 — Lounge Light vertical UI slices
 
@@ -219,6 +233,9 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-09: S3 final exact head `aa9d8b8cc5570ec040c23274be3491b77a3e183f` passed Product `31315783500`, Database `31315783509`, Full `31315783501`, Variance `31315783511` and Benchmark `31315783504`; PR #156 merged as `c901dcc55a65f634be0c3e720cc1f9c783e6189e`.
 - 2026-08-09: S4 starts from accepted `main@c901dcc5`. AndroidX Paging is pinned to stable `3.5.0`; Room3 paging uses its explicit `room3-paging` DAO return converter. The browse contract contains only channel identity/display/favorite/playback and now/next projection fields; locators, headers, credentials and source URLs remain excluded. Production page settings are fixed at `64 / 64 / 16 / 256`, with placeholders disabled.
 - 2026-08-10: S4 implementation head `fbaa42204fb9853df679d2a89936162cbe908450` passed exact-head local host validation and API 36 device validation at `.work/evidence/20260810T164346Z-fbaa42204fb9-devicecurrent`: database instrumentation `132/132`, Media3 instrumentation `10/10`, application instrumentation `38/38`, including empty-filter recovery focus and Player/Back restoration. The emulator was stopped by the harness. API 26/API 36 GitHub Product Matrix and physical-TV frame ceilings remain acceptance/performance gates rather than inferred from this local run.
+- 2026-08-10: S4 accepted through PR #157 as `main@6e852d364db6904e80f87deb9deaba58ec58025a`.
+- 2026-08-11: repository/GitHub review found 114 historical PRs (91 merged, 23 closed-unmerged, no open PR), 144 remote branches, 134 local branches and 117 attached worktrees. Cleanup is exact-head/content-proof based because squash merges make ancestry-only deletion unsafe.
+- 2026-08-11: user reaffirmed S5 but selected the original bounded top-N Search contract over the local Paging prototype. Truth/hygiene, measurement baseline and optimization remain three sequential PRs.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 
