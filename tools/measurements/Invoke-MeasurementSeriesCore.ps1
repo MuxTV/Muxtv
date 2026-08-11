@@ -390,7 +390,7 @@ try {
                 "-RunnerLabel", $runnerLabel,
                 "-Warmups", "1",
                 "-Iterations", "5",
-                "-EntryCount", "10000",
+                "-EntryCount", "50000",
                 "-OutputName", $roomOutputName,
                 "-EvidenceDirectory", $repetitionDirectory
             )

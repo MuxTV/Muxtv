@@ -1,6 +1,7 @@
 package app.muxtv.database.measurement
 
 import app.muxtv.database.CURRENT_EPG_MATCH_POLICY_VERSION
+import app.muxtv.database.ChannelSearchLimits
 import app.muxtv.database.ChannelSearchMatchRank
 import app.muxtv.database.SearchDocumentKind
 
@@ -8,17 +9,18 @@ internal object CatalogSearchQueryPlans {
     fun queries(
         profileId: String,
         nowEpochMillis: Long,
-        canonicalChannelIds: List<String>,
+        candidateProbes: List<CatalogSearchCandidatePlanProbe>,
+        publishedCanonicalChannelIds: List<String>,
     ): List<Pair<String, List<String>>> {
         require(profileId == "measurement-profile")
         require(nowEpochMillis >= 0)
-        require(canonicalChannelIds.isNotEmpty())
-        val ids = canonicalChannelIds.joinToString(",") { id -> "'$id'" }
+        require(candidateProbes.isNotEmpty())
+        require(publishedCanonicalChannelIds.isNotEmpty())
+        val ids = publishedCanonicalChannelIds.toSqlIds()
         return listOf(
-            "search-candidate-resolution" to listOf(
-                candidateQuery(profileId, nowEpochMillis, null),
-                candidateQuery(profileId, nowEpochMillis, ids),
-            ),
+            "search-candidate-resolution" to candidateProbes.map { probe ->
+                candidateQuery(profileId, nowEpochMillis, probe)
+            },
             "search-summary-materialization-ranking" to listOf(summaryQuery(profileId, ids)),
             "search-published-now-next" to listOf(
                 nowNextMatchCountQuery(profileId, ids),
@@ -31,17 +33,16 @@ internal object CatalogSearchQueryPlans {
     private fun candidateQuery(
         profileId: String,
         now: Long,
-        restrictedIds: String?,
+        probe: CatalogSearchCandidatePlanProbe,
     ): String {
-        val restriction = restrictedIds?.let { ids ->
-            "AND candidates.canonicalChannelId IN ($ids)"
-        }.orEmpty()
+        val restrictionEnabled = if (probe.restrictedCanonicalIds == null) 0 else 1
+        val restrictedIds = (probe.restrictedCanonicalIds ?: listOf(RESTRICTION_SENTINEL)).toSqlIds()
         return """
         WITH hit_documents AS (
             SELECT d.kind, d.canonicalChannelId, d.profileId, d.providerChannelId, d.text
             FROM search_documents_fts
             INNER JOIN search_documents AS d ON d.rowid = search_documents_fts.rowid
-            WHERE search_documents_fts MATCH 'Synthetic*'
+            WHERE search_documents_fts MATCH ${probe.ftsExpression.toSqlLiteral()}
         ),
         direct_candidates AS (
             SELECT h.canonicalChannelId,
@@ -171,12 +172,24 @@ internal object CatalogSearchQueryPlans {
                 AND canonicalChannelId = candidates.canonicalChannelId
               LIMIT 1
           ), 0) = 0
-          $restriction
+          AND (
+              $restrictionEnabled = 0
+              OR candidates.canonicalChannelId IN ($restrictedIds)
+          )
         GROUP BY candidates.canonicalChannelId
         ORDER BY candidates.canonicalChannelId COLLATE BINARY
-        LIMIT 801
+        LIMIT ${probe.fetchLimit}
         """.trimIndent()
     }
+
+    private fun List<String>.toSqlIds(): String = joinToString(",") { id ->
+        require(id.isNotBlank())
+        id.toSqlLiteral()
+    }
+
+    private fun String.toSqlLiteral(): String = "'${replace("'", "''")}'"
+
+    private const val RESTRICTION_SENTINEL = "__mux_search_no_restriction__"
 
     private fun summaryQuery(profileId: String, ids: String): String =
         """
@@ -356,4 +369,20 @@ internal object CatalogSearchQueryPlans {
         )
         SELECT MIN(boundaryEpochMillis) FROM boundaries WHERE boundaryEpochMillis > $now
         """.trimIndent()
+}
+
+internal data class CatalogSearchCandidatePlanProbe(
+    val ftsExpression: String,
+    val fetchLimit: Int,
+    val restrictedCanonicalIds: List<String>? = null,
+) {
+    init {
+        require(ftsExpression.isNotBlank())
+        require(fetchLimit in 1..ChannelSearchLimits.CANDIDATE_FETCH_LIMIT)
+        require(
+            restrictedCanonicalIds == null ||
+                restrictedCanonicalIds.size in 1..ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN,
+        )
+        require(restrictedCanonicalIds?.none(String::isBlank) != false)
+    }
 }

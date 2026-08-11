@@ -15,6 +15,7 @@ import app.muxtv.catalog.NowNextQuery
 import app.muxtv.database.CURRENT_EPG_MATCH_POLICY_VERSION
 import app.muxtv.database.ChannelSearchCandidateRow
 import app.muxtv.database.ChannelSearchDataSource
+import app.muxtv.database.ChannelSearchLimits
 import app.muxtv.database.EpgChannelEntity
 import app.muxtv.database.EpgChannelMatchDecision
 import app.muxtv.database.EpgChannelMatchEntity
@@ -30,6 +31,7 @@ import app.muxtv.database.RoomChannelSearchRepository
 import app.muxtv.database.RoomEpgGuideRepository
 import app.muxtv.database.RoomEpgRevisionStore
 import app.muxtv.database.RoomSourceRevisionStore
+import app.muxtv.database.SearchQueryEncoder
 import app.muxtv.database.SourceDefinition
 import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
@@ -677,11 +679,7 @@ internal class CatalogDatabaseMeasurementRunner(
                 check(immutableBatches.size == workload.entryCount / workload.batchSize) {
                     "Catalog database fixture batch agreement failed."
                 }
-                return PreparedCatalogFixture(
-                    workload = workload,
-                    batches = immutableBatches,
-                    sha256 = CatalogDatabaseFixtureDigest.sha256(entries),
-                    epgBatches = entries.indices.chunked(EPG_CHANNELS_PER_BATCH).map { indices ->
+                val epgBatches = entries.indices.chunked(EPG_CHANNELS_PER_BATCH).map { indices ->
                         val channels = indices.map { index ->
                             val suffix = index.toString().padStart(5, '0')
                             EpgChannelEntity(
@@ -714,7 +712,16 @@ internal class CatalogDatabaseMeasurementRunner(
                             )
                         }
                         channels to programmes
-                    },
+                    }
+                return PreparedCatalogFixture(
+                    workload = workload,
+                    batches = immutableBatches,
+                    sha256 = CatalogDatabaseFixtureDigest.sha256(
+                        entries = entries,
+                        epgChannels = epgBatches.flatMap { it.first },
+                        epgProgrammes = epgBatches.flatMap { it.second },
+                    ),
+                    epgBatches = epgBatches,
                 )
             }
 
@@ -780,6 +787,9 @@ internal class CatalogDatabaseMeasurementRunner(
         val BROAD_EXPECTED_IDS = List(SEARCH_RESULT_LIMIT) { index ->
             "canonical-${index.toString().padStart(5, '0')}"
         }
+        val BROAD_CANDIDATE_IDS = List(ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN) { index ->
+            "canonical-${index.toString().padStart(5, '0')}"
+        }
         val SEARCH_SCENARIOS = listOf(
             SearchScenario("search-exact-number", "50000", listOf("canonical-49999"), false),
             SearchScenario(
@@ -801,7 +811,35 @@ internal class CatalogDatabaseMeasurementRunner(
         val SEARCH_PLAN_QUERIES = CatalogSearchQueryPlans.queries(
             profileId = PROFILE_ID,
             nowEpochMillis = SEARCH_NOW_EPOCH_MILLIS,
-            canonicalChannelIds = BROAD_EXPECTED_IDS,
+            candidateProbes = buildList {
+                SEARCH_SCENARIOS
+                    .flatMap { scenario -> SearchQueryEncoder.encode(scenario.query) }
+                    .map { token -> token.ftsExpression }
+                    .distinct()
+                    .forEach { expression ->
+                        add(
+                            CatalogSearchCandidatePlanProbe(
+                                ftsExpression = expression,
+                                fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
+                            ),
+                        )
+                    }
+                add(
+                    CatalogSearchCandidatePlanProbe(
+                        ftsExpression = SearchQueryEncoder.encode("Synthetic").single().ftsExpression,
+                        fetchLimit = 1,
+                        restrictedCanonicalIds = listOf("canonical-49999"),
+                    ),
+                )
+                add(
+                    CatalogSearchCandidatePlanProbe(
+                        ftsExpression = SearchQueryEncoder.encode("Channel").single().ftsExpression,
+                        fetchLimit = ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN,
+                        restrictedCanonicalIds = BROAD_CANDIDATE_IDS,
+                    ),
+                )
+            },
+            publishedCanonicalChannelIds = BROAD_EXPECTED_IDS,
         )
     }
 }

@@ -1,11 +1,17 @@
 package app.muxtv.database.measurement
 
+import app.muxtv.database.EpgChannelEntity
+import app.muxtv.database.EpgProgrammeEntity
 import app.muxtv.database.StagedCatalogEntry
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 internal object CatalogDatabaseFixtureDigest {
-    fun sha256(entries: List<StagedCatalogEntry>): String {
+    fun sha256(
+        entries: List<StagedCatalogEntry>,
+        epgChannels: List<EpgChannelEntity> = emptyList(),
+        epgProgrammes: List<EpgProgrammeEntity> = emptyList(),
+    ): String {
         require(entries.isNotEmpty())
         val digest = MessageDigest.getInstance("SHA-256")
         digest.updateInt(entries.size)
@@ -24,6 +30,32 @@ internal object CatalogDatabaseFixtureDigest {
             digest.updateField(entry.channelNumber)
             digest.updateField(entry.userAgent)
             digest.updateField(entry.referrer)
+        }
+        digest.updateInt(epgChannels.size)
+        epgChannels.forEach { channel ->
+            digest.updateField(channel.sourceId)
+            digest.updateField(channel.revisionNumber.toString())
+            digest.updateField(channel.externalId)
+            digest.updateField(channel.primaryDisplayName)
+            digest.updateField(channel.primaryLanguage)
+            digest.updateField(channel.iconRef)
+        }
+        digest.updateInt(epgProgrammes.size)
+        epgProgrammes.forEach { programme ->
+            digest.updateField(programme.sourceId)
+            digest.updateField(programme.revisionNumber.toString())
+            digest.updateField(programme.sequenceNumber.toString())
+            digest.updateField(programme.externalChannelId)
+            digest.updateField(programme.startEpochMillis.toString())
+            digest.updateField(programme.stopEpochMillis?.toString())
+            digest.updateField(programme.primaryTitle)
+            digest.updateField(programme.primaryLanguage)
+            digest.updateField(programme.subtitle)
+            digest.updateField(programme.description)
+            digest.updateField(programme.category)
+            digest.updateField(programme.iconRef)
+            digest.updateField(programme.episodeNumber)
+            digest.updateField(programme.isNew.toString())
         }
         return digest.digest().toHex()
     }

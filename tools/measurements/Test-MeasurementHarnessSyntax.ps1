@@ -111,6 +111,10 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
             $messages.Add("Measurement series core is missing required contract token: $token")
         }
     }
+    if ($seriesContent -notmatch '"-EntryCount", "50000"' -or
+        $seriesContent -match '"-EntryCount", "10000"') {
+        $messages.Add("Measurement series must use the canonical 50k catalog database profile.")
+    }
     $forbiddenTokens = @(
         "ForEach-Object -Parallel",
         "Start-Job",
