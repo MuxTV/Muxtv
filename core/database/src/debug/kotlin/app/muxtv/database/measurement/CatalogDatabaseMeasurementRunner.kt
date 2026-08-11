@@ -15,7 +15,6 @@ import app.muxtv.catalog.NowNextQuery
 import app.muxtv.database.CURRENT_EPG_MATCH_POLICY_VERSION
 import app.muxtv.database.ChannelSearchCandidateRow
 import app.muxtv.database.ChannelSearchDataSource
-import app.muxtv.database.ChannelSearchLimits
 import app.muxtv.database.EpgChannelEntity
 import app.muxtv.database.EpgChannelMatchDecision
 import app.muxtv.database.EpgChannelMatchEntity
@@ -31,7 +30,6 @@ import app.muxtv.database.RoomChannelSearchRepository
 import app.muxtv.database.RoomEpgGuideRepository
 import app.muxtv.database.RoomEpgRevisionStore
 import app.muxtv.database.RoomSourceRevisionStore
-import app.muxtv.database.SearchQueryEncoder
 import app.muxtv.database.SourceDefinition
 import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
@@ -49,6 +47,7 @@ internal class CatalogDatabaseMeasurementRunner(
 ) {
     private val applicationContext = context.applicationContext
     private val databaseSequence = AtomicInteger()
+    private var measuredSearchQueryTrace: SearchQueryTrace? = null
 
     suspend fun run(spec: CatalogDatabaseMeasurementSpec): CatalogDatabaseMeasurementReport =
         withContext(Dispatchers.IO) {
@@ -241,13 +240,23 @@ internal class CatalogDatabaseMeasurementRunner(
         fixture: PreparedCatalogFixture,
         workload: CatalogDatabaseMeasurementWorkload,
     ): List<CatalogDatabaseOperationReport> {
+        var queryTrace: SearchQueryTrace? = null
         repeat(workload.warmupIterations) { warmupIndex ->
-            measureSearchSuite(-(warmupIndex + 1), fixture)
+            queryTrace = measureSearchSuite(
+                iteration = -(warmupIndex + 1),
+                fixture = fixture,
+                captureQueryTrace = true,
+            ).toQueryTrace()
         }
 
         val measured = List(workload.measuredIterations) { index ->
             measureSearchSuite(index + 1, fixture)
         }
+        measuredSearchQueryTrace = queryTrace ?: measureSearchSuite(
+            iteration = 0,
+            fixture = fixture,
+            captureQueryTrace = true,
+        ).toQueryTrace()
         return SEARCH_SCENARIOS.flatMap { scenario ->
             SearchPhase.entries.map { phase ->
                 val samples = measured.map { suite -> suite.getValue(scenario.id).sample(phase) }
@@ -261,7 +270,16 @@ internal class CatalogDatabaseMeasurementRunner(
     ): List<CatalogDatabaseQueryPlan> = withFreshDatabase("search-query-plans", 1) { handle ->
         handle.prepareActiveCatalog(fixture)
         handle.prepareActiveEpg(fixture)
-        SEARCH_PLAN_QUERIES.map { (operationId, statements) ->
+        val trace = checkNotNull(measuredSearchQueryTrace) {
+            "Search query plans require a completed measured Search suite."
+        }
+        CatalogSearchQueryPlans.queries(
+            profileId = PROFILE_ID,
+            nowEpochMillis = SEARCH_NOW_EPOCH_MILLIS,
+            candidateProbes = trace.candidateProbes,
+            summaryCanonicalIdSets = trace.summaryCanonicalIdSets,
+            nowNextCanonicalIdSets = trace.nowNextCanonicalIdSets,
+        ).map { (operationId, statements) ->
             CatalogDatabaseQueryPlan(operationId, statements.flatMap { sql -> handle.queryPlan(sql) })
         }
     }
@@ -269,11 +287,12 @@ internal class CatalogDatabaseMeasurementRunner(
     private suspend fun measureSearchSuite(
         iteration: Int,
         fixture: PreparedCatalogFixture,
+        captureQueryTrace: Boolean = false,
     ): Map<String, SearchScenarioResult> = withFreshDatabase("search-suite", iteration) { handle ->
         handle.prepareActiveCatalog(fixture)
         handle.prepareActiveEpg(fixture)
         SEARCH_SCENARIOS.associate { scenario ->
-            scenario.id to measureSearchScenario(iteration, handle, scenario)
+            scenario.id to measureSearchScenario(iteration, handle, scenario, captureQueryTrace)
         }
     }
 
@@ -281,9 +300,18 @@ internal class CatalogDatabaseMeasurementRunner(
         iteration: Int,
         handle: DatabaseHandle,
         scenario: SearchScenario,
+        captureQueryTrace: Boolean,
     ): SearchScenarioResult {
-        val dataSource = TimedSearchDataSource(handle.database.channelSearchDao(), nanoTime)
-        val guide = TimedGuideRepository(RoomEpgGuideRepository(handle.database.epgGuideDao()), nanoTime)
+        val dataSource = TimedSearchDataSource(
+            delegate = handle.database.channelSearchDao(),
+            nanoTime = nanoTime,
+            captureQueryTrace = captureQueryTrace,
+        )
+        val guide = TimedGuideRepository(
+            delegate = RoomEpgGuideRepository(handle.database.epgGuideDao()),
+            nanoTime = nanoTime,
+            captureQueryTrace = captureQueryTrace,
+        )
         val repository: ChannelSearchRepository = RoomChannelSearchRepository(dataSource, guide)
         val startedAt = nanoTime()
         val snapshot = repository.observe(
@@ -315,6 +343,9 @@ internal class CatalogDatabaseMeasurementRunner(
             ),
             nowNext = handle.sample(iteration, guide.nowNextNanos, guide.nowNextRows),
             boundary = handle.sample(iteration, dataSource.boundaryNanos, dataSource.boundaryRows),
+            candidateProbes = dataSource.candidateProbes.toList(),
+            summaryCanonicalIds = dataSource.summaryCanonicalIds,
+            nowNextCanonicalIds = guide.nowNextCanonicalIds,
         )
     }
 
@@ -549,6 +580,9 @@ internal class CatalogDatabaseMeasurementRunner(
         val summary: CatalogDatabaseMeasurementSample,
         val nowNext: CatalogDatabaseMeasurementSample,
         val boundary: CatalogDatabaseMeasurementSample,
+        val candidateProbes: List<CatalogSearchCandidatePlanProbe>,
+        val summaryCanonicalIds: List<String>,
+        val nowNextCanonicalIds: List<String>,
     ) {
         fun sample(phase: SearchPhase): CatalogDatabaseMeasurementSample = when (phase) {
             SearchPhase.CANDIDATE -> candidate
@@ -556,18 +590,35 @@ internal class CatalogDatabaseMeasurementRunner(
             SearchPhase.NOW_NEXT -> nowNext
             SearchPhase.BOUNDARY -> boundary
         }
+    }
 
+    private data class SearchQueryTrace(
+        val candidateProbes: List<CatalogSearchCandidatePlanProbe>,
+        val summaryCanonicalIdSets: List<List<String>>,
+        val nowNextCanonicalIdSets: List<List<String>>,
+    )
+
+    private fun Map<String, SearchScenarioResult>.toQueryTrace(): SearchQueryTrace {
+        val scenarioResults = values.toList()
+        return SearchQueryTrace(
+            candidateProbes = scenarioResults.flatMap { it.candidateProbes }.distinct(),
+            summaryCanonicalIdSets = scenarioResults.map { it.summaryCanonicalIds }.distinct(),
+            nowNextCanonicalIdSets = scenarioResults.map { it.nowNextCanonicalIds }.distinct(),
+        )
     }
 
     private class TimedSearchDataSource(
         private val delegate: ChannelSearchDataSource,
         private val nanoTime: () -> Long,
+        private val captureQueryTrace: Boolean,
     ) : ChannelSearchDataSource {
         var candidateNanos = 0L
         var candidateRows = 0
         var summaryRows = 0
         var boundaryNanos = 0L
         var boundaryRows = 0
+        val candidateProbes = mutableListOf<CatalogSearchCandidatePlanProbe>()
+        var summaryCanonicalIds: List<String> = emptyList()
 
         override fun observeChanges(): Flow<Unit> = delegate.observeChanges()
 
@@ -577,26 +628,36 @@ internal class CatalogDatabaseMeasurementRunner(
             nowEpochMillis: Long,
             fetchLimit: Int,
             restrictToCanonicalIds: List<String>?,
-        ): List<ChannelSearchCandidateRow> = timed(
-            block = {
-                delegate.searchCandidates(
-                    profileId,
-                    ftsExpression,
-                    nowEpochMillis,
-                    fetchLimit,
-                    restrictToCanonicalIds,
+        ): List<ChannelSearchCandidateRow> {
+            if (captureQueryTrace) {
+                candidateProbes += CatalogSearchCandidatePlanProbe(
+                    ftsExpression = ftsExpression,
+                    fetchLimit = fetchLimit,
+                    restrictedCanonicalIds = restrictToCanonicalIds?.toList(),
                 )
-            },
-            record = { elapsed, rows ->
-                candidateNanos += elapsed
-                candidateRows += rows.size
-            },
-        )
+            }
+            return timed(
+                block = {
+                    delegate.searchCandidates(
+                        profileId,
+                        ftsExpression,
+                        nowEpochMillis,
+                        fetchLimit,
+                        restrictToCanonicalIds,
+                    )
+                },
+                record = { elapsed, rows ->
+                    candidateNanos += elapsed
+                    candidateRows += rows.size
+                },
+            )
+        }
 
         override suspend fun activeChannelSummaries(
             profileId: String,
             canonicalChannelIds: List<String>,
         ) = delegate.activeChannelSummaries(profileId, canonicalChannelIds).also { rows ->
+            if (captureQueryTrace) summaryCanonicalIds = canonicalChannelIds.toList()
             summaryRows = rows.size
         }
 
@@ -625,15 +686,18 @@ internal class CatalogDatabaseMeasurementRunner(
     private class TimedGuideRepository(
         private val delegate: EpgGuideRepository,
         private val nanoTime: () -> Long,
+        private val captureQueryTrace: Boolean,
     ) : EpgGuideRepository {
         var nowNextNanos = 0L
         var nowNextRows = 0
+        var nowNextCanonicalIds: List<String> = emptyList()
 
         override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> {
             val startedAt = nanoTime()
             return delegate.getNowNext(query).also { rows ->
                 nowNextNanos = (nanoTime() - startedAt).coerceAtLeast(1L)
                 nowNextRows = rows.size
+                if (captureQueryTrace) nowNextCanonicalIds = query.canonicalChannelIds.toList()
             }
         }
 
@@ -787,9 +851,6 @@ internal class CatalogDatabaseMeasurementRunner(
         val BROAD_EXPECTED_IDS = List(SEARCH_RESULT_LIMIT) { index ->
             "canonical-${index.toString().padStart(5, '0')}"
         }
-        val BROAD_CANDIDATE_IDS = List(ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN) { index ->
-            "canonical-${index.toString().padStart(5, '0')}"
-        }
         val SEARCH_SCENARIOS = listOf(
             SearchScenario("search-exact-number", "50000", listOf("canonical-49999"), false),
             SearchScenario(
@@ -807,39 +868,6 @@ internal class CatalogDatabaseMeasurementRunner(
                 listOf("canonical-49999"),
                 false,
             ),
-        )
-        val SEARCH_PLAN_QUERIES = CatalogSearchQueryPlans.queries(
-            profileId = PROFILE_ID,
-            nowEpochMillis = SEARCH_NOW_EPOCH_MILLIS,
-            candidateProbes = buildList {
-                SEARCH_SCENARIOS
-                    .flatMap { scenario -> SearchQueryEncoder.encode(scenario.query) }
-                    .map { token -> token.ftsExpression }
-                    .distinct()
-                    .forEach { expression ->
-                        add(
-                            CatalogSearchCandidatePlanProbe(
-                                ftsExpression = expression,
-                                fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
-                            ),
-                        )
-                    }
-                add(
-                    CatalogSearchCandidatePlanProbe(
-                        ftsExpression = SearchQueryEncoder.encode("Synthetic").single().ftsExpression,
-                        fetchLimit = 1,
-                        restrictedCanonicalIds = listOf("canonical-49999"),
-                    ),
-                )
-                add(
-                    CatalogSearchCandidatePlanProbe(
-                        ftsExpression = SearchQueryEncoder.encode("Channel").single().ftsExpression,
-                        fetchLimit = ChannelSearchLimits.MAX_CANDIDATES_PER_TOKEN,
-                        restrictedCanonicalIds = BROAD_CANDIDATE_IDS,
-                    ),
-                )
-            },
-            publishedCanonicalChannelIds = BROAD_EXPECTED_IDS,
         )
     }
 }

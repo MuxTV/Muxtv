@@ -10,22 +10,28 @@ internal object CatalogSearchQueryPlans {
         profileId: String,
         nowEpochMillis: Long,
         candidateProbes: List<CatalogSearchCandidatePlanProbe>,
-        publishedCanonicalChannelIds: List<String>,
+        summaryCanonicalIdSets: List<List<String>>,
+        nowNextCanonicalIdSets: List<List<String>>,
     ): List<Pair<String, List<String>>> {
         require(profileId == "measurement-profile")
         require(nowEpochMillis >= 0)
         require(candidateProbes.isNotEmpty())
-        require(publishedCanonicalChannelIds.isNotEmpty())
-        val ids = publishedCanonicalChannelIds.toSqlIds()
+        require(summaryCanonicalIdSets.isNotEmpty())
+        require(nowNextCanonicalIdSets.isNotEmpty())
         return listOf(
             "search-candidate-resolution" to candidateProbes.map { probe ->
                 candidateQuery(profileId, nowEpochMillis, probe)
             },
-            "search-summary-materialization-ranking" to listOf(summaryQuery(profileId, ids)),
-            "search-published-now-next" to listOf(
-                nowNextMatchCountQuery(profileId, ids),
-                nowNextProgrammeQuery(profileId, nowEpochMillis, ids),
-            ),
+            "search-summary-materialization-ranking" to summaryCanonicalIdSets.map { ids ->
+                summaryQuery(profileId, ids.toSqlIds())
+            },
+            "search-published-now-next" to nowNextCanonicalIdSets.flatMap { ids ->
+                val sqlIds = ids.toSqlIds()
+                listOf(
+                    nowNextMatchCountQuery(profileId, sqlIds),
+                    nowNextProgrammeQuery(profileId, nowEpochMillis, sqlIds),
+                )
+            },
             "search-global-boundary-scan" to listOf(globalBoundaryQuery(profileId, nowEpochMillis)),
         )
     }
@@ -182,9 +188,12 @@ internal object CatalogSearchQueryPlans {
         """.trimIndent()
     }
 
-    private fun List<String>.toSqlIds(): String = joinToString(",") { id ->
-        require(id.isNotBlank())
-        id.toSqlLiteral()
+    private fun List<String>.toSqlIds(): String {
+        require(isNotEmpty())
+        return joinToString(",") { id ->
+            require(id.isNotBlank())
+            id.toSqlLiteral()
+        }
     }
 
     private fun String.toSqlLiteral(): String = "'${replace("'", "''")}'"

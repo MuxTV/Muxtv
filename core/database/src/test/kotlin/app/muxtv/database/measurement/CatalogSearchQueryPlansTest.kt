@@ -17,7 +17,8 @@ class CatalogSearchQueryPlansTest {
                     restrictedCanonicalIds = listOf("canonical-49999"),
                 ),
             ),
-            publishedCanonicalChannelIds = listOf("canonical-49999"),
+            summaryCanonicalIdSets = listOf(listOf("canonical-49999")),
+            nowNextCanonicalIdSets = listOf(listOf("canonical-49999")),
         ).first { it.first == "search-candidate-resolution" }.second
 
         assertThat(plans).hasSize(2)
