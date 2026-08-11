@@ -91,11 +91,31 @@ if ($statusCommit -cne $currentCommit) {
 }
 
 & git -C $RepositoryRoot cat-file -e "$statusCommit^{commit}" 2>$null
-if ($LASTEXITCODE -ne 0) {
+$acceptedCommitExists = $LASTEXITCODE -eq 0
+$acceptedCommitIsAncestor = $false
+if ($acceptedCommitExists) {
+    & git -C $RepositoryRoot merge-base --is-ancestor $statusCommit HEAD
+    $acceptedCommitIsAncestor = $LASTEXITCODE -eq 0
+}
+
+$isShallow = ((& git -C $RepositoryRoot rev-parse --is-shallow-repository).Trim() -ceq "true")
+if ($isShallow -and (-not $acceptedCommitExists -or -not $acceptedCommitIsAncestor)) {
+    & git -C $RepositoryRoot fetch --quiet --no-tags --unshallow origin $statusCommit
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to recover repository history for accepted implementation source commit: $statusCommit"
+    }
+    & git -C $RepositoryRoot cat-file -e "$statusCommit^{commit}" 2>$null
+    $acceptedCommitExists = $LASTEXITCODE -eq 0
+    if ($acceptedCommitExists) {
+        & git -C $RepositoryRoot merge-base --is-ancestor $statusCommit HEAD
+        $acceptedCommitIsAncestor = $LASTEXITCODE -eq 0
+    }
+}
+
+if (-not $acceptedCommitExists) {
     throw "Accepted implementation source commit does not exist locally: $statusCommit"
 }
-& git -C $RepositoryRoot merge-base --is-ancestor $statusCommit HEAD
-if ($LASTEXITCODE -ne 0) {
+if (-not $acceptedCommitIsAncestor) {
     throw "Accepted implementation source commit is not an ancestor of HEAD: $statusCommit"
 }
 

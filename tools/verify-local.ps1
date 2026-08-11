@@ -29,6 +29,9 @@ Set-Location $repositoryRoot
 
 if ($Mode -ne "DeviceOnly") {
     & (Join-Path $repositoryRoot "tools\ci\Test-RepositoryTruthContract.ps1") -RepositoryRoot $repositoryRoot
+    if ($Mode -eq "Full") {
+        & (Join-Path $repositoryRoot "tools\ci\Test-RepositoryTruthContractShallowClone.ps1") -RepositoryRoot $repositoryRoot
+    }
 }
 
 function Get-GitValue {
