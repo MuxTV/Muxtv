@@ -15,6 +15,38 @@ import org.junit.Test
 
 class RoomChannelSearchRepositoryTest {
     @Test
+    fun goldenCorpusPreservesUnicodeIntersectionRankingAndTruncation() = runTest {
+        val dataSource = FakeSearchDataSource(
+            candidates = mapOf(
+                "\"Россия*\"" to listOf(
+                    candidate("exact-number", ChannelSearchMatchRank.PROVIDER),
+                    candidate("name", ChannelSearchMatchRank.NAME),
+                    candidate("programme", ChannelSearchMatchRank.PROGRAMME),
+                ),
+                "\"вечер*\"" to listOf(
+                    candidate("exact-number", ChannelSearchMatchRank.PROVIDER),
+                    candidate("name", ChannelSearchMatchRank.NAME),
+                    candidate("programme", ChannelSearchMatchRank.PROGRAMME),
+                ),
+            ),
+            summaries = listOf(
+                summary("programme", "Третий", "3"),
+                summary("name", "Россия вечер", "2"),
+                summary("exact-number", "Первый", "Россия вечер"),
+            ),
+        )
+
+        val snapshot = RoomChannelSearchRepository(dataSource, FakeGuideRepository())
+            .observe(query("Россия вечер", limit = 2))
+            .first()
+
+        assertThat(snapshot.results.map { it.channel.channelId })
+            .containsExactly("exact-number", "name")
+            .inOrder()
+        assertThat(snapshot.isTruncated).isTrue()
+    }
+
+    @Test
     fun blankQueryDoesNotExecuteCandidateSearch() = runTest {
         val dataSource = FakeSearchDataSource()
         val repository = RoomChannelSearchRepository(dataSource, FakeGuideRepository())

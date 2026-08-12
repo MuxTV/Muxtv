@@ -2,9 +2,20 @@ package app.muxtv.database.measurement
 
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayOutputStream
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class CatalogDatabaseMeasurementStatisticsTest {
+    @Test
+    fun `query plan rejects locator-shaped details`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            CatalogDatabaseQueryPlan(
+                operationId = "search-candidate-resolution",
+                details = listOf("SCAN https://stream.example/secret"),
+            )
+        }
+    }
+
     @Test
     fun `nearest-rank summary retains every sample`() {
         val summary = CatalogDatabaseMeasurementStatistics.summarize(
@@ -67,6 +78,8 @@ class CatalogDatabaseMeasurementStatisticsTest {
         assertThat(json).contains("\"rawSamples\": [")
         assertThat(json).contains("\"cacheState\": \"fresh-file-per-sample\"")
         assertThat(json).contains("\"fixture\": {")
+        assertThat(json).contains("\"queryPlans\": [")
+        assertThat(json).contains("SEARCH search_documents_fts USING INDEX")
         assertThat(json).contains("\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\"")
         assertThat(json).doesNotContain("stream.example")
         assertThat(json).doesNotContain("Synthetic Channel")
@@ -103,6 +116,12 @@ class CatalogDatabaseMeasurementStatisticsTest {
         ),
         operations = operations,
         failureCount = 0,
+        queryPlans = listOf(
+            CatalogDatabaseQueryPlan(
+                operationId = "search-candidate-resolution",
+                details = listOf("SEARCH search_documents_fts USING INDEX"),
+            ),
+        ),
         limitations = listOf(
             "Descriptive Android Room evidence only.",
             "Not a codec, startup, zapping or physical weak-TV claim.",

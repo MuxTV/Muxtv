@@ -161,6 +161,21 @@ internal data class CatalogDatabaseFixtureIdentity(
     }
 }
 
+internal class CatalogDatabaseQueryPlan(
+    val operationId: String,
+    details: List<String>,
+) {
+    val details: List<String> = details.toList()
+
+    init {
+        require(operationId.matches(OPERATION_ID_PATTERN))
+        require(this.details.isNotEmpty())
+        require(this.details.all { detail ->
+            detail.isNotBlank() && detail.length <= 512 && "://" !in detail
+        })
+    }
+}
+
 internal class CatalogDatabaseMeasurementReport(
     val schemaVersion: Int,
     val methodVersion: Int,
@@ -173,6 +188,7 @@ internal class CatalogDatabaseMeasurementReport(
     operations: List<CatalogDatabaseOperationReport>,
     val failureCount: Int,
     limitations: List<String>,
+    queryPlans: List<CatalogDatabaseQueryPlan> = emptyList(),
     val fixture: CatalogDatabaseFixtureIdentity = CatalogDatabaseFixtureIdentity(
         entryCount = workload.entryCount,
         sha256 = ZERO_SHA_256,
@@ -180,6 +196,7 @@ internal class CatalogDatabaseMeasurementReport(
 ) {
     val operations: List<CatalogDatabaseOperationReport> = operations.toList()
     val limitations: List<String> = limitations.toList()
+    val queryPlans: List<CatalogDatabaseQueryPlan> = queryPlans.toList()
 
     init {
         require(schemaVersion > 0)
@@ -187,11 +204,12 @@ internal class CatalogDatabaseMeasurementReport(
         require(!thresholdApplied)
         require(sourceCommit.matches(SOURCE_COMMIT_PATTERN))
         require(runnerLabel.matches(RUNNER_LABEL_PATTERN))
-        require(cacheState == "fresh-file-per-sample")
+        require(cacheState in VALID_CACHE_STATES)
         require(fixture.entryCount == workload.entryCount)
         require(this.operations.isNotEmpty())
         require(this.operations.map(CatalogDatabaseOperationReport::operationId).distinct().size == this.operations.size)
         require(this.operations.all { it.samples.size == workload.measuredIterations })
+        require(this.queryPlans.map(CatalogDatabaseQueryPlan::operationId).distinct().size == this.queryPlans.size)
         require(failureCount >= 0)
         require(this.limitations.isNotEmpty())
         require(this.limitations.all { it.isNotBlank() && it.length <= 256 })
@@ -203,5 +221,12 @@ internal class CatalogDatabaseMeasurementReport(
             "thresholdApplied=$thresholdApplied, sourceCommit=$sourceCommit, " +
             "runnerLabel=$runnerLabel, cacheState=$cacheState, " +
             "fixtureEntryCount=${fixture.entryCount}, operationCount=${operations.size}, " +
-            "failureCount=$failureCount)"
+            "queryPlanCount=${queryPlans.size}, failureCount=$failureCount)"
+
+    private companion object {
+        val VALID_CACHE_STATES = setOf(
+            "fresh-file-per-sample",
+            "fresh-file-per-repetition-shared-scenarios",
+        )
+    }
 }

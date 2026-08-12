@@ -11,10 +11,9 @@ Phase 00 foundation и основной daily-use контур Phase 01/02 уж�
 
 Текущая последовательность до alpha:
 
-1. repository truth и GitHub/local hygiene;
-2. Search S5 50k+EPG measurement baseline;
-3. Search S5 top-N optimization без Paging/schema/API expansion;
-4. оставшиеся performance, Player/Doctor UX, Lounge/accessibility и release gates из M3/M4/M6/M7 canonical ExecPlan.
+1. Search S5 50k+EPG measurement baseline;
+2. Search S5 top-N optimization без Paging/schema/API expansion;
+3. оставшиеся performance, Player/Doctor UX, Lounge/accessibility и release gates из M3/M4/M6/M7 canonical ExecPlan.
 
 Эта секция описывает текущий checkpoint. Фазы ниже остаются capability roadmap и не являются утверждением, что для уже реализованной функции нужно создать отдельный симметричный модуль.
 

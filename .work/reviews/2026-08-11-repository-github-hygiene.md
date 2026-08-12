@@ -178,4 +178,28 @@ last_reviewed: 2026-08-11
 
 ## Post-clean checkpoint
 
-Pending after the truth/hygiene PR is accepted. The next accepted branch must append final local/remote/worktree counts and the exact retained-exception list; no target count justifies deleting unverified history.
+Executed after PR #158 was squash-merged as `1ec2298d7488e5934bdbaaba7b69af917a021484`.
+
+- GitHub: 115 total PRs, no open PR, 18 open issues (`#147` closed by PR #158).
+- Remote branches: 145 before cleanup, 91 deleted after a second live `ls-remote` exact-tip check, 54 retained.
+- Local state: 64 branches, 40 registered worktrees including the active root, and 45 physical directories below `C:\Reposit\MuxTV\worktrees`.
+- Local cleanup: 72 clean deletion-proof worktrees and their exact-tip branches removed. Five additional deletion-proof worktrees failed at the Windows filesystem boundary; their exact branch refs and remaining directories were retained. No force deletion was used.
+- Recovery remains available from `.git/bundles/pre-s5-hygiene-20260811.bundle`, verified before cleanup.
+
+### Retained remote branches (54)
+
+- Protected: `main`.
+- Closed-unmerged or current-tip/content proof insufficient: `chore/truth-sync-2026-08-03`, `docs/performance-reliability-hardening`, `docs/truth-sync-post-first-frame-20260805`, `feat/bounded-guide-data-window`, `feat/bounded-guide-data-window-v2`, `feat/channel-favorites-29`, `feat/channels-now-next-29`, `feat/guide-tv-route-29`, `feat/search-core-room-v9`, `feat/source-refresh-v2`, `fix/single-player-owner-guard`, `perf/baseline-profile-foundation`, `perf/catalog-database-measurements`, `perf/ci-host-before-device`, `perf/core-allocation-stage1`, `perf/epg-matching-allocation-stage2`, `perf/player-proxy-measurements`, `perf/xmltv-allocation-stage2`, `rebuild/channel-favorites-room-v8`, `rebuild/epg-matching-allocation-stage2-v8`, `wip/epg-matching-now-next-71`, `work/ci-connected-suite-split-101-v2`, `work/playback-transport-classification-108`, `work/source-bare-host-normalization-116`.
+- No PR and unique tip/tree: `backup/epg-p1b-before-clean-stack`, `chore/truth-sync-post-transport-guide-2026-08-06`, `design/bounded-search-2026-08-03`, `docs/synchronize-corpus-artifact-publishing`, `docs/truth-sync-after-133-138`, `feat/source-onboarding-ui`, `plan/reference-adoption-local-validation`, `rebuild/channels-now-next-29`, `rebuild/epg-match-policy-version-82`, `rebuild/xmltv-allocation-stage2`, `wip/epg-refresh-store-contracts`, `work/30a-red2-duplicate`, `work/30a-red3-foreign-channel`, `work/30a-red4-attempt-budget`, `work/30a-red5a-duration-budget`, `work/30a-red5b-deadline`, `work/30a-red6-disposition`, `work/30a-red7-generation`, `work/30a-red8-preference`, `work/alpha-release-evidence-contract-31`, `work/alpha-release-evidence-contract-31-v2`, `work/ci-database-suite-split`, `work/database-current-chain-schema-guard-121`, `work/first-rendered-frame-signal`, `work/measurement-large-m3u-series-27`, `work/portable-backup-envelope-113`, `work/provider-readiness-contract-112`, `work/tv-design-craft-111`, `work/user-unlocked-startup-gate-118`.
+
+### Retained registered worktrees
+
+The active root is `upd/search-s5-measurements`. The 39 retained non-root worktrees are:
+
+`backup/epg-p1b-before-clean-stack`, `chore/truth-sync-2026-08-03`, `design/bounded-search-2026-08-03`, `docs/performance-reliability-hardening`, `docs/synchronize-corpus-artifact-publishing`, `docs/truth-sync-post-first-frame-20260805`, `feat/channel-favorites-29`, `feat/channels-now-next-29`, `feat/guide-tv-route-29`, `feat/search-core-room-v9`, `feat/source-onboarding-ui`, `feat/source-refresh-v2`, `fix/single-player-owner-guard`, `perf/baseline-profile-foundation`, `perf/catalog-database-measurements`, `perf/ci-host-before-device`, `perf/core-allocation-stage1`, `perf/epg-matching-allocation-stage2`, `perf/player-proxy-measurements`, `perf/xmltv-allocation-stage2`, `plan/reference-adoption-local-validation`, `rebuild/channel-favorites-room-v8`, `rebuild/channels-now-next-29`, `rebuild/epg-match-policy-version-82`, `rebuild/epg-matching-allocation-stage2-v8`, `rebuild/xmltv-allocation-stage2`, `upd/search-paging`, `wip/epg-matching-now-next-71`, `wip/epg-refresh-store-contracts`, `work/alpha-release-evidence-contract-31`, `work/ci-connected-suite-split-101-v2`, `work/ci-database-suite-split`, `work/database-current-chain-schema-guard-121`, `work/first-rendered-frame-signal`, `work/measurement-large-m3u-series-27`, `work/portable-backup-envelope-113`, `work/provider-readiness-contract-112`, `work/tv-design-craft-111`, `work/user-unlocked-startup-gate-118`.
+
+### Retained unregistered directories and exact refs
+
+- Pre-existing unregistered directory: `C:\Reposit\MuxTV\worktrees\feat-bounded-guide-data-window-v2`; branch `feat/bounded-guide-data-window-v2` retained.
+- Cleanup filesystem exceptions: `C:\Reposit\MuxTV\worktrees\upd-channels-paging`, `...\upd-doctor-lite`, `...\upd-measurement-foundation`, `...\upd-playback-runtime-recovery`, `...\upd-self-hosted-runner-hardening`. Git worktree metadata was removed before Windows returned `Filename too long` or `Invalid argument`; the exact branch refs remain at their recorded PR head SHAs.
+- Additional unattached refs intentionally retained fail-closed: `chore/publish-room-schema-v5`, `chore/truth-sync-post-transport-guide-2026-08-06`, `feat/bounded-guide-data-window`, `main`, `rebase/playback-catalog`, all eight `safety/*` refs, `tmp-noop`, `upd/mvp-alpha-1`, `upd/repository-truth-hygiene`, `work/playback-transport-classification-108`, and `work/source-bare-host-normalization-116`.

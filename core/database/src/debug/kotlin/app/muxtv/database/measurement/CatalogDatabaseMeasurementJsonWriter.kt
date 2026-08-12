@@ -50,6 +50,22 @@ internal object CatalogDatabaseMeasurementJsonWriter {
                 append('\n')
             }
             append("  ],\n")
+            append("  \"queryPlans\": [\n")
+            report.queryPlans.forEachIndexed { planIndex, plan ->
+                append("    {\n")
+                append("      \"operationId\": ").appendJsonString(plan.operationId).append(",\n")
+                append("      \"details\": [\n")
+                plan.details.forEachIndexed { detailIndex, detail ->
+                    append("        ").appendJsonString(detail)
+                    if (detailIndex != plan.details.lastIndex) append(',')
+                    append('\n')
+                }
+                append("      ]\n")
+                append("    }")
+                if (planIndex != report.queryPlans.lastIndex) append(',')
+                append('\n')
+            }
+            append("  ],\n")
             append("  \"failureCount\": ${report.failureCount},\n")
             append("  \"limitations\": [\n")
             report.limitations.forEachIndexed { index, limitation ->

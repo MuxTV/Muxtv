@@ -27,30 +27,18 @@ class CatalogDatabaseMeasurementTest {
 
         assertThat(report.thresholdApplied).isFalse()
         assertThat(report.failureCount).isEqualTo(0)
-        assertThat(report.operations.map { it.operationId }).containsExactly(
-            "stage-batch-250",
-            "stage-total-10k",
-            "activate-10k",
-            "active-channel-first-page",
-            "search-exact-number-10k",
-            "search-selective-seed-10k",
-            "source-overview-32",
-        ).inOrder()
+        assertThat(report.operations.map { it.operationId })
+            .containsExactlyElementsIn(EXPECTED_RESULT_COUNTS.keys)
+            .inOrder()
         assertThat(report.operations.all { it.samples.size == arguments.spec.workload.measuredIterations }).isTrue()
-        assertThat(report.operations.single { it.operationId == "stage-batch-250" }.expectedResultCount)
-            .isEqualTo(250)
-        assertThat(report.operations.single { it.operationId == "stage-total-10k" }.expectedResultCount)
-            .isEqualTo(arguments.spec.workload.entryCount)
-        assertThat(report.operations.single { it.operationId == "activate-10k" }.expectedResultCount)
-            .isEqualTo(arguments.spec.workload.entryCount)
-        assertThat(report.operations.single { it.operationId == "active-channel-first-page" }.expectedResultCount)
-            .isEqualTo(arguments.spec.workload.firstPageLimit)
-        assertThat(report.operations.single { it.operationId == "search-exact-number-10k" }.expectedResultCount)
-            .isEqualTo(1)
-        assertThat(report.operations.single { it.operationId == "search-selective-seed-10k" }.expectedResultCount)
-            .isEqualTo(1)
-        assertThat(report.operations.single { it.operationId == "source-overview-32" }.expectedResultCount)
-            .isEqualTo(arguments.spec.workload.sourceOverviewCount)
+        assertThat(report.operations.associate { it.operationId to it.expectedResultCount })
+            .containsExactlyEntriesIn(EXPECTED_RESULT_COUNTS)
+        assertThat(report.queryPlans.map { it.operationId }).containsExactly(
+            "search-candidate-resolution",
+            "search-summary-materialization-ranking",
+            "search-published-now-next",
+            "search-global-boundary-scan",
+        ).inOrder()
 
         val published = CatalogDatabaseMeasurementReportPublisher.publish(
             context = instrumentation.context,
@@ -72,5 +60,29 @@ class CatalogDatabaseMeasurementTest {
 
     private companion object {
         const val RESULT_REPORT_BASE64 = "catalogDatabaseMeasurementReportBase64"
+        val EXPECTED_RESULT_COUNTS = buildMap {
+            put("stage-batch-250", 250)
+            put("stage-total-50k", 50_000)
+            put("activate-50k", 50_000)
+            put("active-channel-first-page", 100)
+            put("source-overview-32", 32)
+            val scenarios = linkedMapOf(
+                "search-exact-number" to listOf(1, 1, 1, 1),
+                "search-selective-multi-token" to listOf(803, 1, 1, 1),
+                "search-broad-multi-token" to listOf(2_402, 800, 100, 1),
+                "search-broad-top-100" to listOf(801, 800, 100, 1),
+                "search-programme-title" to listOf(1, 1, 1, 1),
+                "search-cross-document" to listOf(803, 1, 1, 1),
+            )
+            val phases = listOf(
+                "candidate-resolution",
+                "summary-materialization-ranking",
+                "published-now-next",
+                "global-boundary-scan",
+            )
+            scenarios.forEach { (scenario, counts) ->
+                phases.forEachIndexed { index, phase -> put("$scenario-$phase", counts[index]) }
+            }
+        }
     }
 }

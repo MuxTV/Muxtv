@@ -1,5 +1,7 @@
 package app.muxtv.database.measurement
 
+import app.muxtv.database.EpgChannelEntity
+import app.muxtv.database.EpgProgrammeEntity
 import app.muxtv.database.StagedCatalogEntry
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -51,6 +53,29 @@ class CatalogDatabaseFixtureDigestTest {
             .isNotEqualTo(CatalogDatabaseFixtureDigest.sha256(second))
     }
 
+    @Test
+    fun `epg corpus contributes to the digest`() {
+        val entries = listOf(entry())
+        val channel = epgChannel()
+        val programme = epgProgramme()
+        val baseline = CatalogDatabaseFixtureDigest.sha256(entries, listOf(channel), listOf(programme))
+
+        assertThat(
+            CatalogDatabaseFixtureDigest.sha256(
+                entries,
+                listOf(channel.copy(primaryDisplayName = "Renamed EPG channel")),
+                listOf(programme),
+            ),
+        ).isNotEqualTo(baseline)
+        assertThat(
+            CatalogDatabaseFixtureDigest.sha256(
+                entries,
+                listOf(channel),
+                listOf(programme.copy(startEpochMillis = 2_000L)),
+            ),
+        ).isNotEqualTo(baseline)
+    }
+
     private fun entry(
         providerChannelId: String = "provider-1",
         providerKey: String = "tvg:measurement-1",
@@ -69,5 +94,31 @@ class CatalogDatabaseFixtureDigestTest {
         channelNumber = "1",
         userAgent = "MuxTV-Measurement/1",
         referrer = "https://portal.example/measurement/1",
+    )
+
+    private fun epgChannel() = EpgChannelEntity(
+        sourceId = "measurement-epg",
+        revisionNumber = 1,
+        externalId = "epg-1",
+        primaryDisplayName = "Synthetic Channel 1",
+        primaryLanguage = "en",
+        iconRef = null,
+    )
+
+    private fun epgProgramme() = EpgProgrammeEntity(
+        sourceId = "measurement-epg",
+        revisionNumber = 1,
+        sequenceNumber = 1,
+        externalChannelId = "epg-1",
+        startEpochMillis = 1_000L,
+        stopEpochMillis = 3_000L,
+        primaryTitle = "Programme 1",
+        primaryLanguage = "en",
+        subtitle = null,
+        description = null,
+        category = null,
+        iconRef = null,
+        episodeNumber = null,
+        isNew = false,
     )
 }
