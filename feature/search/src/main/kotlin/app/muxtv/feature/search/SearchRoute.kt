@@ -128,11 +128,12 @@ private fun SearchContent(
     onOpenChannel: (String) -> Unit,
     modifier: Modifier,
 ) {
-    val rows = (state as? SearchUiState.Content)?.rows.orEmpty()
+    val content = state as? SearchUiState.Content
+    val rows = content?.rows.orEmpty()
     val inputFocusRequester = remember { FocusRequester() }
     val retryFocusRequester = remember { FocusRequester() }
     val resultFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
-    val channelIds = rows.map(SearchRowProjection::channelId)
+    val channelIds = content?.channelIds.orEmpty()
     val restorationAnchor = remember(queryText, channelIds) { focusAnchor }
     var restorationCompleted by remember(queryText, channelIds) { mutableStateOf(false) }
     val downFocusRequester = channelIds.firstOrNull()
@@ -201,7 +202,7 @@ private fun SearchContent(
         )
 
         Text(
-            text = state.statusLabel(),
+            text = state.statusLabel,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag(SEARCH_STATUS_TEST_TAG),
@@ -256,7 +257,7 @@ private fun SearchContent(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag(searchResultTestTag(row.channelId))
+                            .testTag(row.resultTestTag)
                             .focusProperties {
                                 if (index == 0) up = inputFocusRequester
                             }
@@ -352,24 +353,21 @@ private fun SearchResultItem(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = row.primaryLabel(),
+                text = row.primaryLabel,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = row.metadataLabel().ifEmpty { " " },
+                text = row.metadataLabel.ifEmpty { " " },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = row.currentProgrammeTitle
-                    ?.takeIf(String::isNotBlank)
-                    ?.let { title -> "Сейчас: $title" }
-                    ?: " ",
+                text = row.currentProgrammeLabel,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -378,38 +376,6 @@ private fun SearchResultItem(
     }
 }
 
-private fun SearchUiState.statusLabel(): String = when (this) {
-    SearchUiState.Idle -> "Введите запрос. Поиск выполняется по активным каналам и текущим программам."
-    SearchUiState.Loading -> "Поиск…"
-    SearchUiState.Empty -> "Ничего не найдено."
-    SearchUiState.Failed -> "Не удалось выполнить поиск."
-    is SearchUiState.Content -> if (isTruncated) {
-        "Показано результатов: ${rows.size}. Уточните запрос, чтобы сузить выдачу."
-    } else {
-        "Найдено результатов: ${rows.size}"
-    }
-}
-
-private fun SearchRowProjection.primaryLabel(): String = buildString {
-    if (isFavorite) append("★  ")
-    channelNumber?.takeIf(String::isNotBlank)?.let { number ->
-        append(number).append("  ")
-    }
-    append(displayName)
-}
-
-private fun SearchRowProjection.metadataLabel(): String = buildString {
-    groupTitle?.takeIf(String::isNotBlank)?.let(::append)
-    if (variantCount > 1) {
-        if (isNotEmpty()) append("  ·  ")
-        append(variantCount).append(" источника")
-    }
-}
-
-private fun searchResultTestTag(channelId: String): String =
-    "$SEARCH_RESULT_TEST_TAG_PREFIX$channelId"
-
 private const val SEARCH_INPUT_TEST_TAG = "search-input"
 private const val SEARCH_STATUS_TEST_TAG = "search-status"
 private const val SEARCH_RETRY_TEST_TAG = "search-retry"
-private const val SEARCH_RESULT_TEST_TAG_PREFIX = "search-result-"

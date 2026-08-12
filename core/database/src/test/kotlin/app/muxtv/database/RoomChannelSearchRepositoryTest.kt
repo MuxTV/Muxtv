@@ -187,14 +187,13 @@ class RoomChannelSearchRepositoryTest {
     }
 
     @Test
-    fun publicLimitTruncatesDeterministicallyAndOnlyProjectsGuideForPublishedRows() = runTest {
+    fun publicLimitTruncatesAndUsesOnlyPublishedGuideBoundary() = runTest {
         val candidates = (1..5).map { index -> candidate("c$index", ChannelSearchMatchRank.NAME) }
         val summaries = (1..5).map { index -> summary("c$index", "Канал $index", index.toString()) }
         val guide = FakeGuideRepository(currentTitles = mapOf("c1" to "Сейчас 1", "c2" to "Сейчас 2"))
         val dataSource = FakeSearchDataSource(
             candidates = mapOf("\"канал*\"" to candidates),
             summaries = summaries,
-            nextBoundary = 9_000,
         )
         val repository = RoomChannelSearchRepository(dataSource, guide)
 
@@ -202,7 +201,7 @@ class RoomChannelSearchRepositoryTest {
 
         assertThat(snapshot.results).hasSize(2)
         assertThat(snapshot.isTruncated).isTrue()
-        assertThat(snapshot.nextBoundaryEpochMillis).isEqualTo(9_000)
+        assertThat(snapshot.nextBoundaryEpochMillis).isEqualTo(1_600)
         assertThat(guide.requestedIds.single()).containsExactlyElementsIn(
             snapshot.results.map { it.channel.channelId },
         )
@@ -233,7 +232,6 @@ class RoomChannelSearchRepositoryTest {
 private class FakeSearchDataSource(
     private val candidates: Map<String, List<ChannelSearchCandidateRow>> = emptyMap(),
     private val summaries: List<PlayableChannelSummary> = emptyList(),
-    private val nextBoundary: Long? = null,
 ) : ChannelSearchDataSource {
     val candidateExpressions = mutableListOf<String>()
     val restrictedCandidateExpressions = mutableListOf<String>()
@@ -263,10 +261,6 @@ private class FakeSearchDataSource(
         canonicalChannelIds: List<String>,
     ): List<PlayableChannelSummary> = summaries.filter { it.channelId in canonicalChannelIds }
 
-    override suspend fun nextProgrammeBoundary(
-        profileId: String,
-        nowEpochMillis: Long,
-    ): Long? = nextBoundary
 }
 
 private class FakeGuideRepository(

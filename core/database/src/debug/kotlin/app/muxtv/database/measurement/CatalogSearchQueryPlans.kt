@@ -32,7 +32,6 @@ internal object CatalogSearchQueryPlans {
                     nowNextProgrammeQuery(profileId, nowEpochMillis, sqlIds),
                 )
             },
-            "search-global-boundary-scan" to listOf(globalBoundaryQuery(profileId, nowEpochMillis)),
         )
     }
 
@@ -308,76 +307,6 @@ internal object CatalogSearchQueryPlans {
         ORDER BY matches.canonicalChannelId COLLATE BINARY, programme.startEpochMillis
         """.trimIndent()
 
-    private fun globalBoundaryQuery(profileId: String, now: Long): String =
-        """
-        WITH active_matches AS (
-            SELECT matches.epgSourceId, matches.epgRevisionNumber,
-                   matches.epgExternalChannelId, matches.canonicalChannelId
-            FROM epg_channel_matches AS matches
-            INNER JOIN epg_sources
-                ON epg_sources.id = matches.epgSourceId
-               AND epg_sources.activeRevision = matches.epgRevisionNumber
-               AND epg_sources.providerSourceId = matches.providerSourceId
-            INNER JOIN sources
-                ON sources.id = matches.providerSourceId
-               AND sources.activeRevision = matches.catalogRevisionNumber
-            WHERE matches.matchPolicyVersion = $CURRENT_EPG_MATCH_POLICY_VERSION
-              AND matches.decision = 'MATCHED'
-              AND matches.canonicalChannelId IS NOT NULL
-        ),
-        match_counts AS (
-            SELECT canonicalChannelId, COUNT(*) AS matchCount
-            FROM active_matches GROUP BY canonicalChannelId
-        ),
-        unambiguous AS (
-            SELECT active_matches.* FROM active_matches
-            INNER JOIN match_counts
-                ON match_counts.canonicalChannelId = active_matches.canonicalChannelId
-               AND match_counts.matchCount = 1
-            LEFT JOIN user_channel_overlays AS overlay
-                ON overlay.profileId = '$profileId'
-               AND overlay.canonicalChannelId = active_matches.canonicalChannelId
-            WHERE COALESCE(overlay.isHidden, 0) = 0
-        ),
-        boundaries AS (
-            SELECT CASE
-                WHEN previous.stopEpochMillis > $now THEN previous.stopEpochMillis
-                WHEN previous.stopEpochMillis IS NULL THEN (
-                    SELECT following.startEpochMillis FROM epg_programmes AS following
-                    WHERE following.sourceId = unambiguous.epgSourceId
-                      AND following.revisionNumber = unambiguous.epgRevisionNumber
-                      AND following.externalChannelId = unambiguous.epgExternalChannelId
-                      AND following.startEpochMillis > $now
-                    ORDER BY following.startEpochMillis, following.sequenceNumber LIMIT 1
-                )
-            END AS boundaryEpochMillis
-            FROM unambiguous
-            LEFT JOIN epg_programmes AS previous
-                ON previous.sourceId = unambiguous.epgSourceId
-               AND previous.revisionNumber = unambiguous.epgRevisionNumber
-               AND previous.externalChannelId = unambiguous.epgExternalChannelId
-               AND previous.sequenceNumber = (
-                   SELECT candidate.sequenceNumber FROM epg_programmes AS candidate
-                   WHERE candidate.sourceId = unambiguous.epgSourceId
-                     AND candidate.revisionNumber = unambiguous.epgRevisionNumber
-                     AND candidate.externalChannelId = unambiguous.epgExternalChannelId
-                     AND candidate.startEpochMillis <= $now
-                   ORDER BY candidate.startEpochMillis DESC, candidate.sequenceNumber DESC LIMIT 1
-               )
-            UNION ALL
-            SELECT (
-                SELECT following.startEpochMillis FROM epg_programmes AS following
-                WHERE following.sourceId = unambiguous.epgSourceId
-                  AND following.revisionNumber = unambiguous.epgRevisionNumber
-                  AND following.externalChannelId = unambiguous.epgExternalChannelId
-                  AND following.startEpochMillis > $now
-                ORDER BY following.startEpochMillis ASC, following.sequenceNumber ASC
-                LIMIT 1
-            ) AS boundaryEpochMillis
-            FROM unambiguous
-        )
-        SELECT MIN(boundaryEpochMillis) FROM boundaries WHERE boundaryEpochMillis > $now
-        """.trimIndent()
 }
 
 internal data class CatalogSearchCandidatePlanProbe(
