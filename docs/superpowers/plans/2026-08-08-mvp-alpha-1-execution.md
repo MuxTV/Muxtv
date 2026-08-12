@@ -146,7 +146,7 @@ Android TV rules:
 ### S5 contract — Search top-N
 
 - First land a descriptive 50k active-channel + current/next EPG baseline using the existing database measurement harness.
-- Active PR2 work extends that harness with six Search scenarios, four separately timed phases, five raw repetitions, row counts, secret-free phase query plans and a golden correctness corpus; it makes no speed claim.
+- PR2 extends that harness with six Search scenarios, four separately timed phases, five raw repetitions, row counts, secret-free phase query plans and a golden correctness corpus; it makes no speed claim.
 - Measure candidate resolution, summary materialization/ranking, published now/next and the current global programme-boundary query separately; record counts, median/p95 and secret-free query plans over five repetitions on one device profile.
 - Remove the global boundary scan and derive the next refresh from `ChannelNowNext.nextBoundaryEpochMillis` for published rows only.
 - Empty results and empty token intersections perform no guide/boundary work.
@@ -239,6 +239,7 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-11: repository/GitHub review found 114 historical PRs (91 merged, 23 closed-unmerged, no open PR), 144 remote branches, 134 local branches and 117 attached worktrees. Cleanup is exact-head/content-proof based because squash merges make ancestry-only deletion unsafe.
 - 2026-08-11: user reaffirmed S5 but selected the original bounded top-N Search contract over the local Paging prototype. Truth/hygiene, measurement baseline and optimization remain three sequential PRs.
 - 2026-08-11: PR #158 merged repository truth/hygiene as `main@1ec2298d7488e5934bdbaaba7b69af917a021484`; 91 exact-tip remote branches and 72 deletion-proof local worktrees were removed, while all uncertain and five Windows-filesystem-blocked refs were retained in the immutable hygiene review.
+- 2026-08-12: PR #159 code head `2f3eb8c860eb9f5f6fcc8b6908fe9bfe45e0f1d2` passed local Fast plus exact-head Full and Database device matrix. The canonical 50k Search run is retained as a censored performance failure: warmup exceeded two hours and the first measured repetition did not finish before user-authorized cancellation. No further long baseline reruns precede the root optimization; this evidence establishes that the current path is impractical without claiming an acceleration result.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 
