@@ -4,6 +4,7 @@ import app.muxtv.catalog.ChannelSearchQuery
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.ChannelSearchResult
 import app.muxtv.catalog.ChannelSearchSnapshot
+import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
@@ -56,13 +57,13 @@ internal class RoomChannelSearchRepository(
         // An unrestricted empty token proves the complete AND-query is empty, even if another
         // broad token overflowed its probe or the UI text contained additional ignored tokens.
         if (probes.any { probe -> probe.rows.isEmpty() }) {
-            return emptySnapshot(query = query, truncated = false)
+            return emptySnapshot(truncated = false)
         }
 
         val seed = probes.minWithOrNull(
             compareBy<TokenProbe> { probe -> probe.rows.size }
                 .thenBy { probe -> if (probe.overflow) 1 else 0 },
-        ) ?: return emptySnapshot(query = query, truncated = false)
+        ) ?: return emptySnapshot(truncated = false)
 
         var truncated = queryTokenOverflow || seed.overflow
         val intersection = seed.rows.associateTo(mutableMapOf()) { row ->
@@ -104,7 +105,7 @@ internal class RoomChannelSearchRepository(
         }
 
         if (intersection.isEmpty()) {
-            return emptySnapshot(query = query, truncated = truncated)
+            return emptySnapshot(truncated = truncated)
         }
 
         val summaries = dataSource.activeChannelSummaries(
@@ -128,8 +129,8 @@ internal class RoomChannelSearchRepository(
         if (sorted.size > query.limit) truncated = true
         val published = sorted.take(query.limit)
 
-        val guideByChannel = if (published.isEmpty()) {
-            emptyMap()
+        val guide = if (published.isEmpty()) {
+            emptyList()
         } else {
             guideRepository.getNowNext(
                 NowNextQuery(
@@ -137,8 +138,9 @@ internal class RoomChannelSearchRepository(
                     canonicalChannelIds = published.map(PlayableChannelSummary::channelId),
                     nowEpochMillis = query.nowEpochMillis,
                 ),
-            ).associateBy { projection -> projection.canonicalChannelId }
+            )
         }
+        val guideByChannel = guide.associateBy(ChannelNowNext::canonicalChannelId)
         val results = published.map { summary ->
             val projection = guideByChannel[summary.channelId]
             ChannelSearchResult(
@@ -153,23 +155,17 @@ internal class RoomChannelSearchRepository(
         return ChannelSearchSnapshot(
             results = results,
             isTruncated = truncated,
-            nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
-                profileId = query.profileId,
-                nowEpochMillis = query.nowEpochMillis,
-            ),
+            nextBoundaryEpochMillis = guide.asSequence()
+                .mapNotNull(ChannelNowNext::nextBoundaryEpochMillis)
+                .filter { boundary -> boundary > query.nowEpochMillis }
+                .minOrNull(),
         )
     }
 
-    private suspend fun emptySnapshot(
-        query: ChannelSearchQuery,
-        truncated: Boolean,
-    ): ChannelSearchSnapshot = ChannelSearchSnapshot(
+    private fun emptySnapshot(truncated: Boolean): ChannelSearchSnapshot = ChannelSearchSnapshot(
         results = emptyList(),
         isTruncated = truncated,
-        nextBoundaryEpochMillis = dataSource.nextProgrammeBoundary(
-            profileId = query.profileId,
-            nowEpochMillis = query.nowEpochMillis,
-        ),
+        nextBoundaryEpochMillis = null,
     )
 
     private fun structuredRank(

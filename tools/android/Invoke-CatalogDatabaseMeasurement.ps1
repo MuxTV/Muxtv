@@ -161,27 +161,21 @@ $expectedOperations = [ordered]@{
     "search-exact-number-candidate-resolution" = 1
     "search-exact-number-summary-materialization-ranking" = 1
     "search-exact-number-published-now-next" = 1
-    "search-exact-number-global-boundary-scan" = 1
     "search-selective-multi-token-candidate-resolution" = 803
     "search-selective-multi-token-summary-materialization-ranking" = 1
     "search-selective-multi-token-published-now-next" = 1
-    "search-selective-multi-token-global-boundary-scan" = 1
     "search-broad-multi-token-candidate-resolution" = 2402
     "search-broad-multi-token-summary-materialization-ranking" = 800
     "search-broad-multi-token-published-now-next" = 100
-    "search-broad-multi-token-global-boundary-scan" = 1
     "search-broad-top-100-candidate-resolution" = 801
     "search-broad-top-100-summary-materialization-ranking" = 800
     "search-broad-top-100-published-now-next" = 100
-    "search-broad-top-100-global-boundary-scan" = 1
     "search-programme-title-candidate-resolution" = 1
     "search-programme-title-summary-materialization-ranking" = 1
     "search-programme-title-published-now-next" = 1
-    "search-programme-title-global-boundary-scan" = 1
     "search-cross-document-candidate-resolution" = 803
     "search-cross-document-summary-materialization-ranking" = 1
     "search-cross-document-published-now-next" = 1
-    "search-cross-document-global-boundary-scan" = 1
 }
 $operations = @($report.operations)
 if ($operations.Count -ne $expectedOperations.Count) {
@@ -191,8 +185,7 @@ if ($operations.Count -ne $expectedOperations.Count) {
 $expectedPlans = @(
     "search-candidate-resolution",
     "search-summary-materialization-ranking",
-    "search-published-now-next",
-    "search-global-boundary-scan"
+    "search-published-now-next"
 )
 $plans = @($report.queryPlans)
 if ($plans.Count -ne $expectedPlans.Count) {

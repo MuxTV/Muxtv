@@ -232,6 +232,11 @@ class SearchViewModelTest {
         ).toSearchRowProjection()
         val state = SearchUiState.Content(rows = listOf(row), isTruncated = false)
 
+        assertThat(row.primaryLabel).isEqualTo("77  Секретный канал")
+        assertThat(row.metadataLabel).isEqualTo("Секретная группа")
+        assertThat(row.currentProgrammeLabel).isEqualTo("Сейчас: Секретная программа")
+        assertThat(row.resultTestTag).isEqualTo("search-result-secret-id")
+        assertThat(state.channelIds).containsExactly("secret-id")
         assertThat(row.toString()).doesNotContain("secret-id")
         assertThat(row.toString()).doesNotContain("Секретный")
         assertThat(state.toString()).doesNotContain("Секретный")

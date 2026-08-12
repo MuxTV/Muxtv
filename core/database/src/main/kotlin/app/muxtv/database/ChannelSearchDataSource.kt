@@ -23,9 +23,4 @@ internal interface ChannelSearchDataSource {
         profileId: String,
         canonicalChannelIds: List<String>,
     ): List<PlayableChannelSummary>
-
-    suspend fun nextProgrammeBoundary(
-        profileId: String,
-        nowEpochMillis: Long,
-    ): Long?
 }

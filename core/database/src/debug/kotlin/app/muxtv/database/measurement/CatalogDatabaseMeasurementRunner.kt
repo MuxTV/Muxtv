@@ -335,14 +335,10 @@ internal class CatalogDatabaseMeasurementRunner(
             candidate = handle.sample(iteration, dataSource.candidateNanos, dataSource.candidateRows),
             summary = handle.sample(
                 iteration,
-                (
-                    totalNanos - dataSource.candidateNanos - guide.nowNextNanos -
-                        dataSource.boundaryNanos
-                ).coerceAtLeast(1L),
+                (totalNanos - dataSource.candidateNanos - guide.nowNextNanos).coerceAtLeast(1L),
                 dataSource.summaryRows,
             ),
             nowNext = handle.sample(iteration, guide.nowNextNanos, guide.nowNextRows),
-            boundary = handle.sample(iteration, dataSource.boundaryNanos, dataSource.boundaryRows),
             candidateProbes = dataSource.candidateProbes.toList(),
             summaryCanonicalIds = dataSource.summaryCanonicalIds,
             nowNextCanonicalIds = guide.nowNextCanonicalIds,
@@ -572,14 +568,12 @@ internal class CatalogDatabaseMeasurementRunner(
         CANDIDATE("candidate-resolution"),
         SUMMARY("summary-materialization-ranking"),
         NOW_NEXT("published-now-next"),
-        BOUNDARY("global-boundary-scan"),
     }
 
     private data class SearchScenarioResult(
         val candidate: CatalogDatabaseMeasurementSample,
         val summary: CatalogDatabaseMeasurementSample,
         val nowNext: CatalogDatabaseMeasurementSample,
-        val boundary: CatalogDatabaseMeasurementSample,
         val candidateProbes: List<CatalogSearchCandidatePlanProbe>,
         val summaryCanonicalIds: List<String>,
         val nowNextCanonicalIds: List<String>,
@@ -588,7 +582,6 @@ internal class CatalogDatabaseMeasurementRunner(
             SearchPhase.CANDIDATE -> candidate
             SearchPhase.SUMMARY -> summary
             SearchPhase.NOW_NEXT -> nowNext
-            SearchPhase.BOUNDARY -> boundary
         }
     }
 
@@ -615,8 +608,6 @@ internal class CatalogDatabaseMeasurementRunner(
         var candidateNanos = 0L
         var candidateRows = 0
         var summaryRows = 0
-        var boundaryNanos = 0L
-        var boundaryRows = 0
         val candidateProbes = mutableListOf<CatalogSearchCandidatePlanProbe>()
         var summaryCanonicalIds: List<String> = emptyList()
 
@@ -660,17 +651,6 @@ internal class CatalogDatabaseMeasurementRunner(
             if (captureQueryTrace) summaryCanonicalIds = canonicalChannelIds.toList()
             summaryRows = rows.size
         }
-
-        override suspend fun nextProgrammeBoundary(
-            profileId: String,
-            nowEpochMillis: Long,
-        ): Long? = timed(
-            block = { delegate.nextProgrammeBoundary(profileId, nowEpochMillis) },
-            record = { elapsed, boundary ->
-                boundaryNanos += elapsed
-                boundaryRows = if (boundary == null) 0 else 1
-            },
-        )
 
         private suspend fun <T> timed(
             block: suspend () -> T,

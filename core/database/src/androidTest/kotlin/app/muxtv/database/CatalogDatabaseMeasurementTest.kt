@@ -37,7 +37,6 @@ class CatalogDatabaseMeasurementTest {
             "search-candidate-resolution",
             "search-summary-materialization-ranking",
             "search-published-now-next",
-            "search-global-boundary-scan",
         ).inOrder()
 
         val published = CatalogDatabaseMeasurementReportPublisher.publish(
@@ -67,18 +66,17 @@ class CatalogDatabaseMeasurementTest {
             put("active-channel-first-page", 100)
             put("source-overview-32", 32)
             val scenarios = linkedMapOf(
-                "search-exact-number" to listOf(1, 1, 1, 1),
-                "search-selective-multi-token" to listOf(803, 1, 1, 1),
-                "search-broad-multi-token" to listOf(2_402, 800, 100, 1),
-                "search-broad-top-100" to listOf(801, 800, 100, 1),
-                "search-programme-title" to listOf(1, 1, 1, 1),
-                "search-cross-document" to listOf(803, 1, 1, 1),
+                "search-exact-number" to listOf(1, 1, 1),
+                "search-selective-multi-token" to listOf(803, 1, 1),
+                "search-broad-multi-token" to listOf(2_402, 800, 100),
+                "search-broad-top-100" to listOf(801, 800, 100),
+                "search-programme-title" to listOf(1, 1, 1),
+                "search-cross-document" to listOf(803, 1, 1),
             )
             val phases = listOf(
                 "candidate-resolution",
                 "summary-materialization-ranking",
                 "published-now-next",
-                "global-boundary-scan",
             )
             scenarios.forEach { (scenario, counts) ->
                 phases.forEachIndexed { index, phase -> put("$scenario-$phase", counts[index]) }
