@@ -16,6 +16,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
+    implementation(libs.activity.compose)
     implementation(libs.tv.material)
     implementation(libs.coroutines.android)
     implementation(libs.media3.ui.compose)
