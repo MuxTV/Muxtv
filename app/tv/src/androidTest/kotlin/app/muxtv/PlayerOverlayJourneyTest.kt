@@ -8,9 +8,9 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso.pressBack
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -109,7 +109,9 @@ class PlayerOverlayJourneyTest {
                     .fetchSemanticsNodes().size == 1
             }
 
-            pressBack()
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
             composeRule.waitForIdle()
 
             composeRule.waitUntil(timeoutMillis = 20_000) {
@@ -123,7 +125,9 @@ class PlayerOverlayJourneyTest {
                 }
             }
 
-            pressBack()
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
             composeRule.waitForIdle()
 
             composeRule.waitUntil(timeoutMillis = 20_000) {
@@ -216,12 +220,10 @@ class PlayerOverlayJourneyTest {
                 composeRule.onAllNodesWithTag("player-favorite")
                     .fetchSemanticsNodes().size == 1
             }
+            composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
             composeRule.onNodeWithTag("player-favorite")
                 .assertTextContains("☆ В избранное")
-                .performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                .performClick()
             composeRule.runOnIdle { check(favoritePresses == 1) }
         } finally {
             connector.close()
