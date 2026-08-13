@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 
-**Baseline:** `main@1ec2298d7488e5934bdbaaba7b69af917a021484`
+**Baseline:** `main@1249624db5010e8140814a56553ea194c6d25d66`
 
 **Working model:** sequential `upd/*` vertical-slice branches from accepted `origin/main`
 
@@ -126,7 +126,7 @@ Android TV rules:
 
 - [ ] Add screen-specific Room projections and Room-backed paging only where the product contract is sequential browsing:
   - [x] Channels: S4 accepted through PR #157 / `main@6e852d36`; the 200-row browse limit is removed, only loaded pages are enriched, and focus state remains bounded.
-  - [ ] Search: S5 preserves ranked top-N (`100` default / `200` maximum / explicit `isTruncated`); Search Paging is rejected because it changes semantics and removes bounded completion.
+  - [x] Search: S5 accepted through PR #159 / `main@b8ab064a` and PR #160 / `main@1249624d`; ranked top-N (`100` default / `200` maximum / explicit `isTruncated`), no global programme-boundary scan, no EPG work for empty results, labels/result IDs resolved outside Compose. Search Paging is rejected.
   - [ ] Guide: S6 after accepted Search slice.
 - [ ] Keep parsers streaming with bounded batch transactions, cancellation points and atomic revision publication.
 - [ ] Move sorting/filtering/formatting outside composable bodies; use stable keys/content types and narrow state-read scopes.
@@ -143,17 +143,27 @@ Android TV rules:
 | Focus restoration depended on a complete channel-ID list. | Restoration stores the stable channel ID plus index and scans only the bounded loaded window through `peek`. | Preserves D-pad return behavior without `itemSnapshotList.items` or a full catalog copy. |
 | A page failure replaced the whole route with a terminal message. | Refresh and append failures expose explicit Retry while already loaded rows stay available. | Keeps TV navigation usable during bounded paging failures. |
 
-### S5 contract — Search top-N
+### S5 contract — Search top-N (accepted)
 
-- First land a descriptive 50k active-channel + current/next EPG baseline using the existing database measurement harness.
-- PR2 extends that harness with six Search scenarios, four separately timed phases, five raw repetitions, row counts, secret-free phase query plans and a golden correctness corpus; it makes no speed claim.
-- Measure candidate resolution, summary materialization/ranking, published now/next and the current global programme-boundary query separately; record counts, median/p95 and secret-free query plans over five repetitions on one device profile.
-- Remove the global boundary scan and derive the next refresh from `ChannelNowNext.nextBoundaryEpochMillis` for published rows only.
-- Empty results and empty token intersections perform no guide/boundary work.
-- Preserve `ChannelSearchQuery`, `ChannelSearchSnapshot`, `ChannelSearchRepository.observe`, debounce, cancellation, retry, stale-generation protection and truncation.
-- Move result IDs and ready display labels out of composable bodies.
-- Add two-phase summary materialization only if post-boundary measurements show it remains the largest p95 phase and exceeds 40% of total p95 in both broad scenarios.
-- No Paging dependency, Room schema change, multi-token SQL rewrite or ranking rewrite belongs to S5 without failed correctness/evidence gates.
+- [x] PR #159 landed the descriptive 50k active-channel + current/next EPG baseline using the existing database measurement harness (`main@b8ab064a`).
+- [x] PR #160 removed the global boundary scan and derived refresh from `ChannelNowNext.nextBoundaryEpochMillis` for published rows only (`main@1249624d`).
+- [x] Empty results and empty token intersections perform no guide/boundary work.
+- [x] `ChannelSearchQuery`, `ChannelSearchSnapshot`, `ChannelSearchRepository.observe`, debounce, cancellation, retry, stale-generation protection and truncation are preserved.
+- [x] Result IDs and ready display labels moved out of composable bodies.
+- [x] Two-phase summary materialization remains deferred; the user waived repeat Full/device/50k runs, so no p95 acceleration claim is made.
+- [x] No Paging dependency, Room schema change, multi-token SQL rewrite or ranking rewrite was introduced.
+
+Timed/repeated 50k Search execution is reclassified as manual stress evidence, not a mandatory PR/S6/release gate. The 50k corpus remains available as a synthetic correctness/stress asset.
+
+### S6 contract — Guide bounded closure
+
+S6 closes the existing bounded Guide without new data architecture. `RoomGuideWindowRepository` (keyset channel cursor, `limit + 1`, time-bounded programme window), `GuideViewModel` (generation cancellation, bounded page history, adaptive 6h → 3h → 90m → 45m window) and `GuideRoute` already exist.
+
+- [ ] Move UI-facing presentation projection out of Compose: stable row/cell identity, channel primary/secondary labels, programme time labels, `NO_GUIDE`/`SOURCE_CONFLICT` copy, focus detail labels and secret-safe semantics/test identity. Geometry, theme colors, Dp calculations, current-time marker and actual focus state remain Compose concerns.
+- [ ] Keep channel ID + programme key focus identity, deterministic nearest/surviving fallback, Player → Back restoration, page transition semantics and safe focus under EPG/data invalidation.
+- [ ] Validate bounded performance against a realistic consumer window (current channel window, 6h programme window with existing adaptive narrowing, realistic density, mix of explicit stop and open-ended programmes, `NO_GUIDE` and source conflict), not a 50k full-grid benchmark. A large backing catalog may only verify index selectivity/reachability.
+- [ ] Change `GuideWindowDao`/indexes/schema only with reproducible bounded hotspot evidence; the existing correlated next-programme lookup is not rewritten by assumption.
+- [ ] Full guide is never materialized for UI; truncated programme windows trigger only bounded narrowing or explicit `Incomplete` state; stale generations never publish UI state; static Guide adds no per-frame formatting churn; D-pad journeys stay usable on 720p/1080p; long Russian labels do not break row geometry or focus reachability.
 
 ### M6 — Lounge Light vertical UI slices
 
@@ -193,6 +203,8 @@ Absolute release measurements are manual on one pinned physical API 29+ Android/
 | Regression against pinned baseline | median ≤ +5%; p95 ≤ +10% |
 
 Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run at least five. PR dry-runs prove executability; release runs retain JSON and Perfetto traces. A slice whose baseline exceeds its ceiling is incomplete until corrected; ceilings are not relaxed to fit implementation.
+
+Timed/repeated 50k Search/M3U execution is manual stress evidence, not a mandatory PR, S6 or release gate; the 50k corpus remains a synthetic correctness/stress asset. Large-catalog claims are supported by bounded architecture plus reachability/correctness evidence, and absolute performance claims belong to the physical release gate. `focused-m3u-evidence.yml` is a manual-only (`workflow_dispatch`) heavy lane and does not run automatically on main pushes.
 
 ## Required acceptance scenarios
 
@@ -241,6 +253,8 @@ Startup/navigation Macrobenchmarks run at least ten iterations; other CUJs run a
 - 2026-08-11: PR #158 merged repository truth/hygiene as `main@1ec2298d7488e5934bdbaaba7b69af917a021484`; 91 exact-tip remote branches and 72 deletion-proof local worktrees were removed, while all uncertain and five Windows-filesystem-blocked refs were retained in the immutable hygiene review.
 - 2026-08-12: PR #159 code head `2f3eb8c860eb9f5f6fcc8b6908fe9bfe45e0f1d2` passed local Fast plus exact-head Full and Database device matrix. The canonical 50k Search run is retained as a censored performance failure: warmup exceeded two hours and the first measured repetition did not finish before user-authorized cancellation. No further long baseline reruns precede the root optimization; this evidence establishes that the current path is impractical without claiming an acceleration result.
 - 2026-08-13: PR #160 implementation commit `16348bc852f988fda0e8e1e7056f915261676e08` removes the global Search boundary query, derives refresh only from published top-N guide rows and moves ready Search labels/IDs out of Compose. Database and Search unit suites plus measurement androidTest compilation pass; the user explicitly waived repeat Full/device/50k runs, so no p95 acceleration claim is made and conditional two-phase materialization remains deferred.
+- 2026-08-13: PR #160 merged as `main@1249624db5010e8140814a56553ea194c6d25d66`; S5 is accepted. The next product package is Guide S6 as closure of the existing bounded Guide architecture, followed by M4-R (Player/Doctor residual), M6-R (remote/accessibility/Lounge Light), L1 (#118 lifecycle), D1 (dependency hardening/freeze), M3-C (Baseline Profile/CUJ), M7-R (release engineering) and the physical RC.
+- 2026-08-13: C0 truth/evidence reconciliation. The 50k timed/repeated Search and M3U series is reclassified from mandatory MVP critical path to manual stress evidence; run `31537375406` (~2h47m with cancelled validation step) is not an economically viable PR/release template. The heavy `focused-m3u-evidence.yml` lane becomes manual-only `workflow_dispatch`; no ordinary main push may trigger `5x10k + 5x50k`. Issue #27 is split into measurement infrastructure/corpus readiness (closed) and concrete future performance investigations; absence of a threshold gate is not a defect by itself. No runtime, Room schema or Search public contract changes are part of C0.
 - 2026-08-09: user selected sequential vertical slices, a new protected alpha signing key and one available physical Android/Google TV device for the release/performance gate.
 - 2026-08-09: issue #30 remains open only for source diagnostics, Player recovery UX and remaining fixture/physical evidence; issue #111 remains open for D2-D7; issue #27 remains open for benchmark/performance closure. Issue #112 is a future provider-adapter contract outside the closed-alpha scope.
 

@@ -66,6 +66,7 @@ normative:
 plans:
   phase_00_baseline: .work/plans/2026-07-19-phase-00-foundation.md
   current_execution: docs/superpowers/plans/2026-08-08-mvp-alpha-1-execution.md
+  architecture_2026_08_13: docs/superpowers/plans/2026-08-13-mvp-alpha-1-architecture-plan.md
 
 reviews:
   repository_github_hygiene_2026_08_11: .work/reviews/2026-08-11-repository-github-hygiene.md

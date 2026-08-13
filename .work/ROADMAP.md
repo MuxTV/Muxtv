@@ -1,19 +1,25 @@
 ---
 status: accepted
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-13
 ---
 
 # Roadmap
 
 ## Current alpha checkpoint
 
-Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite.
+Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite. Search S5 принят через PR #159/#160 на `main@1249624d`.
 
 Текущая последовательность до alpha:
 
-1. Search S5 50k+EPG measurement baseline;
-2. Search S5 top-N optimization без Paging/schema/API expansion;
-3. оставшиеся performance, Player/Doctor UX, Lounge/accessibility и release gates из M3/M4/M6/M7 canonical ExecPlan.
+1. Guide S6 — bounded-performance и presentation closure поверх существующего `RoomGuideWindowRepository`/`GuideViewModel`;
+2. M4-R — Player overlay/recovery UX и source-refresh Doctor diagnostics;
+3. M6-R — remote interaction, accessibility и минимальный Lounge Light shell;
+4. L1 — reboot/unlock/package-replace lifecycle contract (#118);
+5. D1 — dependency hardening и freeze;
+6. M3-C — Baseline Profile/CUJ и performance closure;
+7. M7-R — release engineering, signing и provenance; RC — API37 smoke и physical Android/Google TV gate.
+
+Timed/repeated 50k Search/M3U execution является manual stress evidence, а не обязательным PR/release gate; 50k corpus остаётся synthetic correctness/stress asset.
 
 Эта секция описывает текущий checkpoint. Фазы ниже остаются capability roadmap и не являются утверждением, что для уже реализованной функции нужно создать отдельный симметричный модуль.
 

@@ -1,39 +1,18 @@
-name: Accepted main focused M3U evidence
+name: Manual heavy M3U stress evidence
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/focused-m3u-evidence.yml
-      - tools/ci/**
-      - build.gradle.kts
-      - settings.gradle.kts
-      - gradle.properties
-      - gradle/**
-      - gradlew
-      - gradlew.bat
-      - build-logic/**
-      - tools/measurements/Invoke-M3uCorpusSeries.ps1
-      - tools/measurements/Finalize-MeasurementSeriesEvidence.ps1
-      - tools/measurements/Test-MeasurementHarnessSyntax.ps1
-      - tools/measurements/Test-M3uSeriesFinalizerContract.ps1
-      - tools/measurements/Test-M3uSeriesManifestPublicationContract.ps1
-      - tools/measurements/Test-FocusedM3uEvidenceWorkflowContract.ps1
-      - core/testing/**
-      - catalog/ingest/**
 
 permissions:
   contents: read
 
 concurrency:
-  group: focused-m3u-accepted-main
+  group: focused-m3u-manual-stress
   cancel-in-progress: false
 
 jobs:
   focused-m3u:
-    name: Accepted main 5x10k + 5x50k M3U evidence
+    name: Manual 5x10k + 5x50k M3U stress evidence
     runs-on: [self-hosted, Windows, X64, muxtv-android]
     timeout-minutes: 180
 

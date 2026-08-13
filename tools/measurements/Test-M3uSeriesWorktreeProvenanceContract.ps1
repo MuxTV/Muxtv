@@ -178,11 +178,11 @@ exit /b 17
     }
 
     $workflowContent = Get-Content -LiteralPath $focusedWorkflow -Raw -Encoding utf8
-    if (
-        $workflowContent.IndexOf("tools/ci/Assert-EvidenceWorktree.ps1", [System.StringComparison]::Ordinal) -lt 0 -and
-        $workflowContent.IndexOf("tools/ci/**", [System.StringComparison]::Ordinal) -lt 0
-    ) {
-        throw "Accepted-main focused workflow does not trigger on worktree provenance helper changes."
+    if ($workflowContent.IndexOf("Invoke-M3uCorpusSeries.ps1", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Manual heavy M3U stress workflow does not execute the claim-aware corpus series."
+    }
+    if ($workflowContent -match '(?m)^\s*push\s*:') {
+        throw "Manual heavy M3U stress workflow unexpectedly contains an automatic push trigger."
     }
 
     Write-Host "Claim-eligible M3U tracked-worktree provenance integration contract passed."
