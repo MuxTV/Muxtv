@@ -1,9 +1,5 @@
 package app.muxtv.feature.guide
 
-import app.muxtv.catalog.GuideProgrammeCell
-import app.muxtv.catalog.GuideProjectionState
-import app.muxtv.catalog.PlayableChannelSummary
-
 internal data class GuideViewport(
     val fromEpochMillis: Long,
     val toEpochMillis: Long,
@@ -18,43 +14,44 @@ internal data class GuideViewport(
     }
 }
 
-internal class GuideRow(
-    val channel: PlayableChannelSummary,
-    val state: GuideProjectionState,
-    programmes: List<GuideProgrammeCell>,
-) {
-    val programmes: List<GuideProgrammeCell> = programmes.toList()
+internal sealed interface GuideUiState {
+    val statusLabel: String
 
-    init {
-        require(state == GuideProjectionState.READY || this.programmes.isEmpty())
+    data object Loading : GuideUiState {
+        override val statusLabel = "Загружаем программу…"
     }
 
-    override fun toString(): String =
-        "GuideRow(state=$state, programmeCount=${programmes.size}, " +
-            "favorite=${channel.isFavorite}, channelNumberPresent=${channel.channelNumber != null})"
-}
+    data object Empty : GuideUiState {
+        override val statusLabel = "Нет доступных каналов."
+    }
 
-internal sealed interface GuideUiState {
-    data object Loading : GuideUiState
-    data object Empty : GuideUiState
-    data object Failed : GuideUiState
-    data object Incomplete : GuideUiState
+    data object Failed : GuideUiState {
+        override val statusLabel = "Не удалось загрузить программу."
+    }
+
+    data object Incomplete : GuideUiState {
+        override val statusLabel = "Программа слишком большая для безопасного окна. Попробуйте ещё раз."
+    }
 
     class Content(
-        rows: List<GuideRow>,
+        rows: List<GuideRowProjection>,
         val viewport: GuideViewport,
+        val window: GuideWindowPresentation,
     ) : GuideUiState {
-        val rows: List<GuideRow> = rows.toList()
+        val rows: List<GuideRowProjection> = rows.toList()
 
         init {
             require(this.rows.isNotEmpty())
             require(this.rows.size <= GuideViewportPolicy.CHANNEL_LIMIT)
+            require(window.spanMillis == viewport.toEpochMillis - viewport.fromEpochMillis)
         }
+
+        override val statusLabel: String = window.label
 
         override fun toString(): String =
             "Content(rowCount=${rows.size}, hasMoreChannels=${viewport.hasMoreChannels}, " +
                 "canGoPrevious=${viewport.canGoPrevious}, " +
                 "canResetToFirstPage=${viewport.canResetToFirstPage}, " +
-                "spanMillis=${viewport.toEpochMillis - viewport.fromEpochMillis})"
+                "spanMillis=${window.spanMillis})"
     }
 }

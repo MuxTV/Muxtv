@@ -44,15 +44,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import app.muxtv.catalog.GuideProgrammeCell
-import app.muxtv.catalog.GuideProgrammeKey
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
 @Composable
@@ -112,19 +107,19 @@ private fun GuideScreen(
         )
 
         when (state) {
-            GuideUiState.Loading -> GuideMessage("Загружаем программу…")
+            GuideUiState.Loading -> GuideMessage(state.statusLabel)
             GuideUiState.Empty -> GuideFailure(
-                message = "Нет доступных каналов.",
+                message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
             )
             GuideUiState.Failed -> GuideFailure(
-                message = "Не удалось загрузить программу.",
+                message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
             )
             GuideUiState.Incomplete -> GuideFailure(
-                message = "Программа слишком большая для безопасного окна. Попробуйте ещё раз.",
+                message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
             )
@@ -185,17 +180,8 @@ private fun GuideContent(
     onOpenChannel: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    val rowCells = remember(state) {
-        state.rows.map { row -> row.toCells(state.viewport) }
-    }
-    val focusChannels = remember(state, rowCells) {
-        state.rows.mapIndexed { index, row ->
-            GuideFocusChannel(
-                channelId = row.channel.channelId,
-                programmeKeys = rowCells[index].mapNotNull(GuideCellUi::programmeKey),
-            )
-        }
-    }
+    val rowCells = remember(state) { state.rows.map(GuideRowProjection::cells) }
+    val focusChannels = remember(state) { state.rows.map(GuideRowProjection::focusChannel) }
     val requesterShape = remember(rowCells) { rowCells.map { cells -> cells.size } }
     val requesters = remember(requesterShape) {
         requesterShape.map { count -> List(count) { FocusRequester() } }
@@ -231,18 +217,13 @@ private fun GuideContent(
 
     val spanMillis = state.viewport.toEpochMillis - state.viewport.fromEpochMillis
     val totalTimelineWidth = timelineWidth(spanMillis)
-    val narrowed = spanMillis < GuideViewportPolicy.DEFAULT_TIME_SPAN_MILLIS
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
     ) {
         Text(
-            text = if (narrowed) {
-                "Безопасное окно: ${formatDuration(spanMillis)}"
-            } else {
-                "Окно: ${formatDuration(spanMillis)}"
-            },
+            text = state.statusLabel,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f).testTag(GUIDE_STATUS_TAG),
@@ -267,6 +248,7 @@ private fun GuideContent(
 
     TimelineHeader(
         viewport = state.viewport,
+        ticks = state.window.ticks,
         totalWidth = totalTimelineWidth,
         timeOffset = timeOffset,
         nowEpochMillis = nowEpochMillis,
@@ -291,7 +273,7 @@ private fun GuideContent(
                 timeOffset = timeOffset,
                 nowEpochMillis = nowEpochMillis,
                 onFocused = { cellIndex, cell ->
-                    focusedDetail = cell.detailLabel(row.channel.displayName)
+                    focusedDetail = cell.detailLabel
                     onFocusAnchorChanged(
                         GuideFocusAnchor(
                             channelId = row.channel.channelId,
@@ -350,6 +332,7 @@ private fun GuidePager(
 @Composable
 private fun TimelineHeader(
     viewport: GuideViewport,
+    ticks: List<GuideTickProjection>,
     totalWidth: Dp,
     timeOffset: Dp,
     nowEpochMillis: Long,
@@ -373,13 +356,13 @@ private fun TimelineHeader(
             height = TIME_HEADER_HEIGHT,
             modifier = Modifier.weight(1f),
         ) {
-            timelineTicks(viewport).forEach { tick ->
+            ticks.forEach { tick ->
                 Text(
-                    text = formatTime(tick),
+                    text = tick.label,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.offset(
-                        x = epochOffsetDp(tick, viewport.fromEpochMillis),
+                        x = epochOffsetDp(tick.epochMillis, viewport.fromEpochMillis),
                     ),
                 )
             }
@@ -395,14 +378,14 @@ private fun TimelineHeader(
 @Composable
 private fun GuideTimelineRow(
     rowIndex: Int,
-    row: GuideRow,
-    cells: List<GuideCellUi>,
+    row: GuideRowProjection,
+    cells: List<GuideCellProjection>,
     requesters: List<FocusRequester>,
     viewport: GuideViewport,
     totalWidth: Dp,
     timeOffset: Dp,
     nowEpochMillis: Long,
-    onFocused: (Int, GuideCellUi) -> Unit,
+    onFocused: (Int, GuideCellProjection) -> Unit,
     onOpenChannel: () -> Unit,
 ) {
     Row(
@@ -465,7 +448,7 @@ private fun TimelineViewport(
 }
 
 @Composable
-private fun ChannelRailCell(row: GuideRow) {
+private fun ChannelRailCell(row: GuideRowProjection) {
     Box(
         modifier = Modifier
             .width(CHANNEL_RAIL_WIDTH)
@@ -479,17 +462,13 @@ private fun ChannelRailCell(row: GuideRow) {
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                text = buildString {
-                    row.channel.channelNumber?.let { append(it).append("  ") }
-                    if (row.channel.isFavorite) append("★ ")
-                    append(row.channel.displayName)
-                },
+                text = row.primaryLabel,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            row.channel.groupTitle?.let { group ->
+            row.groupLabel?.let { group ->
                 Text(
                     text = group,
                     style = MaterialTheme.typography.labelSmall,
@@ -506,7 +485,7 @@ private fun ChannelRailCell(row: GuideRow) {
 private fun ProgrammeCell(
     rowIndex: Int,
     cellIndex: Int,
-    cell: GuideCellUi,
+    cell: GuideCellProjection,
     viewport: GuideViewport,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
@@ -558,9 +537,9 @@ private fun ProgrammeCell(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (cell.programmeKey != null) {
+            cell.timeLabel?.let { timeLabel ->
                 Text(
-                    text = "${formatTime(cell.startEpochMillis)}–${formatTime(cell.endEpochMillis)}",
+                    text = timeLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -586,89 +565,6 @@ private fun CurrentTimeMarker(
     )
 }
 
-private data class GuideCellUi(
-    val programmeKey: GuideProgrammeKey?,
-    val state: GuideProjectionState,
-    val startEpochMillis: Long,
-    val endEpochMillis: Long,
-    val title: String,
-) {
-    fun composeKey(): Any = programmeKey ?: "status:${state.name}"
-
-    fun detailLabel(channelName: String): String = when (state) {
-        GuideProjectionState.READY ->
-            "$channelName · $title · ${formatTime(startEpochMillis)}–${formatTime(endEpochMillis)}"
-        GuideProjectionState.NO_GUIDE -> "$channelName · программа не найдена"
-        GuideProjectionState.SOURCE_CONFLICT -> "$channelName · конфликт источников программы"
-    }
-
-    override fun toString(): String =
-        "GuideCellUi(state=$state, programmePresent=${programmeKey != null}, " +
-            "startEpochMillis=$startEpochMillis, endEpochMillis=$endEpochMillis)"
-}
-
-private fun GuideRow.toCells(viewport: GuideViewport): List<GuideCellUi> {
-    if (state == GuideProjectionState.NO_GUIDE) {
-        return listOf(statusCell(viewport, state, "Нет программы"))
-    }
-    if (state == GuideProjectionState.SOURCE_CONFLICT) {
-        return listOf(statusCell(viewport, state, "Конфликт источников"))
-    }
-
-    val visible = programmes
-        .asSequence()
-        .filter { programme ->
-            programme.endEpochMillis > viewport.fromEpochMillis &&
-                programme.startEpochMillis < viewport.toEpochMillis
-        }
-        .sortedBy(GuideProgrammeCell::startEpochMillis)
-        .map { programme ->
-            GuideCellUi(
-                programmeKey = programme.key,
-                state = GuideProjectionState.READY,
-                startEpochMillis = maxOf(programme.startEpochMillis, viewport.fromEpochMillis),
-                endEpochMillis = minOf(programme.endEpochMillis, viewport.toEpochMillis),
-                title = programme.title?.takeIf(String::isNotBlank) ?: "Без названия",
-            )
-        }
-        .toList()
-
-    return visible.ifEmpty {
-        listOf(statusCell(viewport, GuideProjectionState.READY, "Нет передач в этом окне"))
-    }
-}
-
-private fun statusCell(
-    viewport: GuideViewport,
-    state: GuideProjectionState,
-    title: String,
-): GuideCellUi = GuideCellUi(
-    programmeKey = null,
-    state = state,
-    startEpochMillis = viewport.fromEpochMillis,
-    endEpochMillis = minOf(
-        viewport.toEpochMillis,
-        viewport.fromEpochMillis + STATUS_CELL_SPAN_MILLIS,
-    ),
-    title = title,
-)
-
-private fun timelineTicks(viewport: GuideViewport): List<Long> {
-    val first = nextLocalHalfHourEpochMillis(
-        epochMillis = viewport.fromEpochMillis,
-        zoneId = ZoneId.systemDefault(),
-    )
-    if (first > viewport.toEpochMillis) return emptyList()
-    val ticks = mutableListOf<Long>()
-    var tick = first
-    while (tick <= viewport.toEpochMillis) {
-        ticks += tick
-        if (tick > Long.MAX_VALUE - HALF_HOUR_MILLIS) break
-        tick += HALF_HOUR_MILLIS
-    }
-    return ticks
-}
-
 private fun timelineWidth(spanMillis: Long): Dp = durationWidth(spanMillis)
 
 private fun durationWidth(durationMillis: Long): Dp {
@@ -684,20 +580,6 @@ private fun epochOffsetDp(
     return maxOf(0f, minutes * DP_PER_MINUTE).dp
 }
 
-private fun formatTime(epochMillis: Long): String =
-    TIME_FORMATTER.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
-
-private fun formatDuration(durationMillis: Long): String {
-    val minutes = durationMillis / MILLIS_PER_MINUTE
-    val hours = minutes / 60L
-    val remainingMinutes = minutes % 60L
-    return when {
-        remainingMinutes == 0L -> "$hours ч"
-        hours == 0L -> "$remainingMinutes мин"
-        else -> "$hours ч $remainingMinutes мин"
-    }
-}
-
 private const val GUIDE_STATUS_TAG = "guide-status"
 private const val GUIDE_RETRY_TAG = "guide-retry"
 private const val GUIDE_PREVIOUS_PAGE_TAG = "guide-page-previous"
@@ -706,11 +588,8 @@ private const val GUIDE_NEXT_PAGE_TAG = "guide-page-next"
 private const val DP_PER_MINUTE = 5f
 private const val MINIMUM_TIMELINE_DP = 1f
 private const val MILLIS_PER_MINUTE = 60_000L
-private const val HALF_HOUR_MILLIS = 30L * MILLIS_PER_MINUTE
-private const val STATUS_CELL_SPAN_MILLIS = HALF_HOUR_MILLIS
 private const val CURRENT_TIME_REFRESH_MILLIS = 60_000L
 private val CHANNEL_RAIL_WIDTH = 260.dp
 private val TIME_HEADER_HEIGHT = 34.dp
 private val GUIDE_ROW_HEIGHT = 72.dp
 private val FOCUS_SCROLL_LEADING_SPACE = 32.dp
-private val TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

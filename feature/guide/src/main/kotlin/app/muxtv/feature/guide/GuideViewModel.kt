@@ -8,6 +8,7 @@ import app.muxtv.catalog.GuideChannelWindowQuery
 import app.muxtv.catalog.GuideProgrammeWindow
 import app.muxtv.catalog.GuideProgrammeWindowQuery
 import app.muxtv.catalog.GuideWindowRepository
+import java.time.ZoneId
 import java.util.ArrayDeque
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -22,6 +23,7 @@ internal class GuideViewModel(
     private val repository: GuideWindowRepository,
     private val profileId: String,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+    private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow<GuideUiState>(GuideUiState.Loading)
     val uiState: StateFlow<GuideUiState> = mutableUiState.asStateFlow()
@@ -136,25 +138,30 @@ internal class GuideViewModel(
         }
 
         nextCursor = channelWindow.nextCursor
+        val viewport = GuideViewport(
+            fromEpochMillis = fromEpochMillis,
+            toEpochMillis = programmeLoad.query.toEpochMillis,
+            hasMoreChannels = channelWindow.isTruncated,
+            canGoPrevious = previousStarts.isNotEmpty(),
+            canResetToFirstPage = currentStartCursor != null,
+        )
         val rows = channelWindow.channels.map { channel ->
             val projection = requireNotNull(projections[channel.channelId])
-            GuideRow(
+            projectGuideRow(
                 channel = channel,
                 state = projection.state,
                 programmes = projection.programmes,
+                viewportFromEpochMillis = viewport.fromEpochMillis,
+                viewportToEpochMillis = viewport.toEpochMillis,
+                zoneId = zoneId,
             )
         }
         publishIfCurrent(
             requestGeneration,
             GuideUiState.Content(
                 rows = rows,
-                viewport = GuideViewport(
-                    fromEpochMillis = fromEpochMillis,
-                    toEpochMillis = programmeLoad.query.toEpochMillis,
-                    hasMoreChannels = channelWindow.isTruncated,
-                    canGoPrevious = previousStarts.isNotEmpty(),
-                    canResetToFirstPage = currentStartCursor != null,
-                ),
+                viewport = viewport,
+                window = viewport.toPresentation(zoneId),
             ),
         )
     }
