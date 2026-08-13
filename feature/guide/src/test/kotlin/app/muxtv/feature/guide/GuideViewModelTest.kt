@@ -197,7 +197,7 @@ class GuideViewModelTest {
         runCurrent()
 
         val state = viewModel.uiState.value as GuideUiState.Content
-        assertThat(state.rows.map(GuideRow::state))
+        assertThat(state.rows.map(GuideRowProjection::state))
             .containsExactly(
                 GuideProjectionState.READY,
                 GuideProjectionState.NO_GUIDE,
