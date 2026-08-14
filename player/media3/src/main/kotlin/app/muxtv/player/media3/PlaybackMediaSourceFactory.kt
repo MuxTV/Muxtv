@@ -80,5 +80,8 @@ private fun PlaybackSessionRequest.toMediaItem(): MediaItem {
         .setMediaId(mediaId)
         .setUri(Uri.parse(locator))
         .setMediaMetadata(metadata)
+        .apply {
+            mimeType?.let(::setMimeType)
+        }
         .build()
 }

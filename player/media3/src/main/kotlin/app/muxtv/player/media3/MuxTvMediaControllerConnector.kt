@@ -10,6 +10,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
+import app.muxtv.player.ExternalPlaybackLeaseId
+import app.muxtv.player.ExternalPlaybackStartFailure
+import app.muxtv.player.ExternalPlaybackStartResult
 import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
@@ -144,6 +147,62 @@ class MuxTvMediaControllerConnector(
         } catch (error: Throwable) {
             throw MediaControllerOperationException(commandFailureFor(error))
         }
+    }
+
+    fun sendExternalPlaybackRequest(
+        controller: MediaController,
+        setupId: PlaybackSetupId,
+        leaseId: ExternalPlaybackLeaseId,
+    ): ListenableFuture<SessionResult> = controller.sendCustomCommand(
+        ExternalPlaybackSessionContract.setExternalPlaybackRequestCommand,
+        ExternalPlaybackSessionContract.setupArgs(setupId, leaseId),
+    )
+
+    suspend fun awaitExternalPlaybackStart(
+        controller: MediaController,
+        leaseId: ExternalPlaybackLeaseId,
+        timeoutMillis: Long,
+    ): ExternalPlaybackStartResult = awaitExternalPlaybackStart(
+        controller = controller,
+        leaseId = leaseId,
+        setupId = PlaybackSetupId.create(),
+        timeoutMillis = timeoutMillis,
+    )
+
+    suspend fun awaitExternalPlaybackStart(
+        controller: MediaController,
+        leaseId: ExternalPlaybackLeaseId,
+        setupId: PlaybackSetupId,
+        timeoutMillis: Long,
+    ): ExternalPlaybackStartResult {
+        return try {
+            val result = awaitPlaybackSetup(
+                future = sendExternalPlaybackRequest(
+                    controller = controller,
+                    setupId = setupId,
+                    leaseId = leaseId,
+                ),
+                timeoutMillis = timeoutMillis,
+                cancelSetup = { postCancel(controller, setupId) },
+            )
+            ExternalPlaybackSessionContract.parseResult(result)
+                ?: ExternalPlaybackStartResult.Rejected(
+                    ExternalPlaybackStartFailure.PlaybackFailed,
+                )
+        } catch (timeout: TimeoutCancellationException) {
+            throw MediaControllerOperationException(commandFailureFor(timeout))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            throw MediaControllerOperationException(commandFailureFor(error))
+        }
+    }
+
+    fun cancelSetup(
+        controller: MediaController,
+        setupId: PlaybackSetupId,
+    ) {
+        postCancel(controller, setupId)
     }
 
     override fun close() {

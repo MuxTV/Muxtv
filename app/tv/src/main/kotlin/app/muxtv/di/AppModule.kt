@@ -42,6 +42,10 @@ import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcePlaybackApprovalResetResult
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
+import app.muxtv.external.ExternalPlaybackOriginGrantStore
+import app.muxtv.external.SharedPreferencesExternalPlaybackOriginGrantStore
+import app.muxtv.player.ExternalPlaybackLeaseRegistry
+import app.muxtv.player.InMemoryExternalPlaybackLeaseRegistry
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.Module
 import dagger.Provides
@@ -259,4 +263,22 @@ object AppModule {
     fun provideMediaControllerConnector(
         @ApplicationContext context: Context,
     ): MuxTvMediaControllerConnector = MuxTvMediaControllerConnector(context)
+
+    @Provides
+    @Singleton
+    fun provideExternalPlaybackLeaseRegistry(): ExternalPlaybackLeaseRegistry =
+        InMemoryExternalPlaybackLeaseRegistry()
+
+    @Provides
+    @Singleton
+    fun provideExternalPlaybackOriginGrantStore(
+        @ApplicationContext context: Context,
+    ): ExternalPlaybackOriginGrantStore = SharedPreferencesExternalPlaybackOriginGrantStore(
+        context.getSharedPreferences(
+            EXTERNAL_PLAYBACK_PREFERENCES_NAME,
+            Context.MODE_PRIVATE,
+        ),
+    )
+
+    private const val EXTERNAL_PLAYBACK_PREFERENCES_NAME = "muxtv_external_playback"
 }

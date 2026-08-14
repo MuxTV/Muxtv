@@ -207,6 +207,11 @@ private fun PlaybackObservationKind.title(): String = when (this) {
     PlaybackObservationKind.RECOVERY_SUCCEEDED -> "Воспроизведение восстановлено"
     PlaybackObservationKind.RECOVERY_FAILED -> "Варианты исчерпаны"
     PlaybackObservationKind.APPROVAL_REQUIRED -> "Требуется разрешение HTTP"
+    PlaybackObservationKind.EXTERNAL_INTENT_ACCEPTED -> "Внешний запрос принят"
+    PlaybackObservationKind.EXTERNAL_INTENT_REJECTED -> "Внешний запрос отклонён"
+    PlaybackObservationKind.EXTERNAL_SETUP_STARTED -> "Внешнее воспроизведение начато"
+    PlaybackObservationKind.EXTERNAL_FIRST_FRAME -> "Первый кадр внешнего потока"
+    PlaybackObservationKind.EXTERNAL_PLAYBACK_FAILED -> "Внешний поток не воспроизведён"
 }
 
 private fun PlaybackFailureCategory.actionableMessage(httpStatusCode: Int?): String = when (this) {

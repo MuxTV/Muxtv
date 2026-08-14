@@ -45,6 +45,28 @@ class PlaybackObservationTest {
         }
     }
 
+    @Test
+    fun `external playback failure requires a category like other failure kinds`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            observation(
+                kind = PlaybackObservationKind.EXTERNAL_PLAYBACK_FAILED,
+                failureCategory = null,
+            )
+        }
+    }
+
+    @Test
+    fun `external observations are accepted without a failure category`() {
+        for (kind in listOf(
+            PlaybackObservationKind.EXTERNAL_INTENT_ACCEPTED,
+            PlaybackObservationKind.EXTERNAL_INTENT_REJECTED,
+            PlaybackObservationKind.EXTERNAL_SETUP_STARTED,
+            PlaybackObservationKind.EXTERNAL_FIRST_FRAME,
+        )) {
+            observation(kind = kind, failureCategory = null)
+        }
+    }
+
     private fun observation(
         kind: PlaybackObservationKind = PlaybackObservationKind.ATTEMPT_FAILED,
         failureCategory: PlaybackFailureCategory? = PlaybackFailureCategory.UNKNOWN,
