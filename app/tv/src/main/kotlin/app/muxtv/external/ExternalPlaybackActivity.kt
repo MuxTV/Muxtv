@@ -9,32 +9,49 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.ui.compose.PlayerSurface
+import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
-import app.muxtv.feature.player.PlayerSurfaceAction
-import app.muxtv.feature.player.PlayerSurfaceContent
 import app.muxtv.player.ExternalPlaybackDescriptor
 import app.muxtv.player.ExternalPlaybackLeaseRegistry
 import app.muxtv.player.ExternalPlaybackStartFailure
@@ -49,6 +66,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -440,22 +459,160 @@ private fun ExternalPlaybackScreen(
             modifier = modifier,
         )
 
-        is ExternalUiState.Playing -> PlayerSurfaceContent(
+        is ExternalUiState.Playing -> ExternalPlaybackContent(
             controller = state.controller,
             title = state.title,
-            favoriteSupported = false,
-            contentIdentity = state.controller,
-            stopAction = PlayerSurfaceAction(
-                label = "Остановить",
-                onClick = onStop,
-            ),
-            backAction = PlayerSurfaceAction(
-                label = "Назад",
-                onClick = onBack,
-            ),
-            testTagPrefix = "external",
+            onStop = onStop,
+            onBack = onBack,
             modifier = modifier,
         )
+    }
+}
+
+@AndroidXOptIn(UnstableApi::class)
+@Composable
+private fun ExternalPlaybackContent(
+    controller: MediaController,
+    title: String,
+    onStop: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier,
+) {
+    var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
+    var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
+    var hasError by remember(controller) { mutableStateOf(controller.playerError != null) }
+    var controlsVisible by remember(controller) { mutableStateOf(false) }
+    var lastInteractionNanos by remember(controller) { mutableLongStateOf(System.nanoTime()) }
+    val primaryActionFocusRequester = remember(controller) { FocusRequester() }
+    val surfaceFocusRequester = remember { FocusRequester() }
+
+    fun revealControls() {
+        lastInteractionNanos = System.nanoTime()
+        controlsVisible = true
+    }
+
+    fun registerInteraction() {
+        lastInteractionNanos = System.nanoTime()
+    }
+
+    DisposableEffect(controller) {
+        val listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                isPlaying = player.isPlaying
+                playbackState = player.playbackState
+                hasError = player.playerError != null
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                hasError = true
+            }
+        }
+        controller.addListener(listener)
+        onDispose { controller.removeListener(listener) }
+    }
+
+    LaunchedEffect(controlsVisible) {
+        if (controlsVisible) {
+            withFrameNanos { }
+            primaryActionFocusRequester.requestFocus()
+        } else {
+            withFrameNanos { }
+            surfaceFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(controller, controlsVisible) {
+        if (!controlsVisible) return@LaunchedEffect
+        while (isActive) {
+            val elapsedNanos = System.nanoTime() - lastInteractionNanos
+            val remainingMillis = (OVERLAY_HIDE_NANOS - elapsedNanos) / 1_000_000L
+            if (remainingMillis <= 0L) {
+                controlsVisible = false
+                return@LaunchedEffect
+            }
+            delay(remainingMillis.coerceAtMost(1_000L).coerceAtLeast(100L))
+        }
+    }
+
+    BackHandler(enabled = controlsVisible) {
+        registerInteraction()
+        controlsVisible = false
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .testTag(EXTERNAL_SURFACE_TEST_TAG)
+            .then(
+                if (controlsVisible) {
+                    Modifier
+                } else {
+                    Modifier
+                        .focusRequester(surfaceFocusRequester)
+                        .clickable(
+                            role = Role.Button,
+                            onClick = ::revealControls,
+                        )
+                },
+            ),
+    ) {
+        PlayerSurface(
+            player = controller,
+            modifier = Modifier.fillMaxSize(),
+            surfaceType = SURFACE_TYPE_SURFACE_VIEW,
+        )
+
+        if (controlsVisible) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                    .padding(horizontal = 48.dp, vertical = 24.dp)
+                    .testTag(EXTERNAL_OVERLAY_TEST_TAG)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            registerInteraction()
+                        }
+                        false
+                    },
+                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
+            ) {
+                Text(title, style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    text = playbackStatus(playbackState = playbackState, hasError = hasError),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                    MuxTvActionButton(
+                        text = if (isPlaying) "Пауза" else "Продолжить",
+                        onClick = {
+                            registerInteraction()
+                            if (isPlaying) controller.pause() else controller.play()
+                        },
+                        modifier = Modifier
+                            .testTag(EXTERNAL_PRIMARY_ACTION_TEST_TAG)
+                            .focusRequester(primaryActionFocusRequester),
+                    )
+                    MuxTvActionButton(
+                        text = "Остановить",
+                        onClick = {
+                            registerInteraction()
+                            onStop()
+                        },
+                    )
+                    MuxTvActionButton(
+                        text = "Назад",
+                        onClick = {
+                            registerInteraction()
+                            onBack()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -532,13 +689,28 @@ private fun externalFailureMessage(reason: ExternalPlaybackStartFailure): String
         "Не удалось воспроизвести поток."
 }
 
+private fun playbackStatus(
+    playbackState: Int,
+    hasError: Boolean,
+): String = when {
+    hasError -> "Ошибка воспроизведения"
+    playbackState == Player.STATE_BUFFERING -> "Буферизация"
+    playbackState == Player.STATE_READY -> "Готово"
+    playbackState == Player.STATE_ENDED -> "Поток завершён"
+    else -> "Подготовка"
+}
+
 private const val INVALID_LOCATOR_MESSAGE = "Некорректный адрес видеопотока."
 private const val APPROVAL_CAPACITY_MESSAGE =
     "Достигнут лимит HTTP-разрешений внешнего плеера."
 private const val CONNECTION_FAILED_MESSAGE =
     "Не удалось подключиться к службе воспроизведения."
 private const val GENERIC_FAILED_MESSAGE = "Не удалось подготовить внешний поток."
+private const val EXTERNAL_SURFACE_TEST_TAG = "external-surface"
+private const val EXTERNAL_OVERLAY_TEST_TAG = "external-overlay"
+private const val EXTERNAL_PRIMARY_ACTION_TEST_TAG = "external-primary-action"
 private const val EXTERNAL_BACK_TEST_TAG = "external-back"
 private const val EXTERNAL_HTTP_APPROVE_TEST_TAG = "external-http-approve"
 private const val EXTERNAL_LAN_APPROVE_TEST_TAG = "external-lan-approve"
 private const val EXTERNAL_RETRY_TEST_TAG = "external-retry"
+private const val OVERLAY_HIDE_NANOS = 6_000_000_000L
