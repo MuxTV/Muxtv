@@ -374,7 +374,7 @@ private fun ExternalPlaybackScreen(
                     style = MaterialTheme.typography.headlineMedium,
                 )
                 Text(
-                    text = "Для воспроизведения потока из локальной сети Android 17 требует отдельное разрешение.",
+                    text = "Для воспроизведения потока из локальной сети Android 16 и новее требует отдельное разрешение.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
