@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.navigation3.ui)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.tv.material)
+    implementation(libs.media3.ui.compose)
     implementation(libs.coroutines.android)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.work)

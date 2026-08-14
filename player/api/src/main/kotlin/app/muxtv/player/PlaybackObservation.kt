@@ -20,6 +20,11 @@ enum class PlaybackObservationKind {
     RECOVERY_SUCCEEDED,
     RECOVERY_FAILED,
     APPROVAL_REQUIRED,
+    EXTERNAL_INTENT_ACCEPTED,
+    EXTERNAL_INTENT_REJECTED,
+    EXTERNAL_SETUP_STARTED,
+    EXTERNAL_FIRST_FRAME,
+    EXTERNAL_PLAYBACK_FAILED,
 }
 
 data class PlaybackObservation(
@@ -37,7 +42,8 @@ data class PlaybackObservation(
         require(timestampEpochMillis >= 0L)
         require(httpStatusCode == null || httpStatusCode in 100..599)
         val failureKind = kind == PlaybackObservationKind.ATTEMPT_FAILED ||
-            kind == PlaybackObservationKind.RECOVERY_FAILED
+            kind == PlaybackObservationKind.RECOVERY_FAILED ||
+            kind == PlaybackObservationKind.EXTERNAL_PLAYBACK_FAILED
         require(failureKind == (failureCategory != null))
         require(httpStatusCode == null || failureCategory == PlaybackFailureCategory.HTTP_RESPONSE)
     }

@@ -15,6 +15,11 @@ import app.muxtv.catalog.PlaybackCandidateIdentity
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.player.ExternalPlaybackClaimResult
+import app.muxtv.player.ExternalPlaybackDescriptor
+import app.muxtv.player.ExternalPlaybackLeaseRegistry
+import app.muxtv.player.ExternalPlaybackStartFailure
+import app.muxtv.player.ExternalPlaybackStartResult
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
 import app.muxtv.player.PlaybackObservationKind
@@ -26,6 +31,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import dagger.hilt.android.AndroidEntryPoint
+import java.net.URI
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +57,9 @@ class MuxTvPlaybackService : MediaSessionService() {
     @Inject
     lateinit var playbackObservationRecorder: PlaybackObservationRecorder
 
+    @Inject
+    lateinit var externalLeaseRegistry: ExternalPlaybackLeaseRegistry
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
@@ -62,6 +71,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeRequest: PlaybackStartRequest? = null
     private var activeCandidate: PlaybackCandidateIdentity? = null
     private var activeGeneration: Long? = null
+    private var activeExternal: ActiveExternalSetup? = null
     private var activeAttemptNumber = 0
     private var lastFailure: Media3Failure? = null
     private val callbackGate = PlaybackCallbackGate()
@@ -157,6 +167,152 @@ class MuxTvPlaybackService : MediaSessionService() {
             )
         }
         return future
+    }
+
+    private fun startExternalSetup(
+        command: ExternalPlaybackSetupCommand,
+    ): ListenableFuture<SessionResult> {
+        if (command.id in cancelledSetupIds) {
+            return Futures.immediateFuture(ExternalPlaybackSessionContract.cancelled())
+        }
+        cancelActiveSetup(completeCancelled = true)
+        val future = SettableFuture.create<SessionResult>()
+        activeSetupId = command.id
+        activeFuture = future
+        activeAttemptNumber = 0
+        lastFailure = null
+        val claim = externalLeaseRegistry.claim(
+            leaseId = command.leaseId,
+            nowEpochMillis = System.currentTimeMillis(),
+        )
+        if (claim !is ExternalPlaybackClaimResult.Claimed) {
+            completeExternal(
+                ExternalPlaybackStartResult.Rejected(
+                    ExternalPlaybackStartFailure.LeaseUnavailable,
+                ),
+            )
+            return future
+        }
+        val descriptor = claim.descriptor
+        if (!isValidExternalDescriptor(descriptor)) {
+            completeExternal(
+                ExternalPlaybackStartResult.Rejected(
+                    ExternalPlaybackStartFailure.InvalidDescriptor,
+                ),
+            )
+            return future
+        }
+        if (descriptor.isCleartext && !descriptor.cleartextApproved) {
+            completeExternal(
+                ExternalPlaybackStartResult.Rejected(
+                    ExternalPlaybackStartFailure.CleartextNotApproved,
+                ),
+            )
+            return future
+        }
+        activeExternal = ActiveExternalSetup(
+            setupId = command.id,
+            sessionId = claim.sessionId,
+        )
+        activeAttemptNumber = 1
+        recordObservation(
+            kind = PlaybackObservationKind.EXTERNAL_SETUP_STARTED,
+            attemptLimit = EXTERNAL_ATTEMPT_LIMIT,
+        )
+        installExternal(
+            setupId = command.id,
+            sessionId = claim.sessionId,
+            descriptor = descriptor,
+        )
+        return future
+    }
+
+    private fun isValidExternalDescriptor(descriptor: ExternalPlaybackDescriptor): Boolean {
+        val uri = runCatching { URI(descriptor.locator) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase() ?: return false
+        if (scheme != "http" && scheme != "https") return false
+        if (uri.userInfo != null) return false
+        if (uri.host.isNullOrBlank()) return false
+        return true
+    }
+
+    private fun installExternal(
+        setupId: PlaybackSetupId,
+        sessionId: String,
+        descriptor: ExternalPlaybackDescriptor,
+    ) {
+        val mediaId = PlaybackSessionRequest.EXTERNAL_MEDIA_ID_PREFIX + sessionId
+        val sessionRequest = PlaybackSessionRequest(
+            profileId = EXTERNAL_PROFILE_ID,
+            mediaId = mediaId,
+            variantId = EXTERNAL_VARIANT_ID,
+            locator = descriptor.locator,
+            displayName = descriptor.displayTitle,
+            insecureHttpApproved = descriptor.cleartextApproved,
+            mimeType = descriptor.mimeType,
+        )
+        try {
+            clearInstalled()
+            activePlayerListener = object : Player.Listener {
+                override fun onRenderedFirstFrame() {
+                    if (activeExternal?.setupId != setupId) return
+                    if (player.currentMediaItem?.mediaId != mediaId) return
+                    activeAttemptNumber = 1
+                    recordObservation(
+                        kind = PlaybackObservationKind.EXTERNAL_FIRST_FRAME,
+                        attemptLimit = EXTERNAL_ATTEMPT_LIMIT,
+                    )
+                    completeExternal(ExternalPlaybackStartResult.Started)
+                    removeActivePlayerListener()
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    if (activeExternal?.setupId != setupId) return
+                    activeAttemptNumber = 1
+                    recordExternalFailure(Media3FailureClassifier.classify(error))
+                    completeExternal(
+                        ExternalPlaybackStartResult.Rejected(
+                            reason = ExternalPlaybackStartFailure.PlaybackFailed,
+                            observationAvailable = true,
+                        ),
+                    )
+                }
+            }.also(player::addListener)
+            player.setMediaSource(mediaSourceFactory.create(sessionRequest))
+            player.prepare()
+            player.play()
+        } catch (_: Exception) {
+            if (activeExternal?.setupId == setupId) {
+                recordExternalFailure(
+                    Media3Failure(
+                        category = PlaybackFailureCategory.UNKNOWN,
+                        media3ErrorCode = PlaybackException.ERROR_CODE_UNSPECIFIED,
+                    ),
+                )
+                completeExternal(
+                    ExternalPlaybackStartResult.Rejected(
+                        reason = ExternalPlaybackStartFailure.PlaybackFailed,
+                        observationAvailable = true,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun completeExternal(result: ExternalPlaybackStartResult) {
+        deadlineJob?.cancel()
+        deadlineJob = null
+        activeFuture?.set(ExternalPlaybackSessionContract.result(result))
+        activeFuture = null
+        activeJob = null
+        if (result !is ExternalPlaybackStartResult.Started) {
+            activeSetupId = null
+            activeExternal = null
+            activeAttemptNumber = 0
+            lastFailure = null
+            callbackGate.clear()
+            clearInstalled()
+        }
     }
 
     private fun processCallback(
@@ -398,6 +554,7 @@ class MuxTvPlaybackService : MediaSessionService() {
         activeRequest = null
         activeCandidate = null
         activeGeneration = null
+        activeExternal = null
         activeAttemptNumber = 0
         lastFailure = null
         callbackGate.clear()
@@ -417,11 +574,24 @@ class MuxTvPlaybackService : MediaSessionService() {
         activePlayerListener = null
     }
 
-    private fun recordAttemptFailure(failure: Media3Failure) {
+    private fun recordAttemptFailure(
+        failure: Media3Failure,
+        attemptLimit: Int = MAX_ATTEMPTS,
+    ) {
         lastFailure = failure
         recordObservation(
             kind = PlaybackObservationKind.ATTEMPT_FAILED,
             failure = failure,
+            attemptLimit = attemptLimit,
+        )
+    }
+
+    private fun recordExternalFailure(failure: Media3Failure) {
+        lastFailure = failure
+        recordObservation(
+            kind = PlaybackObservationKind.EXTERNAL_PLAYBACK_FAILED,
+            failure = failure,
+            attemptLimit = EXTERNAL_ATTEMPT_LIMIT,
         )
     }
 
@@ -441,6 +611,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private fun recordObservation(
         kind: PlaybackObservationKind,
         failure: Media3Failure? = null,
+        attemptLimit: Int = MAX_ATTEMPTS,
     ) {
         try {
             playbackObservationRecorder.record(
@@ -448,7 +619,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                     kind = kind,
                     failureCategory = failure?.category,
                     attemptNumber = activeAttemptNumber,
-                    attemptLimit = MAX_ATTEMPTS,
+                    attemptLimit = attemptLimit,
                     timestampEpochMillis = System.currentTimeMillis(),
                     httpStatusCode = failure?.httpStatusCode,
                     media3ErrorCode = failure?.media3ErrorCode,
@@ -470,6 +641,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                 base.availableSessionCommands.buildUpon()
                     .add(MuxTvPlaybackSessionContract.setPlaybackRequestCommand)
                     .add(MuxTvPlaybackSessionContract.cancelPlaybackSetupCommand)
+                    .add(ExternalPlaybackSessionContract.setExternalPlaybackRequestCommand)
                     .build(),
                 base.availablePlayerCommands,
             )
@@ -500,6 +672,13 @@ class MuxTvPlaybackService : MediaSessionService() {
                     if (id == activeSetupId) cancelActiveSetup(completeCancelled = true)
                     Futures.immediateFuture(MuxTvPlaybackSessionContract.result(PlaybackStartResult.Started))
                 }
+                ExternalPlaybackSessionContract.ACTION_SET_EXTERNAL_PLAYBACK_REQUEST -> {
+                    val command = ExternalPlaybackSessionContract.parseSetupArgs(args)
+                        ?: return Futures.immediateFuture(
+                            ExternalPlaybackSessionContract.badValue(),
+                        )
+                    startExternalSetup(command)
+                }
                 else -> Futures.immediateFuture(MuxTvPlaybackSessionContract.notSupported())
             }
         }
@@ -510,7 +689,15 @@ class MuxTvPlaybackService : MediaSessionService() {
         const val MAX_ATTEMPTS = MAX_PLAYBACK_CANDIDATES
         const val MAX_RECOVERY_DURATION_MILLIS = 20_000L
         const val MAX_CANCELLED_SETUP_IDS = 64
+        const val EXTERNAL_ATTEMPT_LIMIT = 1
+        const val EXTERNAL_PROFILE_ID = "external"
+        const val EXTERNAL_VARIANT_ID = "external"
     }
+
+    private class ActiveExternalSetup(
+        val setupId: PlaybackSetupId,
+        val sessionId: String,
+    )
 }
 
 private fun app.muxtv.catalog.PlaybackVariantResolution?.matches(

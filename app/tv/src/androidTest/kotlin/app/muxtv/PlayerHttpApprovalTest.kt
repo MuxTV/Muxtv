@@ -79,16 +79,26 @@ class PlayerHttpApprovalTest {
             }
 
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                composeRule.onAllNodesWithTag("player-primary-action")
+                composeRule.onAllNodesWithTag("player-surface")
                     .fetchSemanticsNodes().size == 1
             }
-            composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
+            composeRule.onNodeWithTag("player-primary-action").assertDoesNotExist()
             check(catalog.approvalCalls == 1)
             check(catalog.readyResolutionCalls >= 1)
             check(catalog.startRequests.size >= 2)
             check(catalog.startRequests.all { request ->
                 request == PlaybackStartRequest(PROFILE_ID, CHANNEL_ID)
             })
+
+            composeRule.onNodeWithTag("player-surface").performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("player-primary-action")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
         } finally {
             connector.close()
         }
@@ -118,9 +128,10 @@ class PlayerHttpApprovalTest {
             }
 
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                composeRule.onAllNodesWithTag("player-primary-action")
+                composeRule.onAllNodesWithTag("player-surface")
                     .fetchSemanticsNodes().size == 1
             }
+            composeRule.onNodeWithTag("player-primary-action").assertDoesNotExist()
             check(catalog.readyResolutionCalls >= 1)
 
             val revocation = runBlocking {

@@ -1,10 +1,5 @@
 package app.muxtv.navigation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,17 +7,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.PlaybackCatalog
-import app.muxtv.designsystem.TvTokens
-import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.feature.player.PlayerFavoriteAction
 import app.muxtv.feature.player.PlayerRoute
 import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -63,75 +52,55 @@ internal fun PlayerFavoriteRoute(
     }
     val isFavorite = favoriteOverride ?: catalogFavorite
 
-    Box(modifier = modifier.fillMaxSize()) {
-        PlayerRoute(
-            playbackCatalog = playbackCatalog,
-            controllerConnector = controllerConnector,
-            profileId = profileId,
-            channelId = channelId,
-            onBack = onBack,
-            onOpenDoctor = onOpenDoctor,
-            playbackStartGateway = playbackStartGateway,
-            modifier = Modifier.fillMaxSize(),
-        )
+    PlayerRoute(
+        playbackCatalog = playbackCatalog,
+        controllerConnector = controllerConnector,
+        profileId = profileId,
+        channelId = channelId,
+        onBack = onBack,
+        onOpenDoctor = onOpenDoctor,
+        playbackStartGateway = playbackStartGateway,
+        favoriteAction = isFavorite?.let { favorite ->
+            PlayerFavoriteAction(
+                label = when {
+                    mutationInProgress -> "Сохранение…"
+                    favorite -> "★ В избранном"
+                    else -> "☆ В избранное"
+                },
+                enabled = !mutationInProgress,
+                onClick = {
+                    if (!mutationInProgress) {
+                        val requestedFavorite = !favorite
+                        mutationInProgress = true
+                        mutationFailed = false
+                        scope.launch {
+                            try {
+                                when (
+                                    channelPreferencesRepository.setFavorite(
+                                        profileId = profileId,
+                                        channelId = channelId,
+                                        isFavorite = requestedFavorite,
+                                    )
+                                ) {
+                                    ChannelFavoriteMutationResult.Applied,
+                                    ChannelFavoriteMutationResult.Unchanged,
+                                    -> favoriteOverride = requestedFavorite
 
-        if (isFavorite != null) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
-            ) {
-                MuxTvActionButton(
-                    text = when {
-                        mutationInProgress -> "Сохранение…"
-                        isFavorite -> "★ В избранном"
-                        else -> "☆ В избранное"
-                    },
-                    onClick = {
-                        if (!mutationInProgress) {
-                            val requestedFavorite = !isFavorite
-                            mutationInProgress = true
-                            mutationFailed = false
-                            scope.launch {
-                                try {
-                                    when (
-                                        channelPreferencesRepository.setFavorite(
-                                            profileId = profileId,
-                                            channelId = channelId,
-                                            isFavorite = requestedFavorite,
-                                        )
-                                    ) {
-                                        ChannelFavoriteMutationResult.Applied,
-                                        ChannelFavoriteMutationResult.Unchanged,
-                                        -> favoriteOverride = requestedFavorite
-
-                                        ChannelFavoriteMutationResult.NotFound -> mutationFailed = true
-                                    }
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (_: Exception) {
-                                    mutationFailed = true
-                                } finally {
-                                    mutationInProgress = false
+                                    ChannelFavoriteMutationResult.NotFound -> mutationFailed = true
                                 }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                mutationFailed = true
+                            } finally {
+                                mutationInProgress = false
                             }
                         }
-                    },
-                    enabled = !mutationInProgress,
-                    modifier = Modifier.testTag(PLAYER_FAVORITE_TEST_TAG),
-                )
-                if (mutationFailed) {
-                    Text(
-                        text = "Не удалось изменить избранное",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        }
-    }
+                    }
+                },
+                failureLabel = if (mutationFailed) "Не удалось изменить избранное" else null,
+            )
+        },
+        modifier = modifier,
+    )
 }
-
-internal const val PLAYER_FAVORITE_TEST_TAG = "player-favorite"
