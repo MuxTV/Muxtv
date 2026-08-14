@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.test.core.app.ApplicationProvider
 import app.muxtv.catalog.ChannelQuery
@@ -221,10 +220,18 @@ class PlayerOverlayJourneyTest {
                     .fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
+            composeRule.onNodeWithTag("player-primary-action").performKeyInput {
+                keyDown(Key.DirectionLeft)
+                keyUp(Key.DirectionLeft)
+            }
+            composeRule.onNodeWithTag("player-favorite").assertIsFocused()
             composeRule.onNodeWithTag("player-favorite")
                 .assertTextContains("☆ В избранное")
-                .performClick()
-            composeRule.runOnIdle { check(favoritePresses == 1) }
+                .performKeyInput {
+                    keyDown(Key.Enter)
+                    keyUp(Key.Enter)
+                }
+            composeRule.waitUntil(timeoutMillis = 20_000) { favoritePresses == 1 }
         } finally {
             connector.close()
         }
