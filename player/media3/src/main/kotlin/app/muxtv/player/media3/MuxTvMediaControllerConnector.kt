@@ -187,7 +187,13 @@ class MuxTvMediaControllerConnector(
             )
             ExternalPlaybackSessionContract.parseResult(result)
                 ?: ExternalPlaybackStartResult.Rejected(
-                    ExternalPlaybackStartFailure.PlaybackFailed,
+                    reason = if (
+                        result.resultCode == SessionResult.RESULT_ERROR_INVALID_STATE
+                    ) {
+                        ExternalPlaybackStartFailure.LeaseUnavailable
+                    } else {
+                        ExternalPlaybackStartFailure.PlaybackFailed
+                    },
                 )
         } catch (timeout: TimeoutCancellationException) {
             throw MediaControllerOperationException(commandFailureFor(timeout))
@@ -232,15 +238,17 @@ class MuxTvMediaControllerConnector(
             else -> PlaybackSessionPhase.IDLE
         }
         val mediaId = player.currentMediaItem?.mediaId?.takeIf(String::isNotBlank)
-        val phase = if (rawPhase == PlaybackSessionPhase.IDLE || mediaId == null) {
+        val channelId = mediaId?.takeUnless {
+            it.startsWith(PlaybackSessionRequest.EXTERNAL_MEDIA_ID_PREFIX)
+        }
+        val phase = if (rawPhase == PlaybackSessionPhase.IDLE || channelId == null) {
             PlaybackSessionPhase.IDLE
         } else {
             rawPhase
         }
-        val channelId = mediaId.takeIf { phase != PlaybackSessionPhase.IDLE }
 
         mutablePlaybackSessionState.value = PlaybackSessionState(
-            channelId = channelId,
+            channelId = channelId.takeIf { phase != PlaybackSessionPhase.IDLE },
             phase = phase,
             isPlaying = phase == PlaybackSessionPhase.READY && player.isPlaying,
         )

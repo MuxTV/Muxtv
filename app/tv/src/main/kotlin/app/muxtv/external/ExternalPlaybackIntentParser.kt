@@ -79,7 +79,8 @@ object ExternalPlaybackIntentParser {
     private fun isSupportedMime(mimeType: String?): Boolean = when {
         mimeType == null -> true
         mimeType.any { it.isISOControl() } -> false
-        else -> mimeType.startsWith("video/")
+        else -> mimeType.startsWith("video/") &&
+            mimeType.substringAfter('/', missingDelimiterValue = "").isNotBlank()
     }
     private fun sanitizeTitle(raw: String?): String? {
         if (raw == null) return null

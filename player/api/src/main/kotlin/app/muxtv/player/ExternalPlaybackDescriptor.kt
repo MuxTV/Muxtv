@@ -29,7 +29,8 @@ data class ExternalPlaybackDescriptor(
     }
 
     val isCleartext: Boolean
-        get() = locator.startsWith(HTTP_SCHEME_PREFIX)
+        get() = locator.substringBefore(':', missingDelimiterValue = "")
+            .equals("http", ignoreCase = true)
 
     override fun toString(): String =
         "ExternalPlaybackDescriptor(locator=<redacted>, " +
@@ -37,7 +38,6 @@ data class ExternalPlaybackDescriptor(
             "sourcePackage=<redacted>, cleartextApproved=$cleartextApproved)"
 
     private companion object {
-        const val HTTP_SCHEME_PREFIX = "http://"
         const val MAX_LOCATOR_LENGTH = 8_192
         const val MAX_MIME_LENGTH = 256
         const val MAX_DISPLAY_TEXT_LENGTH = 512

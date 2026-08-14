@@ -97,6 +97,7 @@ class PlaybackSessionRequest(
             "hasMimeType=${mimeType != null})"
 
     companion object {
+        const val EXTERNAL_MEDIA_ID_PREFIX = "external:"
         private const val MAX_ID_LENGTH = 512
         private const val MAX_LOCATOR_LENGTH = 8_192
         private const val MAX_DISPLAY_NAME_LENGTH = 512

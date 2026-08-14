@@ -143,6 +143,23 @@ class ExternalPlaybackIntentParserTest {
     }
 
     @Test
+    fun `video mime without subtype is rejected`() {
+        assertThat(
+            ExternalPlaybackIntentParser.parse(
+                action = ExternalPlaybackIntentParser.ACTION_VIEW,
+                uriString = "http://h.local/file.mkv",
+                mimeType = "video/",
+                displayTitle = null,
+                sourcePackage = null,
+            ),
+        ).isEqualTo(
+            ExternalPlaybackIntentResult.Rejected(
+                ExternalPlaybackIntentRejection.UnsupportedMimeType,
+            ),
+        )
+    }
+
+    @Test
     fun `oversized fields are rejected`() {
         assertThat(
             ExternalPlaybackIntentParser.parse(

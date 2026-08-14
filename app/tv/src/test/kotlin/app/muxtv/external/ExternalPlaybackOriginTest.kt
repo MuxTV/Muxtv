@@ -59,4 +59,14 @@ class ExternalPlaybackOriginTest {
 
         assertThat(origin.toString()).doesNotContain("192.168.1.10")
     }
+
+    @Test
+    fun `ipv6 origins round trip through the encoded form`() {
+        for (raw in listOf("http://[fe80::1]:8080", "http://[::1]", "http://[fd00::7]")) {
+            val origin = ExternalPlaybackOrigin.parse(raw)!!
+
+            assertThat(origin.encoded).contains("[")
+            assertThat(ExternalPlaybackOrigin.parse(origin.encoded)).isEqualTo(origin)
+        }
+    }
 }

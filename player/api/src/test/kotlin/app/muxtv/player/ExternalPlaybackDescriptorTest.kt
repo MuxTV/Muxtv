@@ -31,6 +31,13 @@ class ExternalPlaybackDescriptorTest {
     }
 
     @Test
+    fun `cleartext detection is case insensitive on the scheme`() {
+        val descriptor = ExternalPlaybackDescriptor("HTTP://media.example.org/movie.mp4")
+
+        assertThat(descriptor.isCleartext).isTrue()
+    }
+
+    @Test
     fun `non http locators are rejected`() {
         for (locator in listOf(
             "ftp://host/file.mkv",

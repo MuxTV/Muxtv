@@ -20,7 +20,14 @@ data class ExternalPlaybackOrigin(
     }
 
     val encoded: String
-        get() = if (port == DEFAULT_PORT) "$scheme://$host" else "$scheme://$host:$port"
+        get() {
+            val literal = if (':' in host) "[$host]" else host
+            return if (port == DEFAULT_PORT) {
+                "$scheme://$literal"
+            } else {
+                "$scheme://$literal:$port"
+            }
+        }
 
     val isCleartext: Boolean
         get() = scheme == "http"

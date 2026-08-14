@@ -241,9 +241,10 @@ class MuxTvPlaybackService : MediaSessionService() {
         sessionId: String,
         descriptor: ExternalPlaybackDescriptor,
     ) {
+        val mediaId = PlaybackSessionRequest.EXTERNAL_MEDIA_ID_PREFIX + sessionId
         val sessionRequest = PlaybackSessionRequest(
             profileId = EXTERNAL_PROFILE_ID,
-            mediaId = sessionId,
+            mediaId = mediaId,
             variantId = EXTERNAL_VARIANT_ID,
             locator = descriptor.locator,
             displayName = descriptor.displayTitle,
@@ -255,13 +256,14 @@ class MuxTvPlaybackService : MediaSessionService() {
             activePlayerListener = object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     if (activeExternal?.setupId != setupId) return
-                    if (player.currentMediaItem?.mediaId != sessionId) return
+                    if (player.currentMediaItem?.mediaId != mediaId) return
                     activeAttemptNumber = 1
                     recordObservation(
                         kind = PlaybackObservationKind.EXTERNAL_FIRST_FRAME,
                         attemptLimit = EXTERNAL_ATTEMPT_LIMIT,
                     )
                     completeExternal(ExternalPlaybackStartResult.Started)
+                    removeActivePlayerListener()
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
