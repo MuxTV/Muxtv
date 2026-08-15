@@ -9,7 +9,10 @@ import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelNowNext
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
+import app.muxtv.catalog.NowNextQuery
 import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
@@ -63,14 +66,20 @@ class ChannelsViewModelTest {
     @Test
     fun playbackIdentityUpdatesPagedRowsWithoutMaterializingCatalog() = runBlocking {
         val item = item("all")
-        assertThat(item.applyPlaybackState(PlaybackSessionState.Idle).isCurrentPlayback).isFalse()
         assertThat(
-            item.applyPlaybackState(
-                PlaybackSessionState(
+            buildChannelRow(item, nowNext = null, playback = PlaybackSessionState.Idle, nowEpochMillis = 0L)
+                .isCurrentPlayback,
+        ).isFalse()
+        assertThat(
+            buildChannelRow(
+                item = item,
+                nowNext = null,
+                playback = PlaybackSessionState(
                     channelId = "all",
                     phase = PlaybackSessionPhase.READY,
                     isPlaying = true,
                 ),
+                nowEpochMillis = 0L,
             ).isCurrentPlayback,
         ).isTrue()
     }
@@ -90,7 +99,14 @@ class ChannelsViewModelTest {
     ) {
         val store = ViewModelStore()
         val factory = viewModelFactory {
-            initializer { ChannelsViewModel(repository, playback, PROFILE_ID) }
+            initializer {
+                ChannelsViewModel(
+                    channelBrowseRepository = repository,
+                    playbackSessionStateSource = playback,
+                    epgGuideRepository = NoNowNextEpgGuideRepository,
+                    profileId = PROFILE_ID,
+                )
+            }
         }
         val viewModel = ViewModelProvider.create(store, factory)[ChannelsViewModel::class]
         try {
@@ -117,6 +133,12 @@ class ChannelsViewModelTest {
     private class FakePlaybackStateSource : PlaybackSessionStateSource {
         val state = MutableStateFlow(PlaybackSessionState.Idle)
         override val playbackSessionState: StateFlow<PlaybackSessionState> = state
+    }
+
+    private object NoNowNextEpgGuideRepository : EpgGuideRepository {
+        override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> = emptyList()
+
+        override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
     }
 
     private companion object {

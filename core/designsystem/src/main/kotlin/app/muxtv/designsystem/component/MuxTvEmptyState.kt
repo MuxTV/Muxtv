@@ -30,6 +30,7 @@ fun MuxTvEmptyState(
     description: String? = null,
     actionLabel: String? = null,
     actionTestTag: String? = null,
+    actionModifier: Modifier = Modifier,
     onAction: (() -> Unit)? = null,
 ) {
     Column(
@@ -64,7 +65,9 @@ fun MuxTvEmptyState(
             MuxTvActionButton(
                 text = actionLabel,
                 onClick = onAction,
-                modifier = if (actionTestTag != null) Modifier.testTag(actionTestTag) else Modifier,
+                modifier = actionModifier.then(
+                    if (actionTestTag != null) Modifier.testTag(actionTestTag) else Modifier,
+                ),
             )
         }
     }

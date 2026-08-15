@@ -28,8 +28,10 @@ import androidx.navigation3.ui.NavDisplay
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.ChannelSearchRepository
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
@@ -49,6 +51,8 @@ import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.PlaybackObservationReader
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun AppNavigation(
@@ -57,6 +61,8 @@ fun AppNavigation(
     channelPreferencesRepository: ChannelPreferencesRepository,
     channelSearchRepository: ChannelSearchRepository,
     guideWindowRepository: GuideWindowRepository,
+    recentChannelsRepository: RecentChannelsRepository,
+    epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
@@ -125,14 +131,24 @@ fun AppNavigation(
                 NavEntry(key) {
                     when (destination) {
                         AppDestination.Home -> HomeRoute(
+                            channelBrowseRepository = channelBrowseRepository,
+                            recentChannelsRepository = recentChannelsRepository,
+                            epgGuideRepository = epgGuideRepository,
+                            playbackSessionStateSource = controllerConnector,
+                            hasSources = rememberHasSources(sourceRefreshStore),
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                            onOpenChannel = { channelId ->
+                                open(AppDestination.Player(channelId))
+                            },
                             onOpenChannels = { open(AppDestination.Channels) },
                             onOpenGuide = { open(AppDestination.Guide) },
-                            onOpenSearch = { open(AppDestination.Search) },
+                            onAddSource = { open(AppDestination.AddSource) },
                             railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Channels -> ChannelsRoute(
                             channelBrowseRepository = channelBrowseRepository,
+                            epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
@@ -203,6 +219,12 @@ fun AppNavigation(
         )
     }
 }
+
+@Composable
+private fun rememberHasSources(sourceRefreshStore: SourceRefreshStore): Flow<Boolean> =
+    remember(sourceRefreshStore) {
+        sourceRefreshStore.observeOverviews().map { overviews -> overviews.isNotEmpty() }
+    }
 
 @Composable
 private fun topLevelRailItems(selected: AppDestination): List<MuxTvNavigationRailItem> =
