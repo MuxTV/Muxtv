@@ -25,36 +25,7 @@ class RailNavigationJourneyTest {
 
     @Test
     fun contentFocusLeftEntersRailAndRightReturnsWithRestoration() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val controllerConnector = MuxTvMediaControllerConnector(context)
-
-        try {
-            composeRule.setContent {
-                MuxTvTheme {
-                    AppNavigation(
-                        playbackCatalog = RailPlaybackCatalogFixture,
-                        channelBrowseRepository = TestChannelBrowseRepository(
-                            RailPlaybackCatalogFixture,
-                            NoRecentChannelsRepository,
-                            NoGuideEpgGuideRepository,
-                        ),
-                        channelPreferencesRepository = NoChannelPreferencesRepository,
-                        channelSearchRepository = NoChannelSearchRepository,
-                        guideWindowRepository = TestGuideWindowRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
-                        controllerConnector = controllerConnector,
-                        sourceRefreshStore = RailSourceStoreFixture,
-                        sourceRefreshScheduler = SourceRefreshScheduler(context, RailSourceStoreFixture),
-                        sourceEntryOnboarding = RailOnboardingFixture,
-                    )
-                }
-            }
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
-            }
-            composeRule.waitForIdle()
-
+        withNavigation { _ ->
             composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
             composeRule.onNodeWithTag("nav-home").assertIsFocused()
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -68,43 +39,12 @@ class RailNavigationJourneyTest {
                 composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("home-hero").assertIsFocused()
-        } finally {
-            controllerConnector.close()
         }
     }
 
     @Test
-    fun backCollapsesExpandedRailBeforeNavigation() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val controllerConnector = MuxTvMediaControllerConnector(context)
-
-        try {
-            composeRule.setContent {
-                MuxTvTheme {
-                    AppNavigation(
-                        playbackCatalog = RailPlaybackCatalogFixture,
-                        channelBrowseRepository = TestChannelBrowseRepository(
-                            RailPlaybackCatalogFixture,
-                            NoRecentChannelsRepository,
-                            NoGuideEpgGuideRepository,
-                        ),
-                        channelPreferencesRepository = NoChannelPreferencesRepository,
-                        channelSearchRepository = NoChannelSearchRepository,
-                        guideWindowRepository = TestGuideWindowRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
-                        controllerConnector = controllerConnector,
-                        sourceRefreshStore = RailSourceStoreFixture,
-                        sourceRefreshScheduler = SourceRefreshScheduler(context, RailSourceStoreFixture),
-                        sourceEntryOnboarding = RailOnboardingFixture,
-                    )
-                }
-            }
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
-            }
-            composeRule.waitForIdle()
-
+    fun backFromExpandedRailReturnsToOriginatingContentBeforeRouteNavigation() {
+        withNavigation { _ ->
             composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
             composeRule.onNodeWithTag("nav-home").assertIsFocused()
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -114,22 +54,55 @@ class RailNavigationJourneyTest {
             composeRule.runOnUiThread {
                 composeRule.activity.onBackPressedDispatcher.onBackPressed()
             }
+
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithText("Главная").fetchSemanticsNodes().isEmpty()
             }
-            composeRule.waitForIdle()
-            composeRule.onNodeWithTag("nav-home").assertIsFocused()
-            composeRule.onNodeWithTag("home-hero").assertExists()
-        } finally {
-            controllerConnector.close()
+            composeRule.onNodeWithTag("home-hero").assertIsFocused()
         }
     }
 
     @Test
     fun railSelectsDestinationsWithDpad() {
+        withNavigation { _ ->
+            composeRule.onNodeWithTag("home-hero").press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown)
+            composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        }
+    }
+
+    @Test
+    fun channelsFilterFocusGraphIsBidirectionalAndOnlyAllLeftEntersRail() {
+        withNavigation { _ ->
+            composeRule.onNodeWithTag("home-hero").press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-home").press(Key.DirectionDown)
+            composeRule.onNodeWithTag("nav-channels").press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
+            }
+
+            composeRule.onNodeWithTag("channel-row-0").assertIsFocused().press(Key.DirectionUp)
+            composeRule.onNodeWithTag("channels-filter-all").assertIsFocused()
+                .press(Key.DirectionRight)
+            composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+                .press(Key.DirectionRight)
+            composeRule.onNodeWithTag("channels-filter-recent").assertIsFocused()
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("channels-filter-favorites").assertIsFocused()
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("channels-filter-all").assertIsFocused()
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-channels").assertIsFocused()
+        }
+    }
+
+    private fun withNavigation(block: (MuxTvMediaControllerConnector) -> Unit) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val controllerConnector = MuxTvMediaControllerConnector(context)
-
         try {
             composeRule.setContent {
                 MuxTvTheme {
@@ -156,14 +129,7 @@ class RailNavigationJourneyTest {
                 composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
             }
             composeRule.waitForIdle()
-
-            composeRule.onNodeWithTag("home-hero").press(Key.DirectionLeft)
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown)
-            composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
-            }
-            composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+            block(controllerConnector)
         } finally {
             controllerConnector.close()
         }
