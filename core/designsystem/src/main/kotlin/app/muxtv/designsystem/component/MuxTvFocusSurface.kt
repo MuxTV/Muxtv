@@ -1,5 +1,6 @@
 package app.muxtv.designsystem.component
 
+import android.animation.ValueAnimator
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -31,8 +32,9 @@ import app.muxtv.designsystem.TvTokens
  * Shared dense-TV focus surface (Lounge Light L2/L3 model).
  *
  * Unfocused: matte surface + hairline edge. Focused: raised warm surface,
- * bronze outline, restrained soft shadow and optional draw-time scale (reserved
- * for card rails with stable neighbor geometry; rows/grid use scale 1f).
+ * bronze outline, restrained soft shadow and optional draw-time scale. Dense
+ * rows/grid pass 1f. Sparse Home cards may opt into a reserved-envelope scale,
+ * which is disabled when the platform reports system animators disabled.
  * Activation remains owned by Compose clickable semantics without synthesized keys.
  */
 @Composable
@@ -45,8 +47,9 @@ fun MuxTvFocusSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val motionEnabled = ValueAnimator.areAnimatorsEnabled()
     val scale by animateFloatAsState(
-        targetValue = if (focused) focusScale else 1f,
+        targetValue = if (focused && motionEnabled) focusScale else 1f,
         animationSpec = tween(
             durationMillis = TvTokens.Motion.focusDurationMillis,
             easing = TvTokens.Motion.easeOut,
