@@ -32,6 +32,16 @@ foreach ($runnerLabel in @("muxtv-android", "muxtv-device")) {
     }
 }
 
+function Get-WorkflowContent {
+    param([Parameter(Mandatory)][string]$RelativePath)
+
+    $workflow = Join-Path $repositoryRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $workflow -PathType Leaf)) {
+        throw "Expected self-hosted workflow was not found: $RelativePath"
+    }
+    return Get-Content -LiteralPath $workflow -Raw -Encoding utf8
+}
+
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("muxtv-runner-preflight-" + [Guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
@@ -313,26 +323,31 @@ try {
         throw "Runner preflight accepted a missing emulator system image."
     }
 
-    foreach ($workflowPath in @(
+    $allSelfHostedWorkflows = @(
         ".github\workflows\self-hosted-validation.yml",
+        ".github\workflows\android-tv-focused-device.yml",
         ".github\workflows\android-tv-product-device-matrix.yml",
         ".github\workflows\database-migration-device-matrix.yml",
         ".github\workflows\measurement-variance-smoke.yml",
+        ".github\workflows\benchmark-foundation.yml",
+        ".github\workflows\integration-gate.yml",
         ".github\workflows\focused-m3u-evidence.yml"
-    )) {
-        $workflow = Join-Path $repositoryRoot $workflowPath
-        $content = Get-Content -LiteralPath $workflow -Raw -Encoding utf8
-        if ($content.IndexOf("Assert-SelfHostedRunnerPreflight.ps1", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow does not invoke the runner preflight: $workflowPath"
-        }
-        if ($content.IndexOf("if-no-files-found: error", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow does not fail when required evidence is absent: $workflowPath"
-        }
-        if ($content.IndexOf("compression-level: 0", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow does not disable redundant artifact compression: $workflowPath"
-        }
-        if ($content.IndexOf("persist-credentials: false", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow leaves checkout credentials persisted: $workflowPath"
+    )
+    foreach ($workflowPath in $allSelfHostedWorkflows) {
+        $content = Get-WorkflowContent $workflowPath
+        foreach ($requiredFragment in @(
+            "Assert-SelfHostedRunnerPreflight.ps1",
+            "if-no-files-found: error",
+            "compression-level: 0",
+            "persist-credentials: false",
+            "muxtv-android",
+            "ExpectedRunnerLabels",
+            "actions/upload-artifact@",
+            "Reset-SelfHostedAndroidState.ps1"
+        )) {
+            if ($content.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
+                throw "Self-hosted workflow is missing required safety/evidence contract '$requiredFragment': $workflowPath"
+            }
         }
         if ($content.IndexOf("pull_request_target", [System.StringComparison]::Ordinal) -ge 0) {
             throw "Self-hosted workflow must not execute through pull_request_target: $workflowPath"
@@ -345,34 +360,52 @@ try {
                 throw "Self-hosted workflow interpolates an untrusted branch name into PowerShell: $workflowPath"
             }
         }
-        if ($content.IndexOf("muxtv-android", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow does not target the repository Android runner label: $workflowPath"
-        }
-        if ($content.IndexOf("ExpectedRunnerLabels", [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Self-hosted workflow does not record its scheduling label contract: $workflowPath"
-        }
-
         $uploadIndex = $content.IndexOf("actions/upload-artifact@", [System.StringComparison]::Ordinal)
-        $cleanupIndex = $content.IndexOf("Reset-SelfHostedAndroidState.ps1", [System.StringComparison]::Ordinal)
+        $cleanupIndex = $content.LastIndexOf("Reset-SelfHostedAndroidState.ps1", [System.StringComparison]::Ordinal)
         if ($cleanupIndex -lt 0 -or $cleanupIndex -lt $uploadIndex) {
             throw "Self-hosted workflow does not run Android cleanup after artifact publication: $workflowPath"
         }
     }
 
-    foreach ($workflowPath in @(
+    $prSelfHostedWorkflows = @(
         ".github\workflows\self-hosted-validation.yml",
-        ".github\workflows\android-tv-product-device-matrix.yml",
+        ".github\workflows\android-tv-focused-device.yml",
         ".github\workflows\database-migration-device-matrix.yml",
         ".github\workflows\measurement-variance-smoke.yml"
-    )) {
-        $workflow = Join-Path $repositoryRoot $workflowPath
-        $content = Get-Content -LiteralPath $workflow -Raw -Encoding utf8
+    )
+    foreach ($workflowPath in $prSelfHostedWorkflows) {
+        $content = Get-WorkflowContent $workflowPath
+        if ($content.IndexOf("pull_request:", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Expected PR-triggered self-hosted workflow has no pull_request trigger: $workflowPath"
+        }
         if ($content.IndexOf("github.event.pull_request.head.repo.full_name == github.repository", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Self-hosted PR workflow does not reject fork code: $workflowPath"
         }
     }
 
-    $varianceWorkflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\measurement-variance-smoke.yml") -Raw -Encoding utf8
+    $manualOnlyWorkflows = @(
+        ".github\workflows\android-tv-product-device-matrix.yml",
+        ".github\workflows\benchmark-foundation.yml",
+        ".github\workflows\integration-gate.yml",
+        ".github\workflows\focused-m3u-evidence.yml"
+    )
+    foreach ($workflowPath in $manualOnlyWorkflows) {
+        $content = Get-WorkflowContent $workflowPath
+        if ($content.IndexOf("workflow_dispatch:", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Manual-only workflow has no workflow_dispatch trigger: $workflowPath"
+        }
+        if ($content.IndexOf("pull_request:", [System.StringComparison]::Ordinal) -ge 0) {
+            throw "Manual-only workflow unexpectedly auto-runs on pull requests: $workflowPath"
+        }
+        if ($content.IndexOf('ref: ${{ github.sha }}', [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Manual-only workflow does not check out the selected exact commit: $workflowPath"
+        }
+        if ($content.IndexOf("cancel-in-progress: false", [System.StringComparison]::Ordinal) -lt 0) {
+            throw "Manual-only workflow may cancel an already-selected evidence run: $workflowPath"
+        }
+    }
+
+    $varianceWorkflow = Get-WorkflowContent ".github\workflows\measurement-variance-smoke.yml"
     if ($varianceWorkflow.IndexOf('group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}', [System.StringComparison]::Ordinal) -lt 0) {
         throw "Measurement variance workflow does not isolate concurrency by PR/ref."
     }
@@ -380,13 +413,16 @@ try {
         throw "Measurement variance workflow does not preserve manual/release-like runs."
     }
 
-    foreach ($workflowPath in @(
+    $deviceWorkflows = @(
+        ".github\workflows\android-tv-focused-device.yml",
         ".github\workflows\android-tv-product-device-matrix.yml",
         ".github\workflows\database-migration-device-matrix.yml",
-        ".github\workflows\measurement-variance-smoke.yml"
-    )) {
-        $workflow = Join-Path $repositoryRoot $workflowPath
-        $content = Get-Content -LiteralPath $workflow -Raw -Encoding utf8
+        ".github\workflows\measurement-variance-smoke.yml",
+        ".github\workflows\benchmark-foundation.yml",
+        ".github\workflows\integration-gate.yml"
+    )
+    foreach ($workflowPath in $deviceWorkflows) {
+        $content = Get-WorkflowContent $workflowPath
         if ($content.IndexOf("runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Device workflow does not require the dedicated device runner label: $workflowPath"
         }
@@ -398,7 +434,7 @@ try {
         }
     }
 
-    $selfHostedWorkflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\self-hosted-validation.yml") -Raw -Encoding utf8
+    $selfHostedWorkflow = Get-WorkflowContent ".github\workflows\self-hosted-validation.yml"
     foreach ($requiredFragment in @(
         '''["self-hosted","Windows","X64","muxtv-android"]''',
         '''["self-hosted","Windows","X64","muxtv-android","muxtv-device"]''',
@@ -413,24 +449,6 @@ try {
     }
     if ($selfHostedWorkflow.IndexOf("matrix.lane", [System.StringComparison]::Ordinal) -ge 0) {
         throw "Self-hosted validation must not use matrix context in a job condition."
-    }
-
-    $productWorkflow = Get-Content -LiteralPath (Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml") -Raw -Encoding utf8
-    foreach ($requiredPath in @(
-        "feature/home/**",
-        "feature/guide/**",
-        "feature/search/**",
-        "feature/sources/**",
-        "feature/doctor/**",
-        "feature/settings/**",
-        "core/database/**",
-        "catalog/**",
-        "gradle/**",
-        "settings.gradle.kts"
-    )) {
-        if ($productWorkflow.IndexOf($requiredPath, [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Product matrix path filters do not cover MVP UI/data changes: $requiredPath"
-        }
     }
 
     Write-Host "Self-hosted runner preflight contract passed."
