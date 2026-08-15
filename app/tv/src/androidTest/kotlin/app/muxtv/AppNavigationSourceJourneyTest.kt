@@ -90,6 +90,8 @@ class AppNavigationSourceJourneyTest {
                         channelPreferencesRepository = NoChannelPreferencesRepository,
                         channelSearchRepository = NoChannelSearchRepository,
                         guideWindowRepository = TestGuideWindowRepository,
+                        recentChannelsRepository = NoRecentChannelsRepository,
+                        epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
                         sourceRefreshScheduler = scheduler,
@@ -99,8 +101,10 @@ class AppNavigationSourceJourneyTest {
             }
             composeRule.waitForIdle()
 
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionRight, 4)
-            composeRule.onNodeWithTag("nav-sources").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("home-add-source").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("home-add-source").assertIsFocused().press(Key.Enter)
 
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("sources-add").fetchSemanticsNodes().size == 1
@@ -142,19 +146,25 @@ class AppNavigationSourceJourneyTest {
                         .fetchSemanticsNodes().isNotEmpty()
             }
             composeRule.onNodeWithText("Домашний IPTV").assertExists()
-            composeRule.onNodeWithTag("sources-add")
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("home-hero")
                 .assertIsFocused()
-                .press(Key.DirectionUp)
-            composeRule.onNodeWithTag("nav-sources")
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-home")
                 .assertIsFocused()
-                .press(Key.DirectionLeft, 3)
+                .press(Key.DirectionDown)
             composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
 
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-            composeRule.onNodeWithText("1  Первый канал", substring = false).assertExists()
+            composeRule.onNodeWithText("Первый канал", substring = false).assertExists()
         } finally {
             controllerConnector.close()
         }
@@ -163,7 +173,7 @@ class AppNavigationSourceJourneyTest {
     @Test
     fun doctorBackAfterPlaybackRejectionReturnsToChannelsWithoutRetry() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = JourneySourceRefreshStore()
+        val sourceStore = JourneySourceRefreshStore().apply { publish("Домашний IPTV") }
         val playbackCatalog = JourneyPlaybackCatalog().apply { publish("Домашний IPTV") }
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
@@ -182,6 +192,8 @@ class AppNavigationSourceJourneyTest {
                         channelPreferencesRepository = NoChannelPreferencesRepository,
                         channelSearchRepository = NoChannelSearchRepository,
                         guideWindowRepository = TestGuideWindowRepository,
+                        recentChannelsRepository = NoRecentChannelsRepository,
+                        epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
                         sourceRefreshStore = sourceStore,
                         sourceRefreshScheduler = scheduler,
@@ -208,7 +220,15 @@ class AppNavigationSourceJourneyTest {
                 }
             }
 
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionRight)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("home-hero")
+                .assertIsFocused()
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-home")
+                .assertIsFocused()
+                .press(Key.DirectionDown)
             composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("channel-row-0").fetchSemanticsNodes().size == 1
@@ -264,7 +284,7 @@ private fun SemanticsNodeInteraction.press(
     }
 }
 
-private object NoRecentChannelsRepository : RecentChannelsRepository {
+internal object NoRecentChannelsRepository : RecentChannelsRepository {
     override fun observeRecent(query: RecentChannelsQuery): Flow<List<RecentChannel>> = flowOf(emptyList())
 
     override suspend fun recordSuccessfulPlayback(

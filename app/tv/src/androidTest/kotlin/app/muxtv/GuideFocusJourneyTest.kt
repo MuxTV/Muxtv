@@ -96,6 +96,7 @@ class GuideFocusJourneyTest {
         waitUntilGuideCell()
 
         composeRule.onNodeWithTag("guide-cell-0-0").assertIsFocused()
+        composeRule.captureScreenshot("guide-grid")
     }
 
     @Test

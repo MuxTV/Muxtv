@@ -71,6 +71,7 @@ class PlayerOverlayJourneyTest {
             }
             composeRule.onNodeWithTag("player-overlay").assertExists()
             composeRule.onNodeWithTag("player-primary-action").assertIsFocused()
+            composeRule.captureScreenshot("player-overlay")
         } finally {
             connector.close()
         }

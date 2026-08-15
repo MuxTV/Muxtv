@@ -311,8 +311,8 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-        composeRule.onNodeWithText("Сейчас: В эфире").assertExists()
-        composeRule.onNodeWithText("Далее: Следом").assertExists()
+        composeRule.onNodeWithText("Сейчас: В эфире", substring = true).assertExists()
+        composeRule.onNodeWithText("Далее: Следом", substring = true).assertExists()
     }
 
     @androidx.compose.runtime.Composable
@@ -328,6 +328,7 @@ class ChannelsFocusRestorationTest {
                 recentChannelsRepository = recentChannelsRepository,
                 epgGuideRepository = epgGuideRepository,
             ),
+            epgGuideRepository = epgGuideRepository,
             playbackSessionStateSource = NoPlaybackSessionStateSource,
             profileId = "profile-main",
             onOpenChannel = onOpenChannel,
