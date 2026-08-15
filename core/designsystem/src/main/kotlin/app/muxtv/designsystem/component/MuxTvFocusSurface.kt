@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -35,7 +36,8 @@ import app.muxtv.designsystem.TvTokens
  * bronze outline, restrained soft shadow and optional draw-time scale. Dense
  * rows/grid pass 1f. Sparse Home cards may opt into a reserved-envelope scale,
  * which is disabled when the platform reports system animators disabled.
- * Activation remains owned by Compose clickable semantics without synthesized keys.
+ * A deterministic brush may be supplied by showcase/hero surfaces without
+ * introducing a network artwork or dominant-colour pipeline.
  */
 @Composable
 fun MuxTvFocusSurface(
@@ -44,6 +46,7 @@ fun MuxTvFocusSurface(
     corner: Dp = TvTokens.Shape.cardCorner,
     contentPadding: Dp = TvTokens.Spacing.medium,
     focusScale: Float = 1f,
+    containerBrush: Brush? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -76,8 +79,14 @@ fun MuxTvFocusSurface(
                 },
             )
             .clip(shape)
-            .background(
-                if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
+            .then(
+                if (containerBrush != null) {
+                    Modifier.background(containerBrush)
+                } else {
+                    Modifier.background(
+                        if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
+                    )
+                },
             )
             .border(
                 width = if (focused) TvTokens.Focus.outlineWidth else 1.dp,
