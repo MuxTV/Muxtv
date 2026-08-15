@@ -21,12 +21,13 @@ import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 
 /**
- * Standard TV screen frame: bounded safe insets, screen title row and the
- * top-right utility clock. One consistent geometry across destinations.
+ * Standard TV screen frame: bounded safe insets and a quiet top utility row.
+ * Daily surfaces may omit a redundant route title (Home) while retaining the
+ * clock; operational/discovery screens keep an explicit title.
  */
 @Composable
 fun MuxTvScreenScaffold(
-    title: String,
+    title: String?,
     modifier: Modifier = Modifier,
     horizontalInset: Dp = TvTokens.Spacing.screenInset,
     verticalInset: Dp = 28.dp,
@@ -44,18 +45,22 @@ fun MuxTvScreenScaffold(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = title,
-                modifier = Modifier
-                    .weight(1f)
-                    .then(
-                        if (titleTestTag != null) Modifier.testTag(titleTestTag) else Modifier,
-                    ),
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (title != null) {
+                Text(
+                    text = title,
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (titleTestTag != null) Modifier.testTag(titleTestTag) else Modifier,
+                        ),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
             if (showClock) {
                 MuxTvClock()
             }
