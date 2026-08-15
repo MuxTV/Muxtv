@@ -20,6 +20,7 @@ class ModuleDependencyRulesTest {
     private val root = File(System.getProperty("user.dir")).parentFile.parentFile
 
     private val forbiddenImportPrefixes = listOf(
+        "android.",
         "androidx.",
         "com.android.",
         "com.google.android.exoplayer",
@@ -54,28 +55,16 @@ class ModuleDependencyRulesTest {
         listOf("core/model", "catalog/api", "player/api").forEach { module ->
             val allowed = allowedImportPrefixes[module].orEmpty()
             kotlinImports(module).forEach { importFqcn ->
-                if (allowed.none { importFqcn.startsWith(it) }) {
-                    forbiddenImportPrefixes.forEach { prefix ->
-                        assertThat(importFqcn.startsWith(prefix)).isFalse()
-                    }
-                }
+                assertThat(isForbiddenImport(importFqcn, allowed)).isFalse()
             }
             declaredLibAccessors(module).forEach { accessor ->
-                forbiddenAccessorFragments.forEach { fragment ->
-                    assertThat(accessor).doesNotContain(fragment)
-                }
+                assertThat(isForbiddenAccessor(accessor)).isFalse()
             }
             declaredProjectModules(module).forEach { projectModule ->
-                forbiddenProjectModules.forEach { forbiddenModule ->
-                    assertThat(projectModule.startsWith(forbiddenModule)).isFalse()
-                }
+                assertThat(isForbiddenProjectModule(projectModule)).isFalse()
             }
             declaredCoordinates(module).forEach { coordinate ->
-                if (allowed.none { coordinate.startsWith(it) }) {
-                    forbiddenImportPrefixes.forEach { prefix ->
-                        assertThat(coordinate.startsWith(prefix)).isFalse()
-                    }
-                }
+                assertThat(isForbiddenCoordinate(coordinate, allowed)).isFalse()
             }
         }
     }
@@ -85,6 +74,49 @@ class ModuleDependencyRulesTest {
         val build = root.resolve("feature/home/build.gradle.kts").readText()
         assertThat(build).doesNotContain(":core:database")
         assertThat(build).doesNotContain(":player:media3")
+    }
+
+    /**
+     * Mutation-style tests protect the guard itself. Each synthetic line represents
+     * a dependency that must fail even if repository production code currently has none.
+     */
+    @Test
+    fun `project dependency parser preserves colon and rejects forbidden module`() {
+        val module = parseProjectModule("implementation(project(\":core:database\"))")
+        assertThat(module).isEqualTo(":core:database")
+        assertThat(isForbiddenProjectModule(checkNotNull(module))).isTrue()
+
+        val feature = parseProjectModule("api(project(\":feature:player\"))")
+        assertThat(feature).isEqualTo(":feature:player")
+        assertThat(isForbiddenProjectModule(checkNotNull(feature))).isTrue()
+    }
+
+    @Test
+    fun `string coordinate parser returns coordinate rather than quote and rejects platform artifact`() {
+        val coordinate = parseStringCoordinate("implementation(\"androidx.room:room-runtime:3.0.0\")")
+        assertThat(coordinate).isEqualTo("androidx.room:room-runtime:3.0.0")
+        assertThat(isForbiddenCoordinate(checkNotNull(coordinate), emptyList())).isTrue()
+    }
+
+    @Test
+    fun `version catalog parser rejects forbidden platform accessor`() {
+        val accessor = parseLibAccessor("implementation(libs.androidx.media3.common)")
+        assertThat(accessor).isEqualTo("androidx.media3.common")
+        assertThat(isForbiddenAccessor(checkNotNull(accessor))).isTrue()
+    }
+
+    @Test
+    fun `raw android imports are forbidden in pure contracts`() {
+        assertThat(isForbiddenImport("android.net.Uri", emptyList())).isTrue()
+        assertThat(isForbiddenImport("androidx.compose.runtime.Composable", emptyList())).isTrue()
+        assertThat(isForbiddenImport("kotlinx.coroutines.flow.Flow", emptyList())).isFalse()
+    }
+
+    @Test
+    fun `paging allowlist remains narrow`() {
+        val allowed = allowedImportPrefixes.getValue("catalog/api")
+        assertThat(isForbiddenImport("androidx.paging.PagingData", allowed)).isFalse()
+        assertThat(isForbiddenImport("androidx.room.Room", allowed)).isTrue()
     }
 
     private fun kotlinImports(module: String): List<String> =
@@ -98,19 +130,13 @@ class ModuleDependencyRulesTest {
             .toList()
 
     private fun declaredLibAccessors(module: String): List<String> =
-        dependencyLines(module).mapNotNull { line ->
-            LIBS_ACCESSOR_REGEX.find(line)?.groupValues?.get(1)
-        }
+        dependencyLines(module).mapNotNull(::parseLibAccessor)
 
     private fun declaredProjectModules(module: String): List<String> =
-        dependencyLines(module).mapNotNull { line ->
-            PROJECT_MODULE_REGEX.find(line)?.groupValues?.get(1)
-        }
+        dependencyLines(module).mapNotNull(::parseProjectModule)
 
     private fun declaredCoordinates(module: String): List<String> =
-        dependencyLines(module).mapNotNull { line ->
-            STRING_COORDINATE_REGEX.find(line)?.groupValues?.get(1)
-        }
+        dependencyLines(module).mapNotNull(::parseStringCoordinate)
 
     private fun dependencyLines(module: String): List<String> =
         root.resolve(module).walkTopDown()
@@ -122,10 +148,33 @@ class ModuleDependencyRulesTest {
             }
             .toList()
 
+    private fun parseLibAccessor(line: String): String? =
+        LIBS_ACCESSOR_REGEX.find(line)?.groupValues?.get(1)
+
+    private fun parseProjectModule(line: String): String? =
+        PROJECT_MODULE_REGEX.find(line)?.groupValues?.get(1)
+
+    private fun parseStringCoordinate(line: String): String? =
+        STRING_COORDINATE_REGEX.find(line)?.groupValues?.get(2)
+
+    private fun isForbiddenImport(importFqcn: String, allowed: List<String>): Boolean =
+        allowed.none { importFqcn.startsWith(it) } &&
+            forbiddenImportPrefixes.any { importFqcn.startsWith(it) }
+
+    private fun isForbiddenAccessor(accessor: String): Boolean =
+        forbiddenAccessorFragments.any { fragment -> accessor.contains(fragment) }
+
+    private fun isForbiddenProjectModule(projectModule: String): Boolean =
+        forbiddenProjectModules.any { projectModule.startsWith(it) }
+
+    private fun isForbiddenCoordinate(coordinate: String, allowed: List<String>): Boolean =
+        allowed.none { coordinate.startsWith(it) } &&
+            forbiddenImportPrefixes.any { coordinate.startsWith(it) }
+
     private companion object {
         val IMPORT_REGEX = Regex("^import\\s+([A-Za-z0-9_.]+)")
         val LIBS_ACCESSOR_REGEX = Regex("""libs\.([a-zA-Z0-9.]+)""")
-        val PROJECT_MODULE_REGEX = Regex("""project\(":([a-zA-Z0-9-:]+)"\)""")
+        val PROJECT_MODULE_REGEX = Regex("""project\("(:[a-zA-Z0-9-:]+)"\)""")
         val STRING_COORDINATE_REGEX = Regex("""(["'])([a-zA-Z0-9_.:-]+)\1""")
         val DEPENDENCY_DECLARATION_REGEX =
             Regex("""(api|implementation|compileOnly|runtimeOnly|kapt|ksp|annotationProcessor)\(""")
