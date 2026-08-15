@@ -9,13 +9,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -48,8 +43,6 @@ fun MuxTvActionButton(
     selected: Boolean = false,
     style: MuxTvActionStyle = MuxTvActionStyle.Secondary,
 ) {
-    var focused by remember { mutableStateOf(false) }
-    val isSelected = selected
     val shape = RoundedCornerShape(TvTokens.Shape.buttonCorner)
     val primaryStyle = style == MuxTvActionStyle.Primary
 
@@ -70,9 +63,7 @@ fun MuxTvActionButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
-            .semantics { this.selected = isSelected },
+        modifier = modifier.semantics { this.selected = selected },
         enabled = enabled,
         shape = ButtonDefaults.shape(
             shape = shape,
