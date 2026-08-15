@@ -9,7 +9,9 @@ param(
 
     [string]$SourceCommit = "",
 
-    [switch]$NoDaemon
+    [switch]$NoDaemon,
+
+    [switch]$SkipHostValidation
 )
 
 Set-StrictMode -Version Latest
@@ -257,6 +259,7 @@ $manifest = [ordered]@{
     branch = $branch
     commit = $commit
     mode = $Mode
+    hostValidationSkipped = [bool]$SkipHostValidation
     startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     completedAtUtc = $null
     status = "running"
@@ -274,24 +277,28 @@ try {
     $bootstrapTools = Get-AndroidSdkTools -AllowMissingRuntime
     Update-AndroidRuntimePackages -Tools $bootstrapTools -EvidenceDirectory $evidenceDirectory
 
-    $hostValidationRoot = Join-Path $evidenceDirectory "host-validation"
-    $hostValidationArguments = @(
-        "-NoProfile",
-        "-File", $verifyScript,
-        "-Mode", "Full",
-        "-EvidenceRoot", $hostValidationRoot,
-        "-SourceBranch", $branch,
-        "-SourceCommit", $commit
-    )
-    if ($NoDaemon) {
-        $hostValidationArguments += "-NoDaemon"
-    }
+    if (-not $SkipHostValidation) {
+        $hostValidationRoot = Join-Path $evidenceDirectory "host-validation"
+        $hostValidationArguments = @(
+            "-NoProfile",
+            "-File", $verifyScript,
+            "-Mode", "Full",
+            "-EvidenceRoot", $hostValidationRoot,
+            "-SourceBranch", $branch,
+            "-SourceCommit", $commit
+        )
+        if ($NoDaemon) {
+            $hostValidationArguments += "-NoDaemon"
+        }
 
-    Write-Host "`n==> Host validation before Android TV emulator startup"
-    & pwsh @hostValidationArguments
-    $hostValidationExitCode = $LASTEXITCODE
-    if ($hostValidationExitCode -ne 0) {
-        throw "Host validation failed before Android TV emulator startup with exit code $hostValidationExitCode."
+        Write-Host "`n==> Host validation before Android TV emulator startup"
+        & pwsh @hostValidationArguments
+        $hostValidationExitCode = $LASTEXITCODE
+        if ($hostValidationExitCode -ne 0) {
+            throw "Host validation failed before Android TV emulator startup with exit code $hostValidationExitCode."
+        }
+    } else {
+        Write-Host "`n==> Host validation skipped by orchestrating CI lane"
     }
 
     $tools = Get-AndroidSdkTools
