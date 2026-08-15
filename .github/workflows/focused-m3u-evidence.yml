@@ -8,6 +8,7 @@ permissions:
 
 concurrency:
   group: focused-m3u-manual-stress
+  queue: max
   cancel-in-progress: false
 
 jobs:

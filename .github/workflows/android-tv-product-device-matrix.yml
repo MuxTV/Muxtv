@@ -8,6 +8,7 @@ permissions:
 
 concurrency:
   group: android-tv-product-device-matrix-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
