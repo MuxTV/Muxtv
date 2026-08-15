@@ -9,12 +9,12 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /**
- * Small repo-owned icon family for the Lounge TV shell.
+ * Small repo-owned icon family for the Lounge TV shell and its primary workspaces.
  *
- * Navigation glyphs intentionally share one 24dp canvas, rounded 1.9px stroke,
- * and no filled-play treatment so the rail has one visual mass across all five
- * destinations. The brand mark is a filled bow-tie silhouette derived from the
- * approved MuxTV Lounge reference rather than a generic Material glyph.
+ * Glyphs share one 24dp canvas, rounded 1.9px stroke and restrained visual mass.
+ * The `LiveTv` destination deliberately avoids a generic filled-play triangle;
+ * the brand mark is a filled bow-tie silhouette derived from the approved MuxTV
+ * Lounge reference rather than a Material placeholder.
  */
 object MuxTvIcons {
     val Home: ImageVector by lazy {
@@ -117,6 +117,49 @@ object MuxTvIcons {
             lineTo(17.5f, 6.5f)
             moveTo(6.5f, 17.5f)
             lineTo(4.75f, 19.25f)
+        }
+    }
+
+    val Sources: ImageVector by lazy {
+        outlinedIcon("MuxTvSources") {
+            moveTo(4.5f, 5f)
+            lineTo(19.5f, 5f)
+            lineTo(19.5f, 9f)
+            lineTo(4.5f, 9f)
+            close()
+            moveTo(4.5f, 11f)
+            lineTo(19.5f, 11f)
+            lineTo(19.5f, 15f)
+            lineTo(4.5f, 15f)
+            close()
+            moveTo(4.5f, 17f)
+            lineTo(19.5f, 17f)
+            lineTo(19.5f, 21f)
+            lineTo(4.5f, 21f)
+            close()
+            moveTo(7f, 7f)
+            lineTo(7.2f, 7f)
+            moveTo(7f, 13f)
+            lineTo(7.2f, 13f)
+            moveTo(7f, 19f)
+            lineTo(7.2f, 19f)
+        }
+    }
+
+    val Doctor: ImageVector by lazy {
+        outlinedIcon("MuxTvDoctor") {
+            moveTo(12f, 3.75f)
+            cubicTo(7.44f, 3.75f, 3.75f, 7.44f, 3.75f, 12f)
+            cubicTo(3.75f, 16.56f, 7.44f, 20.25f, 12f, 20.25f)
+            cubicTo(16.56f, 20.25f, 20.25f, 16.56f, 20.25f, 12f)
+            cubicTo(20.25f, 7.44f, 16.56f, 3.75f, 12f, 3.75f)
+            close()
+            moveTo(6.75f, 12f)
+            lineTo(9f, 12f)
+            lineTo(10.25f, 9.25f)
+            lineTo(12.25f, 15f)
+            lineTo(13.75f, 12f)
+            lineTo(17.25f, 12f)
         }
     }
 

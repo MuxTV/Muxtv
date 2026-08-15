@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +39,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
+import app.muxtv.designsystem.icon.MuxTvIcons
 
 enum class SettingsSection {
     SOURCES,
@@ -61,14 +59,14 @@ internal fun settingsSections(): List<SettingsSectionModel> = listOf(
         section = SettingsSection.SOURCES,
         label = "Источники",
         description = "Каталог каналов, обновление и добавление источников",
-        icon = Icons.Filled.List,
+        icon = MuxTvIcons.Sources,
         testTag = SETTINGS_SOURCES_TEST_TAG,
     ),
     SettingsSectionModel(
         section = SettingsSection.DOCTOR,
         label = "Диагностика",
         description = "Состояние воспроизведения и экспорт отчёта",
-        icon = Icons.Filled.Info,
+        icon = MuxTvIcons.Doctor,
         testTag = SETTINGS_DOCTOR_TEST_TAG,
     ),
 )
