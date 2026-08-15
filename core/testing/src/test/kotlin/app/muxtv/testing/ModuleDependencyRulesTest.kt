@@ -9,8 +9,8 @@ import org.junit.Test
  *
  * Enforcement happens where actual dependencies surface:
  * - Kotlin `import` statements (code, not comments or strings);
- * - dependency declarations in `*.gradle.kts` (`project(":…")` coordinates, `libs.*` catalog
- *   accessors, `"group:artifact"` coordinates).
+ * - dependency declarations in `*.gradle.kts` (`project(...)` coordinates, `libs.*` catalog
+ *   accessors, direct `"group:artifact"` coordinates).
  *
  * Allowlist entries are concrete prefixes (e.g. `androidx.paging` for the KMP paging-common
  * dependency accepted in #157), so doc words like "Media3" or "Room" in KDoc can neither trip
@@ -41,6 +41,22 @@ class ModuleDependencyRulesTest {
         "okhttp",
         "hilt",
         "compose",
+    )
+
+    /** Direct Maven coordinates need group/artifact rules, not Kotlin package-prefix rules. */
+    private val forbiddenCoordinatePrefixes = listOf(
+        "androidx.",
+        "com.android.",
+        "com.google.android.exoplayer",
+        "com.squareup.okhttp3:",
+        "com.google.dagger:",
+    )
+
+    private val forbiddenCoordinateFragments = listOf(
+        ":media3-",
+        ":room-",
+        ":hilt-",
+        ":compose-",
     )
 
     private val forbiddenProjectModules = listOf(
@@ -76,10 +92,7 @@ class ModuleDependencyRulesTest {
         assertThat(build).doesNotContain(":player:media3")
     }
 
-    /**
-     * Mutation-style tests protect the guard itself. Each synthetic line represents
-     * a dependency that must fail even if repository production code currently has none.
-     */
+    /** Mutation-style tests protect the guard itself against false-green parser regressions. */
     @Test
     fun `project dependency parser preserves colon and rejects forbidden module`() {
         val module = parseProjectModule("implementation(project(\":core:database\"))")
@@ -92,10 +105,23 @@ class ModuleDependencyRulesTest {
     }
 
     @Test
-    fun `string coordinate parser returns coordinate rather than quote and rejects platform artifact`() {
-        val coordinate = parseStringCoordinate("implementation(\"androidx.room:room-runtime:3.0.0\")")
-        assertThat(coordinate).isEqualTo("androidx.room:room-runtime:3.0.0")
-        assertThat(isForbiddenCoordinate(checkNotNull(coordinate), emptyList())).isTrue()
+    fun `project dependency parser covers named path syntax`() {
+        val module = parseProjectModule("implementation(project(path = \":player:media3\"))")
+        assertThat(module).isEqualTo(":player:media3")
+        assertThat(isForbiddenProjectModule(checkNotNull(module))).isTrue()
+    }
+
+    @Test
+    fun `string coordinate parser returns coordinate rather than quote and rejects platform artifacts`() {
+        val room = parseStringCoordinate("implementation(\"androidx.room:room-runtime:3.0.0\")")
+        assertThat(room).isEqualTo("androidx.room:room-runtime:3.0.0")
+        assertThat(isForbiddenCoordinate(checkNotNull(room), emptyList())).isTrue()
+
+        val okhttp = parseStringCoordinate("implementation(\"com.squareup.okhttp3:okhttp:5.1.0\")")
+        assertThat(isForbiddenCoordinate(checkNotNull(okhttp), emptyList())).isTrue()
+
+        val hilt = parseStringCoordinate("implementation(\"com.google.dagger:hilt-android:2.60\")")
+        assertThat(isForbiddenCoordinate(checkNotNull(hilt), emptyList())).isTrue()
     }
 
     @Test
@@ -113,10 +139,12 @@ class ModuleDependencyRulesTest {
     }
 
     @Test
-    fun `paging allowlist remains narrow`() {
+    fun `paging allowlist remains narrow for imports and direct coordinates`() {
         val allowed = allowedImportPrefixes.getValue("catalog/api")
         assertThat(isForbiddenImport("androidx.paging.PagingData", allowed)).isFalse()
         assertThat(isForbiddenImport("androidx.room.Room", allowed)).isTrue()
+        assertThat(isForbiddenCoordinate("androidx.paging:paging-common:3.4.0", allowed)).isFalse()
+        assertThat(isForbiddenCoordinate("androidx.room:room-runtime:3.0.0", allowed)).isTrue()
     }
 
     private fun kotlinImports(module: String): List<String> =
@@ -167,14 +195,17 @@ class ModuleDependencyRulesTest {
     private fun isForbiddenProjectModule(projectModule: String): Boolean =
         forbiddenProjectModules.any { projectModule.startsWith(it) }
 
-    private fun isForbiddenCoordinate(coordinate: String, allowed: List<String>): Boolean =
-        allowed.none { coordinate.startsWith(it) } &&
-            forbiddenImportPrefixes.any { coordinate.startsWith(it) }
+    private fun isForbiddenCoordinate(coordinate: String, allowed: List<String>): Boolean {
+        if (allowed.any { coordinate.startsWith(it) }) return false
+        return forbiddenCoordinatePrefixes.any { coordinate.startsWith(it) } ||
+            forbiddenCoordinateFragments.any { coordinate.contains(it) }
+    }
 
     private companion object {
         val IMPORT_REGEX = Regex("^import\\s+([A-Za-z0-9_.]+)")
         val LIBS_ACCESSOR_REGEX = Regex("""libs\.([a-zA-Z0-9.]+)""")
-        val PROJECT_MODULE_REGEX = Regex("""project\("(:[a-zA-Z0-9-:]+)"\)""")
+        val PROJECT_MODULE_REGEX =
+            Regex("""project\(\s*(?:path\s*=\s*)?"(:[a-zA-Z0-9-:]+)"\s*\)""")
         val STRING_COORDINATE_REGEX = Regex("""(["'])([a-zA-Z0-9_.:-]+)\1""")
         val DEPENDENCY_DECLARATION_REGEX =
             Regex("""(api|implementation|compileOnly|runtimeOnly|kapt|ksp|annotationProcessor)\(""")
