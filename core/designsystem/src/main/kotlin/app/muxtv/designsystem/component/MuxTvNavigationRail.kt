@@ -35,6 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
@@ -71,7 +74,10 @@ fun MuxTvNavigationRail(
     val expanded = railFocused && (expandedOverride ?: true)
     val width by animateDpAsState(
         targetValue = if (expanded) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed,
-        animationSpec = tween(durationMillis = TvTokens.Motion.screenDurationMillis),
+        animationSpec = tween(
+            durationMillis = TvTokens.Motion.screenDurationMillis,
+            easing = TvTokens.Motion.easeInOut,
+        ),
         label = "navigationRailWidth",
     )
     SideEffect {
@@ -167,6 +173,10 @@ private fun MuxTvNavigationRailItemView(
         modifier = modifier
             .height(56.dp)
             .fillMaxWidth()
+            .semantics {
+                contentDescription = item.label
+                selected = item.selected
+            }
             .clip(shape)
             .background(background)
             .border(

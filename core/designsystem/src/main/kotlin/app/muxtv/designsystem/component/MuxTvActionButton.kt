@@ -6,10 +6,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -31,10 +40,13 @@ fun MuxTvActionButton(
     selected: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val isSelected = selected
     val shape = RoundedCornerShape(TvTokens.Shape.buttonCorner)
     Button(
         onClick = onClick,
-        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .semantics { this.selected = isSelected },
         enabled = enabled,
         shape = ButtonDefaults.shape(
             shape = shape,
@@ -71,6 +83,21 @@ fun MuxTvActionButton(
             focusedDisabledBorder = Border.None,
         ),
     ) {
-        Text(if (selected) "• $text" else text, color = Color.Unspecified)
+        // Reserved marker slot keeps geometry stable when selection toggles:
+        // the bronze dot appears in a fixed 8dp slot instead of shifting text.
+        Box(
+            modifier = Modifier
+                .size(TvTokens.Spacing.markerSlot)
+                .clip(CircleShape)
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Transparent
+                    },
+                ),
+        )
+        Spacer(Modifier.width(TvTokens.Spacing.xSmall))
+        Text(text, color = Color.Unspecified)
     }
 }

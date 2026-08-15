@@ -2,6 +2,8 @@ package app.muxtv.feature.player
 
 import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -33,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -233,6 +236,18 @@ fun PlayerSurfaceContent(
         controlsVisible = false
     }
 
+    // Reveal fade only: the overlay still composes exactly under the existing
+    // visibility gate, so focus never lingers on hidden controls. Exit stays
+    // immediate (dense TV contract); re-reveal interrupts from current value.
+    val overlayAlpha by animateFloatAsState(
+        targetValue = if (controlsVisible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = TvTokens.Motion.overlayInMillis,
+            easing = TvTokens.Motion.easeOut,
+        ),
+        label = "playerOverlayAlpha",
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -279,6 +294,7 @@ fun PlayerSurfaceContent(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
+                    .graphicsLayer { alpha = overlayAlpha }
                     .background(TvTokens.Color.surfaceRaised.copy(alpha = 0.94f))
                     .padding(horizontal = 48.dp, vertical = 24.dp)
                     .testTag("$testTagPrefix-overlay")

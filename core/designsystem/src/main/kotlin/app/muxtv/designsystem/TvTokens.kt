@@ -1,5 +1,6 @@
 package app.muxtv.designsystem
 
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -40,9 +41,16 @@ object TvTokens {
         const val screenDurationMillis: Int = 240
         const val overlayInMillis: Int = 200
         const val overlayOutMillis: Int = 140
+
+        /** Strong ease-out for entering state (overlays, reveals). */
+        val easeOut: CubicBezierEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+
+        /** Strong ease-in-out for on-screen morphs (rail expand). */
+        val easeInOut: CubicBezierEasing = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
     }
     object Spacing {
         val micro: Dp = 4.dp
+        val markerSlot: Dp = 8.dp
         val xSmall: Dp = 8.dp
         val small: Dp = 12.dp
         val medium: Dp = 20.dp

@@ -47,7 +47,10 @@ fun MuxTvFocusSurface(
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (focused) focusScale else 1f,
-        animationSpec = tween(durationMillis = TvTokens.Motion.screenDurationMillis),
+        animationSpec = tween(
+            durationMillis = TvTokens.Motion.focusDurationMillis,
+            easing = TvTokens.Motion.easeOut,
+        ),
         label = "focusSurfaceScale",
     )
     val shape = RoundedCornerShape(corner)
@@ -57,10 +60,6 @@ fun MuxTvFocusSurface(
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(shape)
-            .background(
-                if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
-            )
             .then(
                 if (focused) {
                     Modifier.shadow(
@@ -72,6 +71,10 @@ fun MuxTvFocusSurface(
                 } else {
                     Modifier
                 },
+            )
+            .clip(shape)
+            .background(
+                if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
             )
             .border(
                 width = if (focused) TvTokens.Focus.outlineWidth else 1.dp,
