@@ -9,12 +9,12 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /**
- * Small repo-owned icon family for the Lounge TV shell and its primary workspaces.
+ * Repo-owned icon family for the Lounge TV shell and primary daily states.
  *
- * Glyphs share one 24dp canvas, rounded 1.9px stroke and restrained visual mass.
- * The `LiveTv` destination deliberately avoids a generic filled-play triangle;
- * the brand mark is a filled bow-tie silhouette derived from the approved MuxTV
- * Lounge reference rather than a Material placeholder.
+ * Navigation/workspace glyphs share one 24dp canvas, rounded 1.9px stroke and
+ * restrained visual mass. State glyphs may be filled where fill carries actual
+ * state (currently playing/favourite), while the `LiveTv` destination stays an
+ * outlined television instead of a generic filled-play triangle.
  */
 object MuxTvIcons {
     val Home: ImageVector by lazy {
@@ -163,6 +163,51 @@ object MuxTvIcons {
         }
     }
 
+    val Info: ImageVector by lazy {
+        outlinedIcon("MuxTvInfo") {
+            moveTo(12f, 3.75f)
+            cubicTo(7.44f, 3.75f, 3.75f, 7.44f, 3.75f, 12f)
+            cubicTo(3.75f, 16.56f, 7.44f, 20.25f, 12f, 20.25f)
+            cubicTo(16.56f, 20.25f, 20.25f, 16.56f, 20.25f, 12f)
+            cubicTo(20.25f, 7.44f, 16.56f, 3.75f, 12f, 3.75f)
+            close()
+            moveTo(12f, 10.5f)
+            lineTo(12f, 16.25f)
+            moveTo(12f, 7.4f)
+            lineTo(12.05f, 7.4f)
+        }
+    }
+
+    /** Filled state glyph: fill is meaningful because it means playback is active. */
+    val Playing: ImageVector by lazy {
+        filledIcon("MuxTvPlaying") {
+            moveTo(8f, 5.5f)
+            cubicTo(8f, 4.68f, 8.92f, 4.2f, 9.59f, 4.67f)
+            lineTo(19f, 11.17f)
+            cubicTo(19.6f, 11.58f, 19.6f, 12.42f, 19f, 12.83f)
+            lineTo(9.59f, 19.33f)
+            cubicTo(8.92f, 19.8f, 8f, 19.32f, 8f, 18.5f)
+            close()
+        }
+    }
+
+    /** Filled state glyph: mirrors the small persistent favourite marker in the reference. */
+    val Favorite: ImageVector by lazy {
+        filledIcon("MuxTvFavorite") {
+            moveTo(12f, 3.4f)
+            lineTo(14.65f, 8.77f)
+            lineTo(20.58f, 9.63f)
+            lineTo(16.29f, 13.81f)
+            lineTo(17.3f, 19.72f)
+            lineTo(12f, 16.93f)
+            lineTo(6.7f, 19.72f)
+            lineTo(7.71f, 13.81f)
+            lineTo(3.42f, 9.63f)
+            lineTo(9.35f, 8.77f)
+            close()
+        }
+    }
+
     val BrandMark: ImageVector by lazy {
         ImageVector.Builder(
             name = "MuxTvBrandMark",
@@ -217,5 +262,18 @@ object MuxTvIcons {
             strokeLineJoin = StrokeJoin.Round,
             pathBuilder = pathBuilder,
         )
+    }.build()
+
+    private inline fun filledIcon(
+        name: String,
+        pathBuilder: androidx.compose.ui.graphics.vector.PathBuilder.() -> Unit,
+    ): ImageVector = ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(fill = SolidColor(Color.Black), pathBuilder = pathBuilder)
     }.build()
 }
