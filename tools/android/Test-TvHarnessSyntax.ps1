@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param()
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -8,38 +9,44 @@ $evidenceDirectory = Join-Path $repositoryRoot ".work\evidence\harness-syntax"
 New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 $diagnosticPath = Join-Path $evidenceDirectory "harness-syntax.log"
 
-$files = @(
-    (Join-Path $PSScriptRoot "Initialize-AndroidSdkEnvironment.ps1"),
-    (Join-Path $PSScriptRoot "AndroidSdk.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"),
-    (Join-Path $repositoryRoot "tools\verify-local.ps1"),
-    (Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1"),
-    (Join-Path $repositoryRoot "tools\ci\Assert-SelfHostedRunnerPreflight.ps1"),
-    (Join-Path $PSScriptRoot "Invoke-BenchmarkDryRun.ps1")
-)
+$harnessFiles = [ordered]@{
+    Initializer = Join-Path $PSScriptRoot "Initialize-AndroidSdkEnvironment.ps1"
+    AndroidSdk = Join-Path $PSScriptRoot "AndroidSdk.ps1"
+    TvValidation = Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"
+    CatalogMeasurement = Join-Path $PSScriptRoot "Invoke-CatalogDatabaseMeasurement.ps1"
+    CatalogDevice = Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"
+    PlayerMeasurement = Join-Path $PSScriptRoot "Invoke-PlayerProxyMeasurement.ps1"
+    PlayerDevice = Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"
+    VerifyLocal = Join-Path $repositoryRoot "tools\verify-local.ps1"
+    EvidenceAssert = Join-Path $repositoryRoot "tools\ci\Assert-EvidenceCommit.ps1"
+    RunnerPreflight = Join-Path $repositoryRoot "tools\ci\Assert-SelfHostedRunnerPreflight.ps1"
+    BenchmarkDryRun = Join-Path $PSScriptRoot "Invoke-BenchmarkDryRun.ps1"
+}
 
-$messages = @()
-foreach ($file in $files) {
-    if (-not (Test-Path $file -PathType Leaf)) {
-        $messages += "Missing Android harness script: " + $file
+$messages = [System.Collections.Generic.List[string]]::new()
+
+function Add-ContractError {
+    param([Parameter(Mandatory)][string]$Message)
+    $script:messages.Add($Message)
+}
+
+foreach ($entry in $harnessFiles.GetEnumerator()) {
+    $file = [string]$entry.Value
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+        Add-ContractError "Missing Android harness script: $file"
         continue
     }
 
     $tokens = $null
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
-
     foreach ($parseError in @($parseErrors)) {
         $location = "{0}:{1}:{2}" -f $file, $parseError.Extent.StartLineNumber, $parseError.Extent.StartColumnNumber
-        $messages += $location + " " + $parseError.Message
+        Add-ContractError ($location + " " + $parseError.Message)
     }
 }
 
-$initializerContent = Get-Content -Path $files[0] -Raw
+$initializerContent = Get-Content -LiteralPath $harnessFiles.Initializer -Raw
 foreach ($requiredInitializerFragment in @(
     "Add-PathEntryIfMissing",
     "System32",
@@ -48,12 +55,11 @@ foreach ($requiredInitializerFragment in @(
     '"ADB_MDNS_AUTO_CONNECT=0"'
 )) {
     if ($initializerContent -notmatch [regex]::Escape($requiredInitializerFragment)) {
-        $messages += "Android SDK initialization does not preserve required Windows runtime PATH behavior: " +
-            $requiredInitializerFragment
+        Add-ContractError ("Android SDK initialization does not preserve required Windows runtime PATH behavior: " + $requiredInitializerFragment)
     }
 }
 
-$androidSdkContent = Get-Content -Path $files[1] -Raw
+$androidSdkContent = Get-Content -LiteralPath $harnessFiles.AndroidSdk -Raw
 $requiredFunctions = @(
     "Get-AndroidSdkTools",
     "ConvertFrom-TvSystemImagePackage",
@@ -68,120 +74,128 @@ $requiredFunctions = @(
     "Start-TvEmulator",
     "Wait-AndroidBoot",
     "Collect-AndroidEvidence",
+    "Pull-TvAppScreenshots",
     "Stop-TvEmulator"
 )
 foreach ($functionName in $requiredFunctions) {
     $pattern = "(?m)^function\s+" + [regex]::Escape($functionName) + "\s*\{"
     if ($androidSdkContent -notmatch $pattern) {
-        $messages += "Missing function declaration: " + $functionName
+        Add-ContractError ("Missing function declaration: " + $functionName)
     }
 }
 if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages') {
-    $messages += "Resolve-TvSystemImage must preserve singleton image output as an array."
+    Add-ContractError "Resolve-TvSystemImage must preserve singleton image output as an array."
 }
 if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
-    $messages += "sdkmanager list output must be captured as an array."
-}
-if ($androidSdkContent -notmatch 'Get-InstalledTvSystemImages') {
-    $messages += "TV system image resolution must inspect installed SDK directories."
+    Add-ContractError "sdkmanager list output must be captured as an array."
 }
 
-$verifyLocalContent = Get-Content -Path $files[7] -Raw
+$verifyLocalContent = Get-Content -LiteralPath $harnessFiles.VerifyLocal -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
-    $messages += "verify-local must expose DeviceOnly connected-test mode."
+    Add-ContractError "verify-local must expose DeviceOnly connected-test mode."
 }
 if ($verifyLocalContent -notmatch [regex]::Escape('"--no-problems-report"')) {
-    $messages += "verify-local must disable the non-evidence Gradle HTML problems report to avoid Windows report publication races."
+    Add-ContractError "verify-local must disable the non-evidence Gradle HTML problems report to avoid Windows report publication races."
 }
 
-$provenanceAssertContent = Get-Content -Path $files[8] -Raw
-foreach ($requiredProvenanceFragment in @(
-    'git rev-parse HEAD',
-    'Evidence commit provenance mismatch',
-    'ExpectedCommit'
-)) {
+$provenanceAssertContent = Get-Content -LiteralPath $harnessFiles.EvidenceAssert -Raw
+foreach ($requiredProvenanceFragment in @('git rev-parse HEAD', 'Evidence commit provenance mismatch', 'ExpectedCommit')) {
     if ($provenanceAssertContent -notmatch [regex]::Escape($requiredProvenanceFragment)) {
-        $messages += "Evidence commit assertion is missing required behavior: " + $requiredProvenanceFragment
+        Add-ContractError ("Evidence commit assertion is missing required behavior: " + $requiredProvenanceFragment)
     }
 }
 
 $runnerPreflightContract = Join-Path $repositoryRoot "tools\ci\Test-SelfHostedRunnerPreflightContract.ps1"
 if (-not (Test-Path -LiteralPath $runnerPreflightContract -PathType Leaf)) {
-    $messages += "Self-hosted runner preflight contract test was not found."
+    Add-ContractError "Self-hosted runner preflight contract test was not found."
 }
 
-$workflowContracts = @(
-    [pscustomobject]@{
-        Path = Join-Path $repositoryRoot ".github\workflows\self-hosted-validation.yml"
-        CheckoutRef = "ref: `${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        SourceCommit = "github.event.pull_request.head.sha || github.sha"
-    },
-    [pscustomobject]@{
-        Path = Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml"
-        CheckoutRef = "ref: `${{ github.event.pull_request.head.sha }}"
-        SourceCommit = "github.event.pull_request.head.sha"
-    },
-    [pscustomobject]@{
-        Path = Join-Path $repositoryRoot ".github\workflows\database-migration-device-matrix.yml"
-        CheckoutRef = "ref: `${{ github.event.pull_request.head.sha }}"
-        SourceCommit = "github.event.pull_request.head.sha"
-    },
-    [pscustomobject]@{
-        Path = Join-Path $repositoryRoot ".github\workflows\measurement-variance-smoke.yml"
-        CheckoutRef = "ref: `${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-        SourceCommit = "github.event.pull_request.head.sha || github.sha"
-    }
-)
-foreach ($contract in $workflowContracts) {
-    if (-not (Test-Path $contract.Path -PathType Leaf)) {
-        $messages += "Missing evidence workflow: " + $contract.Path
-        continue
+function Assert-WorkflowEvidenceContract {
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$CheckoutToken,
+        [Parameter(Mandatory)][string]$SourceCommitToken
+    )
+
+    $path = Join-Path $repositoryRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Add-ContractError ("Missing evidence workflow: " + $path)
+        return
     }
 
-    $workflowContent = Get-Content -Path $contract.Path -Raw
-    if ($workflowContent -notmatch [regex]::Escape($contract.CheckoutRef)) {
-        $messages += "Evidence workflow must explicitly check out its claimed source commit: " + $contract.Path
+    $content = Get-Content -LiteralPath $path -Raw
+    if ($content.IndexOf($CheckoutToken, [System.StringComparison]::Ordinal) -lt 0) {
+        Add-ContractError ("Evidence workflow must explicitly check out its claimed source commit: " + $path)
     }
-    if ($workflowContent -notmatch [regex]::Escape($contract.SourceCommit)) {
-        $messages += "Evidence workflow does not preserve the expected SourceCommit expression: " + $contract.Path
+    if ($content.IndexOf($SourceCommitToken, [System.StringComparison]::Ordinal) -lt 0) {
+        Add-ContractError ("Evidence workflow does not preserve the expected source-commit expression: " + $path)
     }
-    if ($workflowContent -notmatch [regex]::Escape('Assert-EvidenceCommit.ps1')) {
-        $messages += "Evidence workflow must verify git HEAD before producing evidence: " + $contract.Path
+    if ($content.IndexOf('Assert-EvidenceCommit.ps1', [System.StringComparison]::Ordinal) -lt 0) {
+        Add-ContractError ("Evidence workflow must verify git HEAD before producing evidence: " + $path)
     }
 }
 
-$tvValidationContent = Get-Content -Path $files[2] -Raw
-$hostValidationIndex = $tvValidationContent.IndexOf('"-Mode", "Full"')
-$profileLoopIndex = $tvValidationContent.IndexOf('foreach ($profile in $profiles)')
-$deviceOnlyIndex = $tvValidationContent.IndexOf('"-Mode", "DeviceOnly"')
-if (
-    $hostValidationIndex -lt 0 -or
-    $profileLoopIndex -lt 0 -or
-    $hostValidationIndex -gt $profileLoopIndex
-) {
-    $messages += "TV device validation must complete Full host validation before the profile loop."
+$prOrDispatchCheckout = 'ref: ${{ github.event_name == ''pull_request'' && github.event.pull_request.head.sha || github.sha }}'
+$prOrDispatchSource = 'github.event_name == ''pull_request'' && github.event.pull_request.head.sha || github.sha'
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\self-hosted-validation.yml" `
+    -CheckoutToken $prOrDispatchCheckout `
+    -SourceCommitToken $prOrDispatchSource
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\android-tv-focused-device.yml" `
+    -CheckoutToken $prOrDispatchCheckout `
+    -SourceCommitToken $prOrDispatchSource
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\android-tv-product-device-matrix.yml" `
+    -CheckoutToken 'ref: ${{ github.sha }}' `
+    -SourceCommitToken 'github.sha'
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\database-migration-device-matrix.yml" `
+    -CheckoutToken 'ref: ${{ github.event.pull_request.head.sha || github.sha }}' `
+    -SourceCommitToken 'github.event.pull_request.head.sha || github.sha'
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\measurement-variance-smoke.yml" `
+    -CheckoutToken $prOrDispatchCheckout `
+    -SourceCommitToken $prOrDispatchSource
+
+Assert-WorkflowEvidenceContract `
+    -RelativePath ".github\workflows\integration-gate.yml" `
+    -CheckoutToken 'ref: ${{ github.sha }}' `
+    -SourceCommitToken 'github.sha'
+
+$tvValidationContent = Get-Content -LiteralPath $harnessFiles.TvValidation -Raw
+$hostValidationIndex = $tvValidationContent.IndexOf('"-Mode", "Full"', [System.StringComparison]::Ordinal)
+$profileLoopIndex = $tvValidationContent.IndexOf('foreach ($profile in $profiles)', [System.StringComparison]::Ordinal)
+$deviceOnlyIndex = $tvValidationContent.IndexOf('"-Mode", "DeviceOnly"', [System.StringComparison]::Ordinal)
+if ($hostValidationIndex -lt 0 -or $profileLoopIndex -lt 0 -or $hostValidationIndex -gt $profileLoopIndex) {
+    Add-ContractError "TV device validation must complete Full host validation before the profile loop."
 }
 if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
-    $messages += "TV profile validation must use DeviceOnly inside the profile loop."
+    Add-ContractError "TV profile validation must use DeviceOnly inside the profile loop."
 }
 
-$catalogDeviceValidationContent = Get-Content -Path $files[4] -Raw
-if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "50000"') -lt 0) {
-    $messages += "Catalog device validation must run the canonical 50k measurement profile."
+$catalogDeviceValidationContent = Get-Content -LiteralPath $harnessFiles.CatalogDevice -Raw
+if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "50000"', [System.StringComparison]::Ordinal) -lt 0) {
+    Add-ContractError "Catalog device validation must preserve the manual canonical 50k measurement profile."
 }
-if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "10000"') -ge 0) {
-    $messages += "Catalog device validation still references the obsolete 10k measurement profile."
+if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "10000"', [System.StringComparison]::Ordinal) -ge 0) {
+    Add-ContractError "Catalog device validation still references the obsolete 10k measurement profile."
 }
 
 if ($messages.Count -eq 0) {
-    . $files[1]
+    . $harnessFiles.AndroidSdk
 
     $parsedImages = @(ConvertFrom-SdkManagerTvSystemImageLines -Lines @(
         "system-images;android-36;android-tv;x86 | 1 | Android TV",
         "prefix system-images;android-30;google-tv;x86_64 suffix"
     ))
     if ($parsedImages.Count -ne 2) {
-        $messages += "sdkmanager TV image parser did not preserve all package lines."
+        Add-ContractError "sdkmanager TV image parser did not preserve all package lines."
     }
 
     $tempSdkRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("muxtv-sdk-catalog-" + [Guid]::NewGuid().ToString("N"))
@@ -191,7 +205,7 @@ if ($messages.Count -eq 0) {
         Set-Content -Path (Join-Path $installedImageDirectory "source.properties") -Value "Pkg.Revision=1" -Encoding ascii
         $installedImages = @(Get-InstalledTvSystemImages -Tools ([pscustomobject]@{ Root = $tempSdkRoot }))
         if ($installedImages.Count -ne 1 -or $installedImages[0].Package -ne "system-images;android-36;android-tv;x86") {
-            $messages += "Installed Android TV image discovery did not resolve the SDK filesystem package."
+            Add-ContractError "Installed Android TV image discovery did not resolve the SDK filesystem package."
         }
     } finally {
         Remove-Item -Path $tempSdkRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -208,30 +222,31 @@ if ($messages.Count -eq 0) {
     }
     $singletonResult = Resolve-TvSystemImage -Tools ([pscustomobject]@{}) -PreferredApi 36
     if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86") {
-        $messages += "Resolve-TvSystemImage did not handle singleton image output."
+        Add-ContractError "Resolve-TvSystemImage did not handle singleton image output."
     }
 }
 
 if ($messages.Count -gt 0) {
     $joined = [string]::Join([Environment]::NewLine, $messages)
     $message = "Android TV harness validation failed." + [Environment]::NewLine + $joined
-    Set-Content -Path $diagnosticPath -Value $message -Encoding utf8
+    Set-Content -LiteralPath $diagnosticPath -Value $message -Encoding utf8
     Write-Host $message
     throw $message
 }
 
 $measurementHarnessCheck = Join-Path $repositoryRoot "tools\measurements\Test-MeasurementHarnessSyntax.ps1"
-if (-not (Test-Path $measurementHarnessCheck -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $measurementHarnessCheck -PathType Leaf)) {
     throw "Measurement harness syntax checker was not found."
 }
 & $measurementHarnessCheck
 & $runnerPreflightContract
+
 $benchmarkFoundationContract = Join-Path $repositoryRoot "tools\ci\Test-BenchmarkFoundationContract.ps1"
-if (-not (Test-Path $benchmarkFoundationContract -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $benchmarkFoundationContract -PathType Leaf)) {
     throw "Benchmark foundation contract test was not found."
 }
 & $benchmarkFoundationContract
 
-$message = "Android TV, measurement, and benchmark harness PowerShell syntax and contracts are valid."
-Set-Content -Path $diagnosticPath -Value $message -Encoding utf8
+$message = "Android TV, CI evidence, measurement, and benchmark harness contracts are valid."
+Set-Content -LiteralPath $diagnosticPath -Value $message -Encoding utf8
 Write-Host $message
