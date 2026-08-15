@@ -4,33 +4,44 @@ import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -42,6 +53,8 @@ import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.player.media3.Media3TrackController
+import app.muxtv.player.media3.PlaybackSeekController
+import app.muxtv.player.media3.SeekControllerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -62,8 +75,8 @@ private enum class PlayerSheetKind { AUDIO, SUBTITLE }
  *
  * Shared by the catalog PlayerRoute and the external playback route. Hidden by default,
  * Center/OK reveals the overlay, inactivity auto-hides after 6 s, Back closes the overlay
- * first and only then falls through to the route/activity. Audio/subtitle actions appear only
- * when the current Media3 state supports them.
+ * first and only then falls through to the route/activity. Audio/subtitle actions and the
+ * timeline appear only when the current Media3 state supports them.
  */
 @AndroidXOptIn(UnstableApi::class)
 @Composable
@@ -84,6 +97,22 @@ fun PlayerSurfaceContent(
     )
     val audioModels = rememberAudioTrackModels(controller)
     val subtitleModels = rememberSubtitleTrackModels(controller)
+    val surfaceScope = rememberCoroutineScope()
+    val seekController = remember(contentIdentity) {
+        PlaybackSeekController(
+            scope = surfaceScope,
+            onApplySeek = { generation, targetMs ->
+                if (generation == contentIdentity) {
+                    runCatching { controller.seekTo(targetMs) }
+                }
+            },
+        )
+    }
+    val seekState by seekController.state.collectAsState()
+
+    DisposableEffect(contentIdentity) {
+        onDispose { seekController.reset() }
+    }
 
     var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
     var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
@@ -92,6 +121,7 @@ fun PlayerSurfaceContent(
     var lastInteractionNanos by remember(contentIdentity) { mutableLongStateOf(System.nanoTime()) }
     var openSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
     var previouslyOpenSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
+    var positionMs by remember(contentIdentity) { mutableLongStateOf(0L) }
     val primaryActionFocusRequester = remember(controller) { FocusRequester() }
     val surfaceFocusRequester = remember { FocusRequester() }
     val audioActionFocusRequester = remember(contentIdentity) { FocusRequester() }
@@ -106,6 +136,21 @@ fun PlayerSurfaceContent(
         lastInteractionNanos = System.nanoTime()
     }
 
+    fun requestSeek(direction: Int): Boolean {
+        val durationMs = controller.duration
+        if (!capabilities.canSeek || !capabilities.hasKnownDuration || capabilities.isLive) {
+            return false
+        }
+        if (durationMs == C.TIME_UNSET || durationMs <= 0L) return false
+        return seekController.onDirectionRequested(
+            generation = contentIdentity,
+            direction = direction,
+            currentPositionMs = controller.currentPosition,
+            durationMs = durationMs,
+        )
+    }
+
+    val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
 
@@ -119,6 +164,16 @@ fun PlayerSurfaceContent(
 
             override fun onPlayerError(error: PlaybackException) {
                 hasError = true
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    seekController.onSeekConfirmed(contentIdentity)
+                }
             }
         }
         controller.addListener(listener)
@@ -165,6 +220,14 @@ fun PlayerSurfaceContent(
         }
     }
 
+    LaunchedEffect(controlsVisible, showTimeline, contentIdentity) {
+        if (!controlsVisible || !showTimeline) return@LaunchedEffect
+        while (isActive) {
+            positionMs = controller.currentPosition
+            delay(POSITION_SAMPLE_MILLIS)
+        }
+    }
+
     BackHandler(enabled = controlsVisible) {
         registerInteraction()
         controlsVisible = false
@@ -175,6 +238,23 @@ fun PlayerSurfaceContent(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
             .testTag("$testTagPrefix-surface")
+            .onPreviewKeyEvent { event ->
+                if (!controlsVisible && event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionLeft -> requestSeek(
+                            PlaybackSeekController.DIRECTION_BACKWARD,
+                        )
+
+                        Key.DirectionRight -> requestSeek(
+                            PlaybackSeekController.DIRECTION_FORWARD,
+                        )
+
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            }
             .then(
                 if (controlsVisible) {
                     Modifier
@@ -216,6 +296,35 @@ fun PlayerSurfaceContent(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (showTimeline) {
+                    var timelineFocused by remember(contentIdentity) { mutableStateOf(false) }
+                    PlaybackTimeline(
+                        positionMs = positionMs,
+                        durationMs = controller.duration,
+                        previewState = seekState,
+                        testTagPrefix = testTagPrefix,
+                        modifier = Modifier
+                            .focusable()
+                            .onFocusChanged { timelineFocused = it.isFocused }
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && timelineFocused) {
+                                    when (event.key) {
+                                        Key.DirectionLeft -> requestSeek(
+                                            PlaybackSeekController.DIRECTION_BACKWARD,
+                                        )
+
+                                        Key.DirectionRight -> requestSeek(
+                                            PlaybackSeekController.DIRECTION_FORWARD,
+                                        )
+
+                                        else -> false
+                                    }
+                                } else {
+                                    false
+                                }
+                            },
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                     favoriteAction?.let { favorite ->
                         MuxTvActionButton(
@@ -298,6 +407,14 @@ fun PlayerSurfaceContent(
             }
         }
 
+        if (!controlsVisible && seekState !is SeekControllerState.Idle) {
+            SeekHud(
+                state = seekState,
+                modifier = Modifier.align(Alignment.Center),
+                testTag = "$testTagPrefix-seek-hud",
+            )
+        }
+
         when (openSheet) {
             PlayerSheetKind.AUDIO -> AudioTrackSheet(
                 models = audioModels,
@@ -340,6 +457,70 @@ fun PlayerSurfaceContent(
     }
 }
 
+@Composable
+private fun PlaybackTimeline(
+    positionMs: Long,
+    durationMs: Long,
+    previewState: SeekControllerState,
+    testTagPrefix: String,
+    modifier: Modifier = Modifier,
+) {
+    val displayMs = when (previewState) {
+        is SeekControllerState.Pending -> previewState.targetMs
+        is SeekControllerState.Applying -> previewState.targetMs
+        is SeekControllerState.Completed -> previewState.targetMs
+        SeekControllerState.Idle -> positionMs
+    }
+    val direction = when (previewState) {
+        is SeekControllerState.Pending -> previewState.direction
+        is SeekControllerState.Applying -> previewState.direction
+        is SeekControllerState.Completed -> previewState.direction
+        SeekControllerState.Idle -> PlaybackSeekController.DIRECTION_NONE
+    }
+    val timePrefix = if (previewState is SeekControllerState.Idle) {
+        ""
+    } else {
+        when {
+            direction < 0 -> "← "
+            direction > 0 -> "→ "
+            else -> ""
+        }
+    }
+    val progress = if (durationMs > 0L) {
+        (displayMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.xSmall),
+    ) {
+        Text(
+            text = timePrefix + TrackLabelFormatter.formatPlaybackTime(displayMs) + " / " +
+                TrackLabelFormatter.formatPlaybackTime(durationMs),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("$testTagPrefix-timeline-time"),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                .testTag("$testTagPrefix-timeline"),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+        }
+    }
+}
+
 private fun playbackStatus(
     playbackState: Int,
     hasError: Boolean,
@@ -352,3 +533,4 @@ private fun playbackStatus(
 }
 
 private const val OVERLAY_HIDE_NANOS = 6_000_000_000L
+private const val POSITION_SAMPLE_MILLIS = 500L

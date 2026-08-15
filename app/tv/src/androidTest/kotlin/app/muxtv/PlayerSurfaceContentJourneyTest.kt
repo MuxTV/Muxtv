@@ -114,6 +114,40 @@ class PlayerSurfaceContentJourneyTest {
         }
     }
 
+    @Test
+    fun hiddenSurfaceSeekKeysAreIgnoredWithoutSeekableMedia() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val connector = MuxTvMediaControllerConnector(context)
+
+        try {
+            composeRule.setContent {
+                MuxTvTheme {
+                    PlayerSurfaceHost(
+                        connector = connector,
+                        testTagPrefix = "external",
+                    )
+                }
+            }
+
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag("external-surface")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("external-surface").performKeyInput {
+                keyDown(Key.DirectionLeft)
+                keyUp(Key.DirectionLeft)
+                keyDown(Key.DirectionRight)
+                keyUp(Key.DirectionRight)
+            }
+            composeRule.waitForIdle()
+
+            composeRule.onNodeWithTag("external-seek-hud").assertDoesNotExist()
+            composeRule.onNodeWithTag("external-overlay").assertDoesNotExist()
+        } finally {
+            connector.close()
+        }
+    }
+
     @Composable
     private fun PlayerSurfaceHost(
         connector: MuxTvMediaControllerConnector,
