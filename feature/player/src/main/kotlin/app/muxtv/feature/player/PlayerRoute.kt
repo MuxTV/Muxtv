@@ -1,45 +1,29 @@
 package app.muxtv.feature.player
 
 import androidx.annotation.OptIn as AndroidXOptIn
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
-import androidx.media3.ui.compose.PlayerSurface
-import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.PlaybackAccessMutationResult
@@ -54,9 +38,7 @@ import app.muxtv.player.PlaybackStartRequest
 import app.muxtv.player.PlaybackStartResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PlayerFavoriteAction(
@@ -275,12 +257,20 @@ fun PlayerRoute(
             modifier = modifier,
         )
 
-        is PlayerRouteState.Ready -> PlayerContent(
+        is PlayerRouteState.Ready -> PlayerSurfaceContent(
             controller = current.controller,
             title = current.title,
+            favoriteSupported = favoriteAction != null,
             contentIdentity = channelId,
             favoriteAction = favoriteAction,
-            onBack = onBack,
+            stopAction = PlayerSurfaceAction(
+                label = "Остановить",
+                onClick = { current.controller.stop() },
+            ),
+            backAction = PlayerSurfaceAction(
+                label = "Назад к каналам",
+                onClick = onBack,
+            ),
             modifier = modifier,
         )
     }
@@ -335,172 +325,6 @@ private fun HttpApprovalMessage(
                 onClick = onBack,
                 modifier = Modifier.testTag(PLAYER_BACK_TEST_TAG),
             )
-        }
-    }
-}
-
-@AndroidXOptIn(UnstableApi::class)
-@Composable
-private fun PlayerContent(
-    controller: MediaController,
-    title: String,
-    contentIdentity: Any,
-    favoriteAction: PlayerFavoriteAction?,
-    onBack: () -> Unit,
-    modifier: Modifier,
-) {
-    var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
-    var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
-    var hasError by remember(controller) { mutableStateOf(controller.playerError != null) }
-    var controlsVisible by remember(contentIdentity) { mutableStateOf(false) }
-    var lastInteractionNanos by remember(contentIdentity) { mutableLongStateOf(System.nanoTime()) }
-    val primaryActionFocusRequester = remember(controller) { FocusRequester() }
-    val surfaceFocusRequester = remember { FocusRequester() }
-
-    fun revealControls() {
-        lastInteractionNanos = System.nanoTime()
-        controlsVisible = true
-    }
-
-    fun registerInteraction() {
-        lastInteractionNanos = System.nanoTime()
-    }
-
-    DisposableEffect(controller) {
-        val listener = object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) {
-                isPlaying = player.isPlaying
-                playbackState = player.playbackState
-                hasError = player.playerError != null
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                hasError = true
-            }
-        }
-        controller.addListener(listener)
-        onDispose { controller.removeListener(listener) }
-    }
-
-    LaunchedEffect(controlsVisible) {
-        if (controlsVisible) {
-            withFrameNanos { }
-            primaryActionFocusRequester.requestFocus()
-        } else {
-            withFrameNanos { }
-            surfaceFocusRequester.requestFocus()
-        }
-    }
-
-    LaunchedEffect(contentIdentity, controlsVisible) {
-        if (!controlsVisible) return@LaunchedEffect
-        while (isActive) {
-            val elapsedNanos = System.nanoTime() - lastInteractionNanos
-            val remainingMillis = (OVERLAY_HIDE_NANOS - elapsedNanos) / 1_000_000L
-            if (remainingMillis <= 0L) {
-                controlsVisible = false
-                return@LaunchedEffect
-            }
-            delay(remainingMillis.coerceAtMost(1_000L).coerceAtLeast(100L))
-        }
-    }
-
-    BackHandler(enabled = controlsVisible) {
-        registerInteraction()
-        controlsVisible = false
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .testTag(PLAYER_SURFACE_TEST_TAG)
-            .then(
-                if (controlsVisible) {
-                    Modifier
-                } else {
-                    Modifier
-                        .focusRequester(surfaceFocusRequester)
-                        .clickable(
-                            role = Role.Button,
-                            onClick = ::revealControls,
-                        )
-                },
-            ),
-    ) {
-        PlayerSurface(
-            player = controller,
-            modifier = Modifier.fillMaxSize(),
-            surfaceType = SURFACE_TYPE_SURFACE_VIEW,
-        )
-
-        if (controlsVisible) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
-                    .padding(horizontal = 48.dp, vertical = 24.dp)
-                    .testTag(PLAYER_OVERLAY_TEST_TAG)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown) {
-                            registerInteraction()
-                        }
-                        false
-                    },
-                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
-            ) {
-                Text(title, style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    text = playbackStatus(playbackState = playbackState, hasError = hasError),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                    favoriteAction?.let { favorite ->
-                        MuxTvActionButton(
-                            text = favorite.label,
-                            onClick = {
-                                registerInteraction()
-                                favorite.onClick()
-                            },
-                            enabled = favorite.enabled,
-                            modifier = Modifier.testTag(PLAYER_FAVORITE_TEST_TAG),
-                        )
-                    }
-                    MuxTvActionButton(
-                        text = if (isPlaying) "Пауза" else "Продолжить",
-                        onClick = {
-                            registerInteraction()
-                            if (isPlaying) controller.pause() else controller.play()
-                        },
-                        modifier = Modifier
-                            .testTag(PLAYER_PRIMARY_ACTION_TEST_TAG)
-                            .focusRequester(primaryActionFocusRequester),
-                    )
-                    MuxTvActionButton(
-                        text = "Остановить",
-                        onClick = {
-                            registerInteraction()
-                            controller.stop()
-                        },
-                    )
-                    MuxTvActionButton(
-                        text = "Назад к каналам",
-                        onClick = {
-                            registerInteraction()
-                            onBack()
-                        },
-                    )
-                }
-                favoriteAction?.failureLabel?.let { failureLabel ->
-                    Text(
-                        text = failureLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
         }
     }
 }
@@ -580,28 +404,12 @@ private fun commandFailureMessage(failure: MediaControllerOperationFailure): Str
     else -> COMMAND_FAILED_MESSAGE
 }
 
-private fun playbackStatus(
-    playbackState: Int,
-    hasError: Boolean,
-): String = when {
-    hasError -> "Ошибка воспроизведения"
-    playbackState == Player.STATE_BUFFERING -> "Буферизация"
-    playbackState == Player.STATE_READY -> "Готово"
-    playbackState == Player.STATE_ENDED -> "Поток завершён"
-    else -> "Подготовка"
-}
-
 private const val CONNECTION_FAILED_MESSAGE =
     "Не удалось подключиться к службе воспроизведения."
 private const val COMMAND_FAILED_MESSAGE = "Не удалось подготовить выбранный поток."
 private const val HTTP_APPROVAL_FAILED_MESSAGE = "Не удалось сохранить HTTP-разрешение."
-private const val PLAYER_PRIMARY_ACTION_TEST_TAG = "player-primary-action"
 private const val PLAYER_HTTP_APPROVE_TEST_TAG = "player-http-approve"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val PLAYER_DOCTOR_TEST_TAG = "player-doctor"
-private const val PLAYER_SURFACE_TEST_TAG = "player-surface"
-private const val PLAYER_OVERLAY_TEST_TAG = "player-overlay"
-private const val PLAYER_FAVORITE_TEST_TAG = "player-favorite"
 private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
 private const val COMMAND_TIMEOUT_MILLIS = 25_000L
-private const val OVERLAY_HIDE_NANOS = 6_000_000_000L
