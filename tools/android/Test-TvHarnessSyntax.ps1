@@ -74,7 +74,6 @@ $requiredFunctions = @(
     "Start-TvEmulator",
     "Wait-AndroidBoot",
     "Collect-AndroidEvidence",
-    "Pull-TvAppScreenshots",
     "Stop-TvEmulator"
 )
 foreach ($functionName in $requiredFunctions) {
