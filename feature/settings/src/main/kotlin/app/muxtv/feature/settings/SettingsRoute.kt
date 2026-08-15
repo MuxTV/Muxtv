@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -31,7 +32,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -82,16 +82,15 @@ fun SettingsRoute(
 ) {
     val sourcesFocusRequester = remember { FocusRequester() }
     val doctorFocusRequester = remember { FocusRequester() }
-    val firstSectionFocusRequester = settingsSections().firstOrNull()?.let {
-        when (it.section) {
-            SettingsSection.SOURCES -> sourcesFocusRequester
-            SettingsSection.DOCTOR -> doctorFocusRequester
-        }
-    } ?: sourcesFocusRequester
+    var lastFocusedSection by rememberSaveable { mutableStateOf(SettingsSection.SOURCES) }
+    val restoreFocusRequester = when (lastFocusedSection) {
+        SettingsSection.SOURCES -> sourcesFocusRequester
+        SettingsSection.DOCTOR -> doctorFocusRequester
+    }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(restoreFocusRequester) {
         withFrameNanos { }
-        firstSectionFocusRequester.requestFocus()
+        restoreFocusRequester.requestFocus()
     }
 
     MuxTvScreenScaffold(
@@ -107,6 +106,7 @@ fun SettingsRoute(
                         SettingsSection.DOCTOR -> doctorFocusRequester
                     },
                     railFocusRequester = railFocusRequester,
+                    onFocused = { lastFocusedSection = model.section },
                     onClick = when (model.section) {
                         SettingsSection.SOURCES -> onOpenSources
                         SettingsSection.DOCTOR -> onOpenDoctor
@@ -123,6 +123,7 @@ private fun SettingsSectionRow(
     model: SettingsSectionModel,
     focusRequester: FocusRequester,
     railFocusRequester: FocusRequester?,
+    onFocused: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -145,7 +146,10 @@ private fun SettingsSectionRow(
                 },
                 shape = shape,
             )
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                if (state.isFocused) onFocused()
+            }
             .clickable(role = Role.Button, onClick = onClick)
             .focusable()
             .focusRequester(focusRequester)
