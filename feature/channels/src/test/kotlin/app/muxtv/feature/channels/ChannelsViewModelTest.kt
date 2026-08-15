@@ -87,6 +87,31 @@ class ChannelsViewModelTest {
     }
 
     @Test
+    fun visibleNowNextIdsIgnoreLoadedOffscreenRows() {
+        val loadedRows = listOf(
+            "offscreen-before-0",
+            "offscreen-before-1",
+            "visible-2",
+            "visible-3",
+            "offscreen-after-4",
+        ).map { channelId ->
+            buildChannelRow(
+                item = item(channelId),
+                nowNext = null,
+                playback = PlaybackSessionState.Idle,
+                nowEpochMillis = 0L,
+            )
+        }
+
+        val visibleIds = visibleChannelIds(
+            visibleIndexes = listOf(2, 3, 99),
+            itemAt = loadedRows::getOrNull,
+        )
+
+        assertThat(visibleIds).containsExactly("visible-2", "visible-3").inOrder()
+    }
+
+    @Test
     fun settingNowNextIdsRefreshesImmediately() = runBlocking {
         val epg = RecordingEpgGuideRepository()
         withViewModel(
