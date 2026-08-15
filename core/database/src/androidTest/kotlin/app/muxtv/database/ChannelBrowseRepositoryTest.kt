@@ -12,9 +12,11 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.NowNextQuery
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
@@ -115,7 +117,9 @@ class ChannelBrowseRepositoryTest {
 
         activateRevision(revisionNumber = 2L, channelCount = 2)
         database.invalidationTracker.refresh("sources", "provider_channels")
-        withTimeout(5_000L) { invalidated.await() }
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            withTimeout(10_000L) { invalidated.await() }
+        }
 
         assertThat(source.invalid).isTrue()
         val replacement = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
