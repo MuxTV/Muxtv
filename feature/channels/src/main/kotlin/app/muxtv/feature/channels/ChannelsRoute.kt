@@ -107,11 +107,14 @@ fun ChannelsRoute(
         FocusAnchor(id, focusedChannelIndex, focusedChannelScrollOffset)
     }
 
-    val visibleIds = remember(rows.itemSnapshotList) {
-        rows.itemSnapshotList.filterNotNull().map { it.channelId }
-    }
-    LaunchedEffect(visibleIds) {
-        screenViewModel.setNowNextIds(visibleIds)
+    LaunchedEffect(listState, rows) {
+        snapshotFlow {
+            val snapshot = rows.itemSnapshotList
+            visibleChannelIds(
+                visibleIndexes = listState.layoutInfo.visibleItemsInfo.map { it.index },
+                itemAt = snapshot::getOrNull,
+            )
+        }.collect(screenViewModel::setNowNextIds)
     }
 
     when {
@@ -152,6 +155,13 @@ fun ChannelsRoute(
         )
     }
 }
+
+internal fun visibleChannelIds(
+    visibleIndexes: List<Int>,
+    itemAt: (Int) -> ChannelRowUiModel?,
+): List<String> = visibleIndexes
+    .mapNotNull { index -> itemAt(index)?.channelId }
+    .distinct()
 
 @Composable
 private fun EmptyRoute(
