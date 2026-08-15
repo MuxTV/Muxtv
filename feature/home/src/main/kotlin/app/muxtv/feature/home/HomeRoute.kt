@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +54,7 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvActionStyle
 import app.muxtv.designsystem.component.MuxTvChannelLogo
 import app.muxtv.designsystem.component.MuxTvEmptyState
 import app.muxtv.designsystem.component.MuxTvFocusSurface
@@ -99,7 +101,7 @@ fun HomeRoute(
         }
     }
     val screenViewModel: HomeViewModel = viewModel(factory = factory)
-    val hasSourcesState by screenViewModel.hasSources.collectAsStateWithLifecycle()
+    val sourceState by screenViewModel.sourceState.collectAsStateWithLifecycle()
     val sessionState by screenViewModel.playbackSessionState.collectAsStateWithLifecycle()
     val recent by screenViewModel.recent.collectAsStateWithLifecycle()
     val nowNext by screenViewModel.nowNext.collectAsStateWithLifecycle()
@@ -136,17 +138,29 @@ fun HomeRoute(
     val heroFocusRequester = remember { FocusRequester() }
     val heroDownRequester = remember { FocusRequester() }
 
+    // Home already has a persistent selected destination in the rail. Omitting a
+    // second large route title restores the reference hierarchy: clock -> hero -> rails.
     MuxTvScreenScaffold(
-        title = "Главная",
+        title = null,
         modifier = modifier,
     ) {
-        if (!hasSourcesState) {
-            HomeEmptyState(
+        when (sourceState) {
+            HomeSourceState.Loading -> HomeLoadingState(
+                onOpenChannels = onOpenChannels,
+                railFocusRequester = railFocusRequester,
+            )
+
+            HomeSourceState.Failed -> HomeSourceFailureState(
+                onOpenChannels = onOpenChannels,
+                railFocusRequester = railFocusRequester,
+            )
+
+            HomeSourceState.Empty -> HomeEmptyState(
                 onAddSource = onAddSource,
                 railFocusRequester = railFocusRequester,
             )
-        } else {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+
+            HomeSourceState.Present -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val contentMaxHeight = maxHeight
                 Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.sectionGap)) {
                     HomeHero(
@@ -172,6 +186,51 @@ fun HomeRoute(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HomeLoadingState(
+    onOpenChannels: () -> Unit,
+    railFocusRequester: FocusRequester?,
+) {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        requester.requestFocus()
+    }
+    MuxTvActionButton(
+        text = "Открыть эфир",
+        onClick = onOpenChannels,
+        modifier = Modifier
+            .focusRequester(requester)
+            .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
+    )
+}
+
+@Composable
+private fun HomeSourceFailureState(
+    onOpenChannels: () -> Unit,
+    railFocusRequester: FocusRequester?,
+) {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        requester.requestFocus()
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        MuxTvEmptyState(
+            icon = Icons.Filled.Info,
+            title = "Не удалось прочитать состояние источников",
+            description = "MuxTV не будет считать это пустой библиотекой. Можно открыть эфир или перейти в навигацию.",
+            actionLabel = "Открыть эфир",
+            actionTestTag = HOME_SOURCE_FAILURE_ACTION_TEST_TAG,
+            onAction = onOpenChannels,
+            actionModifier = Modifier
+                .focusRequester(requester)
+                .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -216,12 +275,20 @@ private fun HomeHero(
         withFrameNanos { }
         heroFocusRequester.requestFocus()
     }
+    val heroBrush = Brush.horizontalGradient(
+        colors = listOf(
+            TvTokens.Color.surfaceRaised,
+            TvTokens.Color.accentSoft2,
+            TvTokens.Color.accentSoft,
+        ),
+    )
     MuxTvFocusSurface(
         onClick = {
             hero.channelId?.let(onOpenChannel) ?: onOpenChannels()
         },
         corner = TvTokens.Shape.heroCorner,
         contentPadding = TvTokens.Spacing.large,
+        containerBrush = heroBrush,
         modifier = modifier
             .testTag(HOME_HERO_TEST_TAG)
             .focusRequester(heroFocusRequester)
@@ -230,113 +297,118 @@ private fun HomeHero(
                 downFocusRequester?.let { down = it }
             },
     ) {
-        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
-            ) {
-                if (hero.hasChannel) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        MuxTvChannelLogo(
-                            name = hero.displayName.orEmpty(),
-                            size = 64.dp,
-                            corner = TvTokens.Shape.largeCardCorner,
-                        )
-                        Spacer(Modifier.width(TvTokens.Spacing.medium))
-                        Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.micro)) {
-                            Text(
-                                text = buildString {
-                                    hero.channelNumber?.takeIf(String::isNotBlank)?.let {
-                                        append(it).append(" · ")
-                                    }
-                                    append(hero.displayName.orEmpty())
-                                },
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (hero.isCurrentPlayback) {
-                                    Icon(
-                                        imageVector = Icons.Filled.PlayArrow,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                    )
-                                    Spacer(Modifier.width(TvTokens.Spacing.xSmall))
-                                }
-                                if (hero.isFavorite) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = TvTokens.Color.accent,
-                                    )
-                                    Spacer(Modifier.width(TvTokens.Spacing.xSmall))
-                                }
-                                Text(
-                                    text = if (hero.isCurrentPlayback) {
-                                        "Сейчас в эфире"
-                                    } else {
-                                        "Последний просмотр"
-                                    },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = if (hero.isCurrentPlayback) {
-                                        MaterialTheme.colorScheme.secondary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                    if (hero.currentTitle != null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(HERO_TEXT_WIDTH_FRACTION)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            if (hero.hasChannel) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MuxTvChannelLogo(
+                        name = hero.displayName.orEmpty(),
+                        size = 56.dp,
+                        corner = TvTokens.Shape.logoCorner,
+                    )
+                    Spacer(Modifier.width(TvTokens.Spacing.medium))
+                    Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.micro)) {
                         Text(
-                            text = "Сейчас: ${hero.currentTitle}",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = buildString {
+                                hero.channelNumber?.takeIf(String::isNotBlank)?.let {
+                                    append(it).append(" · ")
+                                }
+                                append(hero.displayName.orEmpty())
+                            },
+                            style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (hero.isCurrentPlayback) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                )
+                                Spacer(Modifier.width(TvTokens.Spacing.xSmall))
+                            }
+                            if (hero.isFavorite) {
+                                Icon(
+                                    imageVector = Icons.Filled.Star,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = TvTokens.Color.accent,
+                                )
+                                Spacer(Modifier.width(TvTokens.Spacing.xSmall))
+                            }
+                            Text(
+                                text = if (hero.isCurrentPlayback) "Сейчас в эфире" else "Последний просмотр",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (hero.isCurrentPlayback) {
+                                    MaterialTheme.colorScheme.secondary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                maxLines = 1,
+                            )
+                        }
                     }
-                    if (hero.nextTitle != null) {
-                        Text(
-                            text = "Далее: ${hero.nextTitle}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (hero.progressFraction != null) {
-                        MuxTvProgrammeProgress(fraction = hero.progressFraction, height = 6.dp)
-                    }
-                } else {
+                }
+                Spacer(Modifier.height(TvTokens.Spacing.medium))
+                Text(
+                    text = hero.currentTitle ?: hero.displayName.orEmpty(),
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = TvTokens.Typography.heroTitle,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (hero.progressFraction != null) {
+                    Spacer(Modifier.height(TvTokens.Spacing.small))
+                    MuxTvProgrammeProgress(fraction = hero.progressFraction, height = 6.dp)
+                }
+                if (hero.nextTitle != null) {
+                    Spacer(Modifier.height(TvTokens.Spacing.small))
                     Text(
-                        text = "Прямой эфир",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "Каналы из ваших источников — в едином списке.",
+                        text = "Далее · ${hero.nextTitle}",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            } else {
+                Text(
+                    text = "Прямой эфир",
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = TvTokens.Typography.heroTitle,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(TvTokens.Spacing.small))
+                Text(
+                    text = "Каналы из ваших источников — в едином списке.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            Spacer(Modifier.width(TvTokens.Spacing.large))
-            Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+            Spacer(Modifier.height(TvTokens.Spacing.medium))
+            Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                 MuxTvActionButton(
                     text = hero.primaryActionLabel,
                     onClick = {
                         hero.channelId?.let(onOpenChannel) ?: onOpenChannels()
                     },
+                    style = MuxTvActionStyle.Primary,
                     modifier = Modifier.testTag(HOME_HERO_PRIMARY_TEST_TAG),
                 )
                 MuxTvActionButton(
@@ -533,11 +605,13 @@ private fun HomeChannelCardView(
     }
 }
 
-private const val HERO_HEIGHT_FRACTION = 0.44f
+private const val HERO_HEIGHT_FRACTION = 0.46f
+private const val HERO_TEXT_WIDTH_FRACTION = 0.68f
 private const val NOW_REFRESH_MILLIS = 60_000L
 const val HOME_HERO_TEST_TAG = "home-hero"
 const val HOME_HERO_PRIMARY_TEST_TAG = "home-hero-primary"
 const val HOME_HERO_GUIDE_TEST_TAG = "home-hero-guide"
 const val HOME_ADD_SOURCE_TEST_TAG = "home-add-source"
+const val HOME_SOURCE_FAILURE_ACTION_TEST_TAG = "home-source-failure-action"
 const val HOME_FAVORITES_HEADER_TEST_TAG = "home-favorites-header"
 const val HOME_RECENT_HEADER_TEST_TAG = "home-recent-header"
