@@ -1,10 +1,10 @@
 package app.muxtv.feature.channels
 
-import androidx.paging.PagingData
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.paging.PagingData
 import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
@@ -17,15 +17,17 @@ import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
 import com.google.common.truth.Truth.assertThat
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -84,6 +86,48 @@ class ChannelsViewModelTest {
         ).isTrue()
     }
 
+    @Test
+    fun settingNowNextIdsRefreshesImmediately() = runBlocking {
+        val epg = RecordingEpgGuideRepository()
+        withViewModel(
+            repository = RecordingBrowseRepository(),
+            playback = FakePlaybackStateSource(),
+            epg = epg,
+        ) { viewModel ->
+            viewModel.setNowNextIds(listOf("channel-a", "channel-b"))
+            repeat(20) {
+                if (epg.queries.isNotEmpty()) return@repeat
+                yield()
+            }
+
+            assertThat(epg.queries).hasSize(1)
+            assertThat(epg.queries.single().canonicalChannelIds)
+                .containsExactly("channel-a", "channel-b").inOrder()
+        }
+    }
+
+    @Test
+    fun staleNowNextCompletionCannotOverwriteNewerIds() = runBlocking {
+        val epg = DeferredEpgGuideRepository()
+        withViewModel(
+            repository = RecordingBrowseRepository(),
+            playback = FakePlaybackStateSource(),
+            epg = epg,
+        ) { viewModel ->
+            viewModel.refreshNowNext(listOf("old-channel"))
+            awaitRequestCount(epg, 1)
+            viewModel.refreshNowNext(listOf("new-channel"))
+            awaitRequestCount(epg, 2)
+
+            epg.complete("new-channel", nowNext("new-channel", 5_000L))
+            yield()
+            epg.complete("old-channel", nowNext("old-channel", 4_000L))
+            yield()
+
+            assertThat(viewModel.nowNextById.value.keys).containsExactly("new-channel")
+        }
+    }
+
     private suspend fun awaitQueryCount(repository: RecordingBrowseRepository, count: Int) {
         repeat(100) {
             if (repository.queries.size >= count) return
@@ -92,9 +136,18 @@ class ChannelsViewModelTest {
         error("Expected $count browse queries, got ${repository.queries.size}")
     }
 
+    private suspend fun awaitRequestCount(repository: DeferredEpgGuideRepository, count: Int) {
+        repeat(100) {
+            if (repository.requestCount >= count) return
+            yield()
+        }
+        error("Expected $count now/next requests, got ${repository.requestCount}")
+    }
+
     private suspend fun withViewModel(
         repository: ChannelBrowseRepository,
         playback: PlaybackSessionStateSource,
+        epg: EpgGuideRepository = NoNowNextEpgGuideRepository,
         block: suspend (ChannelsViewModel) -> Unit,
     ) {
         val store = ViewModelStore()
@@ -103,8 +156,9 @@ class ChannelsViewModelTest {
                 ChannelsViewModel(
                     channelBrowseRepository = repository,
                     playbackSessionStateSource = playback,
-                    epgGuideRepository = NoNowNextEpgGuideRepository,
+                    epgGuideRepository = epg,
                     profileId = PROFILE_ID,
+                    nowEpochMillis = { 1_000L },
                 )
             }
         }
@@ -135,6 +189,37 @@ class ChannelsViewModelTest {
         override val playbackSessionState: StateFlow<PlaybackSessionState> = state
     }
 
+    private class RecordingEpgGuideRepository : EpgGuideRepository {
+        val queries = CopyOnWriteArrayList<NowNextQuery>()
+
+        override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> {
+            queries += query
+            return query.canonicalChannelIds.map { nowNext(it, 5_000L) }
+        }
+
+        override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
+    }
+
+    private class DeferredEpgGuideRepository : EpgGuideRepository {
+        private val requests = CopyOnWriteArrayList<Pair<NowNextQuery, CompletableDeferred<List<ChannelNowNext>>>>()
+
+        val requestCount: Int
+            get() = requests.size
+
+        override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> {
+            val deferred = CompletableDeferred<List<ChannelNowNext>>()
+            requests += query to deferred
+            return deferred.await()
+        }
+
+        fun complete(channelId: String, result: ChannelNowNext) {
+            val request = requests.first { (query, _) -> query.canonicalChannelIds == listOf(channelId) }
+            request.second.complete(listOf(result))
+        }
+
+        override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
+    }
+
     private object NoNowNextEpgGuideRepository : EpgGuideRepository {
         override suspend fun getNowNext(query: NowNextQuery): List<ChannelNowNext> = emptyList()
 
@@ -157,6 +242,14 @@ class ChannelsViewModelTest {
             nextProgrammeStartEpochMillis = null,
             variantCount = 1,
             guideState = GuideProjectionState.NO_GUIDE,
+        )
+
+        fun nowNext(channelId: String, boundary: Long) = ChannelNowNext(
+            canonicalChannelId = channelId,
+            state = GuideProjectionState.READY,
+            current = null,
+            next = null,
+            nextBoundaryEpochMillis = boundary,
         )
     }
 }
