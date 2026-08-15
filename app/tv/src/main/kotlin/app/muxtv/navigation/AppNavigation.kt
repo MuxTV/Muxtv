@@ -77,7 +77,7 @@ fun AppNavigation(
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
     val railFocusRequester = remember { FocusRequester() }
-    var railExpanded by remember { mutableStateOf(false) }
+    var railExpanded by remember { mutableStateOf(true) }
 
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
@@ -113,6 +113,7 @@ fun AppNavigation(
                 railFocusRequester = railFocusRequester,
                 modifier = Modifier.fillMaxHeight(),
                 onExpandedChange = { railExpanded = it },
+                expandedOverride = railExpanded,
             )
         }
         NavDisplay(

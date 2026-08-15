@@ -53,9 +53,9 @@ data class MuxTvNavigationRailItem(
 /**
  * Lounge Light left navigation rail. Collapsed (icon-only) by default,
  * transiently expands while any item holds focus. Selected destination keeps a
- * persistent bronze marker distinct from focus. Back-collapse ownership stays
- * with the shell: callers receive `onExpandedChange` and compose their own
- * BackHandler so precedence with route Back handling stays deterministic.
+ * persistent bronze marker distinct from focus. The shell may force-collapse
+ * via `expandedOverride` (Back contract) and receives focus changes through
+ * `onExpandedChange`.
  */
 @Composable
 fun MuxTvNavigationRail(
@@ -64,11 +64,13 @@ fun MuxTvNavigationRail(
     railFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     onExpandedChange: (Boolean) -> Unit = {},
+    expandedOverride: Boolean? = null,
 ) {
     var focusedItemCount by remember { mutableIntStateOf(0) }
     val railFocused = focusedItemCount > 0
+    val expanded = railFocused && (expandedOverride ?: true)
     val width by animateDpAsState(
-        targetValue = if (railFocused) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed,
+        targetValue = if (expanded) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed,
         animationSpec = tween(durationMillis = TvTokens.Motion.screenDurationMillis),
         label = "navigationRailWidth",
     )
@@ -88,7 +90,7 @@ fun MuxTvNavigationRail(
         items.forEach { item ->
             MuxTvNavigationRailItemView(
                 item = item,
-                expanded = railFocused,
+                expanded = expanded,
                 onFocusChanged = { focused ->
                     if (focused) {
                         focusedItemCount += 1

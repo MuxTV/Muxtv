@@ -494,6 +494,21 @@ function Collect-AndroidEvidence {
     & $Tools.Adb -s $Serial shell screencap -p /sdcard/muxtv-ci.png 2>$null | Out-Null
     & $Tools.Adb -s $Serial pull /sdcard/muxtv-ci.png (Join-Path $OutputDirectory "screen.png") 2>$null | Out-Null
     & $Tools.Adb -s $Serial shell rm /sdcard/muxtv-ci.png 2>$null | Out-Null
+
+    Pull-TvAppScreenshots -Tools $Tools -Serial $Serial -OutputDirectory $OutputDirectory
+}
+
+function Pull-TvAppScreenshots {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string]$OutputDirectory
+    )
+
+    $screenshotDirectory = Join-Path $OutputDirectory "screenshots"
+    New-Item -ItemType Directory -Force -Path $screenshotDirectory | Out-Null
+    & $Tools.Adb -s $Serial pull /sdcard/Android/data/app.muxtv.tv.debug/files/screenshots/. $screenshotDirectory 2>$null | Out-Null
 }
 
 function Stop-TvEmulator {
