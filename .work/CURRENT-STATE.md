@@ -9,9 +9,11 @@ implementation_source_commit: 1249624db5010e8140814a56553ea194c6d25d66
 
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Принятый main заканчивается PR #160 и содержит закрытый MVP-контур S0–S5, repository truth contract и доказуемую GitHub/local hygiene.
+MuxTV находится в стадии **functional pre-alpha**. Принятый main заканчивается PR #166 (shared TV player surface EP-04..07) и содержит закрытый MVP-контур S0–S5, repository truth contract и доказуемую GitHub/local hygiene.
 
-Открытых PR на принятой базе нет. Search S5 считается принятым: measurement baseline через PR #159, top-N refresh optimization через PR #160. Активный пакет — Guide S6 bounded closure, затем M4-R/M6-R/L1/D1/M3-C/M7-R и физический release candidate.
+Search S5 считается принятым: measurement baseline через PR #159, top-N refresh optimization через PR #160. Активный пакет — Guide S6 bounded closure, затем M4-R/M6-R/L1/D1/M3-C/M7-R и физический release candidate.
+
+Статус M6-R (Lounge Light): полный TV-редизайн реализован в PR #168 (ветка `feat/lounge-light-tv-redesign`, 8 коммитов): тема/токены, левая rail-навигация, Home/Channels/Guide/Search, Settings workspace (Sources/Doctor/AddSource), тёплый player overlay, D-pad journeys, design-craft polish (motion easing, semantic selection markers) и фикс макробенчмарк CUJ через Settings workspace. Ждёт CI-гейтов self-hosted runner; device-acceptance на физическом телевизоре — отдельный шаг.
 
 ## Принятая база
 
