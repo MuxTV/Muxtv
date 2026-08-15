@@ -17,4 +17,28 @@ class TvTokensTest {
         assertThat(TvTokens.Motion.focusDurationMillis).isEqualTo(0)
         assertThat(TvTokens.Motion.screenDurationMillis).isAtMost(300)
     }
+
+    @Test
+    fun `lounge rail keeps stable collapsed geometry and bounded expanded width`() {
+        assertThat(TvTokens.Size.railCollapsed.value).isAtLeast(80f)
+        assertThat(TvTokens.Size.railExpanded.value).isAtMost(280f)
+        assertThat(TvTokens.Size.railExpanded).isGreaterThan(TvTokens.Size.railCollapsed)
+    }
+
+    @Test
+    fun `channel rows and guide cells never scale on focus`() {
+        assertThat(TvTokens.Focus.scale).isEqualTo(1f)
+    }
+
+    @Test
+    fun `semantic palette keeps green reserved for live playing progress`() {
+        assertThat(TvTokens.Color.liveGreen).isNotEqualTo(TvTokens.Color.accent)
+        assertThat(TvTokens.Color.accent).isNotEqualTo(TvTokens.Color.liveGreen)
+    }
+
+    @Test
+    fun `text roles keep primary and secondary contrast pairs`() {
+        assertThat(TvTokens.Color.textPrimary).isNotEqualTo(TvTokens.Color.textSecondary)
+        assertThat(TvTokens.Color.accentSoft).isNotEqualTo(TvTokens.Color.accentSoft2)
+    }
 }

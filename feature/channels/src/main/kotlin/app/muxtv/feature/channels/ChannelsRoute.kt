@@ -59,6 +59,7 @@ fun ChannelsRoute(
     profileId: String,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val factory = remember(channelBrowseRepository, playbackSessionStateSource, profileId) {
         viewModelFactory {
@@ -115,6 +116,7 @@ fun ChannelsRoute(
                 focusedChannelScrollOffset = anchor.scrollOffset
             },
             onOpenChannel = onOpenChannel,
+            railFocusRequester = railFocusRequester,
             modifier = modifier,
         )
     }
@@ -159,6 +161,7 @@ private fun ChannelsContent(
     onFocusAnchorChanged: (FocusAnchor) -> Unit,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val allFilterFocusRequester = remember { FocusRequester() }
@@ -207,7 +210,10 @@ private fun ChannelsContent(
                 text = filter.filterLabel(ChannelsFilter.ALL, "Все каналы"),
                 onClick = { onFilterChanged(ChannelsFilter.ALL) },
                 modifier = Modifier.testTag(CHANNELS_ALL_FILTER_TEST_TAG)
-                    .focusProperties { right = favoritesFilterFocusRequester }
+                    .focusProperties {
+                        left = railFocusRequester ?: FocusRequester.Default
+                        right = favoritesFilterFocusRequester
+                    }
                     .focusRequester(allFilterFocusRequester),
             )
             MuxTvActionButton(
@@ -215,7 +221,7 @@ private fun ChannelsContent(
                 onClick = { onFilterChanged(ChannelsFilter.FAVORITES) },
                 modifier = Modifier.testTag(CHANNELS_FAVORITES_FILTER_TEST_TAG)
                     .focusProperties {
-                        left = allFilterFocusRequester
+                        left = railFocusRequester ?: FocusRequester.Default
                         right = recentFilterFocusRequester
                     }
                     .focusRequester(favoritesFilterFocusRequester),
@@ -224,7 +230,9 @@ private fun ChannelsContent(
                 text = filter.filterLabel(ChannelsFilter.RECENT, "Недавние"),
                 onClick = { onFilterChanged(ChannelsFilter.RECENT) },
                 modifier = Modifier.testTag(CHANNELS_RECENT_FILTER_TEST_TAG)
-                    .focusProperties { left = favoritesFilterFocusRequester }
+                    .focusProperties {
+                        left = railFocusRequester ?: FocusRequester.Default
+                    }
                     .focusRequester(recentFilterFocusRequester),
             )
         }
@@ -271,7 +279,12 @@ private fun ChannelsContent(
                         },
                         modifier = Modifier.fillMaxWidth()
                             .testTag("$CHANNEL_ROW_TEST_TAG_PREFIX$index")
-                            .focusProperties { if (index == 0) up = selectedFilterFocusRequester }
+                            .focusProperties {
+                                if (index == 0) {
+                                    up = selectedFilterFocusRequester
+                                    left = railFocusRequester ?: FocusRequester.Default
+                                }
+                            }
                             .focusRequester(focusRequester)
                             .onFocusChanged { state -> if (state.isFocused) captureFocusAnchor() },
                     )

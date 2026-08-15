@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -58,6 +59,7 @@ fun DoctorRoute(
     exportStatus: DoctorExportStatus,
     onExport: (String) -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val refreshFocusRequester = remember { FocusRequester() }
     var snapshot by remember(observationReader) {
@@ -90,6 +92,7 @@ fun DoctorRoute(
                 onClick = { snapshot = readSnapshot(observationReader) },
                 modifier = Modifier
                     .testTag(DOCTOR_REFRESH_TEST_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default }
                     .focusRequester(refreshFocusRequester),
             )
             MuxTvActionButton(

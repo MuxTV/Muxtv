@@ -62,6 +62,7 @@ fun SourcesRoute(
     playbackApprovalActions: SourcePlaybackApprovalActions =
         SourcePlaybackApprovalActions.Unavailable,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val scope = rememberCoroutineScope()
     val busySources = remember { mutableStateMapOf<String, Boolean>() }
@@ -115,6 +116,7 @@ fun SourcesRoute(
             message = "Загрузка источников…",
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -123,6 +125,7 @@ fun SourcesRoute(
             message = "Импортированных источников пока нет.",
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -131,6 +134,7 @@ fun SourcesRoute(
             message = "Не удалось прочитать список источников.",
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
             modifier = modifier,
         )
@@ -141,6 +145,7 @@ fun SourcesRoute(
             mutationError = mutationError,
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
             onRefreshNow = refreshScheduler::refreshNow,
             onUpdatePolicy = { policy ->
@@ -174,6 +179,7 @@ private fun SourcesContent(
     mutationError: String?,
     addSourceFocusRequester: FocusRequester,
     topNavigationFocusRequester: FocusRequester?,
+    railFocusRequester: FocusRequester? = null,
     onAddSource: () -> Unit,
     onRefreshNow: (String) -> Unit,
     onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
@@ -188,6 +194,7 @@ private fun SourcesContent(
         SourcesHeader(
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
         )
         mutationError?.let { message ->
@@ -223,6 +230,7 @@ private fun SourcesHeader(
     addSourceFocusRequester: FocusRequester,
     topNavigationFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
+    railFocusRequester: FocusRequester? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -235,8 +243,11 @@ private fun SourcesHeader(
             modifier = Modifier
                 .testTag(SOURCES_ADD_TEST_TAG)
                 .then(
-                    if (topNavigationFocusRequester != null) {
-                        Modifier.focusProperties { up = topNavigationFocusRequester }
+                    if (topNavigationFocusRequester != null || railFocusRequester != null) {
+                        Modifier.focusProperties {
+                            topNavigationFocusRequester?.let { up = it }
+                            railFocusRequester?.let { left = it }
+                        }
                     } else {
                         Modifier
                     },
@@ -360,6 +371,7 @@ private fun MessageRoute(
     topNavigationFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
     modifier: Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(56.dp),
@@ -368,6 +380,7 @@ private fun MessageRoute(
         SourcesHeader(
             addSourceFocusRequester = addSourceFocusRequester,
             topNavigationFocusRequester = topNavigationFocusRequester,
+            railFocusRequester = railFocusRequester,
             onAddSource = onAddSource,
         )
         Text(

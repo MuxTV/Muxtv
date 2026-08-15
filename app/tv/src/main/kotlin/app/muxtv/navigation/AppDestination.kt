@@ -18,6 +18,9 @@ sealed interface AppDestination : NavKey {
     data object Search : AppDestination
 
     @Serializable
+    data object Settings : AppDestination
+
+    @Serializable
     data object Sources : AppDestination
 
     @Serializable
@@ -37,6 +40,6 @@ sealed interface AppDestination : NavKey {
 
     companion object {
         val initial: AppDestination = Home
-        val topLevel: List<AppDestination> = listOf(Home, Channels, Guide, Search, Sources, Doctor)
+        val topLevel: List<AppDestination> = listOf(Home, Channels, Guide, Search, Settings)
     }
 }

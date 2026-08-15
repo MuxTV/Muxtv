@@ -13,11 +13,12 @@ class AppNavigationModelTest {
                 AppDestination.Channels,
                 AppDestination.Guide,
                 AppDestination.Search,
-                AppDestination.Sources,
-                AppDestination.Doctor,
+                AppDestination.Settings,
             )
             .inOrder()
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.AddSource)
+        assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Sources)
+        assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Doctor)
         assertThat(AppDestination.topLevel)
             .doesNotContain(AppDestination.Player(channelId = "channel-test"))
     }

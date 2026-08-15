@@ -179,6 +179,7 @@ if ($Mode -ne "DeviceOnly") {
         ":feature:search:testDebugUnitTest",
         ":feature:player:testDebugUnitTest",
         ":feature:sources:testDebugUnitTest",
+        ":feature:settings:testDebugUnitTest",
         ":player:media3:testDebugUnitTest"
     )
     Add-Step -Name "android-instrumentation-compile" -Arguments @(
@@ -213,6 +214,7 @@ if ($Mode -ne "DeviceOnly") {
             ":feature:search:lintDebug",
             ":feature:player:lintDebug",
             ":feature:sources:lintDebug",
+            ":feature:settings:lintDebug",
             ":player:media3:lintDebug"
         )
         Add-Step -Name "release-assembly" -Arguments @(

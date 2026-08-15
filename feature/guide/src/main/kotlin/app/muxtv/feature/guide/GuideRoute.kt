@@ -30,6 +30,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -56,6 +57,7 @@ fun GuideRoute(
     profileId: String,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val factory = remember(repository, profileId) {
         viewModelFactory {
@@ -79,6 +81,7 @@ fun GuideRoute(
         onNextPage = screenViewModel::loadNextPage,
         onResetToFirstPage = screenViewModel::resetToFirstPage,
         onOpenChannel = onOpenChannel,
+        railFocusRequester = railFocusRequester,
         modifier = modifier,
     )
 }
@@ -94,6 +97,7 @@ private fun GuideScreen(
     onResetToFirstPage: () -> Unit,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     Column(
         modifier = modifier
@@ -131,6 +135,7 @@ private fun GuideScreen(
                 onNextPage = onNextPage,
                 onResetToFirstPage = onResetToFirstPage,
                 onOpenChannel = onOpenChannel,
+                railFocusRequester = railFocusRequester,
             )
         }
     }
@@ -178,6 +183,7 @@ private fun GuideContent(
     onNextPage: () -> Unit,
     onResetToFirstPage: () -> Unit,
     onOpenChannel: (String) -> Unit,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
     val rowCells = remember(state) { state.rows.map(GuideRowProjection::cells) }
@@ -244,6 +250,7 @@ private fun GuideContent(
         onPreviousPage = onPreviousPage,
         onNextPage = onNextPage,
         onResetToFirstPage = onResetToFirstPage,
+        railFocusRequester = railFocusRequester,
     )
 
     TimelineHeader(
@@ -272,6 +279,7 @@ private fun GuideContent(
                 totalWidth = totalTimelineWidth,
                 timeOffset = timeOffset,
                 nowEpochMillis = nowEpochMillis,
+                railFocusRequester = railFocusRequester,
                 onFocused = { cellIndex, cell ->
                     focusedDetail = cell.detailLabel
                     onFocusAnchorChanged(
@@ -301,6 +309,7 @@ private fun GuidePager(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onResetToFirstPage: () -> Unit,
+    railFocusRequester: FocusRequester? = null,
 ) {
     if (!viewport.hasMoreChannels && !viewport.canResetToFirstPage) return
 
@@ -309,21 +318,24 @@ private fun GuidePager(
             MuxTvActionButton(
                 text = "Предыдущие каналы",
                 onClick = onPreviousPage,
-                modifier = Modifier.testTag(GUIDE_PREVIOUS_PAGE_TAG),
+                modifier = Modifier.testTag(GUIDE_PREVIOUS_PAGE_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
             )
         }
         if (viewport.canResetToFirstPage) {
             MuxTvActionButton(
                 text = "В начало",
                 onClick = onResetToFirstPage,
-                modifier = Modifier.testTag(GUIDE_FIRST_PAGE_TAG),
+                modifier = Modifier.testTag(GUIDE_FIRST_PAGE_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
             )
         }
         if (viewport.hasMoreChannels) {
             MuxTvActionButton(
                 text = "Следующие каналы",
                 onClick = onNextPage,
-                modifier = Modifier.testTag(GUIDE_NEXT_PAGE_TAG),
+                modifier = Modifier.testTag(GUIDE_NEXT_PAGE_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
             )
         }
     }
@@ -387,6 +399,7 @@ private fun GuideTimelineRow(
     nowEpochMillis: Long,
     onFocused: (Int, GuideCellProjection) -> Unit,
     onOpenChannel: () -> Unit,
+    railFocusRequester: FocusRequester? = null,
 ) {
     Row(
         modifier = Modifier
@@ -410,6 +423,7 @@ private fun GuideTimelineRow(
                         focusRequester = requesters[cellIndex],
                         onFocused = { onFocused(cellIndex, cell) },
                         onClick = onOpenChannel,
+                        leftFocusRequester = if (cellIndex == 0) railFocusRequester else null,
                     )
                 }
             }
@@ -490,6 +504,7 @@ private fun ProgrammeCell(
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
     onClick: () -> Unit,
+    leftFocusRequester: FocusRequester? = null,
 ) {
     var focused by remember(cell) { mutableStateOf(false) }
     val shape = RoundedCornerShape(10.dp)
@@ -517,6 +532,7 @@ private fun ProgrammeCell(
             .width(width)
             .height(GUIDE_ROW_HEIGHT)
             .focusRequester(focusRequester)
+            .focusProperties { left = leftFocusRequester ?: FocusRequester.Default }
             .onFocusChanged { focusState ->
                 focused = focusState.isFocused
                 if (focusState.isFocused) onFocused()

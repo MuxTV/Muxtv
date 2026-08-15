@@ -43,6 +43,7 @@ include(
     ":feature:player",
     ":feature:sources",
     ":feature:doctor",
+    ":feature:settings",
     ":benchmark:macrobenchmark",
     ":benchmark:jvm",
 )

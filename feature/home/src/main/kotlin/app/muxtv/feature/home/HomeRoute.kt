@@ -9,7 +9,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -22,7 +28,13 @@ fun HomeRoute(
     onOpenGuide: () -> Unit,
     onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
+    val heroFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        heroFocusRequester.requestFocus()
+    }
     Column(
         modifier = modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 36.dp),
         verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.large),
@@ -35,7 +47,9 @@ fun HomeRoute(
         )
         MuxTvFocusSurface(
             onClick = onOpenChannels,
-            modifier = Modifier.fillMaxWidth().height(220.dp),
+            modifier = Modifier.fillMaxWidth().height(220.dp)
+                .focusRequester(heroFocusRequester)
+                .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                 Text("Прямой эфир", style = MaterialTheme.typography.headlineLarge)

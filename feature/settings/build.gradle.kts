@@ -4,20 +4,17 @@ plugins {
 }
 
 android {
-    namespace = "app.muxtv.designsystem"
+    namespace = "app.muxtv.feature.settings"
     buildFeatures { compose = true }
 }
 
 dependencies {
+    implementation(project(":core:designsystem"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
-    implementation(libs.compose.animation)
     implementation(libs.compose.material.icons.core)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.tv.material)
-    implementation(libs.tv.foundation)
-    debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
