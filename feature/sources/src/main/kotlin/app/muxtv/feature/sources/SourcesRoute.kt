@@ -2,18 +2,18 @@ package app.muxtv.feature.sources
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +38,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -175,25 +174,6 @@ fun SourcesRoute(
                 onAddSource = onAddSource,
                 onOpenDetails = { sourceId -> detailsSourceId = sourceId },
                 onRefreshNow = refreshScheduler::refreshNow,
-                onUpdatePolicy = { policy ->
-                    mutate(policy.sourceId) { refreshScheduler.updatePolicy(policy) }
-                },
-                onRemovePolicy = { sourceId ->
-                    mutate(sourceId) { refreshScheduler.removePolicy(sourceId) }
-                },
-                onResetPlaybackApprovals = { sourceId ->
-                    mutate(sourceId) {
-                        when (playbackApprovalActions.revokeAll(sourceId)) {
-                            SourcePlaybackApprovalResetResult.Reset,
-                            SourcePlaybackApprovalResetResult.Unchanged,
-                            -> Unit
-
-                            SourcePlaybackApprovalResetResult.SourceNotFound,
-                            SourcePlaybackApprovalResetResult.AccessUnavailable,
-                            -> mutationError = "Не удалось сбросить HTTP-разрешения источника."
-                        }
-                    }
-                },
             )
         }
 
@@ -264,9 +244,6 @@ private fun SourcesContent(
     onAddSource: () -> Unit,
     onOpenDetails: (String) -> Unit,
     onRefreshNow: (String) -> Unit,
-    onUpdatePolicy: (SourceRefreshPolicy) -> Unit,
-    onRemovePolicy: (String) -> Unit,
-    onResetPlaybackApprovals: (String) -> Unit,
 ) {
     MuxTvScreenScaffold(title = "Источники") {
         MuxTvActionButton(
@@ -392,27 +369,28 @@ private fun SourceDetailsSheet(
     val running = source.status?.state == SourceRefreshRunState.RUNNING
     val operationalControlsEnabled =
         !mutationInFlight && !running && source.hasCredentialReference
-    val closeFocusRequester = remember { FocusRequester() }
+    val firstActionFocusRequester = remember { FocusRequester() }
     val shape = RoundedCornerShape(TvTokens.Shape.detailsCorner)
 
     androidx.activity.compose.BackHandler(onBack = onDismiss)
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
-        closeFocusRequester.requestFocus()
+        firstActionFocusRequester.requestFocus()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
-            .clickable(role = Role.Button, onClick = onDismiss)
-            .focusable(),
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+        contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(0.56f)
+                .fillMaxWidth(0.60f)
+                .fillMaxHeight(0.82f)
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup()
                 .clip(shape)
                 .background(TvTokens.Color.surfaceRaised)
                 .border(1.dp, TvTokens.Color.dividerStrong, shape)
@@ -432,75 +410,103 @@ private fun SourceDetailsSheet(
                 style = MaterialTheme.typography.bodyLarge,
                 color = source.statusColor(),
             )
-            MuxTvActionButton(
-                text = if (policy.enabled) "Расписание: включено" else "Расписание: выключено",
-                onClick = {
-                    onUpdatePolicy(
-                        policy.copy(
-                            enabled = !policy.enabled,
-                            updatedAtEpochMillis = System.currentTimeMillis(),
-                        ),
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
+            ) {
+                item(key = "schedule") {
+                    MuxTvActionButton(
+                        text = if (policy.enabled) "Расписание: включено" else "Расписание: выключено",
+                        onClick = {
+                            onUpdatePolicy(
+                                policy.copy(
+                                    enabled = !policy.enabled,
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                ),
+                            )
+                        },
+                        enabled = operationalControlsEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(firstActionFocusRequester),
                     )
-                },
-                enabled = operationalControlsEnabled,
-            )
-            MuxTvActionButton(
-                text = "Интервал: ${policy.intervalMinutes.intervalLabel()}",
-                onClick = {
-                    onUpdatePolicy(
-                        policy.copy(
-                            intervalMinutes = policy.intervalMinutes.nextInterval(),
-                            updatedAtEpochMillis = System.currentTimeMillis(),
-                        ),
+                }
+                item(key = "interval") {
+                    MuxTvActionButton(
+                        text = "Интервал: ${policy.intervalMinutes.intervalLabel()}",
+                        onClick = {
+                            onUpdatePolicy(
+                                policy.copy(
+                                    intervalMinutes = policy.intervalMinutes.nextInterval(),
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                ),
+                            )
+                        },
+                        enabled = operationalControlsEnabled,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                },
-                enabled = operationalControlsEnabled,
-            )
-            MuxTvActionButton(
-                text = if (policy.unmeteredOnly) "Сеть: безлимитная" else "Сеть: любая",
-                onClick = {
-                    onUpdatePolicy(
-                        policy.copy(
-                            unmeteredOnly = !policy.unmeteredOnly,
-                            updatedAtEpochMillis = System.currentTimeMillis(),
-                        ),
+                }
+                item(key = "network") {
+                    MuxTvActionButton(
+                        text = if (policy.unmeteredOnly) "Сеть: безлимитная" else "Сеть: любая",
+                        onClick = {
+                            onUpdatePolicy(
+                                policy.copy(
+                                    unmeteredOnly = !policy.unmeteredOnly,
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                ),
+                            )
+                        },
+                        enabled = operationalControlsEnabled,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                },
-                enabled = operationalControlsEnabled,
-            )
-            MuxTvActionButton(
-                text = if (policy.requiresCharging) {
-                    "Питание: только зарядка"
-                } else {
-                    "Питание: без ограничений"
-                },
-                onClick = {
-                    onUpdatePolicy(
-                        policy.copy(
-                            requiresCharging = !policy.requiresCharging,
-                            updatedAtEpochMillis = System.currentTimeMillis(),
-                        ),
+                }
+                item(key = "power") {
+                    MuxTvActionButton(
+                        text = if (policy.requiresCharging) {
+                            "Питание: только зарядка"
+                        } else {
+                            "Питание: без ограничений"
+                        },
+                        onClick = {
+                            onUpdatePolicy(
+                                policy.copy(
+                                    requiresCharging = !policy.requiresCharging,
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                ),
+                            )
+                        },
+                        enabled = operationalControlsEnabled,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                },
-                enabled = operationalControlsEnabled,
-            )
-            MuxTvActionButton(
-                text = "Сбросить расписание",
-                onClick = { onRemovePolicy(source.sourceId) },
-                enabled = !mutationInFlight && source.policy != null,
-            )
-            MuxTvActionButton(
-                text = "Сбросить HTTP-разрешения",
-                onClick = { onResetPlaybackApprovals(source.sourceId) },
-                enabled = operationalControlsEnabled,
-                modifier = Modifier.testTag(SOURCE_HTTP_RESET_TEST_TAG),
-            )
+                }
+                item(key = "reset-schedule") {
+                    MuxTvActionButton(
+                        text = "Сбросить расписание",
+                        onClick = { onRemovePolicy(source.sourceId) },
+                        enabled = !mutationInFlight && source.policy != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item(key = "reset-http") {
+                    MuxTvActionButton(
+                        text = "Сбросить HTTP-разрешения",
+                        onClick = { onResetPlaybackApprovals(source.sourceId) },
+                        enabled = operationalControlsEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(SOURCE_HTTP_RESET_TEST_TAG),
+                    )
+                }
+            }
             MuxTvActionButton(
                 text = "Готово",
                 onClick = onDismiss,
                 modifier = Modifier
-                    .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG)
-                    .focusRequester(closeFocusRequester),
+                    .fillMaxWidth()
+                    .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG),
             )
         }
     }
