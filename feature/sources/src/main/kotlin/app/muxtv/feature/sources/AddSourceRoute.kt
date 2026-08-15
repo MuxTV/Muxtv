@@ -2,12 +2,15 @@ package app.muxtv.feature.sources
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicSecureTextField
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.InputTransformation
@@ -27,6 +30,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -134,13 +139,26 @@ fun AddSourceRoute(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+    Box(
+        modifier = modifier.fillMaxSize(),
     ) {
-        Text("Добавить источник", style = MaterialTheme.typography.displaySmall)
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(0.62f)
+                .clip(RoundedCornerShape(TvTokens.Shape.detailsCorner))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.border,
+                    shape = RoundedCornerShape(TvTokens.Shape.detailsCorner),
+                )
+                .padding(TvTokens.Spacing.large),
+            verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+        ) {
+            Text("Добавить источник", style = MaterialTheme.typography.displaySmall)
 
-        when (val current = state) {
+            when (val current = state) {
             SourceEntryUiState.Editing -> {
                 TvTextInput(
                     label = "Название",
@@ -251,6 +269,7 @@ fun AddSourceRoute(
                     }
                     MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
                 }
+            }
             }
         }
     }

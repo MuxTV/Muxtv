@@ -50,7 +50,7 @@ fun SeekHud(
             Row(
                 modifier = modifier
                     .clip(RoundedCornerShape(TvTokens.Shape.cardCorner))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
+                    .background(TvTokens.Color.surfaceRaised.copy(alpha = 0.94f))
                     .padding(
                         horizontal = TvTokens.Spacing.large,
                         vertical = TvTokens.Spacing.small,

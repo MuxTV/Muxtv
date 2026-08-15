@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,7 @@ fun MuxTvScreenScaffold(
     horizontalInset: Dp = TvTokens.Spacing.screenInset,
     verticalInset: Dp = 28.dp,
     showClock: Boolean = true,
+    titleTestTag: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -44,7 +46,11 @@ fun MuxTvScreenScaffold(
         ) {
             Text(
                 text = title,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (titleTestTag != null) Modifier.testTag(titleTestTag) else Modifier,
+                    ),
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,

@@ -49,6 +49,7 @@ import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import kotlinx.coroutines.delay
 
 @Composable
@@ -99,33 +100,31 @@ private fun GuideScreen(
     modifier: Modifier,
     railFocusRequester: FocusRequester? = null,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
+    MuxTvScreenScaffold(
+        title = "Телепрограмма",
+        modifier = modifier,
+        horizontalInset = 48.dp,
+        verticalInset = 20.dp,
     ) {
-        Text(
-            text = "Телепрограмма",
-            style = MaterialTheme.typography.displaySmall,
-        )
-
         when (state) {
             GuideUiState.Loading -> GuideMessage(state.statusLabel)
             GuideUiState.Empty -> GuideFailure(
                 message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
+                railFocusRequester = railFocusRequester,
             )
             GuideUiState.Failed -> GuideFailure(
                 message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
+                railFocusRequester = railFocusRequester,
             )
             GuideUiState.Incomplete -> GuideFailure(
                 message = state.statusLabel,
                 onRetry = onRetry,
                 onResetToFirstPage = onResetToFirstPage,
+                railFocusRequester = railFocusRequester,
             )
             is GuideUiState.Content -> GuideContent(
                 state = state,
@@ -156,6 +155,7 @@ private fun GuideFailure(
     message: String,
     onRetry: () -> Unit,
     onResetToFirstPage: () -> Unit,
+    railFocusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
         GuideMessage(message)
@@ -163,12 +163,14 @@ private fun GuideFailure(
             MuxTvActionButton(
                 text = "Повторить",
                 onClick = onRetry,
-                modifier = Modifier.testTag(GUIDE_RETRY_TAG),
+                modifier = Modifier.testTag(GUIDE_RETRY_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
             )
             MuxTvActionButton(
                 text = "В начало",
                 onClick = onResetToFirstPage,
-                modifier = Modifier.testTag(GUIDE_FIRST_PAGE_TAG),
+                modifier = Modifier.testTag(GUIDE_FIRST_PAGE_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
             )
         }
     }
@@ -469,7 +471,12 @@ private fun ChannelRailCell(row: GuideRowProjection) {
             .height(GUIDE_ROW_HEIGHT)
             .padding(end = 12.dp)
             .background(
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(10.dp),
+            )
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.borderVariant,
                 shape = RoundedCornerShape(10.dp),
             )
             .padding(horizontal = 12.dp, vertical = 10.dp),

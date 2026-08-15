@@ -279,7 +279,7 @@ fun PlayerSurfaceContent(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+                    .background(TvTokens.Color.surfaceRaised.copy(alpha = 0.94f))
                     .padding(horizontal = 48.dp, vertical = 24.dp)
                     .testTag("$testTagPrefix-overlay")
                     .onPreviewKeyEvent { event ->

@@ -55,6 +55,7 @@ import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 
@@ -178,17 +179,10 @@ private fun SearchContent(
         restorationCompleted = true
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 56.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+    MuxTvScreenScaffold(
+        title = "Поиск",
+        modifier = modifier,
     ) {
-        Text(
-            text = "Поиск",
-            style = MaterialTheme.typography.displaySmall,
-        )
-
         SearchInput(
             value = queryText,
             onValueChange = onQueryTextChanged,
