@@ -253,7 +253,7 @@ private fun ChannelsContent(
                 selected = filter == ChannelsFilter.FAVORITES,
                 modifier = Modifier.testTag(CHANNELS_FAVORITES_FILTER_TEST_TAG)
                     .focusProperties {
-                        left = railFocusRequester ?: FocusRequester.Default
+                        left = allFilterFocusRequester
                         right = recentFilterFocusRequester
                     }
                     .focusRequester(favoritesFilterFocusRequester),
@@ -264,7 +264,7 @@ private fun ChannelsContent(
                 selected = filter == ChannelsFilter.RECENT,
                 modifier = Modifier.testTag(CHANNELS_RECENT_FILTER_TEST_TAG)
                     .focusProperties {
-                        left = railFocusRequester ?: FocusRequester.Default
+                        left = favoritesFilterFocusRequester
                     }
                     .focusRequester(recentFilterFocusRequester),
             )
@@ -339,11 +339,7 @@ private fun findLoadedIndex(rows: LazyPagingItems<ChannelRowUiModel>, channelId:
     return null
 }
 
-/**
- * Lounge channel row: fixed geometry, no focus scale, bronze outline and
- * raised surface. Playing/favorite markers stay visible without focus and
- * never change geometry.
- */
+/** Lounge channel row: fixed geometry, no focus scale. */
 @Composable
 private fun ChannelRow(
     row: ChannelRowUiModel,
@@ -356,16 +352,10 @@ private fun ChannelRow(
         modifier = modifier
             .height(TvTokens.Size.channelRowHeight)
             .clip(shape)
-            .background(
-                if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
-            )
+            .background(if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface)
             .border(
                 width = if (focused) TvTokens.Focus.outlineWidth else 1.dp,
-                color = if (focused) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.borderVariant
-                },
+                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.borderVariant,
                 shape = shape,
             )
             .onFocusChanged { focused = it.isFocused }
@@ -374,10 +364,7 @@ private fun ChannelRow(
             .padding(horizontal = TvTokens.Spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier.width(56.dp),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(modifier = Modifier.width(56.dp), contentAlignment = Alignment.Center) {
             Text(
                 text = row.channelNumber?.takeIf(String::isNotBlank) ?: "—",
                 style = MaterialTheme.typography.titleLarge,
@@ -388,10 +375,7 @@ private fun ChannelRow(
         Spacer(Modifier.width(TvTokens.Spacing.small))
         MuxTvChannelLogo(name = row.displayName)
         Spacer(Modifier.width(TvTokens.Spacing.small))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (row.isCurrentPlayback) {
                     Icon(
