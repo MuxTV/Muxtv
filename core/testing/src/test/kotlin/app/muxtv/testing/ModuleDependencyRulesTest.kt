@@ -1,6 +1,7 @@
 package app.muxtv.testing
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import java.io.File
 import org.junit.Test
 
@@ -81,11 +82,11 @@ class ModuleDependencyRulesTest {
             }
             declaredLibAccessors(module).forEach { accessor ->
                 val resolvedModule = versionCatalogModules[accessor]
-                assertThat(resolvedModule)
-                    .named("resolved version-catalog module for libs.$accessor")
+                assertWithMessage("resolved version-catalog module for libs.$accessor")
+                    .that(resolvedModule)
                     .isNotNull()
-                assertThat(isForbiddenCoordinate(checkNotNull(resolvedModule), moduleAllowedModules))
-                    .named("resolved version-catalog module for libs.$accessor")
+                assertWithMessage("resolved version-catalog module for libs.$accessor")
+                    .that(isForbiddenCoordinate(checkNotNull(resolvedModule), moduleAllowedModules))
                     .isFalse()
             }
         }
