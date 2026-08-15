@@ -8,6 +8,7 @@ permissions:
 
 concurrency:
   group: integration-acceptance-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
