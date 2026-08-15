@@ -1,23 +1,20 @@
 package app.muxtv.navigation
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -25,8 +22,8 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
@@ -35,22 +32,24 @@ import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
+import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvNavigationRail
 import app.muxtv.designsystem.component.MuxTvNavigationRailItem
+import app.muxtv.designsystem.icon.MuxTvIcons
 import app.muxtv.feature.channels.ChannelsRoute
-import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.doctor.DoctorExportStatus
 import app.muxtv.feature.doctor.DoctorRoute
+import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.home.HomeRoute
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
-import app.muxtv.feature.player.PlaybackStartGateway
-import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.PlaybackObservationReader
+import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -77,7 +76,8 @@ fun AppNavigation(
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
     val railFocusRequester = remember { FocusRequester() }
-    var railExpanded by remember { mutableStateOf(true) }
+    val focusManager = LocalFocusManager.current
+    var railFocused by remember { mutableStateOf(false) }
 
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
@@ -97,29 +97,27 @@ fun AppNavigation(
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
     val railVisible = current !is AppDestination.Player && current != AppDestination.AddSource
 
-    BackHandler(enabled = railVisible && railExpanded) {
-        railExpanded = false
+    BackHandler(enabled = railVisible && railFocused) {
+        // Returning focus to the content group preserves spatial provenance and
+        // lets focusRestorer() choose the exact item that previously owned focus.
+        focusManager.moveFocus(FocusDirection.Right)
     }
 
-    Row(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .semantics { testTagsAsResourceId = true },
     ) {
-        if (railVisible) {
-            MuxTvNavigationRail(
-                items = topLevelRailItems(selected = current.topLevelDestination()),
-                onSelect = { key -> open(destinationByRailKey(key)) },
-                railFocusRequester = railFocusRequester,
-                modifier = Modifier.fillMaxHeight(),
-                onExpandedChange = { railExpanded = it },
-                expandedOverride = railExpanded,
-            )
-        }
         NavDisplay(
             modifier = Modifier
-                .fillMaxHeight()
-                .weight(1f)
+                .fillMaxSize()
+                .then(
+                    if (railVisible) {
+                        Modifier.padding(start = TvTokens.Size.railCollapsed)
+                    } else {
+                        Modifier
+                    },
+                )
                 .focusRestorer(),
             backStack = backStack,
             onBack = ::goBack,
@@ -218,6 +216,16 @@ fun AppNavigation(
                 }
             },
         )
+
+        if (railVisible) {
+            MuxTvNavigationRail(
+                items = topLevelRailItems(selected = current.topLevelDestination()),
+                onSelect = { key -> open(destinationByRailKey(key)) },
+                railFocusRequester = railFocusRequester,
+                modifier = Modifier.fillMaxHeight(),
+                onRailFocusChanged = { railFocused = it },
+            )
+        }
     }
 }
 
@@ -273,11 +281,11 @@ private fun AppDestination.navigationLabel(): String = when (this) {
 }
 
 private fun AppDestination.navigationIcon() = when (this) {
-    AppDestination.Home -> Icons.Filled.Home
-    AppDestination.Channels -> Icons.Filled.PlayArrow
-    AppDestination.Guide -> Icons.Filled.DateRange
-    AppDestination.Search -> Icons.Filled.Search
-    AppDestination.Settings -> Icons.Filled.Settings
+    AppDestination.Home -> MuxTvIcons.Home
+    AppDestination.Channels -> MuxTvIcons.LiveTv
+    AppDestination.Guide -> MuxTvIcons.Guide
+    AppDestination.Search -> MuxTvIcons.Search
+    AppDestination.Settings -> MuxTvIcons.Settings
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
