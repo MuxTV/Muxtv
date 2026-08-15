@@ -1,0 +1,52 @@
+name: Supersede stale PR CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/stale-pr-ci-superseder.yml
+
+permissions:
+  contents: read
+
+# One-time/lightweight queue hygiene for policy migrations.
+# Each job deliberately enters a legacy heavy-lane concurrency group so GitHub
+# cancels any queued/in-progress superseded run from that group before a runner
+# is allocated. This workflow itself uses GitHub-hosted runners and does no build.
+jobs:
+  supersede-product-matrix:
+    name: Supersede stale product matrix
+    runs-on: ubuntu-latest
+    concurrency:
+      group: android-tv-product-device-matrix-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Superseded stale product matrix for PR #${{ github.event.pull_request.number }}"
+
+  supersede-database-matrix:
+    name: Supersede stale database matrix
+    runs-on: ubuntu-latest
+    concurrency:
+      group: database-migration-device-matrix-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Superseded stale database matrix for PR #${{ github.event.pull_request.number }}"
+
+  supersede-benchmark:
+    name: Supersede stale benchmark lane
+    runs-on: ubuntu-latest
+    concurrency:
+      group: benchmark-foundation-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Superseded stale benchmark lane for PR #${{ github.event.pull_request.number }}"
+
+  supersede-variance:
+    name: Supersede stale variance lane
+    runs-on: ubuntu-latest
+    concurrency:
+      group: Measurement variance smoke-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Superseded stale variance lane for PR #${{ github.event.pull_request.number }}"
