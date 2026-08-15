@@ -30,9 +30,8 @@ import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRefreshTarget
 import app.muxtv.database.SourceRefreshTrigger
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.sources.SourceEntryOnboarding
-import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.settings.SETTINGS_SOURCES_TEST_TAG
+import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -50,17 +49,11 @@ class SettingsJourneyTest {
     fun settingsSectionsOpenSourcesAndBackRestoresSectionFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val playbackCatalog = StaticPlaybackCatalogFixture
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
-                controllerConnector = controllerConnector,
-            )
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
             composeRule.captureScreenshot("settings-sections")
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).assertIsFocused().press(Key.Enter)
@@ -91,12 +84,7 @@ class SettingsJourneyTest {
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
-                controllerConnector = controllerConnector,
-            )
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -109,7 +97,7 @@ class SettingsJourneyTest {
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-details").fetchSemanticsNodes().size == 1
             }
-            composeRule.onNodeWithTag("source-details-close").assertIsFocused()
+            composeRule.onNodeWithText("Расписание: выключено").assertIsFocused()
             composeRule.captureScreenshot("source-details-sheet")
 
             composeRule.runOnUiThread {
@@ -132,12 +120,7 @@ class SettingsJourneyTest {
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
-                controllerConnector = controllerConnector,
-            )
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG)
                 .assertIsFocused()
@@ -162,7 +145,7 @@ class SettingsJourneyTest {
     }
 
     @Test
-    fun sourceDetailsAt720pKeepsTopAndBottomActionsReachableByDpad() {
+    fun sourceDetailsAt720pKeepsFirstAndLastActionsReachableByDpad() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = StaticSourceRefreshStore().apply {
             publish("Очень длинное название домашнего IPTV источника для телевизора")
@@ -172,12 +155,7 @@ class SettingsJourneyTest {
 
         setDisplaySize("1280x720")
         try {
-            setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
-                controllerConnector = controllerConnector,
-            )
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -185,18 +163,16 @@ class SettingsJourneyTest {
             }
             composeRule.onNodeWithTag("source-configure-source-settings").press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("source-details-close").fetchSemanticsNodes().size == 1
+                composeRule.onAllNodesWithTag("source-details").fetchSemanticsNodes().size == 1
             }
 
-            composeRule.onNodeWithTag("source-details-close")
-                .assertIsFocused()
-                .assertIsDisplayed()
-                .press(Key.DirectionUp, 6)
             composeRule.onNodeWithText("Расписание: выключено")
                 .assertIsFocused()
                 .assertIsDisplayed()
+                .press(Key.DirectionDown, 8)
 
-            composeRule.onNodeWithText("Расписание: выключено").press(Key.DirectionDown, 6)
+            // Disabled rows may be skipped; once the footer is reached, modal
+            // focus containment keeps additional Down events inside the sheet.
             composeRule.onNodeWithTag("source-details-close")
                 .assertIsFocused()
                 .assertIsDisplayed()
@@ -214,12 +190,7 @@ class SettingsJourneyTest {
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
-                controllerConnector = controllerConnector,
-            )
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
             composeRule.onNodeWithTag("settings-section-doctor").press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -297,22 +268,12 @@ private class StaticSourceRefreshStore : SourceRefreshStore {
     }
 
     override suspend fun getTarget(sourceId: String): SourceRefreshTarget? = null
-
     override fun observeOverviews(): Flow<List<SourceRefreshOverview>> = overviews
-
     override suspend fun getPolicies(): List<SourceRefreshPolicy> = emptyList()
-
     override suspend fun upsertPolicy(policy: SourceRefreshPolicy) = Unit
-
     override suspend fun removePolicy(sourceId: String) = Unit
-
     override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> = flowOf(null)
-
-    override suspend fun getRecentAttempts(
-        sourceId: String,
-        limit: Int,
-    ): List<SourceRefreshAttempt> = emptyList()
-
+    override suspend fun getRecentAttempts(sourceId: String, limit: Int): List<SourceRefreshAttempt> = emptyList()
     override suspend fun tryAcquire(
         sourceId: String,
         runToken: String,
@@ -345,11 +306,7 @@ private object StaticPlaybackCatalogFixture : PlaybackCatalog {
             ),
         )
 
-    override suspend fun getChannel(
-        profileId: String,
-        channelId: String,
-    ): PlayableChannel? = null
-
+    override suspend fun getChannel(profileId: String, channelId: String): PlayableChannel? = null
     override suspend fun resolveVariant(
         profileId: String,
         channelId: String,
@@ -386,8 +343,7 @@ private object UnusedSourceEntryOnboardingFixture : SourceEntryOnboarding {
     ): app.muxtv.catalog.refresh.RemoteSourceCancellationResult =
         error("Source entry is not part of this journey")
 
-    override suspend fun restoreLatestPrepared(): app.muxtv.catalog.refresh.RemoteSourcePreparationResult.Prepared? =
-        null
+    override suspend fun restoreLatestPrepared(): app.muxtv.catalog.refresh.RemoteSourcePreparationResult.Prepared? = null
 }
 
 private fun SemanticsNodeInteraction.press(
