@@ -1,5 +1,9 @@
 package app.muxtv.feature.home
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
@@ -18,6 +22,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -38,8 +43,7 @@ class HomeViewModelTest {
     @Test
     fun settingNowNextIdsRefreshesImmediatelyWithoutWaitingForPeriodicTick() = runBlocking {
         val epg = RecordingEpgGuideRepository()
-        val viewModel = createViewModel(epg)
-        try {
+        withViewModel(epg = epg) { viewModel ->
             viewModel.setNowNextIds(listOf("channel-a", "channel-b"))
             repeat(20) {
                 if (epg.queries.isNotEmpty()) return@repeat
@@ -49,16 +53,13 @@ class HomeViewModelTest {
             assertThat(epg.queries).hasSize(1)
             assertThat(epg.queries.single().canonicalChannelIds)
                 .containsExactly("channel-a", "channel-b").inOrder()
-        } finally {
-            viewModel.clearForTest()
         }
     }
 
     @Test
     fun staleNowNextCompletionCannotOverwriteNewerIds() = runBlocking {
         val epg = DeferredEpgGuideRepository()
-        val viewModel = createViewModel(epg)
-        try {
+        withViewModel(epg = epg) { viewModel ->
             viewModel.refreshNowNext(listOf("old-channel"))
             awaitRequestCount(epg, 1)
             viewModel.refreshNowNext(listOf("new-channel"))
@@ -76,19 +77,54 @@ class HomeViewModelTest {
             yield()
 
             assertThat(viewModel.nowNext.value.keys).containsExactly("new-channel")
-        } finally {
-            viewModel.clearForTest()
         }
     }
 
-    private fun createViewModel(epg: EpgGuideRepository): HomeViewModel = HomeViewModel(
-        recentChannelsRepository = EmptyRecentRepository,
-        epgGuideRepository = epg,
-        playbackSessionStateSource = IdlePlaybackSource,
-        hasSources = flowOf(true),
-        profileId = PROFILE_ID,
-        nowEpochMillis = { 1_000L },
-    )
+    @Test
+    fun sourceTruthDistinguishesEmptyPresentAndFailure() = runBlocking {
+        withViewModel(hasSources = flowOf(false)) { viewModel ->
+            yield()
+            assertThat(viewModel.sourceState.value).isEqualTo(HomeSourceState.Empty)
+        }
+        withViewModel(hasSources = flowOf(true)) { viewModel ->
+            yield()
+            assertThat(viewModel.sourceState.value).isEqualTo(HomeSourceState.Present)
+        }
+        withViewModel(
+            hasSources = flow {
+                throw IllegalStateException("database read failed")
+            },
+        ) { viewModel ->
+            yield()
+            assertThat(viewModel.sourceState.value).isEqualTo(HomeSourceState.Failed)
+        }
+    }
+
+    private suspend fun withViewModel(
+        epg: EpgGuideRepository = RecordingEpgGuideRepository(),
+        hasSources: Flow<Boolean> = flowOf(true),
+        block: suspend (HomeViewModel) -> Unit,
+    ) {
+        val store = ViewModelStore()
+        val factory = viewModelFactory {
+            initializer {
+                HomeViewModel(
+                    recentChannelsRepository = EmptyRecentRepository,
+                    epgGuideRepository = epg,
+                    playbackSessionStateSource = IdlePlaybackSource,
+                    hasSources = hasSources,
+                    profileId = PROFILE_ID,
+                    nowEpochMillis = { 1_000L },
+                )
+            }
+        }
+        val viewModel = ViewModelProvider.create(store, factory)[HomeViewModel::class]
+        try {
+            block(viewModel)
+        } finally {
+            store.clear()
+        }
+    }
 
     private suspend fun awaitRequestCount(repository: DeferredEpgGuideRepository, expected: Int) {
         repeat(100) {
@@ -155,10 +191,4 @@ class HomeViewModelTest {
             nextBoundaryEpochMillis = boundary,
         )
     }
-}
-
-/** Test-only lifecycle hook implemented as an extension so production HomeViewModel stays unchanged. */
-private fun HomeViewModel.clearForTest() {
-    // ViewModel.clear() is package-private in AndroidX; test dispatcher cleanup cancels no long-lived work.
-    // Keeping this hook makes the test intent explicit without reflection.
 }
