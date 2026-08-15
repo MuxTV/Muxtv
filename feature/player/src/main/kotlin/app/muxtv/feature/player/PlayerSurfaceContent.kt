@@ -176,8 +176,8 @@ fun PlayerSurfaceContent(
                 }
             }
         }
-        controller.addListener(listener)
-        onDispose { controller.removeListener(listener) }
+        controller.runOnApplicationThread { controller.addListener(listener) }
+        onDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
 
     LaunchedEffect(controlsVisible) {

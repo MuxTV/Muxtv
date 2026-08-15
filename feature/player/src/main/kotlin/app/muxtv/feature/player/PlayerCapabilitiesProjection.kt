@@ -1,5 +1,6 @@
 package app.muxtv.feature.player
 
+import android.os.Handler
 import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,6 +16,20 @@ import app.muxtv.player.media3.Media3TrackController
 import app.muxtv.player.media3.Media3TrackProjector
 import app.muxtv.player.media3.derivePlayerCapabilities
 import app.muxtv.player.media3.toIntSet
+
+/**
+ * Runs [block] on the controller's application looper when the caller is not already on it.
+ * MediaController enforces that all API calls happen on its application thread; effect disposal
+ * in tests can happen on a different thread, so registration and teardown are marshalled.
+ */
+internal fun MediaController.runOnApplicationThread(block: () -> Unit) {
+    val looper = applicationLooper
+    if (looper.thread === Thread.currentThread()) {
+        block()
+    } else {
+        Handler(looper).post(block)
+    }
+}
 
 /**
  * Capability projection of the current controller state, recomputed on every player event.
@@ -48,8 +63,8 @@ fun rememberPlayerCapabilities(
                 )
             }
         }
-        controller.addListener(listener)
-        awaitDispose { controller.removeListener(listener) }
+        controller.runOnApplicationThread { controller.addListener(listener) }
+        awaitDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
     return state
 }
@@ -84,9 +99,11 @@ fun rememberAudioTrackModels(
                 }
             }
         }
-        controller.addListener(listener)
-        value = rebuild()
-        awaitDispose { controller.removeListener(listener) }
+        controller.runOnApplicationThread {
+            controller.addListener(listener)
+            value = rebuild()
+        }
+        awaitDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
     return state
 }
@@ -124,9 +141,11 @@ fun rememberSubtitleTrackModels(
                 }
             }
         }
-        controller.addListener(listener)
-        value = rebuild()
-        awaitDispose { controller.removeListener(listener) }
+        controller.runOnApplicationThread {
+            controller.addListener(listener)
+            value = rebuild()
+        }
+        awaitDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
     return state
 }

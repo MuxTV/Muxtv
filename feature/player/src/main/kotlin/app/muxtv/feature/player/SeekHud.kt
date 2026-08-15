@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -54,6 +55,7 @@ fun SeekHud(
                         horizontal = TvTokens.Spacing.large,
                         vertical = TvTokens.Spacing.small,
                     )
+                    .semantics(mergeDescendants = true) { }
                     .testTag(testTag),
                 horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.xSmall),
                 verticalAlignment = Alignment.CenterVertically,

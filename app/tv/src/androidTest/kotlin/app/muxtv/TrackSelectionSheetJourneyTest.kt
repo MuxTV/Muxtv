@@ -2,6 +2,7 @@ package app.muxtv
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertTextContains
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.player.AudioTrackSheet
@@ -63,6 +65,8 @@ class TrackSelectionSheetJourneyTest {
             composeRule.onAllNodesWithTag("player-audio-track-0")
                 .fetchSemanticsNodes().size == 1
         }
+        composeRule.onNodeWithTag("player-audio-track-0")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
         composeRule.onNodeWithTag("player-audio-track-0").performKeyInput {
             keyDown(Key.Enter)
             keyUp(Key.Enter)
