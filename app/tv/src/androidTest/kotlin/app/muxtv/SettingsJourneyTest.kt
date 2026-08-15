@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -53,37 +55,13 @@ class SettingsJourneyTest {
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            composeRule.setContent {
-                MuxTvTheme {
-                    AppNavigation(
-                        playbackCatalog = playbackCatalog,
-                        channelBrowseRepository = TestChannelBrowseRepository(
-                            playbackCatalog,
-                            NoRecentChannelsRepository,
-                            NoGuideEpgGuideRepository,
-                        ),
-                        channelPreferencesRepository = NoChannelPreferencesRepository,
-                        channelSearchRepository = NoChannelSearchRepository,
-                        guideWindowRepository = TestGuideWindowRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
-                        controllerConnector = controllerConnector,
-                        sourceRefreshStore = sourceStore,
-                        sourceRefreshScheduler = scheduler,
-                        sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
-                    )
-                }
-            }
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
-            }
-            composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown, 4)
-            composeRule.onNodeWithTag("nav-settings").assertIsFocused().press(Key.Enter)
-
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag(SETTINGS_SOURCES_TEST_TAG).fetchSemanticsNodes().size == 1
-            }
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+            )
+            navigateHomeToSettings()
             composeRule.captureScreenshot("settings-sections")
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).assertIsFocused().press(Key.Enter)
 
@@ -109,41 +87,17 @@ class SettingsJourneyTest {
     fun sourceDetailsCloseRestoresConfigureFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val playbackCatalog = StaticPlaybackCatalogFixture
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            composeRule.setContent {
-                MuxTvTheme {
-                    AppNavigation(
-                        playbackCatalog = playbackCatalog,
-                        channelBrowseRepository = TestChannelBrowseRepository(
-                            playbackCatalog,
-                            NoRecentChannelsRepository,
-                            NoGuideEpgGuideRepository,
-                        ),
-                        channelPreferencesRepository = NoChannelPreferencesRepository,
-                        channelSearchRepository = NoChannelSearchRepository,
-                        guideWindowRepository = TestGuideWindowRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
-                        controllerConnector = controllerConnector,
-                        sourceRefreshStore = sourceStore,
-                        sourceRefreshScheduler = scheduler,
-                        sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
-                    )
-                }
-            }
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
-            }
-            composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown, 4)
-            composeRule.onNodeWithTag("nav-settings").assertIsFocused().press(Key.Enter)
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag(SETTINGS_SOURCES_TEST_TAG).fetchSemanticsNodes().size == 1
-            }
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+            )
+            navigateHomeToSettings()
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
@@ -171,45 +125,102 @@ class SettingsJourneyTest {
     }
 
     @Test
-    fun doctorSectionOpensDiagnostics() {
+    fun doctorBackRestoresDoctorSectionFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val playbackCatalog = StaticPlaybackCatalogFixture
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            composeRule.setContent {
-                MuxTvTheme {
-                    AppNavigation(
-                        playbackCatalog = playbackCatalog,
-                        channelBrowseRepository = TestChannelBrowseRepository(
-                            playbackCatalog,
-                            NoRecentChannelsRepository,
-                            NoGuideEpgGuideRepository,
-                        ),
-                        channelPreferencesRepository = NoChannelPreferencesRepository,
-                        channelSearchRepository = NoChannelSearchRepository,
-                        guideWindowRepository = TestGuideWindowRepository,
-                        recentChannelsRepository = NoRecentChannelsRepository,
-                        epgGuideRepository = NoGuideEpgGuideRepository,
-                        controllerConnector = controllerConnector,
-                        sourceRefreshStore = sourceStore,
-                        sourceRefreshScheduler = scheduler,
-                        sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
-                        playbackObservationReader = PlaybackObservationReader { emptyList() },
-                    )
-                }
-            }
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+            )
+            navigateHomeToSettings()
+            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG)
+                .assertIsFocused()
+                .press(Key.DirectionDown)
+            composeRule.onNodeWithTag("settings-section-doctor")
+                .assertIsFocused()
+                .press(Key.Enter)
+
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
+                composeRule.onAllNodesWithTag("doctor-refresh").fetchSemanticsNodes().size == 1
             }
-            composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
-            composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown, 4)
-            composeRule.onNodeWithTag("nav-settings").assertIsFocused().press(Key.Enter)
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("settings-section-doctor").fetchSemanticsNodes().size == 1
             }
+            composeRule.onNodeWithTag("settings-section-doctor").assertIsFocused()
+        } finally {
+            controllerConnector.close()
+        }
+    }
+
+    @Test
+    fun sourceDetailsAt720pKeepsTopAndBottomActionsReachableByDpad() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceStore = StaticSourceRefreshStore().apply {
+            publish("Очень длинное название домашнего IPTV источника для телевизора")
+        }
+        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val controllerConnector = MuxTvMediaControllerConnector(context)
+
+        setDisplaySize("1280x720")
+        try {
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+            )
+            navigateHomeToSettings()
+            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("source-configure-source-settings").press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("source-details-close").fetchSemanticsNodes().size == 1
+            }
+
+            composeRule.onNodeWithTag("source-details-close")
+                .assertIsFocused()
+                .assertIsDisplayed()
+                .press(Key.DirectionUp, 6)
+            composeRule.onNodeWithText("Расписание: выключено")
+                .assertIsFocused()
+                .assertIsDisplayed()
+
+            composeRule.onNodeWithText("Расписание: выключено").press(Key.DirectionDown, 6)
+            composeRule.onNodeWithTag("source-details-close")
+                .assertIsFocused()
+                .assertIsDisplayed()
+        } finally {
+            setDisplaySize("reset")
+            controllerConnector.close()
+        }
+    }
+
+    @Test
+    fun doctorSectionOpensDiagnostics() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
+        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val controllerConnector = MuxTvMediaControllerConnector(context)
+
+        try {
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+            )
+            navigateHomeToSettings()
             composeRule.onNodeWithTag("settings-section-doctor").press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("doctor-refresh").fetchSemanticsNodes().size == 1
@@ -218,6 +229,54 @@ class SettingsJourneyTest {
         } finally {
             controllerConnector.close()
         }
+    }
+
+    private fun setNavigationContent(
+        context: Context,
+        sourceStore: StaticSourceRefreshStore,
+        scheduler: SourceRefreshScheduler,
+        controllerConnector: MuxTvMediaControllerConnector,
+    ) {
+        composeRule.setContent {
+            MuxTvTheme {
+                AppNavigation(
+                    playbackCatalog = StaticPlaybackCatalogFixture,
+                    channelBrowseRepository = TestChannelBrowseRepository(
+                        StaticPlaybackCatalogFixture,
+                        NoRecentChannelsRepository,
+                        NoGuideEpgGuideRepository,
+                    ),
+                    channelPreferencesRepository = NoChannelPreferencesRepository,
+                    channelSearchRepository = NoChannelSearchRepository,
+                    guideWindowRepository = TestGuideWindowRepository,
+                    recentChannelsRepository = NoRecentChannelsRepository,
+                    epgGuideRepository = NoGuideEpgGuideRepository,
+                    controllerConnector = controllerConnector,
+                    sourceRefreshStore = sourceStore,
+                    sourceRefreshScheduler = scheduler,
+                    sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
+                    playbackObservationReader = PlaybackObservationReader { emptyList() },
+                )
+            }
+        }
+    }
+
+    private fun navigateHomeToSettings() {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
+        }
+        composeRule.onNodeWithTag("home-hero").assertIsFocused().press(Key.DirectionLeft)
+        composeRule.onNodeWithTag("nav-home").assertIsFocused().press(Key.DirectionDown, 4)
+        composeRule.onNodeWithTag("nav-settings").assertIsFocused().press(Key.Enter)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(SETTINGS_SOURCES_TEST_TAG).fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun setDisplaySize(size: String) {
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("wm size $size")
+            .close()
     }
 }
 
