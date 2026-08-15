@@ -3,6 +3,7 @@ package app.muxtv.player.media3
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -80,6 +81,14 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeJob: Job? = null
     private var deadlineJob: Job? = null
     private val cancelledSetupIds = linkedSetOf<PlaybackSetupId>()
+    private val mediaSeekController = PlaybackSeekController(
+        scope = serviceScope,
+        onApplySeek = { generation, targetMs ->
+            if (player.currentMediaItem?.mediaId == generation) {
+                player.seekTo(targetMs)
+            }
+        },
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -565,6 +574,7 @@ class MuxTvPlaybackService : MediaSessionService() {
         removeActivePlayerListener()
         callbackGate.clear()
         firstFrameTracker.clearActive()
+        mediaSeekController.reset()
         player.stop()
         player.clearMediaItems()
     }
@@ -630,6 +640,18 @@ class MuxTvPlaybackService : MediaSessionService() {
         }
     }
 
+    private fun handleMediaSeekCommand(direction: Int): Boolean {
+        val mediaId = player.currentMediaItem?.mediaId ?: return false
+        val durationMs = player.duration
+        if (durationMs == C.TIME_UNSET || durationMs <= 0L) return false
+        return mediaSeekController.onDirectionRequested(
+            generation = mediaId,
+            direction = direction,
+            currentPositionMs = player.currentPosition,
+            durationMs = durationMs,
+        )
+    }
+
     private inner class SessionCallback : MediaSession.Callback {
         override fun onConnect(
             session: MediaSession,
@@ -645,6 +667,21 @@ class MuxTvPlaybackService : MediaSessionService() {
                     .build(),
                 base.availablePlayerCommands,
             )
+        }
+
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            val coalesced = when (playerCommand) {
+                Player.COMMAND_SEEK_FORWARD ->
+                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_FORWARD)
+                Player.COMMAND_SEEK_BACK ->
+                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_BACKWARD)
+                else -> false
+            }
+            return if (coalesced) Player.COMMAND_INVALID else playerCommand
         }
 
         override fun onCustomCommand(

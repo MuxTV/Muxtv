@@ -25,6 +25,11 @@ android {
                 "app.muxtv.player.media3.PlayerProxyMeasurement"
         }
     }
+    testOptions {
+        // Media3 model classes (TrackGroup, Format) call android.text helpers in constructors;
+        // default stubs keep projector/projection host tests free of an instrumentation harness.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
