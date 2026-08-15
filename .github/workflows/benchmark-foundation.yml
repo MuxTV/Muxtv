@@ -5,19 +5,10 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/benchmark-foundation.yml
       - benchmark/**
-      - app/tv/**
-      - feature/**
-      - player/**
-      - catalog/**
-      - core/**
-      - tools/android/**
-      - tools/ci/**
-      - build.gradle.kts
-      - settings.gradle.kts
-      - gradle/**
-      - build-logic/**
+      - tools/android/Invoke-BenchmarkDryRun.ps1
+      - tools/ci/Test-BenchmarkFoundationContract.ps1
+      - tools/measurements/**
   workflow_dispatch:
 
 permissions:
