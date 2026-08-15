@@ -6,16 +6,11 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/measurement-variance-smoke.yml
-      - core/testing/build.gradle.kts
       - core/testing/src/main/kotlin/app/muxtv/testing/measurements/**
       - core/testing/src/test/kotlin/app/muxtv/testing/measurements/**
       - tools/measurements/**
-      - tools/android/AndroidSdk.ps1
-      - tools/android/Initialize-AndroidSdkEnvironment.ps1
       - tools/android/Invoke-CatalogDatabaseMeasurement.ps1
       - tools/android/Invoke-PlayerProxyMeasurement.ps1
-      - tools/ci/**
 
 permissions:
   contents: read
@@ -44,24 +39,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to enable repository-local Git long-path support."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
           git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to reset the checked-out workspace."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
           $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to clean the checked-out workspace.`n$cleanOutput"
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
           $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) {
-            throw "Workspace is not clean after reset and clean."
-          }
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace is not clean after reset and clean." }
 
       - name: Verify evidence commit provenance
         shell: pwsh
@@ -99,25 +83,21 @@ jobs:
           $evidenceDirectory = ".work\evidence\measurement-adb"
           New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
           $logPath = Join-Path $evidenceDirectory "adb-server.log"
-
           & $tools.Adb version 2>&1 | Set-Content -Path $logPath -Encoding utf8
           & $tools.Adb kill-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
           Start-Sleep -Seconds 1
           & $tools.Adb start-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
-          if ($LASTEXITCODE -ne 0) {
-            throw "Unable to start the repository-selected ADB server."
-          }
+          if ($LASTEXITCODE -ne 0) { throw "Unable to start the repository-selected ADB server." }
           & $tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
 
       - name: Run two current-profile variance repetitions
         shell: pwsh
         env:
           MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           $ErrorActionPreference = "Stop"
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-
           & .\tools\measurements\Invoke-MeasurementSeries.ps1 `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
@@ -130,8 +110,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\tools\measurements\Finalize-MeasurementSeriesEvidence.ps1 `
-            -EvidenceRoot .work\evidence
+          pwsh -NoProfile -File .\tools\measurements\Finalize-MeasurementSeriesEvidence.ps1 -EvidenceRoot .work\evidence
 
       - name: Upload variance evidence
         if: always()

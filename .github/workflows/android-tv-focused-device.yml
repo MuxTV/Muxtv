@@ -1,29 +1,44 @@
-name: Database migration device matrix
+name: Android TV focused device
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/EpgRevisionImporter.kt
-      - core/database/src/main/kotlin/app/muxtv/database/**
-      - core/database/src/androidTest/kotlin/app/muxtv/database/**
-      - core/database/schemas/**
+      - app/tv/src/**
+      - feature/home/**
+      - feature/channels/**
+      - feature/guide/**
+      - feature/search/**
+      - feature/sources/**
+      - feature/doctor/**
+      - feature/settings/**
+      - feature/player/**
+      - player/api/**
+      - player/media3/**
+      - core/designsystem/**
+      - core/ui/**
+      - tools/android/Invoke-TvDeviceValidation.ps1
+      - tools/android/AndroidSdk.ps1
+      - tools/android/Initialize-AndroidSdkEnvironment.ps1
+      - tools/ci/Assert-EvidenceCommit.ps1
+      - tools/ci/Assert-SelfHostedRunnerPreflight.ps1
+      - tools/ci/Reset-SelfHostedAndroidState.ps1
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: database-migration-device-matrix-${{ github.event.pull_request.number || github.ref }}
+  group: android-tv-focused-device-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
-    name: Database migration device matrix
+    name: Android TV focused device
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 180
+    timeout-minutes: 120
 
     steps:
       - name: Checkout without pre-clean
@@ -31,77 +46,63 @@ jobs:
         with:
           clean: false
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
           git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
           $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
           $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to inspect the checked-out workspace.`n$dirty" }
-          if ($dirty) { throw "Workspace remains dirty after explicit reset/clean.`n$dirty" }
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
 
       - name: Verify evidence commit provenance
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.event.pull_request.head.sha || github.sha }}"
+          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
 
-      - name: Preflight dedicated self-hosted runner
+      - name: Preflight focused device runner
         shell: pwsh
         run: |
           & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
             -RequireNoConnectedDevice `
             -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 26,36
+            -ExpectedSystemImageApis 36
 
-      - name: Inspect runner environment
+      - name: Initialize Android SDK and validate harness
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          java -version
-          if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
-          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
-
-      - name: Validate Android TV harness syntax
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Test-TvHarnessSyntax.ps1
 
-      - name: Run old-edge and current Android TV matrix
+      - name: Run current Android TV focused evidence
         shell: pwsh
         env:
           MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceMatrix `
+            -Mode DeviceCurrent `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
             -NoDaemon
 
-      - name: Upload matrix evidence
+      - name: Upload focused device evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: database-migration-device-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name: android-tv-focused-device-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             .work/evidence/**/*.png
-            core/database/schemas/**/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: error

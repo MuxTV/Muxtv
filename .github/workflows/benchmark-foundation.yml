@@ -1,36 +1,18 @@
 name: Benchmark foundation dry run
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/benchmark-foundation.yml
-      - benchmark/**
-      - app/tv/**
-      - feature/**
-      - player/**
-      - catalog/**
-      - core/**
-      - tools/android/**
-      - tools/ci/**
-      - build.gradle.kts
-      - settings.gradle.kts
-      - gradle/**
-      - build-logic/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: benchmark-foundation-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: benchmark-foundation-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   dry-run:
     name: Benchmark foundation dry run
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
     timeout-minutes: 120
 
@@ -40,7 +22,7 @@ jobs:
         with:
           clean: false
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
@@ -57,8 +39,7 @@ jobs:
       - name: Verify exact source commit
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-EvidenceCommit.ps1 `
-            -ExpectedCommit "${{ github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.sha }}"
 
       - name: Initialize Android SDK
         shell: pwsh
@@ -88,8 +69,8 @@ jobs:
       - name: Run Macrobenchmark CUJ dry run
         shell: pwsh
         env:
-          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          MUXTV_SOURCE_BRANCH: ${{ github.ref_name }}
+          MUXTV_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           & .\tools\android\Invoke-BenchmarkDryRun.ps1 `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
@@ -100,7 +81,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: benchmark-foundation-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: benchmark-foundation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log

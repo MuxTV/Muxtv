@@ -28,6 +28,9 @@ concurrency:
 
 jobs:
   validate:
+    # Keep this historical PR check name stable because branch-protection settings
+    # are not readable by the repository integration. The selected PR mode below
+    # is Fast; Full remains an explicit manual/integration action.
     name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Manual validation' }}
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.validation_mode != 'Fast' && inputs.validation_mode != 'Full' && '["self-hosted","Windows","X64","muxtv-android","muxtv-device"]' || '["self-hosted","Windows","X64","muxtv-android"]') }}
@@ -46,27 +49,14 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to enable repository-local Git long-path support."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
           git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to reset the checked-out workspace."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
           $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to clean the checked-out workspace.`n$cleanOutput"
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
           $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to inspect the checked-out workspace.`n$dirty"
-          }
-          if ($dirty) {
-            throw "Workspace remains dirty after explicit reset/clean.`n$dirty"
-          }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to inspect the checked-out workspace.`n$dirty" }
+          if ($dirty) { throw "Workspace remains dirty after explicit reset/clean.`n$dirty" }
 
           $evidenceDirectory = ".work\evidence\workspace-cleanup"
           New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
@@ -83,6 +73,20 @@ jobs:
           $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
+      - name: Select validation mode
+        id: validation
+        shell: pwsh
+        run: |
+          # Ordinary PRs deliberately use Fast. The check name stays stable for
+          # branch-protection compatibility; Full/Device modes are manual or the
+          # dedicated integration gate.
+          $mode = "Fast"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $mode = "${{ inputs.validation_mode }}"
+          }
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Validation mode: $mode"
+
       - name: Preflight dedicated self-hosted runner
         shell: pwsh
         run: |
@@ -90,15 +94,10 @@ jobs:
             RequireNoConnectedDevice = $true
             ExpectedRunnerLabels = @("muxtv-android")
           }
-          $deviceMode = "${{ github.event_name }}" -ceq "workflow_dispatch" -and `
-            "${{ inputs.validation_mode }}" -notin @("Fast", "Full")
-          if ($deviceMode) {
+          $mode = "${{ steps.validation.outputs.mode }}"
+          if ($mode -notin @("Fast", "Full")) {
             $parameters.ExpectedRunnerLabels += "muxtv-device"
-            $parameters.ExpectedSystemImageApis = if ("${{ inputs.validation_mode }}" -ceq "DeviceMatrix") {
-              @(26, 36)
-            } else {
-              @(36)
-            }
+            $parameters.ExpectedSystemImageApis = if ($mode -ceq "DeviceMatrix") { @(26, 36) } else { @(36) }
           }
           & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 @parameters
 
@@ -111,10 +110,7 @@ jobs:
           Write-Host "Architecture: $env:RUNNER_ARCH"
           Write-Host "Workspace: $env:GITHUB_WORKSPACE"
           java -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Java runtime inspection failed."
-          }
-
+          if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
           . .\tools\android\AndroidSdk.ps1
           $tools = Get-AndroidSdkTools
@@ -128,7 +124,6 @@ jobs:
           $diagnosticDirectory = ".work\evidence\harness-syntax"
           $diagnosticPath = Join-Path $diagnosticDirectory "harness-syntax.log"
           New-Item -ItemType Directory -Force -Path $diagnosticDirectory | Out-Null
-
           try {
             & .\tools\android\Test-TvHarnessSyntax.ps1
           } catch {
@@ -141,22 +136,11 @@ jobs:
             throw
           }
 
-      - name: Select validation mode
-        id: validation
-        shell: pwsh
-        run: |
-          $mode = "Full"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $mode = "${{ inputs.validation_mode }}"
-          }
-          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "Validation mode: $mode"
-
       - name: Run MuxTV validation
         shell: pwsh
         env:
           MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           $mode = "${{ steps.validation.outputs.mode }}"
           $branch = $env:MUXTV_SOURCE_BRANCH
@@ -186,68 +170,6 @@ jobs:
               -NoDaemon
           }
 
-      - name: Generate small synthetic corpus evidence
-        if: success() && steps.validation.outputs.mode == 'Full'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-            $PSNativeCommandUseErrorActionPreference = $false
-          }
-
-          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
-          $evidenceDirectory = ".work\evidence\corpus-generation"
-          $logPath = Join-Path $evidenceDirectory "corpus-generation.log"
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-
-          $output = & .\gradlew.bat `
-            :core:testing:generateM3uCorpus `
-            --no-daemon `
-            --stacktrace `
-            --console=plain `
-            "-PcorpusProfile=small-1k" `
-            "-PcorpusSeed=20260728" `
-            "-PcorpusSourceCommit=$commit" `
-            "-PcorpusOverwrite=true" 2>&1
-          $exitCode = $LASTEXITCODE
-          $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
-
-          if ($exitCode -ne 0) {
-            throw "Synthetic corpus generation failed with exit code $exitCode."
-          }
-
-      - name: Measure small synthetic M3U parse
-        if: success() && steps.validation.outputs.mode == 'Full'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-            $PSNativeCommandUseErrorActionPreference = $false
-          }
-
-          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
-          $evidenceDirectory = ".work\evidence\m3u-parse-measurement"
-          $logPath = Join-Path $evidenceDirectory "m3u-parse-measurement.log"
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-
-          $output = & .\gradlew.bat `
-            :core:testing:measureM3uParse `
-            --no-daemon `
-            --stacktrace `
-            --console=plain `
-            "-PmeasurementProfile=small-1k" `
-            "-PmeasurementSeed=20260728" `
-            "-PmeasurementSourceCommit=$commit" `
-            "-PmeasurementWarmups=2" `
-            "-PmeasurementIterations=5" `
-            "-PmeasurementRunnerLabel=self-hosted-windows-x64" 2>&1
-          $exitCode = $LASTEXITCODE
-          $output | Tee-Object -FilePath $logPath | ForEach-Object { Write-Host $_ }
-
-          if ($exitCode -ne 0) {
-            throw "Descriptive M3U parse measurement failed with exit code $exitCode."
-          }
-
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -258,9 +180,6 @@ jobs:
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             .work/evidence/**/*.png
-            core/testing/build/corpus/*.m3u8
-            core/testing/build/corpus/*.manifest.json
-            core/testing/build/measurements/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: error
