@@ -1,7 +1,6 @@
 package app.muxtv.designsystem
 
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -29,6 +28,7 @@ object TvTokens {
         val textTertiary: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFF858B94)
         val textDisabled: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFFA8ADB5)
     }
+
     object Focus {
         const val scale: Float = 1f
         const val cardScale: Float = 1.03f
@@ -36,6 +36,7 @@ object TvTokens {
         const val focusedAlpha: Float = 1f
         const val unfocusedAlpha: Float = 1f
     }
+
     object Motion {
         const val focusDurationMillis: Int = 0
         const val screenDurationMillis: Int = 240
@@ -45,9 +46,10 @@ object TvTokens {
         /** Strong ease-out for entering state (overlays, reveals). */
         val easeOut: CubicBezierEasing = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
 
-        /** Strong ease-in-out for on-screen morphs (rail expand). */
+        /** Strong ease-in-out for on-screen spatial transitions such as rail expansion. */
         val easeInOut: CubicBezierEasing = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
     }
+
     object Spacing {
         val micro: Dp = 4.dp
         val markerSlot: Dp = 8.dp
@@ -60,6 +62,7 @@ object TvTokens {
         val railGutter: Dp = 28.dp
         val sectionGap: Dp = 40.dp
     }
+
     object Size {
         val railCollapsed: Dp = 88.dp
         val railExpanded: Dp = 248.dp
@@ -68,6 +71,7 @@ object TvTokens {
         val homeCardWidth: Dp = 300.dp
         val homeCardHeight: Dp = 140.dp
     }
+
     object Shape {
         val cardCorner: Dp = 18.dp
         val buttonCorner: Dp = 14.dp
@@ -77,7 +81,9 @@ object TvTokens {
         val detailsCorner: Dp = 24.dp
         val logoCorner: Dp = 14.dp
     }
+
     object Typography {
+        val heroTitle: TextUnit = 48.sp
         val screenTitle: TextUnit = 36.sp
         val sectionTitle: TextUnit = 26.sp
         val cardTitle: TextUnit = 20.sp
