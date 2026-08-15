@@ -23,9 +23,30 @@ internal class MuxTvCriticalUserJourneys(
 
     fun openGuide() = openTopLevel("nav-guide")
 
-    fun openSources() = openTopLevel("nav-sources")
+    /**
+     * Sources and Doctor live inside the Settings workspace since the Lounge
+     * rail redesign: open Settings from the rail, then activate the section.
+     */
+    fun openSources() {
+        openTopLevel("nav-settings")
+        activateSettingsSection("settings-section-sources", "sources-add")
+    }
 
-    fun openDoctor() = openTopLevel("nav-doctor")
+    fun openDoctor() {
+        openTopLevel("nav-settings")
+        activateSettingsSection("settings-section-doctor", "doctor-title")
+    }
+
+    private fun activateSettingsSection(sectionTag: String, destinationTag: String) {
+        val node = requireNotNull(device.wait(Until.findObject(By.res(sectionTag)), UI_TIMEOUT_MILLIS)) {
+            "Required settings section was not found: $sectionTag"
+        }
+        node.click()
+        check(device.wait(Until.hasObject(By.res(destinationTag)), UI_TIMEOUT_MILLIS)) {
+            "Settings section destination did not appear: $destinationTag"
+        }
+        device.waitForIdle()
+    }
 
     private fun openTopLevel(tag: String) {
         val node = requireNotNull(device.wait(Until.findObject(By.res(tag)), UI_TIMEOUT_MILLIS)) {
