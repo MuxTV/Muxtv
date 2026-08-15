@@ -127,7 +127,7 @@ private fun RailBrandMark(expanded: Boolean) {
     ) {
         Icon(
             imageVector = MuxTvIcons.BrandMark,
-            contentDescription = "MuxTV",
+            contentDescription = if (expanded) null else "MuxTV",
             modifier = Modifier.size(36.dp),
             tint = TvTokens.Color.accent,
         )
