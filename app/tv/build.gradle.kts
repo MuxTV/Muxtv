@@ -74,6 +74,7 @@ dependencies {
     androidTestImplementation(libs.truth)
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.mockwebserver3)
+    androidTestImplementation(project(":core:testing"))
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)

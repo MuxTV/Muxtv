@@ -8,9 +8,13 @@ dependencies {
     implementation(project(":catalog:ingest"))
     implementation(libs.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.okhttp.bom))
+    implementation(libs.mockwebserver3)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    testImplementation(platform(libs.okhttp.bom))
+    testImplementation(libs.okhttp)
 }
 
 val mainSourceSet = extensions.getByType<SourceSetContainer>().getByName("main")
