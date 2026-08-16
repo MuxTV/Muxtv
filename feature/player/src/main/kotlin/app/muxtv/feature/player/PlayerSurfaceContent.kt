@@ -73,6 +73,8 @@ private enum class PlayerSheetKind { AUDIO, SUBTITLE }
 
 private enum class SeekInputOutcome(val diagnosticTag: String) {
     ACCEPTED("accepted"),
+    CONTROLS_VISIBLE("controls-visible"),
+    SHEET_OPEN("sheet-open"),
     COMMAND_UNAVAILABLE("command-unavailable"),
     UNKNOWN_DURATION("unknown-duration"),
     LIVE_CONTENT("live-content"),
@@ -174,21 +176,22 @@ fun PlayerSurfaceContent(
         }
     }
 
-    fun handleSeekInput(direction: Int): Boolean {
-        val outcome = requestSeek(direction)
+    fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
         lastSeekInputOutcome = outcome
         return outcome == SeekInputOutcome.ACCEPTED
     }
+
+    fun handleSeekInput(direction: Int): Boolean = recordSeekInputOutcome(requestSeek(direction))
 
     val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
     val currentRemoteInputHandler by rememberUpdatedState(
         newValue = { command: PlayerRemoteCommand ->
-            if (controlsVisible || openSheet != null) {
-                false
-            } else {
-                when (command) {
+            when {
+                controlsVisible -> recordSeekInputOutcome(SeekInputOutcome.CONTROLS_VISIBLE)
+                openSheet != null -> recordSeekInputOutcome(SeekInputOutcome.SHEET_OPEN)
+                else -> when (command) {
                     PlayerRemoteCommand.SEEK_BACKWARD -> handleSeekInput(
                         PlaybackSeekController.DIRECTION_BACKWARD,
                     )
