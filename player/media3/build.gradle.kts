@@ -38,6 +38,9 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":player:api"))
     implementation(libs.coroutines.android)
+
+    // Keep ExoPlayer, session and UI artifacts on the single catalog Media3 version. The external
+    // surface path depends on the SessionResult.INFO_CANCELLED handling fixed upstream in 1.11.0.
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
@@ -57,5 +60,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.mockwebserver3)
+    androidTestImplementation(project(":core:testing"))
     androidTestImplementation(libs.truth)
 }
