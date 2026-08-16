@@ -10,6 +10,7 @@ import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import mockwebserver3.SocketPolicy
 import okio.Buffer
 
 /**
@@ -23,7 +24,9 @@ import okio.Buffer
  *   answered with `206` + `Content-Range` + `Accept-Ranges: bytes` + `ETag`;
  * - no preflight: the server records every request, so tests can prove MuxTV never issues `HEAD`;
  * - failure injection: the N-th request can be answered with an arbitrary status code;
- * - stall injection: the N-th request body can be delayed before bytes are written.
+ * - stall injection: the N-th request body can be delayed before bytes are written;
+ * - transport-loss injection: a bounded number of subsequent GET responses can disconnect midway
+ *   through their body while the origin listener and URL stay alive.
  *
  * Range policy (explicit, deterministic):
  * - `bytes=start-end` with `start > end` or `start >= media size` is unsatisfiable -> `416` with
@@ -47,6 +50,7 @@ class RangeMediaServer private constructor(
     private val nonRangeRequests = AtomicInteger(0)
     private val outOfBoundsRequests = AtomicInteger(0)
     private val failureServed = AtomicInteger(0)
+    private val disconnectResponsesRemaining = AtomicInteger(0)
     private val recordedRequests: MutableList<RecordedRequest> =
         Collections.synchronizedList(ArrayList())
 
@@ -67,14 +71,18 @@ class RangeMediaServer private constructor(
 
                 "GET" -> {
                     getRequests.incrementAndGet()
-                    val response = getResponse(request)
+                    var response = getResponse(request)
                     if (bodyDelayMillis > 0L) {
-                        response.newBuilder()
+                        response = response.newBuilder()
                             .bodyDelay(bodyDelayMillis, TimeUnit.MILLISECONDS)
                             .build()
-                    } else {
-                        response
                     }
+                    if (consumeDisconnectResponse()) {
+                        response = response.newBuilder()
+                            .socketPolicy(SocketPolicy.DisconnectDuringResponseBody)
+                            .build()
+                    }
+                    response
                 }
 
                 else -> MockResponse.Builder().code(405).build()
@@ -135,6 +143,29 @@ class RangeMediaServer private constructor(
         .body(Buffer().write(config.media))
         .build()
 
+    private fun consumeDisconnectResponse(): Boolean {
+        while (true) {
+            val remaining = disconnectResponsesRemaining.get()
+            if (remaining <= 0) return false
+            if (disconnectResponsesRemaining.compareAndSet(remaining, remaining - 1)) return true
+        }
+    }
+
+    /**
+     * Makes the next [count] GET responses fail in the middle of their response body while keeping
+     * this server bound to the same origin. This models transport loss without coupling evidence to
+     * Android's listener-port reuse behavior.
+     */
+    fun disconnectNextResponses(count: Int) {
+        require(count >= 0) { "count must be non-negative" }
+        disconnectResponsesRemaining.set(count)
+    }
+
+    /** Restores normal transport immediately for subsequent responses on this same origin. */
+    fun restoreConnections() {
+        disconnectResponsesRemaining.set(0)
+    }
+
     /**
      * Parses a single first-byte-pos range spec (`bytes=start-end` / `bytes=start-`).
      * Returns null for missing/malformed headers and for unsupported forms (suffix-only,
@@ -161,9 +192,8 @@ class RangeMediaServer private constructor(
     /**
      * Restarts the listener on the same port with the same config; counters keep accumulating.
      *
-     * Android can transiently retain the listener port after MockWebServer shutdown. Retry only
-     * that expected bind race for a short, bounded interval; all other startup failures remain
-     * immediate so the fixture cannot hide a real server defect.
+     * This helper remains for host-level origin-restart coverage. Transport-loss device evidence
+     * should prefer [disconnectNextResponses] so it does not depend on platform port reuse timing.
      */
     fun restartOnSamePort() {
         val port = boundPort
