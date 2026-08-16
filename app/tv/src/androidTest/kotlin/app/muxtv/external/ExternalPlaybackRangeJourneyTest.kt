@@ -15,6 +15,8 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.feature.player.PlayerRemoteInputDiagnostics
+import app.muxtv.feature.player.PlayerRemoteInputHost
 import app.muxtv.testing.http.RangeMediaServer
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.TimeUnit
@@ -85,9 +87,6 @@ class ExternalPlaybackRangeJourneyTest {
     @Test
     fun torrServeStyleIntentPlaysSeeksAndReturnsCleanly() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        // Previous evidence attempts must not make this cleartext-approval journey vacuously skip
-        // its gate. The production store is backed by this bounded preferences file and is lazily
-        // constructed when ExternalPlaybackActivity is injected.
         context.getSharedPreferences(EXTERNAL_PLAYBACK_PREFERENCES_NAME, Context.MODE_PRIVATE)
             .edit()
             .clear()
@@ -123,10 +122,22 @@ class ExternalPlaybackRangeJourneyTest {
                 }
 
                 composeRule.onNodeWithTag(SURFACE_TAG).assertIsFocused()
+                val beforeSystemKey = remoteInputDiagnostics(scenario)
+                if (!beforeSystemKey.hasActiveHandler) {
+                    throw AssertionError(
+                        "REMOTE_INPUT_HANDLER_NOT_ATTACHED_BEFORE_KEY: $beforeSystemKey",
+                    )
+                }
+
                 pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
+                val afterSystemKey = remoteInputDiagnostics(scenario)
 
                 val seekInputOutcome = awaitSeekInputOutcomeOrNull()
-                    ?: diagnoseMissingSystemKeyBoundary(scenario)
+                    ?: diagnoseMissingSystemKeyBoundary(
+                        scenario = scenario,
+                        beforeSystemKey = beforeSystemKey,
+                        afterSystemKey = afterSystemKey,
+                    )
                 assertThat(seekInputOutcome).isEqualTo(SEEK_INPUT_ACCEPTED_TAG)
 
                 composeRule.waitUntil(timeoutMillis = 15_000) {
@@ -166,7 +177,16 @@ class ExternalPlaybackRangeJourneyTest {
 
     private fun diagnoseMissingSystemKeyBoundary(
         scenario: ActivityScenario<ExternalPlaybackActivity>,
+        beforeSystemKey: PlayerRemoteInputDiagnostics,
+        afterSystemKey: PlayerRemoteInputDiagnostics,
     ): Nothing {
+        if (afterSystemKey.dispatchCount > beforeSystemKey.dispatchCount) {
+            throw AssertionError(
+                "REMOTE_INPUT_HANDLER_DISPATCHED_WITHOUT_SEMANTIC_OUTCOME: " +
+                    "before=$beforeSystemKey after=$afterSystemKey",
+            )
+        }
+
         scenario.onActivity { activity ->
             activity.dispatchKeyEvent(
                 KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT),
@@ -175,17 +195,38 @@ class ExternalPlaybackRangeJourneyTest {
                 KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT),
             )
         }
+        val afterDirectDispatch = remoteInputDiagnostics(scenario)
         val directOutcome = awaitSeekInputOutcomeOrNull()
         if (directOutcome != null) {
             throw AssertionError(
                 "SYSTEM_KEY_TRANSPORT_MISSED_ACTIVITY_BOUNDARY: " +
-                    "direct Activity.dispatchKeyEvent produced $directOutcome",
+                    "direct Activity.dispatchKeyEvent produced $directOutcome; " +
+                    "before=$beforeSystemKey system=$afterSystemKey direct=$afterDirectDispatch",
+            )
+        }
+        if (afterDirectDispatch.dispatchCount > afterSystemKey.dispatchCount) {
+            throw AssertionError(
+                "SYSTEM_KEY_TRANSPORT_MISSED_ACTIVITY_BOUNDARY_WITHOUT_SEMANTIC_OUTCOME: " +
+                    "before=$beforeSystemKey system=$afterSystemKey direct=$afterDirectDispatch",
             )
         }
         throw AssertionError(
-            "REMOTE_INPUT_BOUNDARY_INACTIVE: neither real DPAD_RIGHT nor direct " +
-                "Activity.dispatchKeyEvent reached the player seek-input outcome",
+            "REMOTE_INPUT_ACTIVITY_DISPATCH_NOT_OBSERVED: " +
+                "before=$beforeSystemKey system=$afterSystemKey direct=$afterDirectDispatch",
         )
+    }
+
+    private fun remoteInputDiagnostics(
+        scenario: ActivityScenario<ExternalPlaybackActivity>,
+    ): PlayerRemoteInputDiagnostics {
+        lateinit var snapshot: PlayerRemoteInputDiagnostics
+        scenario.onActivity { activity ->
+            val field = ExternalPlaybackActivity::class.java.getDeclaredField("remoteInputHost")
+            field.isAccessible = true
+            val host = field.get(activity) as PlayerRemoteInputHost
+            snapshot = host.diagnosticsSnapshot()
+        }
+        return snapshot
     }
 
     private fun awaitSeekInputOutcomeOrNull(): String? {
