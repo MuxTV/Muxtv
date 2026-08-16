@@ -43,8 +43,8 @@ import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRefreshTarget
 import app.muxtv.database.SourceRefreshTrigger
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.player.PlaybackStartGateway
+import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
@@ -106,11 +106,7 @@ class AppNavigationSourceJourneyTest {
             }
             composeRule.onNodeWithTag("home-add-source").assertIsFocused().press(Key.Enter)
 
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("sources-add").fetchSemanticsNodes().size == 1
-            }
-            composeRule.onNodeWithTag("sources-add").assertIsFocused().press(Key.Enter)
-
+            // Home's CTA owns the direct AddSource journey; there is no intermediate Sources list.
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-name").fetchSemanticsNodes().size == 1
             }
@@ -140,24 +136,47 @@ class AppNavigationSourceJourneyTest {
             ).assertCountEquals(0)
             composeRule.onNodeWithTag("source-confirm").assertIsFocused().press(Key.Enter)
 
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("sources-add").fetchSemanticsNodes().size == 1 &&
-                    composeRule.onAllNodes(hasText("Домашний IPTV", substring = false))
-                        .fetchSemanticsNodes().isNotEmpty()
-            }
-            composeRule.onNodeWithText("Домашний IPTV").assertExists()
-            composeRule.runOnUiThread {
-                composeRule.activity.onBackPressedDispatcher.onBackPressed()
-            }
+            // Activation pops the direct AddSource entry back to Home.
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("home-hero").fetchSemanticsNodes().size == 1
             }
             composeRule.onNodeWithTag("home-hero")
                 .assertIsFocused()
                 .press(Key.DirectionLeft)
+
+            // Verify the activated source through Settings -> Sources.
             composeRule.onNodeWithTag("nav-home")
                 .assertIsFocused()
-                .press(Key.DirectionDown)
+                .press(Key.DirectionDown, count = 4)
+            composeRule.onNodeWithTag("nav-settings").assertIsFocused().press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("settings-section-sources")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("settings-section-sources")
+                .assertIsFocused()
+                .press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("sources-add").fetchSemanticsNodes().size == 1 &&
+                    composeRule.onAllNodes(hasText("Домашний IPTV", substring = false))
+                        .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("Домашний IPTV").assertExists()
+
+            // Return to Settings, enter its selected rail item, then move to Channels.
+            composeRule.runOnUiThread {
+                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+            }
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("settings-section-sources")
+                    .fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("settings-section-sources")
+                .assertIsFocused()
+                .press(Key.DirectionLeft)
+            composeRule.onNodeWithTag("nav-settings")
+                .assertIsFocused()
+                .press(Key.DirectionUp, count = 3)
             composeRule.onNodeWithTag("nav-channels").assertIsFocused().press(Key.Enter)
 
             composeRule.waitUntil(timeoutMillis = 5_000) {
