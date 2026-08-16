@@ -232,6 +232,8 @@ class ExternalPlaybackRangeJourneyTest {
         const val SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS = 2_000L
         val SEEK_INPUT_OUTCOME_TAGS = listOf(
             SEEK_INPUT_ACCEPTED_TAG,
+            "external-seek-input-controls-visible",
+            "external-seek-input-sheet-open",
             "external-seek-input-command-unavailable",
             "external-seek-input-unknown-duration",
             "external-seek-input-live-content",
