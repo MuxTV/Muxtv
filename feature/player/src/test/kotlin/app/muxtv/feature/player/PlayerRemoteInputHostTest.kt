@@ -42,6 +42,27 @@ class PlayerRemoteInputHostTest {
     }
 
     @Test
+    fun `semantic outcome belongs only to current dispatch`() {
+        val host = PlayerRemoteInputHost()
+        var recordOutcome = true
+        val registration = host.attach {
+            if (recordOutcome) host.recordSemanticOutcome("accepted")
+            recordOutcome
+        }
+
+        assertThat(host.dispatch(PlayerRemoteCommand.SEEK_FORWARD)).isTrue()
+        assertThat(host.diagnosticsSnapshot().lastSemanticOutcome).isEqualTo("accepted")
+
+        recordOutcome = false
+        assertThat(host.dispatch(PlayerRemoteCommand.SEEK_FORWARD)).isFalse()
+        assertThat(host.diagnosticsSnapshot().lastSemanticOutcome).isNull()
+
+        registration.close()
+        assertThat(host.dispatch(PlayerRemoteCommand.SEEK_BACKWARD)).isFalse()
+        assertThat(host.diagnosticsSnapshot().lastSemanticOutcome).isNull()
+    }
+
+    @Test
     fun `diagnostics distinguish registration dispatch and close boundaries`() {
         val host = PlayerRemoteInputHost()
 
