@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -182,9 +183,8 @@ fun PlayerSurfaceContent(
     val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
-
-    DisposableEffect(remoteInputHost, contentIdentity, controlsVisible, openSheet, capabilities) {
-        val registration = remoteInputHost?.attach { command ->
+    val currentRemoteInputHandler by rememberUpdatedState(
+        newValue = { command: PlayerRemoteCommand ->
             if (controlsVisible || openSheet != null) {
                 false
             } else {
@@ -198,6 +198,12 @@ fun PlayerSurfaceContent(
                     )
                 }
             }
+        },
+    )
+
+    DisposableEffect(remoteInputHost, contentIdentity) {
+        val registration = remoteInputHost?.attach { command ->
+            currentRemoteInputHandler(command)
         }
         onDispose { registration?.close() }
     }
