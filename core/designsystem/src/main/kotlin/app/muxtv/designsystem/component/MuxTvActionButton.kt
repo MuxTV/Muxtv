@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -63,7 +64,9 @@ fun MuxTvActionButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.semantics { this.selected = selected },
+        modifier = modifier
+            .focusProperties { canFocus = enabled }
+            .semantics { this.selected = selected },
         enabled = enabled,
         shape = ButtonDefaults.shape(
             shape = shape,
