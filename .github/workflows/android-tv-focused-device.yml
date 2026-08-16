@@ -91,6 +91,7 @@ jobs:
             -Mode DeviceCurrent `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
+            -SkipHostValidation `
             -NoDaemon
 
       - name: Upload focused device evidence

@@ -8,6 +8,7 @@ permissions:
 
 concurrency:
   group: integration-acceptance-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -78,6 +79,7 @@ jobs:
             -Mode DeviceMatrix `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
+            -SkipHostValidation `
             -NoDaemon
 
       - name: Upload integration acceptance evidence

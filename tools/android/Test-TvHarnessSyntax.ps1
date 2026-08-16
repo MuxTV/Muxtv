@@ -108,6 +108,10 @@ $runnerPreflightContract = Join-Path $repositoryRoot "tools\ci\Test-SelfHostedRu
 if (-not (Test-Path -LiteralPath $runnerPreflightContract -PathType Leaf)) {
     Add-ContractError "Self-hosted runner preflight contract test was not found."
 }
+$manualEvidenceQueueContract = Join-Path $repositoryRoot "tools\ci\Test-ManualEvidenceQueueContract.ps1"
+if (-not (Test-Path -LiteralPath $manualEvidenceQueueContract -PathType Leaf)) {
+    Add-ContractError "Manual evidence queue contract test was not found."
+}
 
 function Assert-WorkflowEvidenceContract {
     param(
@@ -239,6 +243,7 @@ if (-not (Test-Path -LiteralPath $measurementHarnessCheck -PathType Leaf)) {
 }
 & $measurementHarnessCheck
 & $runnerPreflightContract
+& $manualEvidenceQueueContract
 
 $benchmarkFoundationContract = Join-Path $repositoryRoot "tools\ci\Test-BenchmarkFoundationContract.ps1"
 if (-not (Test-Path -LiteralPath $benchmarkFoundationContract -PathType Leaf)) {

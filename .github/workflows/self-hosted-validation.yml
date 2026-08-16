@@ -73,6 +73,11 @@ jobs:
           $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
+      - name: Validate risk-based device lane contract
+        shell: pwsh
+        run: |
+          & .\tools\ci\Test-RiskBasedDeviceLaneContract.ps1
+
       - name: Select validation mode
         id: validation
         shell: pwsh
