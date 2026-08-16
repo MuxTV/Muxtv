@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +48,7 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.designsystem.component.MuxTvEmptyState
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
+import app.muxtv.designsystem.icon.MuxTvIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
@@ -216,7 +215,7 @@ private fun EmptyRoute(
     MuxTvScreenScaffold(title = "Источники") {
         Box(modifier = Modifier.fillMaxSize()) {
             MuxTvEmptyState(
-                icon = Icons.Filled.List,
+                icon = MuxTvIcons.Sources,
                 title = "Источников пока нет",
                 description = "Добавьте M3U-ссылку, чтобы MuxTV собрал каталог каналов.",
                 actionLabel = "Добавить источник",
@@ -369,13 +368,21 @@ private fun SourceDetailsSheet(
     val operationalControlsEnabled =
         !mutationInFlight && !running && source.hasCredentialReference
     val firstActionFocusRequester = remember { FocusRequester() }
+    val closeFocusRequester = remember { FocusRequester() }
+    var initialFocusClaimed by remember(source.sourceId) { mutableStateOf(false) }
     val shape = RoundedCornerShape(TvTokens.Shape.detailsCorner)
 
     androidx.activity.compose.BackHandler(onBack = onDismiss)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(operationalControlsEnabled) {
+        if (initialFocusClaimed) return@LaunchedEffect
         withFrameNanos { }
-        firstActionFocusRequester.requestFocus()
+        if (operationalControlsEnabled) {
+            firstActionFocusRequester.requestFocus()
+        } else {
+            closeFocusRequester.requestFocus()
+        }
+        initialFocusClaimed = true
     }
 
     Box(
@@ -505,7 +512,8 @@ private fun SourceDetailsSheet(
                 onClick = onDismiss,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG),
+                    .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG)
+                    .focusRequester(closeFocusRequester),
             )
         }
     }

@@ -13,10 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +57,7 @@ import app.muxtv.designsystem.component.MuxTvFocusSurface
 import app.muxtv.designsystem.component.MuxTvProgrammeProgress
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import app.muxtv.designsystem.component.MuxTvSectionHeader
+import app.muxtv.designsystem.icon.MuxTvIcons
 import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -143,6 +140,9 @@ fun HomeRoute(
 
     val heroFocusRequester = remember { FocusRequester() }
     val heroDownRequester = remember { FocusRequester() }
+    var activeFocusOwner by rememberSaveable(profileId) {
+        mutableStateOf(HOME_FOCUS_OWNER_HERO)
+    }
 
     // Home already has a persistent selected destination in the rail. Omitting a
     // second large route title restores the reference hierarchy: clock -> hero -> rails.
@@ -177,6 +177,8 @@ fun HomeRoute(
                         heroFocusRequester = heroFocusRequester,
                         railFocusRequester = railFocusRequester,
                         downFocusRequester = heroDownRequester,
+                        requestInitialFocus = activeFocusOwner == HOME_FOCUS_OWNER_HERO,
+                        onFocused = { activeFocusOwner = HOME_FOCUS_OWNER_HERO },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(contentMaxHeight * HERO_HEIGHT_FRACTION),
@@ -188,6 +190,8 @@ fun HomeRoute(
                         railFocusRequester = railFocusRequester,
                         heroFocusRequester = heroFocusRequester,
                         firstCardFocusRequester = heroDownRequester,
+                        activeFocusOwner = activeFocusOwner,
+                        onFocusOwnerChanged = { activeFocusOwner = it },
                     )
                 }
             }
@@ -226,7 +230,7 @@ private fun HomeSourceFailureState(
     }
     Box(modifier = Modifier.fillMaxSize()) {
         MuxTvEmptyState(
-            icon = Icons.Filled.Info,
+            icon = MuxTvIcons.Info,
             title = "Не удалось прочитать состояние источников",
             description = "MuxTV не будет считать это пустой библиотекой. Можно открыть эфир или перейти в навигацию.",
             actionLabel = "Открыть эфир",
@@ -252,7 +256,7 @@ private fun HomeEmptyState(
     }
     Box(modifier = Modifier.fillMaxSize()) {
         MuxTvEmptyState(
-            icon = Icons.Filled.Info,
+            icon = MuxTvIcons.Info,
             title = "Добро пожаловать в MuxTV",
             description = "Добавьте источник M3U, и MuxTV соберёт единый список каналов.",
             actionLabel = "Добавить источник",
@@ -275,11 +279,15 @@ private fun HomeHero(
     heroFocusRequester: FocusRequester,
     railFocusRequester: FocusRequester?,
     downFocusRequester: FocusRequester?,
+    requestInitialFocus: Boolean,
+    onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        heroFocusRequester.requestFocus()
+    LaunchedEffect(requestInitialFocus) {
+        if (requestInitialFocus) {
+            withFrameNanos { }
+            heroFocusRequester.requestFocus()
+        }
     }
     val heroBrush = Brush.horizontalGradient(
         colors = listOf(
@@ -298,6 +306,7 @@ private fun HomeHero(
         modifier = modifier
             .testTag(HOME_HERO_TEST_TAG)
             .focusRequester(heroFocusRequester)
+            .onFocusChanged { if (it.isFocused) onFocused() }
             .focusProperties {
                 left = railFocusRequester ?: FocusRequester.Default
                 downFocusRequester?.let { down = it }
@@ -333,7 +342,7 @@ private fun HomeHero(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (hero.isCurrentPlayback) {
                                 Icon(
-                                    imageVector = Icons.Filled.PlayArrow,
+                                    imageVector = MuxTvIcons.Playing,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.secondary,
@@ -342,7 +351,7 @@ private fun HomeHero(
                             }
                             if (hero.isFavorite) {
                                 Icon(
-                                    imageVector = Icons.Filled.Star,
+                                    imageVector = MuxTvIcons.Favorite,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = TvTokens.Color.accent,
@@ -435,6 +444,8 @@ private fun HomeRails(
     railFocusRequester: FocusRequester?,
     heroFocusRequester: FocusRequester,
     firstCardFocusRequester: FocusRequester,
+    activeFocusOwner: String,
+    onFocusOwnerChanged: (String) -> Unit,
 ) {
     var firstRailRendered = false
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.large)) {
@@ -444,12 +455,14 @@ private fun HomeRails(
                 modifier = Modifier.testTag(HOME_FAVORITES_HEADER_TEST_TAG),
             )
             HomeChannelRail(
-                railKey = "favorites",
+                railKey = HOME_FOCUS_OWNER_FAVORITES,
                 cards = favoriteCards,
                 onOpenChannel = onOpenChannel,
                 railFocusRequester = railFocusRequester,
                 upFocusRequester = heroFocusRequester,
                 firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
+                restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_FAVORITES,
+                onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_FAVORITES) },
             )
             firstRailRendered = true
         }
@@ -459,12 +472,14 @@ private fun HomeRails(
                 modifier = Modifier.testTag(HOME_RECENT_HEADER_TEST_TAG),
             )
             HomeChannelRail(
-                railKey = "recent",
+                railKey = HOME_FOCUS_OWNER_RECENT,
                 cards = recentCards,
                 onOpenChannel = onOpenChannel,
                 railFocusRequester = railFocusRequester,
                 upFocusRequester = heroFocusRequester,
                 firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
+                restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_RECENT,
+                onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_RECENT) },
             )
         }
     }
@@ -478,6 +493,8 @@ private fun HomeChannelRail(
     railFocusRequester: FocusRequester?,
     upFocusRequester: FocusRequester,
     firstCardOverrideRequester: FocusRequester?,
+    restoreFocus: Boolean,
+    onFocused: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val focusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
@@ -487,12 +504,20 @@ private fun HomeChannelRail(
         mutableStateOf(false)
     }
 
-    LaunchedEffect(anchorChannelId, cards.map(HomeChannelCard::channelId), restorationCompleted) {
-        if (restorationCompleted || anchorChannelId == null || cards.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(
+        anchorChannelId,
+        cards.map(HomeChannelCard::channelId),
+        restorationCompleted,
+        restoreFocus,
+    ) {
+        if (!restoreFocus || restorationCompleted || anchorChannelId == null || cards.isEmpty()) {
+            return@LaunchedEffect
+        }
         val targetIndex = cards.indexOfFirst { it.channelId == anchorChannelId }
             .takeIf { it >= 0 }
             ?: 0
         listState.scrollToItem(targetIndex, anchorScrollOffset)
+        withFrameNanos { }
         focusRequesters[cards[targetIndex].channelId]?.requestFocus()
         restorationCompleted = true
     }
@@ -520,6 +545,7 @@ private fun HomeChannelRail(
             fun captureAnchor() {
                 anchorChannelId = card.channelId
                 anchorScrollOffset = listState.firstVisibleItemScrollOffset
+                onFocused()
             }
             HomeChannelCardView(
                 card = card,
@@ -576,7 +602,7 @@ private fun HomeChannelCardView(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (card.isPlaying) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = MuxTvIcons.Playing,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.secondary,
@@ -585,7 +611,7 @@ private fun HomeChannelCardView(
                         }
                         if (card.isFavorite) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = MuxTvIcons.Favorite,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = TvTokens.Color.accent,
@@ -614,6 +640,9 @@ private fun HomeChannelCardView(
 private const val HERO_HEIGHT_FRACTION = 0.46f
 private const val HERO_TEXT_WIDTH_FRACTION = 0.68f
 private const val NOW_REFRESH_MILLIS = 60_000L
+private const val HOME_FOCUS_OWNER_HERO = "hero"
+private const val HOME_FOCUS_OWNER_FAVORITES = "favorites"
+private const val HOME_FOCUS_OWNER_RECENT = "recent"
 const val HOME_HERO_TEST_TAG = "home-hero"
 const val HOME_HERO_PRIMARY_TEST_TAG = "home-hero-primary"
 const val HOME_HERO_GUIDE_TEST_TAG = "home-hero-guide"
