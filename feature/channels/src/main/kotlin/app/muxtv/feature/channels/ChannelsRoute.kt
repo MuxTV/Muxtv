@@ -255,9 +255,15 @@ private fun ChannelsContent(
                 }
 
                 appendState is LoadState.NotLoading && appendState.endOfPaginationReached -> {
-                    val fallbackIndex = focusAnchor.previousIndex
-                        .coerceIn(0, rows.itemCount - 1)
-                    rows.peek(fallbackIndex)?.channelId?.let { fallbackIndex to it }
+                    val loadedIds = (0 until rows.itemCount)
+                        .mapNotNull { index -> rows.peek(index)?.channelId }
+                    if (loadedIds.size == rows.itemCount) {
+                        focusAnchor.resolveAgainst(loadedIds)?.let { resolved ->
+                            resolved.index to resolved.itemKey
+                        }
+                    } else {
+                        null
+                    }
                 }
 
                 else -> null
