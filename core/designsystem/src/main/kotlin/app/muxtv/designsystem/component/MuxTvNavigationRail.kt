@@ -11,10 +11,12 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -55,6 +58,40 @@ data class MuxTvNavigationRailItem(
     val testTag: String,
 )
 
+internal data class NavigationRailMetrics(
+    val verticalPadding: Dp,
+    val brandHeight: Dp,
+    val itemHeight: Dp,
+    val itemGap: Dp,
+) {
+    fun requiredHeight(itemCount: Int): Dp {
+        require(itemCount >= 0)
+        return verticalPadding * 2f +
+            brandHeight +
+            itemHeight * itemCount.toFloat() +
+            itemGap * itemCount.toFloat()
+    }
+}
+
+internal fun navigationRailMetrics(availableHeight: Dp): NavigationRailMetrics =
+    if (availableHeight < COMPACT_RAIL_HEIGHT_THRESHOLD) {
+        NavigationRailMetrics(
+            verticalPadding = 12.dp,
+            brandHeight = 40.dp,
+            itemHeight = 48.dp,
+            itemGap = 4.dp,
+        )
+    } else {
+        NavigationRailMetrics(
+            verticalPadding = TvTokens.Spacing.medium,
+            brandHeight = 48.dp,
+            itemHeight = 56.dp,
+            itemGap = TvTokens.Spacing.xSmall,
+        )
+    }
+
+private val COMPACT_RAIL_HEIGHT_THRESHOLD = 400.dp
+
 /**
  * Lounge Light left navigation rail.
  *
@@ -62,6 +99,9 @@ data class MuxTvNavigationRailItem(
  * a fixed 88dp content inset, so this composable may draw at 248dp while focused
  * without changing destination constraints. Selected destination remains a
  * persistent state independent from the currently focused rail item.
+ *
+ * Low-height TV viewports use a compact vertical geometry profile so every
+ * top-level destination remains laid out before the focus graph is evaluated.
  *
  * System reduced-motion is authoritative: when platform animators are disabled,
  * the transient reveal snaps between the two rail widths while focus/selection
@@ -90,49 +130,65 @@ fun MuxTvNavigationRail(
         label = "navigationRailWidth",
     )
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .width(width)
-            .fillMaxHeight()
-            .onFocusChanged { state ->
-                val hasFocus = state.hasFocus
-                if (railFocused != hasFocus) {
-                    railFocused = hasFocus
-                    onRailFocusChanged(hasFocus)
-                }
-            }
-            .focusGroup()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = TvTokens.Spacing.small, vertical = TvTokens.Spacing.medium),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.xSmall),
+            .fillMaxHeight(),
     ) {
-        RailBrandMark(expanded = railFocused)
-        Spacer(Modifier.height(TvTokens.Spacing.small))
-        items.forEach { item ->
-            MuxTvNavigationRailItemView(
-                item = item,
+        val metrics = navigationRailMetrics(maxHeight)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .onFocusChanged { state ->
+                    val hasFocus = state.hasFocus
+                    if (railFocused != hasFocus) {
+                        railFocused = hasFocus
+                        onRailFocusChanged(hasFocus)
+                    }
+                }
+                .focusGroup()
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(
+                    horizontal = TvTokens.Spacing.small,
+                    vertical = metrics.verticalPadding,
+                ),
+            verticalArrangement = Arrangement.spacedBy(metrics.itemGap),
+        ) {
+            RailBrandMark(
                 expanded = railFocused,
-                onClick = { onSelect(item.key) },
-                modifier = Modifier
-                    .testTag(item.testTag)
-                    .then(
-                        if (item.selected) {
-                            Modifier.focusRequester(railFocusRequester)
-                        } else {
-                            Modifier
-                        },
-                    ),
+                height = metrics.brandHeight,
             )
+            items.forEach { item ->
+                MuxTvNavigationRailItemView(
+                    item = item,
+                    expanded = railFocused,
+                    itemHeight = metrics.itemHeight,
+                    onClick = { onSelect(item.key) },
+                    modifier = Modifier
+                        .testTag(item.testTag)
+                        .then(
+                            if (item.selected) {
+                                Modifier.focusRequester(railFocusRequester)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun RailBrandMark(expanded: Boolean) {
+private fun RailBrandMark(
+    expanded: Boolean,
+    height: Dp,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height)
             .padding(horizontal = TvTokens.Spacing.xSmall),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -159,6 +215,7 @@ private fun RailBrandMark(expanded: Boolean) {
 private fun MuxTvNavigationRailItemView(
     item: MuxTvNavigationRailItem,
     expanded: Boolean,
+    itemHeight: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -171,7 +228,7 @@ private fun MuxTvNavigationRailItemView(
     }
     Row(
         modifier = modifier
-            .height(56.dp)
+            .height(itemHeight)
             .fillMaxWidth()
             .semantics {
                 contentDescription = item.label
