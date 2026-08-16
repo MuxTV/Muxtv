@@ -6,7 +6,9 @@ compose-bom = "2026.06.00"
 tv-material = "1.1.0"
 tv-foundation = "1.0.0"
 navigation3 = "1.1.4"
-media3 = "1.10.1"
+# Media3 1.11.0 contains the upstream SessionResult.INFO_CANCELLED fix required by
+# MediaController surface commands; 1.10.1 could reject that valid informational result.
+media3 = "1.11.0"
 room3 = "3.0.0"
 paging = "3.5.0"
 dagger-hilt = "2.60.1"
