@@ -217,9 +217,18 @@ private fun ChannelsContent(
         ChannelsFilter.RECENT -> recentFilterFocusRequester
     }
     var restorationCompleted by remember(filter) { mutableStateOf(false) }
+    var observedFocusedChannelId by remember(filter) { mutableStateOf<String?>(null) }
     val refreshState = rows.loadState.refresh
+    val appendState = rows.loadState.append
 
-    LaunchedEffect(rows, refreshState, rows.itemCount, focusAnchor, restorationCompleted) {
+    LaunchedEffect(
+        rows,
+        refreshState,
+        appendState,
+        rows.itemCount,
+        focusAnchor,
+        restorationCompleted,
+    ) {
         if (
             restorationCompleted ||
             refreshState !is LoadState.NotLoading ||
@@ -227,33 +236,56 @@ private fun ChannelsContent(
         ) {
             return@LaunchedEffect
         }
+
         val requestedIndex = focusAnchor?.previousIndex?.coerceIn(0, rows.itemCount - 1) ?: 0
         listState.scrollToItem(requestedIndex, focusAnchor?.scrollOffset ?: 0)
-        val loadedAtRequestedIndex = snapshotFlow { rows.peek(requestedIndex) }
-            .filterNotNull()
-            .first()
-        val targetIndex = if (
-            focusAnchor == null || loadedAtRequestedIndex.channelId == focusAnchor.itemKey
-        ) {
-            requestedIndex
-        } else {
-            findLoadedIndex(rows, focusAnchor.itemKey)
-                ?: minOf(focusAnchor.previousIndex - 1, rows.itemCount - 1).coerceAtLeast(0)
+
+        val target = snapshotFlow {
+            val anchoredIndex = focusAnchor?.let { anchor ->
+                findLoadedIndex(rows, anchor.itemKey)
+            }
+            when {
+                anchoredIndex != null -> {
+                    val anchoredId = rows.peek(anchoredIndex)?.channelId
+                    anchoredId?.let { anchoredIndex to it }
+                }
+
+                focusAnchor == null -> {
+                    rows.peek(requestedIndex)?.channelId?.let { requestedIndex to it }
+                }
+
+                appendState is LoadState.NotLoading && appendState.endOfPaginationReached -> {
+                    val fallbackIndex = focusAnchor.previousIndex
+                        .coerceIn(0, rows.itemCount - 1)
+                    rows.peek(fallbackIndex)?.channelId?.let { fallbackIndex to it }
+                }
+
+                else -> null
+            }
         }
-        if (targetIndex != requestedIndex) listState.scrollToItem(targetIndex)
-        val targetId = snapshotFlow { rows.peek(targetIndex)?.channelId }
             .filterNotNull()
             .first()
+
+        val (targetIndex, targetId) = target
+        if (targetIndex != requestedIndex) {
+            listState.scrollToItem(targetIndex)
+        }
+
         val requester = snapshotFlow {
             val placed = listState.layoutInfo.visibleItemsInfo.any { item ->
-                item.key == targetId
+                item.index == targetIndex
             }
             if (placed) focusRequesters[targetId] else null
         }
             .filterNotNull()
             .first()
+
         withFrameNanos { }
-        restorationCompleted = requester.requestFocus()
+        if (!requester.requestFocus()) return@LaunchedEffect
+
+        snapshotFlow { observedFocusedChannelId }
+            .first { focusedId -> focusedId == targetId }
+        restorationCompleted = true
     }
 
     MuxTvScreenScaffold(
@@ -344,7 +376,14 @@ private fun ChannelsContent(
                                 }
                             }
                             .focusRequester(focusRequester)
-                            .onFocusChanged { state -> if (state.isFocused) captureFocusAnchor() },
+                            .onFocusChanged { state ->
+                                if (state.isFocused) {
+                                    observedFocusedChannelId = row.channelId
+                                    captureFocusAnchor()
+                                } else if (observedFocusedChannelId == row.channelId) {
+                                    observedFocusedChannelId = null
+                                }
+                            },
                     )
                 }
             }
