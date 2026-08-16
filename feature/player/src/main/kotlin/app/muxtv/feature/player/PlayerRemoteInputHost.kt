@@ -18,8 +18,8 @@ fun interface PlayerRemoteCommandHandler {
 /**
  * Bounded, non-content diagnostic snapshot for the native TV-input bridge.
  *
- * It intentionally records only registration/dispatch control-flow state. No media identity,
- * locator, title, channel, or user input payload is retained.
+ * It intentionally records only registration/dispatch control-flow state and a bounded semantic
+ * outcome label. No media identity, locator, title, channel, or user input payload is retained.
  */
 data class PlayerRemoteInputDiagnostics(
     val attachGeneration: Long,
@@ -27,6 +27,7 @@ data class PlayerRemoteInputDiagnostics(
     val dispatchCount: Long,
     val lastDispatchHadActiveHandler: Boolean?,
     val lastDispatchHandled: Boolean?,
+    val lastSemanticOutcome: String? = null,
 )
 
 /**
@@ -41,11 +42,13 @@ class PlayerRemoteInputHost {
     private var dispatchCount = 0L
     private var lastDispatchHadActiveHandler: Boolean? = null
     private var lastDispatchHandled: Boolean? = null
+    private var lastSemanticOutcome: String? = null
 
     fun attach(handler: PlayerRemoteCommandHandler): AutoCloseable {
         val registration = Registration(handler)
         attachGeneration += 1L
         active = registration
+        lastSemanticOutcome = null
         return AutoCloseable {
             if (active === registration) {
                 active = null
@@ -56,11 +59,17 @@ class PlayerRemoteInputHost {
     fun dispatch(command: PlayerRemoteCommand): Boolean {
         val registration = active
         val hadActiveHandler = registration != null
+        lastSemanticOutcome = null
         val handled = registration?.handler?.onCommand(command) == true
         dispatchCount += 1L
         lastDispatchHadActiveHandler = hadActiveHandler
         lastDispatchHandled = handled
         return handled
+    }
+
+    /** Records one bounded semantic outcome for the currently executing remote command. */
+    fun recordSemanticOutcome(outcome: String) {
+        lastSemanticOutcome = outcome
     }
 
     fun diagnosticsSnapshot(): PlayerRemoteInputDiagnostics = PlayerRemoteInputDiagnostics(
@@ -69,6 +78,7 @@ class PlayerRemoteInputHost {
         dispatchCount = dispatchCount,
         lastDispatchHadActiveHandler = lastDispatchHadActiveHandler,
         lastDispatchHandled = lastDispatchHandled,
+        lastSemanticOutcome = lastSemanticOutcome,
     )
 
     private class Registration(
