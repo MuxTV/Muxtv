@@ -100,9 +100,9 @@ fun ChannelsRoute(
     val filter by screenViewModel.filter.collectAsStateWithLifecycle()
     val rows = screenViewModel.rows.collectAsLazyPagingItems()
     val listState = rememberLazyListState()
-    var focusedChannelId by rememberSaveable(filter) { mutableStateOf<String?>(null) }
-    var focusedChannelIndex by rememberSaveable(filter) { mutableIntStateOf(0) }
-    var focusedChannelScrollOffset by rememberSaveable(filter) { mutableIntStateOf(0) }
+    var focusedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
+    var focusedChannelIndex by rememberSaveable { mutableIntStateOf(0) }
+    var focusedChannelScrollOffset by rememberSaveable { mutableIntStateOf(0) }
     val focusAnchor = focusedChannelId?.let { id ->
         FocusAnchor(id, focusedChannelIndex, focusedChannelScrollOffset)
     }
