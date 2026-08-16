@@ -435,30 +435,39 @@ private fun ExternalPlaybackScreen(
             modifier = modifier,
         )
 
-        is ExternalUiState.HttpApprovalRequired -> Column(
-            modifier = modifier.fillMaxSize().padding(56.dp),
-            verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
-        ) {
-            Text(
-                text = "Этот поток использует незащищённое HTTP-соединение.",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                text = "Разрешить воспроизведение только для ${state.origin}?",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                MuxTvActionButton(
-                    text = "Разрешить для этого адреса",
-                    onClick = onApproveHttp,
-                    modifier = Modifier.testTag(EXTERNAL_HTTP_APPROVE_TEST_TAG),
+        is ExternalUiState.HttpApprovalRequired -> {
+            val httpApprovalFocusRequester = remember(state.origin) { FocusRequester() }
+            LaunchedEffect(state.origin) {
+                withFrameNanos { }
+                httpApprovalFocusRequester.requestFocus()
+            }
+            Column(
+                modifier = modifier.fillMaxSize().padding(56.dp),
+                verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+            ) {
+                Text(
+                    text = "Этот поток использует незащищённое HTTP-соединение.",
+                    style = MaterialTheme.typography.headlineMedium,
                 )
-                MuxTvActionButton(
-                    text = "Назад",
-                    onClick = onBack,
-                    modifier = Modifier.testTag(EXTERNAL_BACK_TEST_TAG),
+                Text(
+                    text = "Разрешить воспроизведение только для ${state.origin}?",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                    MuxTvActionButton(
+                        text = "Разрешить для этого адреса",
+                        onClick = onApproveHttp,
+                        modifier = Modifier
+                            .testTag(EXTERNAL_HTTP_APPROVE_TEST_TAG)
+                            .focusRequester(httpApprovalFocusRequester),
+                    )
+                    MuxTvActionButton(
+                        text = "Назад",
+                        onClick = onBack,
+                        modifier = Modifier.testTag(EXTERNAL_BACK_TEST_TAG),
+                    )
+                }
             }
         }
 
