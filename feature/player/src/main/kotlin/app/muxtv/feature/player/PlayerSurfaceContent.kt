@@ -177,6 +177,7 @@ fun PlayerSurfaceContent(
     }
 
     fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
+        remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
         lastSeekInputOutcome = outcome
         return outcome == SeekInputOutcome.ACCEPTED
     }
