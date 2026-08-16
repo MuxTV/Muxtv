@@ -34,6 +34,9 @@ internal fun MediaController.runOnApplicationThread(block: () -> Unit) {
 /**
  * Capability projection of the current controller state, recomputed on every player event.
  * The UI never assumes capability from route kind, source name or persisted flags.
+ *
+ * Live-ness is timeline-derived. MediaItem.liveConfiguration contains live-offset overrides and is
+ * not evidence that the current timeline window is actually live.
  */
 @AndroidXOptIn(UnstableApi::class)
 @Composable
@@ -41,29 +44,30 @@ fun rememberPlayerCapabilities(
     controller: MediaController,
     favoriteSupported: Boolean,
 ): PlayerCapabilities {
+    fun snapshot(player: Player): PlayerCapabilities = derivePlayerCapabilities(
+        availableCommands = player.availableCommands.toIntSet(),
+        tracks = player.currentTracks,
+        durationMs = player.duration,
+        isLive = player.isCurrentMediaItemLive,
+        favoriteSupported = favoriteSupported,
+    )
+
     val state by produceState(
-        initialValue = derivePlayerCapabilities(
-            availableCommands = controller.availableCommands.toIntSet(),
-            tracks = controller.currentTracks,
-            durationMs = controller.duration,
-            isLive = controller.currentMediaItem?.liveConfiguration != null,
-            favoriteSupported = favoriteSupported,
-        ),
+        initialValue = snapshot(controller),
         controller,
         favoriteSupported,
     ) {
         val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
-                value = derivePlayerCapabilities(
-                    availableCommands = player.availableCommands.toIntSet(),
-                    tracks = player.currentTracks,
-                    durationMs = player.duration,
-                    isLive = player.currentMediaItem?.liveConfiguration != null,
-                    favoriteSupported = favoriteSupported,
-                )
+                value = snapshot(player)
             }
         }
-        controller.runOnApplicationThread { controller.addListener(listener) }
+        controller.runOnApplicationThread {
+            controller.addListener(listener)
+            // Re-read after listener registration so a timeline/command update cannot be lost
+            // between the produceState initial snapshot and subscription.
+            value = snapshot(controller)
+        }
         awaitDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
     return state
