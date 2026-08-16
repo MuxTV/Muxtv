@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -98,7 +99,10 @@ fun ChannelsRoute(
     }
     val screenViewModel: ChannelsViewModel = viewModel(factory = factory)
     val filter by screenViewModel.filter.collectAsStateWithLifecycle()
-    val rows = screenViewModel.rows.collectAsLazyPagingItems()
+    val rowsFlow = remember(screenViewModel, filter) {
+        screenViewModel.rowsFor(filter)
+    }
+    val rows = rowsFlow.collectAsLazyPagingItems()
     val listState = rememberLazyListState()
     var focusedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedChannelIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -138,21 +142,23 @@ fun ChannelsRoute(
             modifier = modifier,
         )
 
-        else -> ChannelsContent(
-            rows = rows,
-            filter = filter,
-            listState = listState,
-            focusAnchor = focusAnchor,
-            onFilterChanged = screenViewModel::setFilter,
-            onFocusAnchorChanged = { anchor ->
-                focusedChannelId = anchor.itemKey
-                focusedChannelIndex = anchor.previousIndex
-                focusedChannelScrollOffset = anchor.scrollOffset
-            },
-            onOpenChannel = onOpenChannel,
-            railFocusRequester = railFocusRequester,
-            modifier = modifier,
-        )
+        else -> key(filter) {
+            ChannelsContent(
+                rows = rows,
+                filter = filter,
+                listState = listState,
+                focusAnchor = focusAnchor,
+                onFilterChanged = screenViewModel::setFilter,
+                onFocusAnchorChanged = { anchor ->
+                    focusedChannelId = anchor.itemKey
+                    focusedChannelIndex = anchor.previousIndex
+                    focusedChannelScrollOffset = anchor.scrollOffset
+                },
+                onOpenChannel = onOpenChannel,
+                railFocusRequester = railFocusRequester,
+                modifier = modifier,
+            )
+        }
     }
 }
 
@@ -213,9 +219,9 @@ private fun ChannelsContent(
         ChannelsFilter.FAVORITES -> favoritesFilterFocusRequester
         ChannelsFilter.RECENT -> recentFilterFocusRequester
     }
-    var restorationCompleted by remember(filter) { mutableStateOf(false) }
+    var restorationCompleted by remember { mutableStateOf(false) }
 
-    LaunchedEffect(filter, rows.itemCount, focusAnchor, restorationCompleted) {
+    LaunchedEffect(rows.itemCount, focusAnchor, restorationCompleted) {
         if (restorationCompleted || rows.itemCount == 0) return@LaunchedEffect
         val requestedIndex = focusAnchor?.previousIndex?.coerceIn(0, rows.itemCount - 1) ?: 0
         listState.scrollToItem(requestedIndex, focusAnchor?.scrollOffset ?: 0)
@@ -234,11 +240,16 @@ private fun ChannelsContent(
         val targetId = snapshotFlow { rows.peek(targetIndex)?.channelId }
             .filterNotNull()
             .first()
-        snapshotFlow { focusRequesters[targetId] }
+        val requester = snapshotFlow {
+            val placed = listState.layoutInfo.visibleItemsInfo.any { item ->
+                item.key == targetId
+            }
+            if (placed) focusRequesters[targetId] else null
+        }
             .filterNotNull()
             .first()
-            .requestFocus()
-        restorationCompleted = true
+        withFrameNanos { }
+        restorationCompleted = requester.requestFocus()
     }
 
     MuxTvScreenScaffold(
