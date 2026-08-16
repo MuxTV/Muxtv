@@ -298,8 +298,10 @@ class SettingsJourneyTest {
             .executeShellCommand("wm size $size")
             .close()
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        composeRule.runOnUiThread {
-            check(!composeRule.activity.isFinishing) {
+        composeRule.activityRule.scenario.recreate()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        composeRule.activityRule.scenario.onActivity { activity ->
+            check(!activity.isFinishing && !activity.isDestroyed) {
                 "Display-size transition did not settle on a live ComponentActivity."
             }
         }
