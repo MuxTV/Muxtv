@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -214,6 +215,7 @@ class ExternalPlaybackActivity : ComponentActivity() {
     private fun beginSetup(parsed: ExternalPlaybackIntentResult.Accepted) {
         val myGeneration = ++generation
         val leaseSessionId = UUID.randomUUID().toString()
+        val displayTitle = parsed.displayTitle ?: DEFAULT_TITLE
         sessionId = leaseSessionId
         uiState = ExternalUiState.Preparing
         lifecycleScope.launch {
@@ -241,6 +243,19 @@ class ExternalPlaybackActivity : ComponentActivity() {
                 val setupId = PlaybackSetupId.create()
                 pendingSetupId = setupId
                 activeController = controller
+
+                // The service intentionally completes the external setup only after
+                // Player.Listener.onRenderedFirstFrame(). A video surface therefore has to be
+                // attached before awaiting that command result; otherwise Activity and service
+                // form a circular wait (Started -> render surface -> first frame -> Started).
+                // SurfaceAttaching keeps the first-frame authority in the service while making
+                // the user-visible surface available to Media3 during preparation.
+                uiState = ExternalUiState.SurfaceAttaching(
+                    controller = controller,
+                    sessionId = leaseSessionId,
+                    title = displayTitle,
+                )
+
                 val result = controllerConnector.awaitExternalPlaybackStart(
                     controller = controller,
                     leaseId = leaseId,
@@ -252,7 +267,7 @@ class ExternalPlaybackActivity : ComponentActivity() {
                     ExternalPlaybackStartResult.Started -> uiState = ExternalUiState.Playing(
                         controller = controller,
                         sessionId = leaseSessionId,
-                        title = parsed.displayTitle ?: DEFAULT_TITLE,
+                        title = displayTitle,
                     )
 
                     is ExternalPlaybackStartResult.Rejected ->
@@ -328,11 +343,23 @@ private sealed interface ExternalUiState {
     data object Preparing : ExternalUiState
     data class Failed(val message: String) : ExternalUiState
 
+    sealed interface Surface : ExternalUiState {
+        val controller: MediaController
+        val sessionId: String
+        val title: String
+    }
+
+    data class SurfaceAttaching(
+        override val controller: MediaController,
+        override val sessionId: String,
+        override val title: String,
+    ) : Surface
+
     data class Playing(
-        val controller: MediaController,
-        val sessionId: String,
-        val title: String,
-    ) : ExternalUiState
+        override val controller: MediaController,
+        override val sessionId: String,
+        override val title: String,
+    ) : Surface
 }
 
 @Composable
@@ -442,22 +469,34 @@ private fun ExternalPlaybackScreen(
             modifier = modifier,
         )
 
-        is ExternalUiState.Playing -> PlayerSurfaceContent(
-            controller = state.controller,
-            title = state.title,
-            favoriteSupported = false,
-            contentIdentity = state.sessionId,
-            stopAction = PlayerSurfaceAction(
-                label = "Остановить",
-                onClick = onStop,
-            ),
-            backAction = PlayerSurfaceAction(
-                label = "Назад",
-                onClick = onBack,
-            ),
-            testTagPrefix = "external",
-            modifier = modifier,
-        )
+        is ExternalUiState.Surface -> Box(
+            modifier = modifier
+                .fillMaxSize()
+                .then(
+                    if (state is ExternalUiState.Playing) {
+                        Modifier.testTag(EXTERNAL_FIRST_FRAME_CONFIRMED_TEST_TAG)
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            PlayerSurfaceContent(
+                controller = state.controller,
+                title = state.title,
+                favoriteSupported = false,
+                contentIdentity = state.sessionId,
+                stopAction = PlayerSurfaceAction(
+                    label = "Остановить",
+                    onClick = onStop,
+                ),
+                backAction = PlayerSurfaceAction(
+                    label = "Назад",
+                    onClick = onBack,
+                ),
+                testTagPrefix = "external",
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
@@ -541,6 +580,7 @@ private const val CONNECTION_FAILED_MESSAGE =
     "Не удалось подключиться к службе воспроизведения."
 private const val GENERIC_FAILED_MESSAGE = "Не удалось подготовить внешний поток."
 private const val EXTERNAL_BACK_TEST_TAG = "external-back"
+private const val EXTERNAL_FIRST_FRAME_CONFIRMED_TEST_TAG = "external-first-frame-confirmed"
 private const val EXTERNAL_HTTP_APPROVE_TEST_TAG = "external-http-approve"
 private const val EXTERNAL_LAN_APPROVE_TEST_TAG = "external-lan-approve"
 private const val EXTERNAL_RETRY_TEST_TAG = "external-retry"

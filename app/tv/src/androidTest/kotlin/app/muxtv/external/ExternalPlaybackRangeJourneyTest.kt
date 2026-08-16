@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.view.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -16,6 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.testing.http.RangeMediaServer
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.TimeUnit
@@ -31,12 +33,14 @@ import org.junit.runner.RunWith
  *
  * First rendered frame requires decodable video, so the media is encoded on the device itself
  * ([OnDeviceVideoFixture]); on images without an H.264 codec the test skips with an explicit
- * message instead of silently passing. The `external-surface` is causally post-first-frame rather
- * than a bare Compose-presence proxy: [ExternalPlaybackActivity] renders its Playing surface only
- * after `awaitExternalPlaybackStart()` returns `Started`, while the playback service completes that
+ * message instead of silently passing. `external-surface` proves that the real Media3 surface has
+ * been attached while the external setup is still pending. `external-first-frame-confirmed` is the
+ * causal completion marker: [ExternalPlaybackActivity] exposes it only after
+ * `awaitExternalPlaybackStart()` returns `Started`, while the playback service completes that
  * result only from its guarded `onRenderedFirstFrame()` for the active external setup/media id.
- * A second observer controller is deliberately not used because it would introduce an unrelated
- * MediaSession-event race instead of testing the production authority path.
+ * This ordering avoids the invalid circular dependency where a first frame was required before a
+ * surface existed. A second observer controller is deliberately not used because it would
+ * introduce an unrelated MediaSession-event race instead of testing the production authority path.
  *
  * ActivityScenario is intentionally given an explicit component while preserving ACTION_VIEW,
  * data and MIME. Android's Intent API requires data and MIME to be assigned together with
@@ -44,12 +48,13 @@ import org.junit.runner.RunWith
  * path. A separate manifest-resolution test below proves that the exported HTTP/HTTPS video entry
  * point remains discoverable by Android.
  *
- * Evidence produced: intent accepted -> cleartext exact-origin approval -> service-gated first
- * frame -> hidden-surface D-pad seek burst accepted (transient HUD) -> clean Back -> activity
- * destroyed, playback stopped (no HTTP traffic after destroy). Network range/rebuffer semantics
- * are not claimed here: the 4-second fixture is fully buffered long before the D-pad input, so
- * HTTP request deltas around the seek are not causally observable at the app level. Byte-range and
- * resilience evidence lives in `ProgressiveResilienceEvidenceTest` (player:media3).
+ * Evidence produced: intent accepted -> cleartext exact-origin approval -> Media3 surface attached
+ * -> service-gated first frame confirmed -> hidden-surface D-pad seek burst accepted (transient HUD)
+ * -> real Android Back -> activity destroyed, playback stopped (no HTTP traffic after destroy).
+ * Network range/rebuffer semantics are not claimed here: the 4-second fixture is fully buffered
+ * long before the D-pad input, so HTTP request deltas around the seek are not causally observable
+ * at the app level. Byte-range and resilience evidence lives in
+ * `ProgressiveResilienceEvidenceTest` (player:media3).
  *
  * No locator path, query or media identity is ever logged or persisted.
  */
@@ -107,26 +112,27 @@ class ExternalPlaybackRangeJourneyTest {
                 }
                 composeRule.onNodeWithTag(HTTP_APPROVE_TAG).performClick()
 
+                composeRule.waitUntil(timeoutMillis = 30_000) {
+                    composeRule.onAllNodesWithTag(SURFACE_TAG)
+                        .fetchSemanticsNodes().size == 1
+                }
                 composeRule.waitUntil(timeoutMillis = 60_000) {
-                    composeRule.onAllNodesWithTag("external-surface")
+                    composeRule.onAllNodesWithTag(FIRST_FRAME_CONFIRMED_TAG)
                         .fetchSemanticsNodes().size == 1
                 }
 
-                composeRule.onNodeWithTag("external-surface").performKeyInput {
+                composeRule.onNodeWithTag(SURFACE_TAG).performKeyInput {
                     repeat(SEEK_BURST_PRESSES) {
                         keyDown(Key.DirectionRight)
                         keyUp(Key.DirectionRight)
                     }
                 }
                 composeRule.waitUntil(timeoutMillis = 15_000) {
-                    composeRule.onAllNodesWithTag("external-seek-hud")
+                    composeRule.onAllNodesWithTag(SEEK_HUD_TAG)
                         .fetchSemanticsNodes().isNotEmpty()
                 }
 
-                composeRule.onNodeWithTag("external-surface").performKeyInput {
-                    keyDown(Key.Back)
-                    keyUp(Key.Back)
-                }
+                pressSystemBack()
 
                 waitForLifecycle(scenario, Lifecycle.State.DESTROYED, 15_000)
                 val requestsAtDestroy = server.requestCount()
@@ -148,13 +154,18 @@ class ExternalPlaybackRangeJourneyTest {
             composeRule.waitUntil(timeoutMillis = 15_000) {
                 composeRule.onAllNodesWithTag(BACK_TAG).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag(BACK_TAG)
-                .assertIsFocused()
-                .performKeyInput {
-                    keyDown(Key.Back)
-                    keyUp(Key.Back)
-                }
+            composeRule.onNodeWithTag(BACK_TAG).assertIsFocused()
+
+            pressSystemBack()
+
             waitForLifecycle(scenario, Lifecycle.State.DESTROYED, 15_000)
+        }
+    }
+
+    private fun pressSystemBack() {
+        InstrumentationRegistry.getInstrumentation().apply {
+            sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            waitForIdleSync()
         }
     }
 
@@ -173,6 +184,9 @@ class ExternalPlaybackRangeJourneyTest {
     private companion object {
         const val HTTP_APPROVE_TAG = "external-http-approve"
         const val BACK_TAG = "external-back"
+        const val SURFACE_TAG = "external-surface"
+        const val FIRST_FRAME_CONFIRMED_TAG = "external-first-frame-confirmed"
+        const val SEEK_HUD_TAG = "external-seek-hud"
         const val SEEK_BURST_PRESSES = 4
         const val NO_REQUESTS_AFTER_FINISH_SLEEP_MILLIS = 1_000L
         const val EXTERNAL_PLAYBACK_PREFERENCES_NAME = "muxtv_external_playback"
