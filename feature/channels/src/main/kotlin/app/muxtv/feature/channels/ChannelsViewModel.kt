@@ -34,8 +34,8 @@ internal enum class ChannelsFilter {
 }
 
 internal class ChannelsViewModel(
-    channelBrowseRepository: ChannelBrowseRepository,
-    playbackSessionStateSource: PlaybackSessionStateSource,
+    private val channelBrowseRepository: ChannelBrowseRepository,
+    private val playbackSessionStateSource: PlaybackSessionStateSource,
     private val epgGuideRepository: EpgGuideRepository,
     private val profileId: String,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
@@ -48,9 +48,26 @@ internal class ChannelsViewModel(
 
     private val nowNextIds = MutableStateFlow<List<String>>(emptyList())
     private var nowNextJob: Job? = null
+    private val rowsByFilter = mutableMapOf<ChannelsFilter, Flow<PagingData<ChannelRowUiModel>>>()
 
-    private val rowsByFilter: Map<ChannelsFilter, Flow<PagingData<ChannelRowUiModel>>> =
-        ChannelsFilter.entries.associateWith { filter ->
+    init {
+        require(profileId.isNotBlank())
+        viewModelScope.launch {
+            epgGuideRepository.observeDataChanges().collect {
+                launchNowNextLoop(nowNextIds.value)
+            }
+        }
+    }
+
+    /**
+     * Returns the stable Paging stream owned by one filter projection.
+     *
+     * Streams are created lazily so opening Channels does not query inactive filters. Re-entering
+     * a filter reuses its cached stream while switching filters gives Compose a distinct stream
+     * identity, preventing a new filter state from being paired with the previous Paging generation.
+     */
+    fun rowsFor(filter: ChannelsFilter): Flow<PagingData<ChannelRowUiModel>> =
+        rowsByFilter.getOrPut(filter) {
             combine(
                 channelBrowseRepository.pages(
                     ChannelBrowseQuery(
@@ -71,18 +88,6 @@ internal class ChannelsViewModel(
                 }
             }.cachedIn(viewModelScope)
         }
-
-    init {
-        require(profileId.isNotBlank())
-        viewModelScope.launch {
-            epgGuideRepository.observeDataChanges().collect {
-                launchNowNextLoop(nowNextIds.value)
-            }
-        }
-    }
-
-    fun rowsFor(filter: ChannelsFilter): Flow<PagingData<ChannelRowUiModel>> =
-        rowsByFilter.getValue(filter)
 
     fun setFilter(filter: ChannelsFilter) {
         mutableFilter.value = filter
