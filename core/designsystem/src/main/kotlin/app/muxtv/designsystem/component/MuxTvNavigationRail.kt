@@ -1,6 +1,8 @@
 package app.muxtv.designsystem.component
 
+import android.animation.ValueAnimator
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +62,10 @@ data class MuxTvNavigationRailItem(
  * a fixed 88dp content inset, so this composable may draw at 248dp while focused
  * without changing destination constraints. Selected destination remains a
  * persistent state independent from the currently focused rail item.
+ *
+ * System reduced-motion is authoritative: when platform animators are disabled,
+ * the transient reveal snaps between the two rail widths while focus/selection
+ * tone and outline continue to provide immediate non-motion feedback.
  */
 @Composable
 fun MuxTvNavigationRail(
@@ -70,12 +76,17 @@ fun MuxTvNavigationRail(
     onRailFocusChanged: (Boolean) -> Unit = {},
 ) {
     var railFocused by remember { mutableStateOf(false) }
+    val motionEnabled = ValueAnimator.areAnimatorsEnabled()
     val width by animateDpAsState(
         targetValue = if (railFocused) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed,
-        animationSpec = tween(
-            durationMillis = TvTokens.Motion.screenDurationMillis,
-            easing = TvTokens.Motion.easeInOut,
-        ),
+        animationSpec = if (motionEnabled) {
+            tween(
+                durationMillis = TvTokens.Motion.screenDurationMillis,
+                easing = TvTokens.Motion.easeInOut,
+            )
+        } else {
+            snap()
+        },
         label = "navigationRailWidth",
     )
 
