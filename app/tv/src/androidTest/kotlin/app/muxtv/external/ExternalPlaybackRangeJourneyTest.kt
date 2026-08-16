@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.view.KeyEvent
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -48,13 +49,13 @@ import org.junit.runner.RunWith
  * TV interaction is remote-native: cleartext approval, hidden-surface seek and Back are driven
  * through real Android D-pad events rather than synthetic touch or Compose-local key injection.
  * Evidence produced: intent accepted -> cleartext exact-origin approval -> Media3 surface attached
- * -> service-gated first frame confirmed -> focused hidden-surface D-pad seek burst accepted
- * (transient HUD) -> real Android Back -> activity destroyed, playback stopped (no HTTP traffic
- * after destroy).
- * Network range/rebuffer semantics are not claimed here: the 4-second fixture is fully buffered
- * long before the D-pad input, so HTTP request deltas around the seek are not causally observable
- * at the app level. Byte-range and resilience evidence lives in
- * `ProgressiveResilienceEvidenceTest` (player:media3).
+ * -> service-gated first frame confirmed -> focused hidden surface -> real D-pad seek input reaches
+ * the production seek boundary and is accepted (transient HUD) -> real Android Back -> activity
+ * destroyed, playback stopped (no HTTP traffic after destroy).
+ * Network range/rebuffer semantics are not claimed here: the short fixture is fully buffered long
+ * before the D-pad input, so HTTP request deltas around the seek are not causally observable at the
+ * app level. Byte-range and resilience evidence lives in `ProgressiveResilienceEvidenceTest`
+ * (player:media3).
  *
  * No locator path, query or media identity is ever logged or persisted.
  */
@@ -123,9 +124,11 @@ class ExternalPlaybackRangeJourneyTest {
                 }
 
                 composeRule.onNodeWithTag(SURFACE_TAG).assertIsFocused()
-                repeat(SEEK_BURST_PRESSES) {
-                    pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
-                }
+                pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
+
+                val seekInputOutcome = awaitSeekInputOutcome()
+                assertThat(seekInputOutcome).isEqualTo(SEEK_INPUT_ACCEPTED_TAG)
+
                 composeRule.waitUntil(timeoutMillis = 15_000) {
                     composeRule.onAllNodesWithTag(SEEK_HUD_TAG)
                         .fetchSemanticsNodes().isNotEmpty()
@@ -161,6 +164,24 @@ class ExternalPlaybackRangeJourneyTest {
         }
     }
 
+    private fun awaitSeekInputOutcome(): String {
+        try {
+            composeRule.waitUntil(timeoutMillis = SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS) {
+                SEEK_INPUT_OUTCOME_TAGS.any { tag ->
+                    composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+                }
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            throw AssertionError(
+                "KEY_NOT_RECEIVED: real DPAD_RIGHT did not reach the player seek-input boundary",
+                timeout,
+            )
+        }
+        return SEEK_INPUT_OUTCOME_TAGS.single { tag ->
+            composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun pressSystemKey(keyCode: Int) {
         InstrumentationRegistry.getInstrumentation().apply {
             sendKeyDownUpSync(keyCode)
@@ -186,7 +207,16 @@ class ExternalPlaybackRangeJourneyTest {
         const val SURFACE_TAG = "external-surface"
         const val FIRST_FRAME_CONFIRMED_TAG = "external-first-frame-confirmed"
         const val SEEK_HUD_TAG = "external-seek-hud"
-        const val SEEK_BURST_PRESSES = 4
+        const val SEEK_INPUT_ACCEPTED_TAG = "external-seek-input-accepted"
+        const val SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS = 2_000L
+        val SEEK_INPUT_OUTCOME_TAGS = listOf(
+            SEEK_INPUT_ACCEPTED_TAG,
+            "external-seek-input-command-unavailable",
+            "external-seek-input-unknown-duration",
+            "external-seek-input-live-content",
+            "external-seek-input-invalid-position",
+            "external-seek-input-controller-rejected",
+        )
         const val NO_REQUESTS_AFTER_FINISH_SLEEP_MILLIS = 1_000L
         const val EXTERNAL_PLAYBACK_PREFERENCES_NAME = "muxtv_external_playback"
 
