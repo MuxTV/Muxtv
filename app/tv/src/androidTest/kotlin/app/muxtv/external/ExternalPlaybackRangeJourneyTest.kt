@@ -6,12 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.view.KeyEvent
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performKeyInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -47,11 +45,12 @@ import org.junit.runner.RunWith
  * path. A separate manifest-resolution test below proves that the exported HTTP/HTTPS video entry
  * point remains discoverable by Android.
  *
- * TV interaction is remote-native: the cleartext approval must own focus and is activated with a
- * real Android DPAD_CENTER event rather than a synthetic touch click. Evidence produced: intent
- * accepted -> cleartext exact-origin approval -> Media3 surface attached -> service-gated first
- * frame confirmed -> hidden-surface D-pad seek burst accepted (transient HUD) -> real Android Back
- * -> activity destroyed, playback stopped (no HTTP traffic after destroy).
+ * TV interaction is remote-native: cleartext approval, hidden-surface seek and Back are driven
+ * through real Android D-pad events rather than synthetic touch or Compose-local key injection.
+ * Evidence produced: intent accepted -> cleartext exact-origin approval -> Media3 surface attached
+ * -> service-gated first frame confirmed -> focused hidden-surface D-pad seek burst accepted
+ * (transient HUD) -> real Android Back -> activity destroyed, playback stopped (no HTTP traffic
+ * after destroy).
  * Network range/rebuffer semantics are not claimed here: the 4-second fixture is fully buffered
  * long before the D-pad input, so HTTP request deltas around the seek are not causally observable
  * at the app level. Byte-range and resilience evidence lives in
@@ -123,11 +122,9 @@ class ExternalPlaybackRangeJourneyTest {
                         .fetchSemanticsNodes().size == 1
                 }
 
-                composeRule.onNodeWithTag(SURFACE_TAG).performKeyInput {
-                    repeat(SEEK_BURST_PRESSES) {
-                        keyDown(Key.DirectionRight)
-                        keyUp(Key.DirectionRight)
-                    }
+                composeRule.onNodeWithTag(SURFACE_TAG).assertIsFocused()
+                repeat(SEEK_BURST_PRESSES) {
+                    pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
                 }
                 composeRule.waitUntil(timeoutMillis = 15_000) {
                     composeRule.onAllNodesWithTag(SEEK_HUD_TAG)
