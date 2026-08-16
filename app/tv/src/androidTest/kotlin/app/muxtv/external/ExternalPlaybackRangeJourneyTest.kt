@@ -132,7 +132,9 @@ class ExternalPlaybackRangeJourneyTest {
                 pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
                 val afterSystemKey = remoteInputDiagnostics(scenario)
 
-                val seekInputOutcome = awaitSeekInputOutcomeOrNull()
+                val seekInputOutcome = afterSystemKey.lastSemanticOutcome
+                    ?.let { "external-seek-input-$it" }
+                    ?: awaitSeekInputOutcomeOrNull()
                     ?: diagnoseMissingSystemKeyBoundary(
                         scenario = scenario,
                         beforeSystemKey = beforeSystemKey,
@@ -196,7 +198,9 @@ class ExternalPlaybackRangeJourneyTest {
             )
         }
         val afterDirectDispatch = remoteInputDiagnostics(scenario)
-        val directOutcome = awaitSeekInputOutcomeOrNull()
+        val directOutcome = afterDirectDispatch.lastSemanticOutcome
+            ?.let { "external-seek-input-$it" }
+            ?: awaitSeekInputOutcomeOrNull()
         if (directOutcome != null) {
             throw AssertionError(
                 "SYSTEM_KEY_TRANSPORT_MISSED_ACTIVITY_BOUNDARY: " +
