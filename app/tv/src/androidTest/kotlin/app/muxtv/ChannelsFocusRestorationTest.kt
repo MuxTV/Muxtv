@@ -142,10 +142,12 @@ class ChannelsFocusRestorationTest {
 
         moveFocusToSecondChannel()
         composeRule.onNodeWithTag("channels-filter-favorites").performClick()
-        composeRule.waitUntilText("★  Второй")
+        composeRule.waitUntilText("Второй")
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("★  Второй", substring = false).assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Второй", substring = false).assertExists()
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsSelected()
     }
 
     @Test
@@ -163,11 +165,12 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         openFavoritesFromFirstRowWithDpad()
-        composeRule.waitUntilText("★  Первый")
+        composeRule.waitUntilText("Первый")
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-        composeRule.onNodeWithText("★  Первый", substring = false).assertExists()
+        composeRule.onNodeWithText("Первый", substring = false).assertExists()
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsSelected()
     }
 
     @Test
