@@ -9,7 +9,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -61,36 +60,46 @@ data class MuxTvNavigationRailItem(
 internal data class NavigationRailMetrics(
     val verticalPadding: Dp,
     val brandHeight: Dp,
+    val brandToItemsGap: Dp,
     val itemHeight: Dp,
     val itemGap: Dp,
 ) {
     fun requiredHeight(itemCount: Int): Dp {
         require(itemCount >= 0)
+        val betweenItems = (itemCount - 1).coerceAtLeast(0)
         return verticalPadding * 2f +
             brandHeight +
+            brandToItemsGap +
             itemHeight * itemCount.toFloat() +
-            itemGap * itemCount.toFloat()
+            itemGap * betweenItems.toFloat()
     }
 }
 
-internal fun navigationRailMetrics(availableHeight: Dp): NavigationRailMetrics =
-    if (availableHeight < COMPACT_RAIL_HEIGHT_THRESHOLD) {
-        NavigationRailMetrics(
-            verticalPadding = 12.dp,
-            brandHeight = 40.dp,
-            itemHeight = 48.dp,
-            itemGap = 4.dp,
-        )
-    } else {
-        NavigationRailMetrics(
-            verticalPadding = TvTokens.Spacing.medium,
-            brandHeight = 48.dp,
-            itemHeight = 56.dp,
-            itemGap = TvTokens.Spacing.xSmall,
-        )
-    }
+private val NORMAL_RAIL_METRICS = NavigationRailMetrics(
+    verticalPadding = TvTokens.Spacing.medium,
+    brandHeight = 48.dp,
+    brandToItemsGap = 28.dp,
+    itemHeight = 56.dp,
+    itemGap = TvTokens.Spacing.xSmall,
+)
 
-private val COMPACT_RAIL_HEIGHT_THRESHOLD = 400.dp
+private val COMPACT_RAIL_METRICS = NavigationRailMetrics(
+    verticalPadding = 12.dp,
+    brandHeight = 40.dp,
+    brandToItemsGap = 4.dp,
+    itemHeight = 48.dp,
+    itemGap = 4.dp,
+)
+
+internal fun navigationRailMetrics(
+    availableHeight: Dp,
+    itemCount: Int,
+): NavigationRailMetrics =
+    if (NORMAL_RAIL_METRICS.requiredHeight(itemCount) <= availableHeight) {
+        NORMAL_RAIL_METRICS
+    } else {
+        COMPACT_RAIL_METRICS
+    }
 
 /**
  * Lounge Light left navigation rail.
@@ -100,8 +109,9 @@ private val COMPACT_RAIL_HEIGHT_THRESHOLD = 400.dp
  * without changing destination constraints. Selected destination remains a
  * persistent state independent from the currently focused rail item.
  *
- * Low-height TV viewports use a compact vertical geometry profile so every
- * top-level destination remains laid out before the focus graph is evaluated.
+ * Normal Lounge geometry is preserved whenever it fits. Low-height TV viewports
+ * switch to a compact vertical profile derived from the actual item count so every
+ * top-level destination is laid out before the focus graph is evaluated.
  *
  * System reduced-motion is authoritative: when platform animators are disabled,
  * the transient reveal snaps between the two rail widths while focus/selection
@@ -135,7 +145,10 @@ fun MuxTvNavigationRail(
             .width(width)
             .fillMaxHeight(),
     ) {
-        val metrics = navigationRailMetrics(maxHeight)
+        val metrics = navigationRailMetrics(
+            availableHeight = maxHeight,
+            itemCount = items.size,
+        )
 
         Column(
             modifier = Modifier
@@ -153,28 +166,33 @@ fun MuxTvNavigationRail(
                     horizontal = TvTokens.Spacing.small,
                     vertical = metrics.verticalPadding,
                 ),
-            verticalArrangement = Arrangement.spacedBy(metrics.itemGap),
         ) {
             RailBrandMark(
                 expanded = railFocused,
                 height = metrics.brandHeight,
             )
-            items.forEach { item ->
-                MuxTvNavigationRailItemView(
-                    item = item,
-                    expanded = railFocused,
-                    itemHeight = metrics.itemHeight,
-                    onClick = { onSelect(item.key) },
-                    modifier = Modifier
-                        .testTag(item.testTag)
-                        .then(
-                            if (item.selected) {
-                                Modifier.focusRequester(railFocusRequester)
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
+            Spacer(Modifier.height(metrics.brandToItemsGap))
+            Column {
+                items.forEachIndexed { index, item ->
+                    if (index > 0) {
+                        Spacer(Modifier.height(metrics.itemGap))
+                    }
+                    MuxTvNavigationRailItemView(
+                        item = item,
+                        expanded = railFocused,
+                        itemHeight = metrics.itemHeight,
+                        onClick = { onSelect(item.key) },
+                        modifier = Modifier
+                            .testTag(item.testTag)
+                            .then(
+                                if (item.selected) {
+                                    Modifier.focusRequester(railFocusRequester)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                }
             }
         }
     }
