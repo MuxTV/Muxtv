@@ -681,7 +681,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                     handleMediaSeekCommand(PlaybackSeekController.DIRECTION_BACKWARD)
                 else -> false
             }
-            return if (coalesced) Player.COMMAND_INVALID else playerCommand
+            return playerCommandSessionResult(coalescedByService = coalesced)
         }
 
         override fun onCustomCommand(
@@ -736,6 +736,13 @@ class MuxTvPlaybackService : MediaSessionService() {
         val sessionId: String,
     )
 }
+
+internal fun playerCommandSessionResult(coalescedByService: Boolean): Int =
+    if (coalescedByService) {
+        SessionResult.RESULT_INFO_SKIPPED
+    } else {
+        SessionResult.RESULT_SUCCESS
+    }
 
 private fun app.muxtv.catalog.PlaybackVariantResolution?.matches(
     candidate: PlaybackCandidateIdentity,

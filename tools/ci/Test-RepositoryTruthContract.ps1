@@ -90,33 +90,63 @@ if ($statusCommit -cne $currentCommit) {
     throw "CURRENT-STATE and status.yaml disagree on implementation_source_commit."
 }
 
-& git -C $RepositoryRoot cat-file -e "$statusCommit^{commit}" 2>$null
+$statusSnapshot = Get-SingleMatch $status '^\s+reviewed_main_commit:\s*([0-9a-f]{40})\s*$' "status truth_snapshot.reviewed_main_commit"
+$currentSnapshot = Get-SingleMatch $currentState '^reviewed_main_commit:\s*([0-9a-f]{40})\s*$' "current-state reviewed_main_commit"
+if ($statusSnapshot -cne $currentSnapshot) {
+    throw "CURRENT-STATE and status.yaml disagree on reviewed_main_commit."
+}
+if ($statusCommit -cne $statusSnapshot -or $currentCommit -cne $currentSnapshot) {
+    throw "Legacy implementation_source_commit must remain a compatibility alias of reviewed_main_commit."
+}
+
+$requiredSnapshotMarkers = @(
+    'status: reviewed_snapshot',
+    'live_state_authority: git'
+)
+foreach ($marker in $requiredSnapshotMarkers) {
+    if (-not $currentState.Contains($marker)) {
+        throw "CURRENT-STATE is missing reviewed-snapshot marker: $marker"
+    }
+}
+
+$forbiddenDynamicClaims = @(
+    'Открытых PR на принятой базе нет.',
+    'open PRs: none',
+    'accepted open PR count'
+)
+foreach ($claim in $forbiddenDynamicClaims) {
+    if ($currentState.IndexOf($claim, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        throw "CURRENT-STATE contains dynamic GitHub coordination state that cannot be durable truth: $claim"
+    }
+}
+
+& git -C $RepositoryRoot cat-file -e "$statusSnapshot^{commit}" 2>$null
 $acceptedCommitExists = $LASTEXITCODE -eq 0
 $acceptedCommitIsAncestor = $false
 if ($acceptedCommitExists) {
-    & git -C $RepositoryRoot merge-base --is-ancestor $statusCommit HEAD
+    & git -C $RepositoryRoot merge-base --is-ancestor $statusSnapshot HEAD
     $acceptedCommitIsAncestor = $LASTEXITCODE -eq 0
 }
 
 $isShallow = ((& git -C $RepositoryRoot rev-parse --is-shallow-repository).Trim() -ceq "true")
 if ($isShallow -and (-not $acceptedCommitExists -or -not $acceptedCommitIsAncestor)) {
-    & git -C $RepositoryRoot fetch --quiet --no-tags --unshallow origin $statusCommit
+    & git -C $RepositoryRoot fetch --quiet --no-tags --unshallow origin $statusSnapshot
     if ($LASTEXITCODE -ne 0) {
-        throw "Unable to recover repository history for accepted implementation source commit: $statusCommit"
+        throw "Unable to recover repository history for reviewed snapshot commit: $statusSnapshot"
     }
-    & git -C $RepositoryRoot cat-file -e "$statusCommit^{commit}" 2>$null
+    & git -C $RepositoryRoot cat-file -e "$statusSnapshot^{commit}" 2>$null
     $acceptedCommitExists = $LASTEXITCODE -eq 0
     if ($acceptedCommitExists) {
-        & git -C $RepositoryRoot merge-base --is-ancestor $statusCommit HEAD
+        & git -C $RepositoryRoot merge-base --is-ancestor $statusSnapshot HEAD
         $acceptedCommitIsAncestor = $LASTEXITCODE -eq 0
     }
 }
 
 if (-not $acceptedCommitExists) {
-    throw "Accepted implementation source commit does not exist locally: $statusCommit"
+    throw "Reviewed snapshot commit does not exist locally: $statusSnapshot"
 }
 if (-not $acceptedCommitIsAncestor) {
-    throw "Accepted implementation source commit is not an ancestor of HEAD: $statusCommit"
+    throw "Reviewed snapshot commit is not an ancestor of HEAD: $statusSnapshot"
 }
 
 $currentTruthFiles = @(
@@ -134,4 +164,30 @@ if ($staleFiles.Count -ne 0) {
     throw "Current repository truth still contains stale baseline $staleBaseline in: $($staleFiles -join ', ')."
 }
 
-Write-Host "Repository truth contract passed for $($settingsModules.Count) Gradle modules at accepted $statusCommit."
+$liveStateJson = (& (Join-Path $PSScriptRoot "Get-RepositoryLiveState.ps1") `
+    -RepositoryRoot $RepositoryRoot `
+    -AsJson | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to resolve exact live repository state."
+}
+$liveState = $liveStateJson | ConvertFrom-Json
+if ($liveState.reviewedSnapshot -cne $statusSnapshot) {
+    throw "Live-state reader and durable truth disagree on reviewed snapshot."
+}
+if ($liveState.snapshotRelation -in @("missing", "diverged")) {
+    throw "Live HEAD is not based on reviewed snapshot: relation=$($liveState.snapshotRelation) head=$($liveState.head) snapshot=$($liveState.reviewedSnapshot)"
+}
+
+Write-Host (
+    "Live repository state: branch={0} head={1} snapshot={2} relation={3} ahead={4} dirty={5}" -f `
+        $liveState.branch,
+        $liveState.head,
+        $liveState.reviewedSnapshot,
+        $liveState.snapshotRelation,
+        $liveState.commitsAheadOfSnapshot,
+        $liveState.dirty
+)
+
+& (Join-Path $PSScriptRoot "Test-RepositoryLiveStateContract.ps1") -RepositoryRoot $RepositoryRoot
+
+Write-Host "Repository truth contract passed for $($settingsModules.Count) Gradle modules at reviewed snapshot $statusSnapshot."

@@ -1,18 +1,31 @@
 schema_version: 2
-state: implementation_current
-updated_at: 2026-08-15
+state: reviewed_snapshot
+updated_at: 2026-08-16
 phase: phase_01_functional_pre_alpha
+architecture_version: 2
+
+# Compatibility alias for older repository tooling. This is a reviewed snapshot commit,
+# never the dynamic branch HEAD. Live HEAD is resolved from Git at execution time.
+implementation_source_commit: faa179a1301ab9b0977cc8991aee803b647ba7ba
+
+truth_snapshot:
+  reviewed_main_commit: faa179a1301ab9b0977cc8991aee803b647ba7ba
+  reviewed_main_short: faa179a
+  reviewed_through_pr: 171
+  reviewed_at: 2026-08-16
+  live_git_authority: git
+  live_github_authority: github_api
+  dynamic_pr_state_is_durable_truth: false
+
 repository_state:
   application_code: present
   gradle_project: present_modular_27_projects
-  ci: present_exact_source_head_host_api26_api36_measurement_and_benchmark
+  ci: present_risk_based_exact_source_head_fast_focused_device_and_manual_integration_matrix
   tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_and_measurement
   release_pipeline: alpha_identity_present_signing_and_physical_release_gate_pending
-  documentation: synchronized_to_main_166_with_167_170_active_review_branches
-  architecture_version: 2
-active_branch_after_merge: main
-implementation_source_commit: 9eb30068cf88264b70386dab8be86fb80668db1a
-room_schema: 10
+  documentation: reviewed_through_main_pr_171
+  room_schema: 10
+
 implemented:
   - android_tv_application_shell
   - navigation3_top_level_routes
@@ -27,7 +40,7 @@ implemented:
   - channels_room_paging
   - profile_scoped_favorites_and_recent
   - bounded_now_next_and_guide
-  - guide_s6_presentation_and_focus_closure
+  - guide_presentation_projection_outside_compose
   - bounded_unicode_search_top_n
   - search_debounce_cancellation_retry_truncation_and_focus
   - media3_single_process_owned_session_and_player
@@ -35,14 +48,19 @@ implemented:
   - bounded_same_channel_recovery
   - bounded_redacted_playback_observations
   - doctor_lite_presentation_and_export
-  - external_action_view_shared_service_playback_ep01_ep03
-  - shared_tv_player_track_selectors_and_coalesced_seek_ep04_ep07
+  - external_http_https_playback_via_shared_playback_service
+  - external_playback_opaque_lease_and_cleartext_approval
+  - api37_local_network_permission_boundary
+  - shared_tv_player_surface_audio_subtitle_selection_and_seek_hud
   - deterministic_m3u_corpus_profiles_1k_10k_50k
   - repository_owned_measurement_profiles_and_series
   - jmh_macrobenchmark_and_baseline_profile_foundation
   - api26_api36_android_tv_device_harness
   - exact_source_head_evidence_contract
+  - dependency_aware_architecture_guards
+  - risk_based_pr_validation_and_single_integration_acceptance_lane
   - alpha_release_identity_and_r8
+
 verified_evidence:
   provider_readiness_merge: 8fadb411e20c6a854fafd2005c5c5b17e868f858
   repeated_m3u_evidence_merge: b1da13e882b8ca6403846c4a108ba503f5a02e18
@@ -59,143 +77,70 @@ verified_evidence:
   repository_truth_hygiene_merge: 1ec2298d7488e5934bdbaaba7b69af917a021484
   search_s5_measurement_merge: b8ab064aed58b2b6789514ae858c979f0ccb4713
   search_s5_top_n_merge: 1249624db5010e8140814a56553ea194c6d25d66
-  repository_truth_50k_policy_merge: 2bc731efa113815856a6dfbac840b5e8ea379786
-  guide_s6_merge: 64ce4adb14849d4991d8f91b73dd00464c586eed
-  external_player_ep01_ep03_merge: 5163a5e7135696a172395f62155ec37630f87967
-  paging_invalidation_test_repair_merge: 12ebdf52fb5ec59b5f48d32c365803746d060cf1
-  player_ep04_ep07_merge: 9eb30068cf88264b70386dab8be86fb80668db1a
+
 active_work:
-  repository_truth_hygiene:
-    status: accepted
-    base: 6e852d364db6904e80f87deb9deaba58ec58025a
-    branch: upd/repository-truth-hygiene
-    required:
-      - canonical_truth_surfaces_agree
-      - every_historical_pr_classified
-      - dirty_work_preserved_before_cleanup
-      - branch_cleanup_requires_exact_head_or_content_proof
-  search_s5_measurement:
-    status: accepted
-    base: 1ec2298d7488e5934bdbaaba7b69af917a021484
-    branch: upd/search-s5-measurements
-    merge: b8ab064aed58b2b6789514ae858c979f0ccb4713
-    evidence:
-      - deterministic_50k_channels_with_current_next_epg
-      - stage_timings_and_secret_free_query_plans
-      - long_timed_series_reclassified_as_manual_stress_not_gate
-  search_s5_top_n:
-    status: accepted
-    base: b8ab064aed58b2b6789514ae858c979f0ccb4713
-    branch: upd/search-s5-top-n
-    merge: 1249624db5010e8140814a56553ea194c6d25d66
-    public_contract: top_100_default_top_200_max_explicit_truncation
-    forbidden:
-      - search_paging_api
-      - room_schema_change
-      - new_dependency
-    delivered:
-      - published_rows_only_programme_boundary
-      - no_epg_work_for_empty_results
-      - preserved_debounce_cancellation_retry_and_stale_generation
-      - compose_consumes_preformatted_rows_and_result_ids
+  semantics: reviewed_work_records_not_live_github_state
   guide_s6_closure:
-    status: accepted
-    base: 2bc731efa113815856a6dfbac840b5e8ea379786
-    branch: upd/guide-s6-presentation
-    merge: 64ce4adb14849d4991d8f91b73dd00464c586eed
+    status: accepted_in_reviewed_snapshot
+    source_pr: 162
     delivered:
       - presentation_projection_built_outside_compose
       - deterministic_ready_no_guide_source_conflict_copy
       - focus_identity_survives_reload_and_player_back
       - stale_generation_never_publishes_ui_state
       - static_guide_has_no_per_frame_formatting_churn
-    forbidden:
-      - guide_paging3
-      - full_guide_materialization_or_cache
-      - room_schema_bump_without_measured_requirement
-      - new_epg_model
-      - new_focus_engine
-      - timed_50k_guide_benchmark
-  player_overlay_tv_contract:
-    status: accepted_absorbed_by_165_166
-    base: 64ce4adb14849d4991d8f91b73dd00464c586eed
+  external_playback_foundation:
+    status: accepted_in_reviewed_snapshot
+    source_prs: [165, 170]
     delivered:
-      - controls_hidden_by_default_center_reveals
-      - inactivity_hides_overlay_unless_focus_or_interaction_holds
-      - back_closes_overlay_first_then_originating_surface
-      - hidden_controls_retain_no_unreachable_focus
-      - favorite_action_in_unified_overlay_surface
-      - overlay_state_keyed_per_playback_generation
-      - no_second_player_or_retry_owner
-  external_player_ep08:
-    status: active_review
-    branch: feat/external-player-ep08-evidence
-    base: 9eb30068cf88264b70386dab8be86fb80668db1a
-    required:
-      - observation_driven_progressive_evidence
-      - recordable_egl_codec_fixture
-      - exact_head_player_media3_device_evidence
-      - exact_head_external_action_view_first_frame_journey
-  lounge_light_m6r:
-    status: active_review
-    branch: feat/lounge-light-tv-redesign
-    base: 9eb30068cf88264b70386dab8be86fb80668db1a
-    required:
-      - fixed_layout_slot_overlay_navigation_rail
-      - deterministic_bidirectional_dpad_focus_graph
-      - boundary_aware_cancellation_safe_now_next
-      - source_error_distinct_from_empty
-      - bounded_focus_contained_settings_details
-      - reduced_motion_optional_home_scale
-      - reference_aligned_home_hero_and_primary_cta
-      - coherent_repo_owned_navigation_and_brand_icons
-      - exact_head_full_and_device_evidence
-      - 720p_reachability_and_1080p_visual_review
-  architecture_dependency_guard:
-    status: active_review
-    branch: fix/architecture-guard-dependency-based
-    required:
-      - dependency_parsers_preserve_actual_coordinates
-      - negative_mutation_tests
-  local_network_permission_api37:
-    status: active_review
-    branch: fix/lan-permission-api37
-    required:
-      - api36_no_access_local_network_runtime_prompt
-      - api37_local_target_runtime_prompt
-      - loopback_remote_no_prompt
-      - version_neutral_runtime_rationale_copy
+      - shared_playback_service_authority
+      - opaque_external_lease
+      - cleartext_exact_origin_approval
+      - api37_local_network_permission_boundary
+  shared_player_surface:
+    status: accepted_with_known_architecture_deviation
+    source_pr: 166
+    delivered:
+      - shared_catalog_and_external_surface
+      - audio_and_subtitle_selectors
+      - transient_seek_hud
+      - coalesced_seek_behavior
+    known_deviation:
+      - issue_132_dual_seek_ownership_requires_single_service_owner
+  architecture_guard:
+    status: accepted_in_reviewed_snapshot
+    source_pr: 169
+  ci_admission:
+    status: accepted_in_reviewed_snapshot
+    source_pr: 171
+
 next_milestone:
-  id: active_review_closure
-  immediate_sequence:
-    - ep08_exact_head_evidence
-    - lounge_light_m6r_exact_head_evidence
-    - architecture_guard_and_api37_focused_fixes
-    - m4r_recovery_doctor_residual
-    - l1_lifecycle_reboot_package_replace
-    - d1_dependency_hardening_freeze
-    - m3c_baseline_profile_performance_closure
-    - m7r_release_signing_provenance
-    - rc_api37_and_physical_android_tv_release_candidate
-parallel_work:
-  ep08: [pull_167_progressive_resilience]
-  m4r: [issue_30_recovery_doctor_residual]
-  m6r: [pull_168_lounge_light, issue_33_lounge_shell, issue_93_design_reference, issue_111_remote_interaction]
-  focused_fixes: [pull_169_dependency_guard, pull_170_local_network_permission]
-  l1: [issue_118_reboot_unlock_package_replace]
-  d1: [issue_146_room3_patch]
-  m3c: [issue_27_performance_closure, issue_31_baseline_profile]
-  m7r: [issue_31_release_signing, issue_101_ci_split, issue_141_artifact_upload, issue_144_ci_routing]
-  backlog: [issue_100, issue_109, issue_112, issue_113, issue_115, issue_117, issue_132]
+  id: stabilization_before_mvp_0_1_alpha
+  sequence:
+    - repository_truth_live_state_separation
+    - external_playback_ep08_resilience_evidence_closure
+    - lounge_light_tv_focus_and_lifecycle_stabilization
+    - issue_132_single_service_owned_seek_authority
+    - ci_issue_and_branch_hygiene
+    - api37_and_physical_tv_release_evidence
+
 known_gaps:
-  - ep08_exact_head_device_evidence
-  - lounge_light_exact_head_full_device_and_visual_evidence
-  - player_recovery_terminal_presentation_residual
-  - source_refresh_doctor_diagnostics
+  - external_playback_ep08_progressive_range_evidence_not_accepted
+  - lounge_light_tv_focus_and_lifecycle_evidence_not_accepted
+  - dual_seek_ownership_issue_132
+  - source_refresh_doctor_diagnostics_residual
   - lifecycle_reboot_package_replace_contract
   - baseline_profile_cuj_closure
-  - api37_permission_smoke
   - signed_release_sbom_and_physical_device_evidence
+  - api37_private_lan_permission_smoke
+
+live_coordination:
+  git_head: resolve_at_execution_time
+  branch: resolve_at_execution_time
+  pull_requests: query_github_at_execution_time
+  issues: query_github_at_execution_time
+  rule: do_not_copy_dynamic_github_state_into_durable_truth
+
 blocked: []
 deferred:
   - xtream

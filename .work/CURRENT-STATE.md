@@ -1,113 +1,136 @@
 ---
-status: accepted
-last_reviewed: 2026-08-15
+status: reviewed_snapshot
+last_reviewed: 2026-08-16
 architecture_version: 2
-implementation_source_commit: 9eb30068cf88264b70386dab8be86fb80668db1a
+# Compatibility alias: reviewed snapshot, not dynamic HEAD.
+implementation_source_commit: faa179a1301ab9b0977cc8991aee803b647ba7ba
+reviewed_main_commit: faa179a1301ab9b0977cc8991aee803b647ba7ba
+live_state_authority: git
 ---
 
 # Текущее состояние
 
+## Что означает этот документ
+
+Этот файл — **durable reviewed snapshot**, а не динамический снимок GitHub. Он проверен против `main@faa179a1301ab9b0977cc8991aee803b647ba7ba` (через PR #171).
+
+Точный `HEAD`, текущая ветка и dirty-state берутся из Git во время выполнения. Состояние PR/Issues берётся из GitHub во время выполнения и намеренно не фиксируется здесь как «текущее»: оно может измениться без единого commit и поэтому не является versioned repository truth.
+
+`implementation_source_commit` временно сохранён как compatibility alias для существующего tooling и равен `reviewed_main_commit`. Он **не означает**, что live HEAD обязан совпадать с этим SHA.
+
 ## Классификация
 
-MuxTV находится в стадии **functional pre-alpha**. Принятый `main` заканчивается PR #166 (`9eb30068cf88264b70386dab8be86fb80668db1a`) и содержит закрытый MVP-контур S0–S5, принятый Guide S6, external-player EP-01..07, repository-truth contract и доказуемую GitHub/local hygiene.
+MuxTV находится в стадии **functional pre-alpha / stabilization before MVP 0.1 alpha**.
 
-Текущая работа не считается принятой до exact-head evidence и merge:
+Reviewed snapshot уже включает закрытый продуктовый контур Source/Catalog/EPG, bounded Search и Guide, service-owned Media3 playback/recovery, Doctor Lite, внешний HTTP/HTTPS playback через общий playback service, shared TV player surface, dependency-aware architecture guards и risk-based CI с отдельным exact-candidate integration lane.
 
-- PR #167 — EP-08 TorrServer/progressive resilience evidence;
-- PR #168 — M6-R Lounge Light TV redesign + remote/accessibility corrections;
-- PR #169 — dependency-based architecture guard hardening;
-- PR #170 — Android 17 `ACCESS_LOCAL_NETWORK` boundary correction.
+Следующая долговременная цель — не расширение feature scope, а стабилизация перед alpha: repository live-state contract, EP-08 external/progressive evidence, Lounge Light TV focus/lifecycle, затем устранение dual seek ownership (#132) и release evidence.
 
-PR #168 остаётся **active/review**, а не частью accepted implementation: его тема, overlay-only rail, Home/Channels/Guide/Search/Settings presentation, focus/reachability fixes и icon/brand polish не должны описываться как main до merge.
+## Принятая база snapshot
 
-## Принятая база
-
-- Repository: MuxTV/Muxtv, default branch `main`, private, BSD 3-Clause.
-- Accepted implementation source: `main@9eb30068cf88264b70386dab8be86fb80668db1a` (PR #166).
-- Android application: `app.muxtv.tv`, versionCode=1001, versionName=0.1.0-alpha.1, minSdk=26, target/compile API37.
-- Architecture: нормативная v2; продвижение implementation не повышает architecture version.
-- Stack: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp и Media3.
+- Repository: `MuxTV/Muxtv`, default branch `main`, private, BSD 3-Clause.
+- Reviewed main: `faa179a1301ab9b0977cc8991aee803b647ba7ba` (PR #171).
+- Android application: `app.muxtv.tv`, versionCode=1001, versionName=`0.1.0-alpha.1`, minSdk=26.
+- Architecture: нормативная v2; implementation progress не повышает architecture version.
+- Stack: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp, Media3.
 - Room schema: v10.
-- CI: host Fast/Full, Product API26/API36, Database API26/API36, variance/measurement и benchmark-foundation lanes; API37/physical-device claims остаются отдельным release evidence.
+- Фактический Gradle graph snapshot: 27 модулей плюс included build `build-logic`.
+- CI snapshot: PR Fast host validation, risk-based Android TV `DeviceCurrent`, manual exact-candidate Integration acceptance gate с host Full + API26/API36 DeviceMatrix, отдельные measurement/benchmark/migration lanes.
 
-## Реализованный product contour на accepted main
+## Реализованный продуктовый контур
 
 ### Source, catalog и EPG
 
 - secure source URL policy, exact-origin HTTP approval и Keystore-backed credentials;
-- bounded streaming M3U и XMLTV parsing/decoding;
+- bounded streaming M3U/XMLTV parsing/decoding;
 - immutable source/EPG revisions, staging, atomic publication и previous-good retention;
 - durable refresh ownership, cancellation и supersession;
 - deterministic EPG matching, bounded Now/Next и Guide windows;
-- Guide S6 presentation/focus closure без Paging3/full-guide materialization/schema bump;
-- active/current-revision + selected-profile-visible truth contract.
+- active/current-revision + selected-profile-visible truth contract;
+- Channels Room Paging с bounded loaded window, Favorites и Recent.
 
-### TV surfaces и playback
+### Search и Guide
 
-- Home, Channels, Guide, Search, Player, Sources и Doctor routes;
-- Channels Room Paging с bounded loaded window, Favorites, Recent, Now/Next и stable focus;
-- bounded Unicode Search top-N: 100 результатов по умолчанию, максимум 200, явный `isTruncated`;
+- bounded Unicode Search top-N: 100 результатов по умолчанию, максимум 200, explicit `isTruncated`;
 - Search debounce/cancellation/retry, Player/Back query и canonical focus restoration;
-- service-owned Media3 playback и first-rendered-frame success boundary;
+- Guide presentation projection вынесена из Compose;
+- deterministic `READY` / `NO_GUIDE` / `SOURCE_CONFLICT` presentation;
+- bounded Guide window и сохранение focus identity при reload/Player→Back.
+
+### Playback и external playback
+
+- один process-owned `MediaSessionService`/ExoPlayer authority;
+- service-owned first-rendered-frame success boundary;
 - bounded same-channel recovery и redacted playback observations;
+- external `ACTION_VIEW` HTTP/HTTPS через тот же playback service;
+- opaque process-local external lease, exact-origin cleartext approval и sanitized external metadata;
+- runtime `ACCESS_LOCAL_NETWORK` boundary для API37+, без ложного API36 prompt;
+- shared catalog/external TV player surface;
+- audio/subtitle selectors, transient seek HUD и coalesced seek behavior.
+
+**Известное архитектурное отклонение:** после PR #166 остаются два владельца seek/coalescing policy (UI + service). Это не считается целевым состоянием; residual зафиксирован в Issue #132 и должен быть устранён после стабилизации текущих external/UI изменений.
+
+### Diagnostics, measurement и release foundation
+
 - Doctor Lite presentation/export без secrets;
-- external `ACTION_VIEW` playback через тот же service-owned player (EP-01..03);
-- shared TV player surface, audio/subtitle selectors и coalesced seek/HUD (EP-04..07).
-
-### Measurement и release foundation
-
 - deterministic 1k/10k/50k M3U corpus и repeated-series tooling;
-- JMH, Macrobenchmark/Baseline Profile producer foundation;
-- release identity, R8/resource optimization и repository-owned signing/evidence contracts;
-- self-hosted runner preflight, cleanup и exact-source-head provenance.
+- JMH и Macrobenchmark/Baseline Profile foundation;
+- release identity, R8/resource optimization и signing/evidence contracts;
+- self-hosted runner preflight/cleanup и exact-source-head provenance;
+- dependency-aware architecture guards на реальные imports/dependencies/version-catalog coordinates;
+- risk-based PR routing и один manual integration acceptance lane.
 
-## Последние принятые этапы
+## Последние принятые этапы reviewed snapshot
 
-- PR #149 — MVP/CI contract;
-- PR #150 — service-owned bounded playback recovery;
-- PR #151 — bounded redacted playback observations;
-- PR #152 — Doctor Lite;
-- PR #153 — alpha identity и release optimization;
-- PR #154 — closed-MVP truth sync;
-- PR #155 — self-hosted runner hardening;
-- PR #156 — measurement foundation;
-- PR #157 — Channels Paging;
-- PR #158 — repository truth contract и GitHub/local hygiene;
-- PR #159 — S5 measurement baseline;
-- PR #160 — S5 published-results refresh optimization;
-- PR #161 — repository-truth / 50k policy correction;
-- PR #162 — Guide S6 bounded presentation closure;
-- PR #163 — closed without merge; no accepted implementation delta;
-- PR #164 — real-time Paging invalidation test repair;
-- PR #165 — external-player EP-01..03 plus accepted shared overlay mechanics;
-- PR #166 — shared TV player surface EP-04..07.
+- PR #159 — Search S5 measurement baseline;
+- PR #160 — bounded published-results Search refresh optimization;
+- PR #161 — S5 truth/evidence-policy reconciliation;
+- PR #162 — Guide S6 presentation projection closure;
+- PR #164 — real-time Room paging invalidation wait fix для device matrix;
+- PR #165 — external playback EP-01..EP-03 через shared playback service;
+- PR #166 — shared TV player surface, track selectors и coalesced seek EP-04..EP-07;
+- PR #169 — dependency-aware architecture guards;
+- PR #170 — корректная API37 boundary для `ACCESS_LOCAL_NETWORK`;
+- PR #171 — risk-based PR gates и single integration acceptance lane.
 
-## Активная последовательность
+Это список **принятых в reviewed snapshot этапов**, а не live GitHub coordination list.
 
-1. EP-08/#167 — observation-driven progressive/TorrServer evidence without production buffer/seek-policy tuning before evidence.
-2. M6-R/#168 — Lounge Light shell and daily surfaces, remote focus/accessibility, bounded settings details and design-reference polish; exact-head CI/device evidence required before acceptance.
-3. #169/#170 — focused architecture-guard and Android17 LAN-permission corrections; keep them small and independent.
-4. M4-R residual — terminal recovery presentation and source-refresh Doctor diagnostics only; overlay mechanics are already accepted through #165/#166.
-5. L1 — lifecycle/reboot/package-replace contract (#118) без расширения Direct Boot scope.
-6. D1 — dependency hardening/freeze after focused dependency evidence.
-7. M3-C — Baseline Profile/CUJ closure and performance evidence.
-8. M7-R — signing, artifact provenance and release evidence; RC includes API37 smoke and physical Android/Google TV gate.
+## Стабилизационная последовательность перед MVP 0.1 alpha
+
+1. **Repository control plane** — разделить reviewed snapshot и live state; Git/HEAD не должен восстанавливаться из исторического ancestor как будто это текущая ветка.
+2. **External/progressive EP-08** — закрыть exact-head host/device failures, доказать first-frame/Range/seek/rebuffer/cleanup без таймаут-инфляции и без расширения ownership.
+3. **Lounge Light TV** — freeze feature scope; исправить lifecycle/focus failures, включая 720p и deterministic focus restoration.
+4. **Issue #132** — оставить единственного service-owned seek/coalescing authority; UI публикует intent и presentation state, но не владеет final seek scheduling.
+5. **Repository/CI hygiene** — residual Issues, remote branch namespace, protection/admission enforcement и focused DB suites.
+6. **Alpha release evidence** — API37 private-LAN smoke, weak/real Android TV, long playback/channel switching/network recovery и codec/HDR/audio claims только на соответствующем hardware.
 
 ## Политика 50k evidence
 
-Timed/repeated 50k Search/M3U execution **не является** обязательным PR, S6 или release gate. 50k corpus остаётся synthetic correctness/stress asset и manual stress lane. Claim на large catalog подтверждается bounded architecture и reachability/correctness evidence; absolute performance claims относятся к physical release evidence.
+Timed/repeated 50k Search/M3U execution не является обязательным PR или release gate. 50k corpus остаётся synthetic correctness/stress asset и manual stress lane. Large-catalog correctness доказывается bounded architecture + reachability/correctness evidence; absolute performance claims требуют отдельного hardware/release evidence.
 
-## Открытые дорожки
+## Известные gaps reviewed snapshot
 
-- EP-08/#167 — progressive resilience evidence.
-- M4-R/#30/#33 — recovery terminal UX и source-refresh Doctor diagnostics.
-- M6-R/#33/#93/#111 — Lounge Light shell, accessibility и remote interaction (PR #168 active).
-- #169 — architecture dependency guard hardening.
-- #170 — Android17 local-network runtime permission boundary.
-- L1/#118 — reboot/unlock/package-replace WorkManager lifecycle.
-- M3-C/M7-R/#27/#31/#146 — Baseline Profile, release engineering, signing и physical-device evidence.
-- #100/#101/#109/#112/#113/#115/#117/#132/#141/#144 — backlog вне closed-alpha critical path.
+- EP-08 progressive/Range evidence ещё не принято;
+- Lounge Light redesign ещё не имеет принятого TV focus/lifecycle evidence;
+- dual seek ownership (#132);
+- source-refresh Doctor diagnostics residual;
+- reboot/unlock/package-replace lifecycle contract (#118);
+- Baseline Profile/CUJ closure;
+- signing/SBOM/physical-device release evidence;
+- API37 private-LAN permission smoke.
+
+## Live-state protocol
+
+Перед любой новой execution-сессией:
+
+1. получить exact Git `HEAD`, branch и dirty state из checkout;
+2. сравнить exact HEAD с `reviewed_main_commit` и явно классифицировать relation (`exact`, `ancestor`, `diverged`, `missing`);
+3. получить PR/Issue state из GitHub, если он нужен для задачи;
+4. не использовать старые remote `tmp/*`, `backup/*`, `rebuild/*` как execution base только потому, что они существуют;
+5. evidence считать действительным только для точного SHA, на котором оно было получено.
+
+`tools/ci/Get-RepositoryLiveState.ps1` является offline Git-reader для пунктов 1–2. GitHub coordination state остаётся отдельным live source.
 
 ## Evidence limits
 
-API26/API36 emulator gates валидируют Android API, Room/migration, lifecycle, focus, MediaSession и database contracts, но не доказывают Android17 runtime-permission UX. Emulator evidence также не доказывает vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM, thermal, real-network или absolute performance. Такие claims требуют соответствующего API37/physical-device evidence.
+API26/API36 emulator gates валидируют Android API, Room/migration, lifecycle, focus, MediaSession и database contracts. Они не доказывают vendor MediaCodec/HDR/passthrough, Fire OS, weak ARM, thermal, real-network или absolute performance. Эти claims требуют physical-device evidence.
