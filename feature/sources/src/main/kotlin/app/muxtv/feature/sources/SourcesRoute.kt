@@ -367,6 +367,7 @@ private fun SourceDetailsSheet(
     val running = source.status?.state == SourceRefreshRunState.RUNNING
     val operationalControlsEnabled =
         !mutationInFlight && !running && source.hasCredentialReference
+    val resetScheduleEnabled = !mutationInFlight && source.policy != null
     val firstActionFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
     var initialFocusClaimed by remember(source.sourceId) { mutableStateOf(false) }
@@ -492,8 +493,14 @@ private fun SourceDetailsSheet(
                     MuxTvActionButton(
                         text = "Сбросить расписание",
                         onClick = { onRemovePolicy(source.sourceId) },
-                        enabled = !mutationInFlight && source.policy != null,
-                        modifier = Modifier.fillMaxWidth(),
+                        enabled = resetScheduleEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusProperties {
+                                if (resetScheduleEnabled && !operationalControlsEnabled) {
+                                    down = closeFocusRequester
+                                }
+                            },
                     )
                 }
                 item(key = "reset-http") {
@@ -503,7 +510,12 @@ private fun SourceDetailsSheet(
                         enabled = operationalControlsEnabled,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag(SOURCE_HTTP_RESET_TEST_TAG),
+                            .testTag(SOURCE_HTTP_RESET_TEST_TAG)
+                            .focusProperties {
+                                if (operationalControlsEnabled) {
+                                    down = closeFocusRequester
+                                }
+                            },
                     )
                 }
             }
