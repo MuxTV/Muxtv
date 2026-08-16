@@ -217,9 +217,16 @@ private fun ChannelsContent(
         ChannelsFilter.RECENT -> recentFilterFocusRequester
     }
     var restorationCompleted by remember(filter) { mutableStateOf(false) }
+    val refreshState = rows.loadState.refresh
 
-    LaunchedEffect(rows.itemCount, focusAnchor, restorationCompleted) {
-        if (restorationCompleted || rows.itemCount == 0) return@LaunchedEffect
+    LaunchedEffect(rows, refreshState, rows.itemCount, focusAnchor, restorationCompleted) {
+        if (
+            restorationCompleted ||
+            refreshState !is LoadState.NotLoading ||
+            rows.itemCount == 0
+        ) {
+            return@LaunchedEffect
+        }
         val requestedIndex = focusAnchor?.previousIndex?.coerceIn(0, rows.itemCount - 1) ?: 0
         listState.scrollToItem(requestedIndex, focusAnchor?.scrollOffset ?: 0)
         val loadedAtRequestedIndex = snapshotFlow { rows.peek(requestedIndex) }
