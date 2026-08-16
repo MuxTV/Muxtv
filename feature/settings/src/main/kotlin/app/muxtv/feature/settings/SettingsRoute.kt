@@ -144,14 +144,14 @@ private fun SettingsSectionRow(
                 },
                 shape = shape,
             )
+            .clickable(role = Role.Button, onClick = onClick)
+            .focusRequester(focusRequester)
+            .focusProperties { left = railFocusRequester ?: FocusRequester.Default }
             .onFocusChanged { state ->
                 focused = state.isFocused
                 if (state.isFocused) onFocused()
             }
-            .clickable(role = Role.Button, onClick = onClick)
             .focusable()
-            .focusRequester(focusRequester)
-            .focusProperties { left = railFocusRequester ?: FocusRequester.Default }
             .padding(horizontal = TvTokens.Spacing.large, vertical = TvTokens.Spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
