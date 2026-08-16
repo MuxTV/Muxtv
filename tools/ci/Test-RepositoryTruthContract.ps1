@@ -164,6 +164,30 @@ if ($staleFiles.Count -ne 0) {
     throw "Current repository truth still contains stale baseline $staleBaseline in: $($staleFiles -join ', ')."
 }
 
+$liveStateJson = (& (Join-Path $PSScriptRoot "Get-RepositoryLiveState.ps1") `
+    -RepositoryRoot $RepositoryRoot `
+    -AsJson | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to resolve exact live repository state."
+}
+$liveState = $liveStateJson | ConvertFrom-Json
+if ($liveState.reviewedSnapshot -cne $statusSnapshot) {
+    throw "Live-state reader and durable truth disagree on reviewed snapshot."
+}
+if ($liveState.snapshotRelation -in @("missing", "diverged")) {
+    throw "Live HEAD is not based on reviewed snapshot: relation=$($liveState.snapshotRelation) head=$($liveState.head) snapshot=$($liveState.reviewedSnapshot)"
+}
+
+Write-Host (
+    "Live repository state: branch={0} head={1} snapshot={2} relation={3} ahead={4} dirty={5}" -f `
+        $liveState.branch,
+        $liveState.head,
+        $liveState.reviewedSnapshot,
+        $liveState.snapshotRelation,
+        $liveState.commitsAheadOfSnapshot,
+        $liveState.dirty
+)
+
 & (Join-Path $PSScriptRoot "Test-RepositoryLiveStateContract.ps1") -RepositoryRoot $RepositoryRoot
 
 Write-Host "Repository truth contract passed for $($settingsModules.Count) Gradle modules at reviewed snapshot $statusSnapshot."
