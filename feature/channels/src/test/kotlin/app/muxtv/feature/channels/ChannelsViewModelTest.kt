@@ -24,9 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.resetMain
@@ -44,24 +42,31 @@ class ChannelsViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun filterSwitchCreatesIndependentPagedQueries() = runBlocking {
+    fun filterSwitchCreatesIndependentPagedQueriesLazily() = runBlocking {
         val repository = RecordingBrowseRepository()
         withViewModel(repository, FakePlaybackStateSource()) { viewModel ->
-            val collection = launch { viewModel.rows.collect() }
+            assertThat(repository.queries).isEmpty()
+
+            val allRows = viewModel.rowsFor(ChannelsFilter.ALL)
             awaitQueryCount(repository, 1)
+            assertThat(viewModel.rowsFor(ChannelsFilter.ALL)).isSameInstanceAs(allRows)
+            assertThat(repository.queries).hasSize(1)
+
             viewModel.setFilter(ChannelsFilter.FAVORITES)
+            viewModel.rowsFor(viewModel.filter.value)
             awaitQueryCount(repository, 2)
+
             viewModel.setFilter(ChannelsFilter.RECENT)
+            viewModel.rowsFor(viewModel.filter.value)
             awaitQueryCount(repository, 3)
-            collection.cancel()
         }
 
         assertThat(repository.queries.map { it.filter })
-            .containsAtLeast(
+            .containsExactly(
                 ChannelBrowseFilter.ALL,
                 ChannelBrowseFilter.FAVORITES,
                 ChannelBrowseFilter.RECENT,
-            )
+            ).inOrder()
         assertThat(repository.queries.all { it.profileId == PROFILE_ID }).isTrue()
     }
 
