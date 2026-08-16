@@ -2,6 +2,8 @@ package app.muxtv
 
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -11,8 +13,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
@@ -176,9 +179,19 @@ class SettingsJourneyTest {
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
-        setDisplaySizeAndAwaitActivity("1280x720")
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            // API36 TV image uses 320dpi. 1280x720 therefore maps to a 640x360dp Compose
+            // viewport. Constrain the production navigation tree directly instead of mutating
+            // `wm size`: the latter asynchronously replaces the Activity and makes the test
+            // exercise ActivityScenario timing rather than the Lounge layout/focus contract.
+            setNavigationContent(
+                context = context,
+                sourceStore = sourceStore,
+                scheduler = scheduler,
+                controllerConnector = controllerConnector,
+                viewportWidth = 640.dp,
+                viewportHeight = 360.dp,
+            )
             navigateHomeToSettings()
             openSourcesAndFocusConfigure(hasOperationalControls = true)
             composeRule.onNodeWithTag("source-configure-source-settings")
@@ -199,7 +212,6 @@ class SettingsJourneyTest {
                 .assertIsFocused()
                 .assertIsDisplayed()
         } finally {
-            setDisplaySizeAndAwaitActivity("reset")
             controllerConnector.close()
         }
     }
@@ -229,8 +241,18 @@ class SettingsJourneyTest {
         sourceStore: StaticSourceRefreshStore,
         scheduler: SourceRefreshScheduler,
         controllerConnector: MuxTvMediaControllerConnector,
+        viewportWidth: Dp? = null,
+        viewportHeight: Dp? = null,
     ) {
+        require((viewportWidth == null) == (viewportHeight == null)) {
+            "Viewport width and height must either both be specified or both be omitted."
+        }
         composeRule.setContent {
+            val navigationModifier = if (viewportWidth != null && viewportHeight != null) {
+                Modifier.size(viewportWidth, viewportHeight)
+            } else {
+                Modifier
+            }
             MuxTvTheme {
                 AppNavigation(
                     playbackCatalog = StaticPlaybackCatalogFixture,
@@ -249,6 +271,7 @@ class SettingsJourneyTest {
                     sourceRefreshScheduler = scheduler,
                     sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
                     playbackObservationReader = PlaybackObservationReader { emptyList() },
+                    modifier = navigationModifier,
                 )
             }
         }
@@ -291,20 +314,6 @@ class SettingsJourneyTest {
         composeRule.onNodeWithTag("settings-section-doctor")
             .assertIsFocused()
             .press(Key.Enter)
-    }
-
-    private fun setDisplaySizeAndAwaitActivity(size: String) {
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("wm size $size")
-            .close()
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        composeRule.activityRule.scenario.recreate()
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-        composeRule.activityRule.scenario.onActivity { activity ->
-            check(!activity.isFinishing && !activity.isDestroyed) {
-                "Display-size transition did not settle on a live ComponentActivity."
-            }
-        }
     }
 }
 
