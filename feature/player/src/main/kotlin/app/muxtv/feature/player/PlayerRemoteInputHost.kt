@@ -16,6 +16,20 @@ fun interface PlayerRemoteCommandHandler {
 }
 
 /**
+ * Bounded, non-content diagnostic snapshot for the native TV-input bridge.
+ *
+ * It intentionally records only registration/dispatch control-flow state. No media identity,
+ * locator, title, channel, or user input payload is retained.
+ */
+data class PlayerRemoteInputDiagnostics(
+    val attachGeneration: Long,
+    val hasActiveHandler: Boolean,
+    val dispatchCount: Long,
+    val lastDispatchHadActiveHandler: Boolean?,
+    val lastDispatchHandled: Boolean?,
+)
+
+/**
  * Single-consumer bridge between native TV input and the active playback surface.
  *
  * A newer registration replaces the previous one. Closing an older registration is identity-safe
@@ -23,9 +37,14 @@ fun interface PlayerRemoteCommandHandler {
  */
 class PlayerRemoteInputHost {
     private var active: Registration? = null
+    private var attachGeneration = 0L
+    private var dispatchCount = 0L
+    private var lastDispatchHadActiveHandler: Boolean? = null
+    private var lastDispatchHandled: Boolean? = null
 
     fun attach(handler: PlayerRemoteCommandHandler): AutoCloseable {
         val registration = Registration(handler)
+        attachGeneration += 1L
         active = registration
         return AutoCloseable {
             if (active === registration) {
@@ -34,8 +53,23 @@ class PlayerRemoteInputHost {
         }
     }
 
-    fun dispatch(command: PlayerRemoteCommand): Boolean =
-        active?.handler?.onCommand(command) == true
+    fun dispatch(command: PlayerRemoteCommand): Boolean {
+        val registration = active
+        val hadActiveHandler = registration != null
+        val handled = registration?.handler?.onCommand(command) == true
+        dispatchCount += 1L
+        lastDispatchHadActiveHandler = hadActiveHandler
+        lastDispatchHandled = handled
+        return handled
+    }
+
+    fun diagnosticsSnapshot(): PlayerRemoteInputDiagnostics = PlayerRemoteInputDiagnostics(
+        attachGeneration = attachGeneration,
+        hasActiveHandler = active != null,
+        dispatchCount = dispatchCount,
+        lastDispatchHadActiveHandler = lastDispatchHadActiveHandler,
+        lastDispatchHandled = lastDispatchHandled,
+    )
 
     private class Registration(
         val handler: PlayerRemoteCommandHandler,
