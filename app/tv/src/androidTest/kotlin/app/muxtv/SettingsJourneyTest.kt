@@ -201,16 +201,31 @@ class SettingsJourneyTest {
                 composeRule.onAllNodesWithTag("source-details").fetchSemanticsNodes().size == 1
             }
 
-            composeRule.onNodeWithText("Расписание: выключено")
+            var focusedAction = composeRule.onNodeWithText("Расписание: выключено")
                 .assertIsFocused()
                 .assertIsDisplayed()
-                .press(Key.DirectionDown, 8)
+            val nextFocusableActions = listOf(
+                "Интервал: 1 ч",
+                "Сеть: любая",
+                "Питание: без ограничений",
+                "Сбросить HTTP-разрешения",
+            )
+            nextFocusableActions.forEach { label ->
+                focusedAction.press(Key.DirectionDown)
+                focusedAction = composeRule.onNodeWithText(label, substring = false)
+                    .assertIsFocused()
+                    .assertIsDisplayed()
+            }
 
-            // Disabled rows may be skipped; once the footer is reached, modal
-            // focus containment keeps additional Down events inside the sheet.
-            composeRule.onNodeWithTag("source-details-close")
+            focusedAction.press(Key.DirectionDown)
+            val closeAction = composeRule.onNodeWithTag("source-details-close")
                 .assertIsFocused()
                 .assertIsDisplayed()
+
+            // Once the last action is reached, focus containment must keep additional Down
+            // events inside the modal instead of leaking focus to the route behind it.
+            closeAction.press(Key.DirectionDown, 3)
+            closeAction.assertIsFocused().assertIsDisplayed()
         } finally {
             controllerConnector.close()
         }
