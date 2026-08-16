@@ -11,12 +11,15 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.lifecycle.Lifecycle
+import androidx.media3.common.Player
+import androidx.media3.session.MediaController
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.feature.player.PlayerRemoteInputDiagnostics
 import app.muxtv.feature.player.PlayerRemoteInputHost
+import app.muxtv.player.media3.PlaybackSeekPolicy
 import app.muxtv.testing.http.RangeMediaServer
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.TimeUnit
@@ -50,13 +53,14 @@ import org.junit.runner.RunWith
  * TV interaction is remote-native: cleartext approval, hidden-surface seek and Back are driven
  * through real Android D-pad events rather than synthetic touch or Compose-local key injection.
  * Evidence produced: intent accepted -> cleartext exact-origin approval -> Media3 surface attached
- * -> service-gated first frame confirmed -> focused hidden surface -> real D-pad seek input reaches
+ * -> service-gated first frame confirmed -> current Media3 item is finite, seekable and has more
+ * than one production seek step remaining -> focused hidden surface -> real D-pad seek input reaches
  * the production seek boundary and is accepted (transient HUD) -> real Android Back -> activity
  * destroyed, playback stopped (no HTTP traffic after destroy).
- * Network range/rebuffer semantics are not claimed here: the short fixture is fully buffered long
- * before the D-pad input, so HTTP request deltas around the seek are not causally observable at the
- * app level. Byte-range and resilience evidence lives in `ProgressiveResilienceEvidenceTest`
- * (player:media3).
+ * Network range/rebuffer semantics are not claimed here: the fixture is deliberately long enough
+ * to prove the D-pad seek is not merely a clamp-to-EOF operation, while HTTP request deltas around
+ * that seek are not causally required at the app layer. Byte-range and resilience evidence lives
+ * in `ProgressiveResilienceEvidenceTest` (player:media3).
  *
  * No locator path, query or media identity is ever logged or persisted.
  */
@@ -120,6 +124,14 @@ class ExternalPlaybackRangeJourneyTest {
                     composeRule.onAllNodesWithTag(FIRST_FRAME_CONFIRMED_TAG)
                         .fetchSemanticsNodes().size == 1
                 }
+
+                val readiness = playbackReadiness(scenario)
+                assertThat(readiness.canSeek).isTrue()
+                assertThat(readiness.isLive).isFalse()
+                assertThat(readiness.durationMs).isGreaterThan(PlaybackSeekPolicy.STEP_MILLIS)
+                assertThat(readiness.currentPositionMs).isAtLeast(0L)
+                assertThat(readiness.currentPositionMs + PlaybackSeekPolicy.STEP_MILLIS)
+                    .isLessThan(readiness.durationMs)
 
                 composeRule.onNodeWithTag(SURFACE_TAG).assertIsFocused()
                 val beforeSystemKey = remoteInputDiagnostics(scenario)
@@ -233,6 +245,24 @@ class ExternalPlaybackRangeJourneyTest {
         return snapshot
     }
 
+    private fun playbackReadiness(
+        scenario: ActivityScenario<ExternalPlaybackActivity>,
+    ): PlaybackReadiness {
+        lateinit var snapshot: PlaybackReadiness
+        scenario.onActivity { activity ->
+            val field = ExternalPlaybackActivity::class.java.getDeclaredField("activeController")
+            field.isAccessible = true
+            val controller = checkNotNull(field.get(activity) as MediaController?)
+            snapshot = PlaybackReadiness(
+                canSeek = controller.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM),
+                isLive = controller.isCurrentMediaItemLive,
+                currentPositionMs = controller.currentPosition,
+                durationMs = controller.duration,
+            )
+        }
+        return snapshot
+    }
+
     private fun awaitSeekInputOutcomeOrNull(): String? {
         val deadline = System.nanoTime() +
             TimeUnit.MILLISECONDS.toNanos(SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS)
@@ -267,6 +297,13 @@ class ExternalPlaybackRangeJourneyTest {
         assertThat(scenario.state).isEqualTo(target)
     }
 
+    private data class PlaybackReadiness(
+        val canSeek: Boolean,
+        val isLive: Boolean,
+        val currentPositionMs: Long,
+        val durationMs: Long,
+    )
+
     private companion object {
         const val HTTP_APPROVE_TAG = "external-http-approve"
         const val BACK_TAG = "external-back"
@@ -300,7 +337,7 @@ class ExternalPlaybackRangeJourneyTest {
                     "first-frame journey evidence requires decodable video",
                 OnDeviceVideoFixture.hasRequiredCodecs(),
             )
-            encodedVideo = OnDeviceVideoFixture.encode(context, durationSeconds = 4)
+            encodedVideo = OnDeviceVideoFixture.encode(context, durationSeconds = 20)
         }
     }
 }
