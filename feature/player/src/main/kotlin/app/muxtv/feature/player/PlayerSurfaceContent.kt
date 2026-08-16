@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -73,6 +74,17 @@ data class PlayerSurfaceAction(
 
 private enum class PlayerSheetKind { AUDIO, SUBTITLE }
 
+private enum class SeekInputOutcome(val diagnosticTag: String) {
+    ACCEPTED("accepted"),
+    CONTROLS_VISIBLE("controls-visible"),
+    SHEET_OPEN("sheet-open"),
+    COMMAND_UNAVAILABLE("command-unavailable"),
+    UNKNOWN_DURATION("unknown-duration"),
+    LIVE_CONTENT("live-content"),
+    INVALID_POSITION("invalid-position"),
+    CONTROLLER_REJECTED("controller-rejected"),
+}
+
 /**
  * Single capability-driven fullscreen surface and overlay state machine.
  *
@@ -89,6 +101,7 @@ fun PlayerSurfaceContent(
     favoriteSupported: Boolean,
     modifier: Modifier = Modifier,
     contentIdentity: Any = Unit,
+    remoteInputHost: PlayerRemoteInputHost? = null,
     favoriteAction: PlayerFavoriteAction? = null,
     stopAction: PlayerSurfaceAction? = null,
     backAction: PlayerSurfaceAction? = null,
@@ -125,6 +138,7 @@ fun PlayerSurfaceContent(
     var openSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
     var previouslyOpenSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
     var positionMs by remember(contentIdentity) { mutableLongStateOf(0L) }
+    var lastSeekInputOutcome by remember(contentIdentity) { mutableStateOf<SeekInputOutcome?>(null) }
     val primaryActionFocusRequester = remember(controller) { FocusRequester() }
     val surfaceFocusRequester = remember { FocusRequester() }
     val audioActionFocusRequester = remember(contentIdentity) { FocusRequester() }
@@ -139,23 +153,67 @@ fun PlayerSurfaceContent(
         lastInteractionNanos = System.nanoTime()
     }
 
-    fun requestSeek(direction: Int): Boolean {
+    fun requestSeek(direction: Int): SeekInputOutcome {
+        if (!capabilities.canSeek) return SeekInputOutcome.COMMAND_UNAVAILABLE
+        if (capabilities.isLive) return SeekInputOutcome.LIVE_CONTENT
+
         val durationMs = controller.duration
-        if (!capabilities.canSeek || !capabilities.hasKnownDuration || capabilities.isLive) {
-            return false
+        if (!capabilities.hasKnownDuration || durationMs == C.TIME_UNSET || durationMs <= 0L) {
+            return SeekInputOutcome.UNKNOWN_DURATION
         }
-        if (durationMs == C.TIME_UNSET || durationMs <= 0L) return false
-        return seekController.onDirectionRequested(
-            generation = contentIdentity,
-            direction = direction,
-            currentPositionMs = controller.currentPosition,
-            durationMs = durationMs,
-        )
+
+        val currentPositionMs = controller.currentPosition
+        if (currentPositionMs < 0L) return SeekInputOutcome.INVALID_POSITION
+
+        return if (
+            seekController.onDirectionRequested(
+                generation = contentIdentity,
+                direction = direction,
+                currentPositionMs = currentPositionMs,
+                durationMs = durationMs,
+            )
+        ) {
+            SeekInputOutcome.ACCEPTED
+        } else {
+            SeekInputOutcome.CONTROLLER_REJECTED
+        }
     }
+
+    fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
+        remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
+        lastSeekInputOutcome = outcome
+        return outcome == SeekInputOutcome.ACCEPTED
+    }
+
+    fun handleSeekInput(direction: Int): Boolean = recordSeekInputOutcome(requestSeek(direction))
 
     val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
+    val currentRemoteInputHandler by rememberUpdatedState(
+        newValue = { command: PlayerRemoteCommand ->
+            when {
+                controlsVisible -> recordSeekInputOutcome(SeekInputOutcome.CONTROLS_VISIBLE)
+                openSheet != null -> recordSeekInputOutcome(SeekInputOutcome.SHEET_OPEN)
+                else -> when (command) {
+                    PlayerRemoteCommand.SEEK_BACKWARD -> handleSeekInput(
+                        PlaybackSeekController.DIRECTION_BACKWARD,
+                    )
+
+                    PlayerRemoteCommand.SEEK_FORWARD -> handleSeekInput(
+                        PlaybackSeekController.DIRECTION_FORWARD,
+                    )
+                }
+            }
+        },
+    )
+
+    DisposableEffect(remoteInputHost, contentIdentity) {
+        val registration = remoteInputHost?.attach { command ->
+            currentRemoteInputHandler(command)
+        }
+        onDispose { registration?.close() }
+    }
 
     DisposableEffect(controller) {
         val listener = object : Player.Listener {
@@ -256,11 +314,11 @@ fun PlayerSurfaceContent(
             .onPreviewKeyEvent { event ->
                 if (!controlsVisible && event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        Key.DirectionLeft -> requestSeek(
+                        Key.DirectionLeft -> handleSeekInput(
                             PlaybackSeekController.DIRECTION_BACKWARD,
                         )
 
-                        Key.DirectionRight -> requestSeek(
+                        Key.DirectionRight -> handleSeekInput(
                             PlaybackSeekController.DIRECTION_FORWARD,
                         )
 
@@ -288,6 +346,14 @@ fun PlayerSurfaceContent(
             modifier = Modifier.fillMaxSize(),
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
         )
+
+        lastSeekInputOutcome?.let { outcome ->
+            Box(
+                modifier = Modifier.testTag(
+                    "$testTagPrefix-seek-input-${outcome.diagnosticTag}",
+                ),
+            )
+        }
 
         if (controlsVisible) {
             Column(
@@ -325,11 +391,11 @@ fun PlayerSurfaceContent(
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && timelineFocused) {
                                     when (event.key) {
-                                        Key.DirectionLeft -> requestSeek(
+                                        Key.DirectionLeft -> handleSeekInput(
                                             PlaybackSeekController.DIRECTION_BACKWARD,
                                         )
 
-                                        Key.DirectionRight -> requestSeek(
+                                        Key.DirectionRight -> handleSeekInput(
                                             PlaybackSeekController.DIRECTION_FORWARD,
                                         )
 
