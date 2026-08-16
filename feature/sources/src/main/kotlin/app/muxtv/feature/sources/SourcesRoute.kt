@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -370,6 +371,7 @@ private fun SourceDetailsSheet(
     val resetScheduleEnabled = !mutationInFlight && source.policy != null
     val firstActionFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
+    val detailsListState = rememberLazyListState()
     var initialFocusClaimed by remember(source.sourceId) { mutableStateOf(false) }
     val shape = RoundedCornerShape(TvTokens.Shape.detailsCorner)
 
@@ -377,6 +379,9 @@ private fun SourceDetailsSheet(
 
     LaunchedEffect(operationalControlsEnabled) {
         if (initialFocusClaimed) return@LaunchedEffect
+        if (!operationalControlsEnabled) {
+            detailsListState.scrollToItem(SOURCE_DETAILS_CLOSE_ITEM_INDEX)
+        }
         withFrameNanos { }
         if (operationalControlsEnabled) {
             firstActionFocusRequester.requestFocus()
@@ -421,6 +426,7 @@ private fun SourceDetailsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                state = detailsListState,
                 verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
             ) {
                 item(key = "schedule") {
@@ -494,13 +500,7 @@ private fun SourceDetailsSheet(
                         text = "Сбросить расписание",
                         onClick = { onRemovePolicy(source.sourceId) },
                         enabled = resetScheduleEnabled,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusProperties {
-                                if (resetScheduleEnabled && !operationalControlsEnabled) {
-                                    down = closeFocusRequester
-                                }
-                            },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 item(key = "reset-http") {
@@ -510,23 +510,20 @@ private fun SourceDetailsSheet(
                         enabled = operationalControlsEnabled,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag(SOURCE_HTTP_RESET_TEST_TAG)
-                            .focusProperties {
-                                if (operationalControlsEnabled) {
-                                    down = closeFocusRequester
-                                }
-                            },
+                            .testTag(SOURCE_HTTP_RESET_TEST_TAG),
+                    )
+                }
+                item(key = "close") {
+                    MuxTvActionButton(
+                        text = "Готово",
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG)
+                            .focusRequester(closeFocusRequester),
                     )
                 }
             }
-            MuxTvActionButton(
-                text = "Готово",
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(SOURCE_DETAILS_CLOSE_TEST_TAG)
-                    .focusRequester(closeFocusRequester),
-            )
         }
     }
 }
@@ -626,4 +623,5 @@ const val SOURCES_ADD_TEST_TAG = "sources-add"
 const val SOURCE_HTTP_RESET_TEST_TAG = "source-http-reset"
 const val SOURCE_DETAILS_TEST_TAG = "source-details"
 const val SOURCE_DETAILS_CLOSE_TEST_TAG = "source-details-close"
+private const val SOURCE_DETAILS_CLOSE_ITEM_INDEX = 6
 private const val DEFAULT_INTERVAL_MINUTES = 60L
