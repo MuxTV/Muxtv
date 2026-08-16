@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.view.KeyEvent
-import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -126,7 +125,8 @@ class ExternalPlaybackRangeJourneyTest {
                 composeRule.onNodeWithTag(SURFACE_TAG).assertIsFocused()
                 pressSystemKey(KeyEvent.KEYCODE_DPAD_RIGHT)
 
-                val seekInputOutcome = awaitSeekInputOutcome()
+                val seekInputOutcome = awaitSeekInputOutcomeOrNull()
+                    ?: diagnoseMissingSystemKeyBoundary(scenario)
                 assertThat(seekInputOutcome).isEqualTo(SEEK_INPUT_ACCEPTED_TAG)
 
                 composeRule.waitUntil(timeoutMillis = 15_000) {
@@ -164,22 +164,43 @@ class ExternalPlaybackRangeJourneyTest {
         }
     }
 
-    private fun awaitSeekInputOutcome(): String {
-        try {
-            composeRule.waitUntil(timeoutMillis = SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS) {
-                SEEK_INPUT_OUTCOME_TAGS.any { tag ->
-                    composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
-                }
-            }
-        } catch (timeout: ComposeTimeoutException) {
-            throw AssertionError(
-                "KEY_NOT_RECEIVED: real DPAD_RIGHT did not reach the player seek-input boundary",
-                timeout,
+    private fun diagnoseMissingSystemKeyBoundary(
+        scenario: ActivityScenario<ExternalPlaybackActivity>,
+    ): Nothing {
+        scenario.onActivity { activity ->
+            activity.dispatchKeyEvent(
+                KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT),
+            )
+            activity.dispatchKeyEvent(
+                KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT),
             )
         }
-        return SEEK_INPUT_OUTCOME_TAGS.single { tag ->
-            composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        val directOutcome = awaitSeekInputOutcomeOrNull()
+        if (directOutcome != null) {
+            throw AssertionError(
+                "SYSTEM_KEY_TRANSPORT_MISSED_ACTIVITY_BOUNDARY: " +
+                    "direct Activity.dispatchKeyEvent produced $directOutcome",
+            )
         }
+        throw AssertionError(
+            "REMOTE_INPUT_BOUNDARY_INACTIVE: neither real DPAD_RIGHT nor direct " +
+                "Activity.dispatchKeyEvent reached the player seek-input outcome",
+        )
+    }
+
+    private fun awaitSeekInputOutcomeOrNull(): String? {
+        val deadline = System.nanoTime() +
+            TimeUnit.MILLISECONDS.toNanos(SEEK_INPUT_OUTCOME_TIMEOUT_MILLIS)
+        while (System.nanoTime() < deadline) {
+            val matches = SEEK_INPUT_OUTCOME_TAGS.filter { tag ->
+                composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+            }
+            if (matches.isNotEmpty()) {
+                return matches.single()
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        }
+        return null
     }
 
     private fun pressSystemKey(keyCode: Int) {
