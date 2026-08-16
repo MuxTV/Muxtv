@@ -40,4 +40,55 @@ class PlayerRemoteInputHostTest {
         second.close()
         assertThat(host.dispatch(PlayerRemoteCommand.SEEK_FORWARD)).isFalse()
     }
+
+    @Test
+    fun `diagnostics distinguish registration dispatch and close boundaries`() {
+        val host = PlayerRemoteInputHost()
+
+        assertThat(host.diagnosticsSnapshot()).isEqualTo(
+            PlayerRemoteInputDiagnostics(
+                attachGeneration = 0L,
+                hasActiveHandler = false,
+                dispatchCount = 0L,
+                lastDispatchHadActiveHandler = null,
+                lastDispatchHandled = null,
+            ),
+        )
+
+        val registration = host.attach { true }
+        assertThat(host.diagnosticsSnapshot()).isEqualTo(
+            PlayerRemoteInputDiagnostics(
+                attachGeneration = 1L,
+                hasActiveHandler = true,
+                dispatchCount = 0L,
+                lastDispatchHadActiveHandler = null,
+                lastDispatchHandled = null,
+            ),
+        )
+
+        assertThat(host.dispatch(PlayerRemoteCommand.SEEK_FORWARD)).isTrue()
+        assertThat(host.diagnosticsSnapshot()).isEqualTo(
+            PlayerRemoteInputDiagnostics(
+                attachGeneration = 1L,
+                hasActiveHandler = true,
+                dispatchCount = 1L,
+                lastDispatchHadActiveHandler = true,
+                lastDispatchHandled = true,
+            ),
+        )
+
+        registration.close()
+        assertThat(host.diagnosticsSnapshot().hasActiveHandler).isFalse()
+
+        assertThat(host.dispatch(PlayerRemoteCommand.SEEK_BACKWARD)).isFalse()
+        assertThat(host.diagnosticsSnapshot()).isEqualTo(
+            PlayerRemoteInputDiagnostics(
+                attachGeneration = 1L,
+                hasActiveHandler = false,
+                dispatchCount = 2L,
+                lastDispatchHadActiveHandler = false,
+                lastDispatchHandled = false,
+            ),
+        )
+    }
 }
