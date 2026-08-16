@@ -10,7 +10,7 @@ import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
-import mockwebserver3.SocketPolicy
+import mockwebserver3.SocketEffect
 import okio.Buffer
 
 /**
@@ -79,7 +79,7 @@ class RangeMediaServer private constructor(
                     }
                     if (consumeDisconnectResponse()) {
                         response = response.newBuilder()
-                            .socketPolicy(SocketPolicy.DisconnectDuringResponseBody)
+                            .onResponseBody(SocketEffect.CloseSocket())
                             .build()
                     }
                     response
