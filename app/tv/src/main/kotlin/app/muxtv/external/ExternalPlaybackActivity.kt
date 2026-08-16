@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +35,8 @@ import androidx.tv.material3.Text
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.feature.player.PlayerRemoteCommand
+import app.muxtv.feature.player.PlayerRemoteInputHost
 import app.muxtv.feature.player.PlayerSurfaceAction
 import app.muxtv.feature.player.PlayerSurfaceContent
 import app.muxtv.player.ExternalPlaybackDescriptor
@@ -67,6 +70,7 @@ class ExternalPlaybackActivity : ComponentActivity() {
     lateinit var observationRecorder: PlaybackObservationRecorder
 
     private val permissionGate = LocalNetworkPermissionGate(Build.VERSION.SDK_INT)
+    private val remoteInputHost = PlayerRemoteInputHost()
 
     private var uiState by mutableStateOf<ExternalUiState>(ExternalUiState.Starting)
     private var accepted: ExternalPlaybackIntentResult.Accepted? = null
@@ -87,6 +91,7 @@ class ExternalPlaybackActivity : ComponentActivity() {
             MuxTvTheme {
                 ExternalPlaybackScreen(
                     state = uiState,
+                    remoteInputHost = remoteInputHost,
                     onApproveLan = { requestLanPermission() },
                     onRetryGate = ::retryGates,
                     onApproveHttp = ::approveHttpOrigin,
@@ -97,6 +102,20 @@ class ExternalPlaybackActivity : ComponentActivity() {
             }
         }
         acceptIntent(intent)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val command = when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> PlayerRemoteCommand.SEEK_BACKWARD
+                KeyEvent.KEYCODE_DPAD_RIGHT -> PlayerRemoteCommand.SEEK_FORWARD
+                else -> null
+            }
+            if (command != null && remoteInputHost.dispatch(command)) {
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -365,6 +384,7 @@ private sealed interface ExternalUiState {
 @Composable
 private fun ExternalPlaybackScreen(
     state: ExternalUiState,
+    remoteInputHost: PlayerRemoteInputHost,
     onApproveLan: () -> Unit,
     onRetryGate: () -> Unit,
     onApproveHttp: () -> Unit,
@@ -494,6 +514,7 @@ private fun ExternalPlaybackScreen(
                 title = state.title,
                 favoriteSupported = false,
                 contentIdentity = state.sessionId,
+                remoteInputHost = remoteInputHost,
                 stopAction = PlayerSurfaceAction(
                     label = "Остановить",
                     onClick = onStop,
