@@ -95,6 +95,7 @@ fun PlayerSurfaceContent(
     favoriteSupported: Boolean,
     modifier: Modifier = Modifier,
     contentIdentity: Any = Unit,
+    remoteInputHost: PlayerRemoteInputHost? = null,
     favoriteAction: PlayerFavoriteAction? = null,
     stopAction: PlayerSurfaceAction? = null,
     backAction: PlayerSurfaceAction? = null,
@@ -181,6 +182,25 @@ fun PlayerSurfaceContent(
     val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
+
+    DisposableEffect(remoteInputHost, contentIdentity, controlsVisible, openSheet, capabilities) {
+        val registration = remoteInputHost?.attach { command ->
+            if (controlsVisible || openSheet != null) {
+                false
+            } else {
+                when (command) {
+                    PlayerRemoteCommand.SEEK_BACKWARD -> handleSeekInput(
+                        PlaybackSeekController.DIRECTION_BACKWARD,
+                    )
+
+                    PlayerRemoteCommand.SEEK_FORWARD -> handleSeekInput(
+                        PlaybackSeekController.DIRECTION_FORWARD,
+                    )
+                }
+            }
+        }
+        onDispose { registration?.close() }
+    }
 
     DisposableEffect(controller) {
         val listener = object : Player.Listener {
