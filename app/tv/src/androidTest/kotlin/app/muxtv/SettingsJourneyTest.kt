@@ -113,6 +113,40 @@ class SettingsJourneyTest {
     }
 
     @Test
+    fun sourceDetailsWithoutOperationalActionsFocusesClose() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceStore = StaticSourceRefreshStore().apply {
+            publish("Источник без сохранённой ссылки", hasCredentialReference = false)
+        }
+        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val controllerConnector = MuxTvMediaControllerConnector(context)
+
+        try {
+            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            navigateHomeToSettings()
+            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
+            }
+            composeRule.onNodeWithTag("source-configure-source-settings")
+                .assertIsFocused()
+                .press(Key.Enter)
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithTag("source-details").fetchSemanticsNodes().size == 1
+            }
+            composeRule.waitForIdle()
+
+            // Disabled operational rows are not valid initial TV focus targets.
+            // The modal must still start with one deterministic, actionable owner.
+            composeRule.onNodeWithTag("source-details-close")
+                .assertIsFocused()
+                .assertIsDisplayed()
+        } finally {
+            controllerConnector.close()
+        }
+    }
+
+    @Test
     fun doctorBackRestoresDoctorSectionFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
@@ -254,12 +288,15 @@ class SettingsJourneyTest {
 private class StaticSourceRefreshStore : SourceRefreshStore {
     private val overviews = MutableStateFlow<List<SourceRefreshOverview>>(emptyList())
 
-    fun publish(sourceName: String) {
+    fun publish(
+        sourceName: String,
+        hasCredentialReference: Boolean = true,
+    ) {
         overviews.value = listOf(
             SourceRefreshOverview(
                 sourceId = "source-settings",
                 sourceName = sourceName,
-                hasCredentialReference = true,
+                hasCredentialReference = hasCredentialReference,
                 activeRevision = 2,
                 policy = null,
                 status = null,

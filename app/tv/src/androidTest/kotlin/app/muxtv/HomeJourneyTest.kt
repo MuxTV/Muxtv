@@ -3,17 +3,25 @@ package app.muxtv
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseRepository
@@ -21,13 +29,14 @@ import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.RecentChannel
+import app.muxtv.catalog.RecentChannelWriteResult
 import app.muxtv.catalog.RecentChannelsQuery
 import app.muxtv.catalog.RecentChannelsRepository
-import app.muxtv.catalog.RecentChannelWriteResult
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.home.HomeRoute
+import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.feature.home.HOME_ADD_SOURCE_TEST_TAG
 import app.muxtv.feature.home.HOME_HERO_TEST_TAG
+import app.muxtv.feature.home.HomeRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
@@ -139,6 +148,59 @@ class HomeJourneyTest {
     }
 
     @Test
+    fun lastActiveRailCardIsRestoredAfterPlayerBack() {
+        val playerOpen = mutableStateOf(false)
+        composeRule.setContent {
+            val stateHolder = rememberSaveableStateHolder()
+            MuxTvTheme {
+                if (playerOpen.value) {
+                    TestHomePlayer(onBack = { playerOpen.value = false })
+                } else {
+                    stateHolder.SaveableStateProvider("home") {
+                        HomeRoute(
+                            channelBrowseRepository = FavoritesBrowseRepository,
+                            recentChannelsRepository = StaticRecentChannelsFixture(),
+                            epgGuideRepository = NoGuideEpgGuideRepository,
+                            playbackSessionStateSource = NoPlaybackSessionStateSource,
+                            hasSources = flowOf(true),
+                            profileId = "profile-main",
+                            onOpenChannel = { playerOpen.value = true },
+                            onOpenChannels = {},
+                            onOpenGuide = {},
+                            onAddSource = {},
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("home-card-favorites-0").fetchSemanticsNodes().size == 1 &&
+                composeRule.onAllNodesWithTag("home-card-recent-0").fetchSemanticsNodes().size == 1
+        }
+        composeRule.waitForIdle()
+
+        // Give both rails historical anchors, then make Favorites the single active owner.
+        // Independent per-rail restoration is invalid because both rails can then race on return.
+        composeRule.onNodeWithTag("home-card-recent-0")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.onNodeWithTag("home-card-recent-0").assertIsFocused()
+        composeRule.onNodeWithTag("home-card-favorites-0")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.onNodeWithTag("home-card-favorites-0").assertIsFocused().pressEnter()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(TEST_HOME_PLAYER_BACK_TAG).fetchSemanticsNodes().size == 1
+        }
+        composeRule.onNodeWithTag(TEST_HOME_PLAYER_BACK_TAG).assertIsFocused().pressEnter()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("home-card-favorites-0").fetchSemanticsNodes().size == 1
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("home-card-favorites-0").assertIsFocused()
+    }
+
+    @Test
     fun heroAndRailsRenderForScreenshotEvidence() {
         composeRule.setContent {
             MuxTvTheme {
@@ -196,6 +258,22 @@ class HomeJourneyTest {
     }
 }
 
+@Composable
+private fun TestHomePlayer(onBack: () -> Unit) {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        requester.requestFocus()
+    }
+    MuxTvActionButton(
+        text = "Назад",
+        onClick = onBack,
+        modifier = Modifier
+            .testTag(TEST_HOME_PLAYER_BACK_TAG)
+            .focusRequester(requester),
+    )
+}
+
 internal class StaticRecentChannelsFixture : RecentChannelsRepository {
     override fun observeRecent(query: RecentChannelsQuery): Flow<List<RecentChannel>> =
         flowOf(
@@ -222,8 +300,6 @@ internal class StaticRecentChannelsFixture : RecentChannelsRepository {
     ): RecentChannelWriteResult = RecentChannelWriteResult.ProfileUnavailable
 }
 
-
-
 private fun SemanticsNodeInteraction.pressEnter(): SemanticsNodeInteraction = apply {
     performKeyInput {
         keyDown(Key.Enter)
@@ -239,3 +315,5 @@ private fun SemanticsNodeInteraction.press(
         keyUp(key)
     }
 }
+
+private const val TEST_HOME_PLAYER_BACK_TAG = "test-home-player-back"
