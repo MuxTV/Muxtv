@@ -11,7 +11,6 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -48,9 +47,11 @@ import org.junit.runner.RunWith
  * path. A separate manifest-resolution test below proves that the exported HTTP/HTTPS video entry
  * point remains discoverable by Android.
  *
- * Evidence produced: intent accepted -> cleartext exact-origin approval -> Media3 surface attached
- * -> service-gated first frame confirmed -> hidden-surface D-pad seek burst accepted (transient HUD)
- * -> real Android Back -> activity destroyed, playback stopped (no HTTP traffic after destroy).
+ * TV interaction is remote-native: the cleartext approval must own focus and is activated with a
+ * real Android DPAD_CENTER event rather than a synthetic touch click. Evidence produced: intent
+ * accepted -> cleartext exact-origin approval -> Media3 surface attached -> service-gated first
+ * frame confirmed -> hidden-surface D-pad seek burst accepted (transient HUD) -> real Android Back
+ * -> activity destroyed, playback stopped (no HTTP traffic after destroy).
  * Network range/rebuffer semantics are not claimed here: the 4-second fixture is fully buffered
  * long before the D-pad input, so HTTP request deltas around the seek are not causally observable
  * at the app level. Byte-range and resilience evidence lives in
@@ -110,7 +111,8 @@ class ExternalPlaybackRangeJourneyTest {
                     composeRule.onAllNodesWithTag(HTTP_APPROVE_TAG)
                         .fetchSemanticsNodes().isNotEmpty()
                 }
-                composeRule.onNodeWithTag(HTTP_APPROVE_TAG).performClick()
+                composeRule.onNodeWithTag(HTTP_APPROVE_TAG).assertIsFocused()
+                pressSystemKey(KeyEvent.KEYCODE_DPAD_CENTER)
 
                 composeRule.waitUntil(timeoutMillis = 30_000) {
                     composeRule.onAllNodesWithTag(SURFACE_TAG)
@@ -132,7 +134,7 @@ class ExternalPlaybackRangeJourneyTest {
                         .fetchSemanticsNodes().isNotEmpty()
                 }
 
-                pressSystemBack()
+                pressSystemKey(KeyEvent.KEYCODE_BACK)
 
                 waitForLifecycle(scenario, Lifecycle.State.DESTROYED, 15_000)
                 val requestsAtDestroy = server.requestCount()
@@ -156,15 +158,15 @@ class ExternalPlaybackRangeJourneyTest {
             }
             composeRule.onNodeWithTag(BACK_TAG).assertIsFocused()
 
-            pressSystemBack()
+            pressSystemKey(KeyEvent.KEYCODE_BACK)
 
             waitForLifecycle(scenario, Lifecycle.State.DESTROYED, 15_000)
         }
     }
 
-    private fun pressSystemBack() {
+    private fun pressSystemKey(keyCode: Int) {
         InstrumentationRegistry.getInstrumentation().apply {
-            sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            sendKeyDownUpSync(keyCode)
             waitForIdleSync()
         }
     }
