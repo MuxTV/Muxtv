@@ -134,4 +134,6 @@ if ($staleFiles.Count -ne 0) {
     throw "Current repository truth still contains stale baseline $staleBaseline in: $($staleFiles -join ', ')."
 }
 
+& (Join-Path $PSScriptRoot "Test-RepositoryLiveStateContract.ps1") -RepositoryRoot $RepositoryRoot
+
 Write-Host "Repository truth contract passed for $($settingsModules.Count) Gradle modules at accepted $statusCommit."
