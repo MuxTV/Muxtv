@@ -105,9 +105,15 @@ fun HomeRoute(
     val sessionState by screenViewModel.playbackSessionState.collectAsStateWithLifecycle()
     val recent by screenViewModel.recent.collectAsStateWithLifecycle()
     val nowNext by screenViewModel.nowNext.collectAsStateWithLifecycle()
-    val favorites = channelBrowseRepository.pages(
-        query = ChannelBrowseQuery(profileId = profileId, filter = ChannelBrowseFilter.FAVORITES),
-    ).collectAsLazyPagingItems()
+    val favoritesFlow = remember(channelBrowseRepository, profileId) {
+        channelBrowseRepository.pages(
+            query = ChannelBrowseQuery(
+                profileId = profileId,
+                filter = ChannelBrowseFilter.FAVORITES,
+            ),
+        )
+    }
+    val favorites = favoritesFlow.collectAsLazyPagingItems()
     val favoriteItems = remember(favorites.itemSnapshotList) {
         favorites.itemSnapshotList.filterNotNull()
     }
