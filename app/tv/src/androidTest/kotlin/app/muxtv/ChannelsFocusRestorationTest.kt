@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
@@ -127,7 +126,7 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
-    fun favoritesFilterKeepsFocusedFavoriteChannel() {
+    fun favoritesFilterFromSecondChannelUsesDpadAndFocusesFilteredRow() {
         val catalog = MutablePlaybackCatalog(
             testChannels.map { channel ->
                 if (channel.channelId == "channel-b") channel.copy(isFavorite = true) else channel
@@ -141,7 +140,11 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         moveFocusToSecondChannel()
-        composeRule.onNodeWithTag("channels-filter-favorites").performClick()
+        composeRule.onNodeWithTag("channel-row-1").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        openFavoritesFromFirstRowWithDpad()
         composeRule.waitUntilText("Второй")
         composeRule.waitForIdle()
 
