@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -38,9 +39,10 @@ import org.junit.runner.RunWith
  * MediaSession-event race instead of testing the production authority path.
  *
  * ActivityScenario is intentionally given an explicit component while preserving ACTION_VIEW,
- * data and MIME. That isolates activity/parser/service behavior from the test harness's implicit
- * intent resolver. A separate manifest-resolution test below proves that the exported HTTP/HTTPS
- * video entry point remains discoverable by Android.
+ * data and MIME. Android's Intent API requires data and MIME to be assigned together with
+ * `setDataAndType`; setting `type` after `data` clears the URI and would test a different rejection
+ * path. A separate manifest-resolution test below proves that the exported HTTP/HTTPS video entry
+ * point remains discoverable by Android.
  *
  * Evidence produced: intent accepted -> cleartext exact-origin approval -> service-gated first
  * frame -> hidden-surface D-pad seek burst accepted (transient HUD) -> clean Back -> activity
@@ -59,12 +61,9 @@ class ExternalPlaybackRangeJourneyTest {
     @Test
     fun exportedHttpVideoIntentResolvesToExternalPlaybackActivity() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse("https://example.invalid/media.mp4"),
-        ).apply {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
             addCategory(Intent.CATEGORY_DEFAULT)
-            type = "video/mp4"
+            setDataAndType(Uri.parse("https://example.invalid/media.mp4"), "video/mp4")
             setPackage(context.packageName)
         }
 
@@ -81,15 +80,23 @@ class ExternalPlaybackRangeJourneyTest {
     @Test
     fun torrServeStyleIntentPlaysSeeksAndReturnsCleanly() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        // Previous evidence attempts must not make this cleartext-approval journey vacuously skip
+        // its gate. The production store is backed by this bounded preferences file and is lazily
+        // constructed when ExternalPlaybackActivity is injected.
+        context.getSharedPreferences(EXTERNAL_PLAYBACK_PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+
         RangeMediaServer.start(
             RangeMediaServer.Config(
                 media = encodedVideo,
                 contentType = "video/mp4",
             ),
         ).use { server ->
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(server.url("/movie.mp4"))).apply {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
                 setClass(context, ExternalPlaybackActivity::class.java)
-                type = "video/mp4"
+                setDataAndType(Uri.parse(server.url("/movie.mp4")), "video/mp4")
                 putExtra(Intent.EXTRA_TITLE, "EP-08 Journey")
             }
 
@@ -132,16 +139,21 @@ class ExternalPlaybackRangeJourneyTest {
     @Test
     fun malformedExternalIntentShowsTypedRejection() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("ftp://invalid.example/media.mp4")).apply {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
             setClass(context, ExternalPlaybackActivity::class.java)
-            type = "video/mp4"
+            setDataAndType(Uri.parse("ftp://invalid.example/media.mp4"), "video/mp4")
         }
 
         ActivityScenario.launch<ExternalPlaybackActivity>(intent).use { scenario ->
             composeRule.waitUntil(timeoutMillis = 15_000) {
                 composeRule.onAllNodesWithTag(BACK_TAG).fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag(BACK_TAG).performClick()
+            composeRule.onNodeWithTag(BACK_TAG)
+                .assertIsFocused()
+                .performKeyInput {
+                    keyDown(Key.Back)
+                    keyUp(Key.Back)
+                }
             waitForLifecycle(scenario, Lifecycle.State.DESTROYED, 15_000)
         }
     }
@@ -163,6 +175,7 @@ class ExternalPlaybackRangeJourneyTest {
         const val BACK_TAG = "external-back"
         const val SEEK_BURST_PRESSES = 4
         const val NO_REQUESTS_AFTER_FINISH_SLEEP_MILLIS = 1_000L
+        const val EXTERNAL_PLAYBACK_PREFERENCES_NAME = "muxtv_external_playback"
 
         @Volatile
         var encodedVideo: ByteArray = byteArrayOf()
