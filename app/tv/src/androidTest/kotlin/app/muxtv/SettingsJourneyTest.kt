@@ -86,10 +86,7 @@ class SettingsJourneyTest {
         try {
             setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
-            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
-            }
+            openSourcesAndFocusConfigure(hasOperationalControls = true)
             composeRule.onNodeWithTag("source-configure-source-settings")
                 .assertIsFocused()
                 .press(Key.Enter)
@@ -124,10 +121,7 @@ class SettingsJourneyTest {
         try {
             setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
-            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
-            }
+            openSourcesAndFocusConfigure(hasOperationalControls = false)
             composeRule.onNodeWithTag("source-configure-source-settings")
                 .assertIsFocused()
                 .press(Key.Enter)
@@ -156,12 +150,7 @@ class SettingsJourneyTest {
         try {
             setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
-            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG)
-                .assertIsFocused()
-                .press(Key.DirectionDown)
-            composeRule.onNodeWithTag("settings-section-doctor")
-                .assertIsFocused()
-                .press(Key.Enter)
+            focusDoctorSectionAndOpen()
 
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("doctor-refresh").fetchSemanticsNodes().size == 1
@@ -187,15 +176,14 @@ class SettingsJourneyTest {
         val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
-        setDisplaySize("1280x720")
+        setDisplaySizeAndAwaitActivity("1280x720")
         try {
             setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
-            composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).press(Key.Enter)
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
-            }
-            composeRule.onNodeWithTag("source-configure-source-settings").press(Key.Enter)
+            openSourcesAndFocusConfigure(hasOperationalControls = true)
+            composeRule.onNodeWithTag("source-configure-source-settings")
+                .assertIsFocused()
+                .press(Key.Enter)
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("source-details").fetchSemanticsNodes().size == 1
             }
@@ -211,7 +199,7 @@ class SettingsJourneyTest {
                 .assertIsFocused()
                 .assertIsDisplayed()
         } finally {
-            setDisplaySize("reset")
+            setDisplaySizeAndAwaitActivity("reset")
             controllerConnector.close()
         }
     }
@@ -226,7 +214,7 @@ class SettingsJourneyTest {
         try {
             setNavigationContent(context, sourceStore, scheduler, controllerConnector)
             navigateHomeToSettings()
-            composeRule.onNodeWithTag("settings-section-doctor").press(Key.Enter)
+            focusDoctorSectionAndOpen()
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("doctor-refresh").fetchSemanticsNodes().size == 1
             }
@@ -278,10 +266,43 @@ class SettingsJourneyTest {
         }
     }
 
-    private fun setDisplaySize(size: String) {
+    private fun openSourcesAndFocusConfigure(hasOperationalControls: Boolean) {
+        composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG)
+            .assertIsFocused()
+            .press(Key.Enter)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("source-configure-source-settings").fetchSemanticsNodes().size == 1
+        }
+        composeRule.onNodeWithTag("sources-add")
+            .assertIsFocused()
+            .press(Key.DirectionDown)
+        if (hasOperationalControls) {
+            composeRule.onNodeWithText("Обновить сейчас", substring = false)
+                .assertIsFocused()
+                .press(Key.DirectionRight)
+        }
+        composeRule.onNodeWithTag("source-configure-source-settings").assertIsFocused()
+    }
+
+    private fun focusDoctorSectionAndOpen() {
+        composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG)
+            .assertIsFocused()
+            .press(Key.DirectionDown)
+        composeRule.onNodeWithTag("settings-section-doctor")
+            .assertIsFocused()
+            .press(Key.Enter)
+    }
+
+    private fun setDisplaySizeAndAwaitActivity(size: String) {
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("wm size $size")
             .close()
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        composeRule.runOnUiThread {
+            check(!composeRule.activity.isFinishing) {
+                "Display-size transition did not settle on a live ComponentActivity."
+            }
+        }
     }
 }
 
