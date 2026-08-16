@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -142,23 +141,21 @@ fun ChannelsRoute(
             modifier = modifier,
         )
 
-        else -> key(filter) {
-            ChannelsContent(
-                rows = rows,
-                filter = filter,
-                listState = listState,
-                focusAnchor = focusAnchor,
-                onFilterChanged = screenViewModel::setFilter,
-                onFocusAnchorChanged = { anchor ->
-                    focusedChannelId = anchor.itemKey
-                    focusedChannelIndex = anchor.previousIndex
-                    focusedChannelScrollOffset = anchor.scrollOffset
-                },
-                onOpenChannel = onOpenChannel,
-                railFocusRequester = railFocusRequester,
-                modifier = modifier,
-            )
-        }
+        else -> ChannelsContent(
+            rows = rows,
+            filter = filter,
+            listState = listState,
+            focusAnchor = focusAnchor,
+            onFilterChanged = screenViewModel::setFilter,
+            onFocusAnchorChanged = { anchor ->
+                focusedChannelId = anchor.itemKey
+                focusedChannelIndex = anchor.previousIndex
+                focusedChannelScrollOffset = anchor.scrollOffset
+            },
+            onOpenChannel = onOpenChannel,
+            railFocusRequester = railFocusRequester,
+            modifier = modifier,
+        )
     }
 }
 
@@ -219,7 +216,7 @@ private fun ChannelsContent(
         ChannelsFilter.FAVORITES -> favoritesFilterFocusRequester
         ChannelsFilter.RECENT -> recentFilterFocusRequester
     }
-    var restorationCompleted by remember { mutableStateOf(false) }
+    var restorationCompleted by remember(filter) { mutableStateOf(false) }
 
     LaunchedEffect(rows.itemCount, focusAnchor, restorationCompleted) {
         if (restorationCompleted || rows.itemCount == 0) return@LaunchedEffect
