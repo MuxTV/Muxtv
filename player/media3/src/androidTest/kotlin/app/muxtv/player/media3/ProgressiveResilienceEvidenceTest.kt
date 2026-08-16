@@ -272,29 +272,23 @@ class ProgressiveResilienceEvidenceTest {
 
     @Test
     fun connectionLossFailsThenManualRetryRecovers() {
-        // A tiny file would be fully buffered before the origin dies; closing the listener then
-        // breaks nothing. For a deterministic failure we seek into a not-yet-loaded region whose
-        // range request is still in flight (delayed body) and kill the listener mid-transfer:
-        // the active request dies, retries hit a refused connection and the error surfaces.
-        RangeMediaServer.start(
-            config(
-                singleTrackMedia(durationSeconds = 90),
-                requestDelaysMillis = mapOf(SEEK_REQUEST_INDEX to CONNECTION_LOSS_STALL_MILLIS),
-            ),
-        ).use { server ->
+        // Keep the origin listener and URL alive while MockWebServer closes a bounded sequence of
+        // GET sockets halfway through their bodies. This models transport loss directly and avoids
+        // coupling the evidence to Android's listener-port reuse timing after server shutdown.
+        RangeMediaServer.start(config(singleTrackMedia(durationSeconds = 90))).use { server ->
             PlayerHarness().use { harness ->
                 val locator = server.url("/media.mp4")
                 harness.post { prepare(harness, locator) }
                 harness.awaitState(Player.STATE_READY, TIMEOUT_PREPARE_MILLIS)
                 harness.awaitPositionAtLeast(POSITION_ADVANCE_MILLIS, TIMEOUT_POSITION_MILLIS)
 
+                val requestsBeforeLoss = server.requestCount()
+                server.disconnectNextResponses(CONNECTION_LOSS_DISCONNECT_RESPONSES)
                 harness.post { harness.player.seekTo(STALL_SEEK_TARGET_MILLIS) }
-                harness.awaitState(Player.STATE_BUFFERING, TIMEOUT_BUFFERING_MILLIS)
-                assertThat(server.requestCount()).isAtLeast(2)
-
-                server.close()
 
                 harness.await(TIMEOUT_ERROR_MILLIS) { harness.probe.playerErrorCount >= 1 }
+                assertThat(server.requestCount()).isGreaterThan(requestsBeforeLoss)
+
                 var playbackState = -1
                 harness.post { playbackState = harness.player.playbackState }
                 assertThat(playbackState).isEqualTo(Player.STATE_IDLE)
@@ -318,7 +312,7 @@ class ProgressiveResilienceEvidenceTest {
                 )
 
                 val requestsAtError = server.requestCount()
-                server.restartOnSamePort()
+                server.restoreConnections()
                 harness.post { harness.player.prepare() }
                 harness.post { harness.player.play() }
 
@@ -501,7 +495,7 @@ class ProgressiveResilienceEvidenceTest {
 
         const val SEEK_REQUEST_INDEX = 1
         const val STALL_DELAY_MILLIS = 2_500L
-        const val CONNECTION_LOSS_STALL_MILLIS = 10_000L
+        const val CONNECTION_LOSS_DISCONNECT_RESPONSES = 12
         const val STALL_SEEK_TARGET_MILLIS = 80_000L
 
         const val TIMEOUT_PREPARE_MILLIS = 30_000L
