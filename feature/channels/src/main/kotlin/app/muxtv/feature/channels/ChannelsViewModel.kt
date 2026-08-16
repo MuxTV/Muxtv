@@ -15,7 +15,6 @@ import app.muxtv.catalog.NowNextQuery
 import app.muxtv.player.PlaybackSessionState
 import app.muxtv.player.PlaybackSessionStateSource
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -25,7 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -35,7 +33,6 @@ internal enum class ChannelsFilter {
     RECENT,
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
 internal class ChannelsViewModel(
     channelBrowseRepository: ChannelBrowseRepository,
     playbackSessionStateSource: PlaybackSessionStateSource,
@@ -52,27 +49,28 @@ internal class ChannelsViewModel(
     private val nowNextIds = MutableStateFlow<List<String>>(emptyList())
     private var nowNextJob: Job? = null
 
-    val rows: Flow<PagingData<ChannelRowUiModel>> = combine(
-        mutableFilter.flatMapLatest { filter ->
-            channelBrowseRepository.pages(
-                ChannelBrowseQuery(
-                    profileId = profileId,
-                    filter = filter.toBrowseFilter(),
+    private val rowsByFilter: Map<ChannelsFilter, Flow<PagingData<ChannelRowUiModel>>> =
+        ChannelsFilter.entries.associateWith { filter ->
+            combine(
+                channelBrowseRepository.pages(
+                    ChannelBrowseQuery(
+                        profileId = profileId,
+                        filter = filter.toBrowseFilter(),
+                    ),
                 ),
-            )
-        },
-        _nowNextById,
-        playbackSessionStateSource.playbackSessionState,
-    ) { pagingData: PagingData<ChannelBrowseItem>, nowNext: Map<String, ChannelNowNext>, playback: PlaybackSessionState ->
-        pagingData.map { item ->
-            buildChannelRow(
-                item = item,
-                nowNext = nowNext[item.channelId],
-                playback = playback,
-                nowEpochMillis = nowEpochMillis(),
-            )
+                _nowNextById,
+                playbackSessionStateSource.playbackSessionState,
+            ) { pagingData: PagingData<ChannelBrowseItem>, nowNext: Map<String, ChannelNowNext>, playback: PlaybackSessionState ->
+                pagingData.map { item ->
+                    buildChannelRow(
+                        item = item,
+                        nowNext = nowNext[item.channelId],
+                        playback = playback,
+                        nowEpochMillis = nowEpochMillis(),
+                    )
+                }
+            }.cachedIn(viewModelScope)
         }
-    }.cachedIn(viewModelScope)
 
     init {
         require(profileId.isNotBlank())
@@ -82,6 +80,9 @@ internal class ChannelsViewModel(
             }
         }
     }
+
+    fun rowsFor(filter: ChannelsFilter): Flow<PagingData<ChannelRowUiModel>> =
+        rowsByFilter.getValue(filter)
 
     fun setFilter(filter: ChannelsFilter) {
         mutableFilter.value = filter
