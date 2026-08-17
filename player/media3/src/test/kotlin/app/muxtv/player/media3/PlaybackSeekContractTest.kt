@@ -6,68 +6,44 @@ import org.junit.Test
 
 class PlaybackSeekContractTest {
     @Test
-    fun `relative request round trips with opaque generation`() {
+    fun `relative request retains opaque generation and direction`() {
         val request = PlaybackSeekRequest.Relative(
             token = PlaybackSeekToken(mediaId = "channel-1", generation = 7L),
-            direction = PlaybackSeekController.DIRECTION_FORWARD,
+            direction = PlaybackSeekPolicy.DIRECTION_FORWARD,
         )
 
-        val parsed = MuxTvPlaybackSessionContract.parseSeekArgs(
-            MuxTvPlaybackSessionContract.seekArgs(request),
-        )
-
-        assertThat(parsed).isEqualTo(request)
+        assertThat(request.token.mediaId).isEqualTo("channel-1")
+        assertThat(request.token.generation).isEqualTo(7L)
+        assertThat(request.direction).isEqualTo(PlaybackSeekPolicy.DIRECTION_FORWARD)
     }
 
     @Test
-    fun `absolute request round trips through same contract`() {
+    fun `absolute request retains target through same semantic contract`() {
         val request = PlaybackSeekRequest.Absolute(
             token = PlaybackSeekToken(mediaId = "channel-1", generation = 8L),
             targetMs = 42_000L,
         )
 
-        val parsed = MuxTvPlaybackSessionContract.parseSeekArgs(
-            MuxTvPlaybackSessionContract.seekArgs(request),
-        )
-
-        assertThat(parsed).isEqualTo(request)
+        assertThat(request.token.generation).isEqualTo(8L)
+        assertThat(request.targetMs).isEqualTo(42_000L)
     }
 
     @Test
-    fun `seek args reject unknown fields`() {
-        val args = MuxTvPlaybackSessionContract.seekArgs(
-            PlaybackSeekRequest.Relative(
-                token = PlaybackSeekToken(mediaId = "channel-1", generation = 9L),
-                direction = PlaybackSeekController.DIRECTION_BACKWARD,
-            ),
-        ).apply {
-            putString("unexpected", "value")
-        }
-
-        assertThat(MuxTvPlaybackSessionContract.parseSeekArgs(args)).isNull()
-    }
-
-    @Test
-    fun `accepted result round trips authoritative target`() {
-        val expected = PlaybackSeekResult.Accepted(
+    fun `accepted result retains authoritative target`() {
+        val result = PlaybackSeekResult.Accepted(
             targetMs = 30_000L,
-            direction = PlaybackSeekController.DIRECTION_FORWARD,
+            direction = PlaybackSeekPolicy.DIRECTION_FORWARD,
         )
 
-        val parsed = MuxTvPlaybackSessionContract.parseSeekResult(
-            MuxTvPlaybackSessionContract.seekSessionResult(expected),
-        )
-
-        assertThat(parsed).isEqualTo(expected)
+        assertThat(result.targetMs).isEqualTo(30_000L)
+        assertThat(result.direction).isEqualTo(PlaybackSeekPolicy.DIRECTION_FORWARD)
     }
 
     @Test
-    fun `policy rejection stays typed inside successful transport`() {
-        val expected = PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.STALE_PLAYBACK)
-        val sessionResult = MuxTvPlaybackSessionContract.seekSessionResult(expected)
+    fun `policy rejection remains typed independently from transport`() {
+        val result = PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.STALE_PLAYBACK)
 
-        assertThat(sessionResult.resultCode).isEqualTo(androidx.media3.session.SessionResult.RESULT_SUCCESS)
-        assertThat(MuxTvPlaybackSessionContract.parseSeekResult(sessionResult)).isEqualTo(expected)
+        assertThat(result.reason).isEqualTo(PlaybackSeekRejectReason.STALE_PLAYBACK)
     }
 
     @Test
@@ -77,6 +53,13 @@ class PlaybackSeekContractTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             PlaybackSeekToken(mediaId = "channel-1", generation = 0L)
+        }
+    }
+
+    @Test
+    fun `seek token rejects line breaks`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            PlaybackSeekToken(mediaId = "channel\n1", generation = 1L)
         }
     }
 
