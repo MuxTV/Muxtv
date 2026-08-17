@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -57,10 +56,17 @@ import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.player.media3.Media3TrackController
-import app.muxtv.player.media3.PlaybackSeekController
+import app.muxtv.player.media3.PlaybackSeekPolicy
+import app.muxtv.player.media3.PlaybackSeekRejectReason
+import app.muxtv.player.media3.PlaybackSeekRequest
+import app.muxtv.player.media3.PlaybackSeekResult
 import app.muxtv.player.media3.SeekControllerState
+import app.muxtv.player.media3.awaitPlaybackSeek
+import app.muxtv.player.media3.currentPlaybackSeekToken
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 data class PlayerSurfaceAction(
     val label: String,
@@ -85,6 +91,18 @@ private enum class SeekInputOutcome(val diagnosticTag: String) {
     CONTROLLER_REJECTED("controller-rejected"),
 }
 
+private fun PlaybackSeekRejectReason.toInputOutcome(): SeekInputOutcome = when (this) {
+    PlaybackSeekRejectReason.STALE_PLAYBACK,
+    PlaybackSeekRejectReason.COMMAND_UNAVAILABLE,
+    -> SeekInputOutcome.COMMAND_UNAVAILABLE
+    PlaybackSeekRejectReason.LIVE_CONTENT -> SeekInputOutcome.LIVE_CONTENT
+    PlaybackSeekRejectReason.UNKNOWN_DURATION -> SeekInputOutcome.UNKNOWN_DURATION
+    PlaybackSeekRejectReason.INVALID_POSITION,
+    PlaybackSeekRejectReason.INVALID_TARGET,
+    -> SeekInputOutcome.INVALID_POSITION
+    PlaybackSeekRejectReason.CONTROLLER_REJECTED -> SeekInputOutcome.CONTROLLER_REJECTED
+}
+
 /**
  * Single capability-driven fullscreen surface and overlay state machine.
  *
@@ -92,6 +110,10 @@ private enum class SeekInputOutcome(val diagnosticTag: String) {
  * Center/OK reveals the overlay, inactivity auto-hides after 6 s, Back closes the overlay
  * first and only then falls through to the route/activity. Audio/subtitle actions and the
  * timeline appear only when the current Media3 state supports them.
+ *
+ * Seek ownership is intentionally presentation-only here: this surface computes immediate
+ * provisional HUD state and submits typed requests, while MuxTvPlaybackService owns the single
+ * coalescing scheduler and the only production player seek mutation.
  */
 @AndroidXOptIn(UnstableApi::class)
 @Composable
@@ -114,22 +136,12 @@ fun PlayerSurfaceContent(
     val audioModels = rememberAudioTrackModels(controller)
     val subtitleModels = rememberSubtitleTrackModels(controller)
     val surfaceScope = rememberCoroutineScope()
-    val seekController = remember(contentIdentity) {
-        PlaybackSeekController(
-            scope = surfaceScope,
-            onApplySeek = { generation, targetMs ->
-                if (generation == contentIdentity) {
-                    runCatching { controller.seekTo(targetMs) }
-                }
-            },
-        )
-    }
-    val seekState by seekController.state.collectAsState()
 
-    DisposableEffect(contentIdentity) {
-        onDispose { seekController.reset() }
+    var seekState by remember(contentIdentity) {
+        mutableStateOf<SeekControllerState>(SeekControllerState.Idle)
     }
-
+    var provisionalSeekTargetMs by remember(contentIdentity) { mutableStateOf<Long?>(null) }
+    var seekRequestSequence by remember(contentIdentity) { mutableLongStateOf(0L) }
     var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
     var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
     var hasError by remember(controller) { mutableStateOf(controller.playerError != null) }
@@ -153,6 +165,12 @@ fun PlayerSurfaceContent(
         lastInteractionNanos = System.nanoTime()
     }
 
+    fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
+        remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
+        lastSeekInputOutcome = outcome
+        return outcome == SeekInputOutcome.ACCEPTED
+    }
+
     fun requestSeek(direction: Int): SeekInputOutcome {
         if (!capabilities.canSeek) return SeekInputOutcome.COMMAND_UNAVAILABLE
         if (capabilities.isLive) return SeekInputOutcome.LIVE_CONTENT
@@ -164,25 +182,60 @@ fun PlayerSurfaceContent(
 
         val currentPositionMs = controller.currentPosition
         if (currentPositionMs < 0L) return SeekInputOutcome.INVALID_POSITION
+        val token = controller.currentPlaybackSeekToken()
+            ?: return SeekInputOutcome.COMMAND_UNAVAILABLE
 
-        return if (
-            seekController.onDirectionRequested(
-                generation = contentIdentity,
-                direction = direction,
-                currentPositionMs = currentPositionMs,
-                durationMs = durationMs,
-            )
-        ) {
-            SeekInputOutcome.ACCEPTED
-        } else {
-            SeekInputOutcome.CONTROLLER_REJECTED
+        val startMs = provisionalSeekTargetMs ?: currentPositionMs
+        val targetMs = (
+            startMs + direction * PlaybackSeekPolicy.STEP_MILLIS
+        ).coerceIn(0L, durationMs)
+        val previewDirection = when {
+            targetMs > startMs -> PlaybackSeekPolicy.DIRECTION_FORWARD
+            targetMs < startMs -> PlaybackSeekPolicy.DIRECTION_BACKWARD
+            else -> PlaybackSeekPolicy.DIRECTION_NONE
         }
-    }
+        provisionalSeekTargetMs = targetMs
+        seekState = SeekControllerState.Pending(targetMs, previewDirection)
+        seekRequestSequence += 1L
+        val requestSequence = seekRequestSequence
 
-    fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
-        remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
-        lastSeekInputOutcome = outcome
-        return outcome == SeekInputOutcome.ACCEPTED
+        surfaceScope.launch {
+            val result = try {
+                controller.awaitPlaybackSeek(
+                    request = PlaybackSeekRequest.Relative(
+                        token = token,
+                        direction = direction,
+                    ),
+                    timeoutMillis = SEEK_REQUEST_TIMEOUT_MILLIS,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (requestSequence != seekRequestSequence) return@launch
+            when (result) {
+                is PlaybackSeekResult.Accepted -> {
+                    provisionalSeekTargetMs = result.targetMs
+                    seekState = SeekControllerState.Applying(
+                        targetMs = result.targetMs,
+                        direction = result.direction,
+                    )
+                    recordSeekInputOutcome(SeekInputOutcome.ACCEPTED)
+                }
+                is PlaybackSeekResult.Rejected -> {
+                    provisionalSeekTargetMs = null
+                    seekState = SeekControllerState.Idle
+                    recordSeekInputOutcome(result.reason.toInputOutcome())
+                }
+                null -> {
+                    provisionalSeekTargetMs = null
+                    seekState = SeekControllerState.Idle
+                    recordSeekInputOutcome(SeekInputOutcome.CONTROLLER_REJECTED)
+                }
+            }
+        }
+        return SeekInputOutcome.ACCEPTED
     }
 
     fun handleSeekInput(direction: Int): Boolean = recordSeekInputOutcome(requestSeek(direction))
@@ -197,11 +250,11 @@ fun PlayerSurfaceContent(
                 openSheet != null -> recordSeekInputOutcome(SeekInputOutcome.SHEET_OPEN)
                 else -> when (command) {
                     PlayerRemoteCommand.SEEK_BACKWARD -> handleSeekInput(
-                        PlaybackSeekController.DIRECTION_BACKWARD,
+                        PlaybackSeekPolicy.DIRECTION_BACKWARD,
                     )
 
                     PlayerRemoteCommand.SEEK_FORWARD -> handleSeekInput(
-                        PlaybackSeekController.DIRECTION_FORWARD,
+                        PlaybackSeekPolicy.DIRECTION_FORWARD,
                     )
                 }
             }
@@ -232,13 +285,31 @@ fun PlayerSurfaceContent(
                 newPosition: Player.PositionInfo,
                 reason: Int,
             ) {
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                    seekController.onSeekConfirmed(contentIdentity)
+                if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+                val current = seekState
+                val direction = when (current) {
+                    is SeekControllerState.Pending -> current.direction
+                    is SeekControllerState.Applying -> current.direction
+                    is SeekControllerState.Completed -> current.direction
+                    SeekControllerState.Idle -> return
                 }
+                // Invalidate an older custom-command completion and show Media3's applied position.
+                seekRequestSequence += 1L
+                provisionalSeekTargetMs = null
+                seekState = SeekControllerState.Completed(
+                    targetMs = newPosition.positionMs.coerceAtLeast(0L),
+                    direction = direction,
+                )
             }
         }
         controller.runOnApplicationThread { controller.addListener(listener) }
         onDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
+    }
+
+    LaunchedEffect(seekState) {
+        val completed = seekState as? SeekControllerState.Completed ?: return@LaunchedEffect
+        delay(PlaybackSeekPolicy.HUD_LINGER_MILLIS)
+        if (seekState == completed) seekState = SeekControllerState.Idle
     }
 
     LaunchedEffect(controlsVisible) {
@@ -315,11 +386,11 @@ fun PlayerSurfaceContent(
                 if (!controlsVisible && event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionLeft -> handleSeekInput(
-                            PlaybackSeekController.DIRECTION_BACKWARD,
+                            PlaybackSeekPolicy.DIRECTION_BACKWARD,
                         )
 
                         Key.DirectionRight -> handleSeekInput(
-                            PlaybackSeekController.DIRECTION_FORWARD,
+                            PlaybackSeekPolicy.DIRECTION_FORWARD,
                         )
 
                         else -> false
@@ -392,11 +463,11 @@ fun PlayerSurfaceContent(
                                 if (event.type == KeyEventType.KeyDown && timelineFocused) {
                                     when (event.key) {
                                         Key.DirectionLeft -> handleSeekInput(
-                                            PlaybackSeekController.DIRECTION_BACKWARD,
+                                            PlaybackSeekPolicy.DIRECTION_BACKWARD,
                                         )
 
                                         Key.DirectionRight -> handleSeekInput(
-                                            PlaybackSeekController.DIRECTION_FORWARD,
+                                            PlaybackSeekPolicy.DIRECTION_FORWARD,
                                         )
 
                                         else -> false
@@ -557,7 +628,7 @@ private fun PlaybackTimeline(
         is SeekControllerState.Pending -> previewState.direction
         is SeekControllerState.Applying -> previewState.direction
         is SeekControllerState.Completed -> previewState.direction
-        SeekControllerState.Idle -> PlaybackSeekController.DIRECTION_NONE
+        SeekControllerState.Idle -> PlaybackSeekPolicy.DIRECTION_NONE
     }
     val timePrefix = if (previewState is SeekControllerState.Idle) {
         ""
@@ -616,3 +687,4 @@ private fun playbackStatus(
 
 private const val OVERLAY_HIDE_NANOS = 6_000_000_000L
 private const val POSITION_SAMPLE_MILLIS = 500L
+private const val SEEK_REQUEST_TIMEOUT_MILLIS = 2_000L
