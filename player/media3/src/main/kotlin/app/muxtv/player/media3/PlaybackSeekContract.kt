@@ -22,8 +22,8 @@ sealed interface PlaybackSeekRequest {
     ) : PlaybackSeekRequest {
         init {
             require(
-                direction == PlaybackSeekController.DIRECTION_BACKWARD ||
-                    direction == PlaybackSeekController.DIRECTION_FORWARD,
+                direction == PlaybackSeekPolicy.DIRECTION_BACKWARD ||
+                    direction == PlaybackSeekPolicy.DIRECTION_FORWARD,
             )
         }
     }
@@ -56,7 +56,7 @@ sealed interface PlaybackSeekResult {
     ) : PlaybackSeekResult {
         init {
             require(targetMs >= 0L)
-            require(direction in PlaybackSeekController.DIRECTION_BACKWARD..PlaybackSeekController.DIRECTION_FORWARD)
+            require(direction in PlaybackSeekPolicy.DIRECTION_BACKWARD..PlaybackSeekPolicy.DIRECTION_FORWARD)
         }
     }
 
