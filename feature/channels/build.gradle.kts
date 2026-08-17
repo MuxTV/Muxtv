@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(project(":catalog:api"))
     implementation(project(":player:api"))
+    implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

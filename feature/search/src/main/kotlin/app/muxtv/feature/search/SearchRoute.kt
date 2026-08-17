@@ -55,6 +55,7 @@ import androidx.tv.material3.Text
 import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 
@@ -64,6 +65,7 @@ fun SearchRoute(
     profileId: String,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val factory = remember(repository, profileId) {
         viewModelFactory {
@@ -112,6 +114,7 @@ fun SearchRoute(
             focusedScrollOffset = anchor.scrollOffset
         },
         onOpenChannel = onOpenChannel,
+        railFocusRequester = railFocusRequester,
         modifier = modifier,
     )
 }
@@ -127,6 +130,7 @@ private fun SearchContent(
     onFocusAnchorChanged: (SearchFocusAnchor) -> Unit,
     onOpenChannel: (String) -> Unit,
     modifier: Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val content = state as? SearchUiState.Content
     val rows = content?.rows.orEmpty()
@@ -175,22 +179,16 @@ private fun SearchContent(
         restorationCompleted = true
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 56.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+    MuxTvScreenScaffold(
+        title = "Поиск",
+        modifier = modifier,
     ) {
-        Text(
-            text = "Поиск",
-            style = MaterialTheme.typography.displaySmall,
-        )
-
         SearchInput(
             value = queryText,
             onValueChange = onQueryTextChanged,
             focusRequester = inputFocusRequester,
             downFocusRequester = downFocusRequester,
+            leftFocusRequester = railFocusRequester,
             onSearchAction = {
                 val firstResultRequester = channelIds.firstOrNull()
                     ?.let(resultFocusRequesters::get)
@@ -279,6 +277,7 @@ private fun SearchInput(
     focusRequester: FocusRequester,
     downFocusRequester: FocusRequester?,
     onSearchAction: () -> Unit,
+    leftFocusRequester: FocusRequester? = null,
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(TvTokens.Shape.cardCorner)
@@ -304,6 +303,7 @@ private fun SearchInput(
             }
             .focusProperties {
                 downFocusRequester?.let { down = it }
+                leftFocusRequester?.let { left = it }
             }
             .focusRequester(focusRequester)
             .onFocusChanged { focusState -> isFocused = focusState.isFocused },

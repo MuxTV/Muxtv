@@ -1,52 +1,57 @@
 package app.muxtv.navigation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
-import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelSearchRepository
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.TvTokens
-import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvNavigationRail
+import app.muxtv.designsystem.component.MuxTvNavigationRailItem
+import app.muxtv.designsystem.icon.MuxTvIcons
 import app.muxtv.feature.channels.ChannelsRoute
-import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.doctor.DoctorExportStatus
 import app.muxtv.feature.doctor.DoctorRoute
+import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.home.HomeRoute
+import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.search.SearchRoute
+import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
-import app.muxtv.feature.player.PlaybackStartGateway
-import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.PlaybackObservationReader
+import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun AppNavigation(
@@ -55,6 +60,8 @@ fun AppNavigation(
     channelPreferencesRepository: ChannelPreferencesRepository,
     channelSearchRepository: ChannelSearchRepository,
     guideWindowRepository: GuideWindowRepository,
+    recentChannelsRepository: RecentChannelsRepository,
+    epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
     sourceRefreshStore: SourceRefreshStore,
     sourceRefreshScheduler: SourceRefreshScheduler,
@@ -68,7 +75,9 @@ fun AppNavigation(
     modifier: Modifier = Modifier,
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
-    val initialNavigationFocusRequester = remember { FocusRequester() }
+    val railFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    var railFocused by remember { mutableStateOf(false) }
 
     fun open(destination: AppDestination) {
         if (backStack.lastOrNull() != destination) backStack.add(destination)
@@ -86,26 +95,30 @@ fun AppNavigation(
     }
 
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
+    val railVisible = current !is AppDestination.Player && current != AppDestination.AddSource
 
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        initialNavigationFocusRequester.requestFocus()
+    BackHandler(enabled = railVisible && railFocused) {
+        // Returning focus to the content group preserves spatial provenance and
+        // lets focusRestorer() choose the exact item that previously owned focus.
+        focusManager.moveFocus(FocusDirection.Right)
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .semantics { testTagsAsResourceId = true },
     ) {
-        if (current !is AppDestination.Player && current != AppDestination.AddSource) {
-            NavigationRow(
-                current = current.topLevelDestination(),
-                initialFocusRequester = initialNavigationFocusRequester,
-                onOpen = ::open,
-            )
-        }
         NavDisplay(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (railVisible) {
+                        Modifier.padding(start = TvTokens.Size.railCollapsed)
+                    } else {
+                        Modifier
+                    },
+                )
+                .focusRestorer(),
             backStack = backStack,
             onBack = ::goBack,
             entryDecorators = listOf(
@@ -117,18 +130,30 @@ fun AppNavigation(
                 NavEntry(key) {
                     when (destination) {
                         AppDestination.Home -> HomeRoute(
+                            channelBrowseRepository = channelBrowseRepository,
+                            recentChannelsRepository = recentChannelsRepository,
+                            epgGuideRepository = epgGuideRepository,
+                            playbackSessionStateSource = controllerConnector,
+                            hasSources = rememberHasSources(sourceRefreshStore),
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                            onOpenChannel = { channelId ->
+                                open(AppDestination.Player(channelId))
+                            },
                             onOpenChannels = { open(AppDestination.Channels) },
                             onOpenGuide = { open(AppDestination.Guide) },
-                            onOpenSearch = { open(AppDestination.Search) },
+                            onAddSource = { open(AppDestination.AddSource) },
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Channels -> ChannelsRoute(
                             channelBrowseRepository = channelBrowseRepository,
+                            epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
                             },
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Guide -> GuideRoute(
@@ -137,6 +162,7 @@ fun AppNavigation(
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
                             },
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Search -> SearchRoute(
@@ -145,20 +171,29 @@ fun AppNavigation(
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
                             },
+                            railFocusRequester = railFocusRequester,
+                        )
+
+                        AppDestination.Settings -> SettingsRoute(
+                            onOpenSources = { open(AppDestination.Sources) },
+                            onOpenDoctor = { open(AppDestination.Doctor) },
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Sources -> SourcesRoute(
                             refreshStore = sourceRefreshStore,
                             refreshScheduler = sourceRefreshScheduler,
                             playbackApprovalActions = sourcePlaybackApprovalActions,
-                            topNavigationFocusRequester = initialNavigationFocusRequester,
+                            topNavigationFocusRequester = null,
                             onAddSource = { open(AppDestination.AddSource) },
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.Doctor -> DoctorRoute(
                             observationReader = playbackObservationReader,
                             exportStatus = doctorExportStatus,
                             onExport = onExportDoctorReport,
+                            railFocusRequester = railFocusRequester,
                         )
 
                         AppDestination.AddSource -> AddSourceRoute(
@@ -181,50 +216,80 @@ fun AppNavigation(
                 }
             },
         )
+
+        if (railVisible) {
+            MuxTvNavigationRail(
+                items = topLevelRailItems(selected = current.topLevelDestination()),
+                onSelect = { key -> open(destinationByRailKey(key)) },
+                railFocusRequester = railFocusRequester,
+                modifier = Modifier.fillMaxHeight(),
+                onRailFocusChanged = { railFocused = it },
+            )
+        }
     }
 }
 
 @Composable
-private fun NavigationRow(
-    current: AppDestination,
-    initialFocusRequester: FocusRequester,
-    onOpen: (AppDestination) -> Unit,
-) {
-    Row(
-        modifier = Modifier.padding(horizontal = 56.dp, vertical = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
-    ) {
-        AppDestination.topLevel.forEach { destination ->
-            val label = when (destination) {
-                AppDestination.Home -> "Главная"
-                AppDestination.Channels -> "Каналы"
-                AppDestination.Guide -> "Программа"
-                AppDestination.Search -> "Поиск"
-                AppDestination.Sources -> "Источники"
-                AppDestination.Doctor -> "Диагностика"
-                AppDestination.AddSource -> error("AddSource is not a top-level destination.")
-                is AppDestination.Player -> error("Player is not a top-level destination.")
-            }
-            val focusModifier = if (destination == current) {
-                Modifier.focusRequester(initialFocusRequester)
-            } else {
-                Modifier
-            }
-            MuxTvActionButton(
-                text = if (destination == current) "• $label" else label,
-                onClick = { onOpen(destination) },
-                modifier = Modifier
-                    .testTag(destination.navigationTestTag())
-                    .then(focusModifier),
-            )
-        }
-        Text(
-            text = "Основной",
-            modifier = Modifier.padding(start = 24.dp, top = 12.dp),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun rememberHasSources(sourceRefreshStore: SourceRefreshStore): Flow<Boolean> =
+    remember(sourceRefreshStore) {
+        sourceRefreshStore.observeOverviews().map { overviews -> overviews.isNotEmpty() }
+    }
+
+@Composable
+private fun topLevelRailItems(selected: AppDestination): List<MuxTvNavigationRailItem> =
+    AppDestination.topLevel.map { destination ->
+        MuxTvNavigationRailItem(
+            key = destination.navigationKey(),
+            label = destination.navigationLabel(),
+            icon = destination.navigationIcon(),
+            selected = destination == selected,
+            testTag = destination.navigationTestTag(),
         )
     }
+
+private fun AppDestination.navigationKey(): String = when (this) {
+    AppDestination.Home -> "home"
+    AppDestination.Channels -> "channels"
+    AppDestination.Guide -> "guide"
+    AppDestination.Search -> "search"
+    AppDestination.Settings -> "settings"
+    AppDestination.Sources -> error("Sources is not a top-level destination.")
+    AppDestination.Doctor -> error("Doctor is not a top-level destination.")
+    AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    is AppDestination.Player -> error("Player is not a top-level destination.")
+}
+
+private fun destinationByRailKey(key: String): AppDestination = when (key) {
+    "home" -> AppDestination.Home
+    "channels" -> AppDestination.Channels
+    "guide" -> AppDestination.Guide
+    "search" -> AppDestination.Search
+    "settings" -> AppDestination.Settings
+    else -> error("Unknown top-level navigation key: $key")
+}
+
+private fun AppDestination.navigationLabel(): String = when (this) {
+    AppDestination.Home -> "Главная"
+    AppDestination.Channels -> "Эфир"
+    AppDestination.Guide -> "Программа"
+    AppDestination.Search -> "Поиск"
+    AppDestination.Settings -> "Настройки"
+    AppDestination.Sources -> error("Sources is not a top-level destination.")
+    AppDestination.Doctor -> error("Doctor is not a top-level destination.")
+    AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    is AppDestination.Player -> error("Player is not a top-level destination.")
+}
+
+private fun AppDestination.navigationIcon() = when (this) {
+    AppDestination.Home -> MuxTvIcons.Home
+    AppDestination.Channels -> MuxTvIcons.LiveTv
+    AppDestination.Guide -> MuxTvIcons.Guide
+    AppDestination.Search -> MuxTvIcons.Search
+    AppDestination.Settings -> MuxTvIcons.Settings
+    AppDestination.Sources -> error("Sources is not a top-level destination.")
+    AppDestination.Doctor -> error("Doctor is not a top-level destination.")
+    AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.navigationTestTag(): String = when (this) {
@@ -232,14 +297,15 @@ private fun AppDestination.navigationTestTag(): String = when (this) {
     AppDestination.Channels -> "nav-channels"
     AppDestination.Guide -> "nav-guide"
     AppDestination.Search -> "nav-search"
-    AppDestination.Sources -> "nav-sources"
-    AppDestination.Doctor -> "nav-doctor"
+    AppDestination.Settings -> "nav-settings"
+    AppDestination.Sources -> error("Sources is not a top-level destination.")
+    AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
-    AppDestination.AddSource -> AppDestination.Sources
+    AppDestination.Sources, AppDestination.Doctor, AppDestination.AddSource -> AppDestination.Settings
     is AppDestination.Player -> AppDestination.Channels
     else -> this
 }

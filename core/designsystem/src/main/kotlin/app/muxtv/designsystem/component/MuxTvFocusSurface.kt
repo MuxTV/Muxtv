@@ -1,5 +1,8 @@
 package app.muxtv.designsystem.component
 
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,44 +17,90 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import app.muxtv.designsystem.TvTokens
 
 /**
- * Shared dense-TV focus surface.
+ * Shared dense-TV focus surface (Lounge Light L2/L3 model).
  *
- * Repeated D-pad traversal keeps measured geometry stable and updates focus feedback immediately.
- * Activation remains owned by Compose clickable semantics; this wrapper does not synthesize
- * DPAD_CENTER/ENTER events in preview-key handlers.
+ * Unfocused: matte surface + hairline edge. Focused: raised warm surface,
+ * bronze outline, restrained soft shadow and optional draw-time scale. Dense
+ * rows/grid pass 1f. Sparse Home cards may opt into a reserved-envelope scale,
+ * which is disabled when the platform reports system animators disabled.
+ * A deterministic brush may be supplied by showcase/hero surfaces without
+ * introducing a network artwork or dominant-colour pipeline.
  */
 @Composable
 fun MuxTvFocusSurface(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    corner: Dp = TvTokens.Shape.cardCorner,
+    contentPadding: Dp = TvTokens.Spacing.medium,
+    focusScale: Float = 1f,
+    containerBrush: Brush? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(TvTokens.Shape.cardCorner)
+    val motionEnabled = ValueAnimator.areAnimatorsEnabled()
+    val scale by animateFloatAsState(
+        targetValue = if (focused && motionEnabled) focusScale else 1f,
+        animationSpec = tween(
+            durationMillis = TvTokens.Motion.focusDurationMillis,
+            easing = TvTokens.Motion.easeOut,
+        ),
+        label = "focusSurfaceScale",
+    )
+    val shape = RoundedCornerShape(corner)
     Box(
         modifier = modifier
-            .alpha(if (focused) TvTokens.Focus.focusedAlpha else TvTokens.Focus.unfocusedAlpha)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .then(
+                if (focused) {
+                    Modifier.shadow(
+                        elevation = 8.dp,
+                        shape = shape,
+                        ambientColor = Color(0x24000000),
+                        spotColor = Color(0x1A000000),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(
+                if (containerBrush != null) {
+                    Modifier.background(containerBrush)
+                } else {
+                    Modifier.background(
+                        if (focused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
+                    )
+                },
+            )
             .border(
-                width = if (focused) TvTokens.Focus.outlineWidth else 0.dp,
-                color = if (focused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                width = if (focused) TvTokens.Focus.outlineWidth else 1.dp,
+                color = if (focused) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.borderVariant
+                },
                 shape = shape,
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Button, onClick = onClick)
             .focusable()
-            .padding(TvTokens.Spacing.medium),
+            .padding(contentPadding),
         content = content,
     )
 }

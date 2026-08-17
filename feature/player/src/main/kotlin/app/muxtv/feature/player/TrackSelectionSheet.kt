@@ -2,6 +2,7 @@ package app.muxtv.feature.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,8 +76,13 @@ fun TrackSelectionSheet(
             modifier = Modifier
                 .fillMaxWidth(SHEET_WIDTH_FRACTION)
                 .fillMaxHeight(SHEET_HEIGHT_FRACTION)
-                .clip(RoundedCornerShape(TvTokens.Shape.cardCorner))
-                .background(MaterialTheme.colorScheme.surface)
+                .clip(RoundedCornerShape(TvTokens.Shape.detailsCorner))
+                .background(TvTokens.Color.surfaceRaised)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.border,
+                    shape = RoundedCornerShape(TvTokens.Shape.detailsCorner),
+                )
                 .padding(TvTokens.Spacing.medium),
             verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small),
         ) {

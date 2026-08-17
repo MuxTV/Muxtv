@@ -99,6 +99,10 @@ actual_modules:
     gradle_path: :feature:sources
     type: android_compose_library
     owns: [sources_management, source_entry_wizard, source_entry_state_machine]
+  feature-settings:
+    gradle_path: :feature:settings
+    type: android_compose_library
+    owns: [settings_workspace_route, settings_sections, settings_focus_restoration]
   feature-doctor:
     gradle_path: :feature:doctor
     type: android_compose_library
@@ -117,7 +121,6 @@ actual_modules:
     owns: [convention_plugins, module_defaults, quality_wiring]
 planned_not_created:
   - feature_profiles
-  - feature_settings
   - local_control_server
   - local_control_web
 rules:

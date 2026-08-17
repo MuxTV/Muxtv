@@ -9,8 +9,10 @@ import androidx.lifecycle.lifecycleScope
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.ChannelSearchRepository
+import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.MuxTvTheme
@@ -49,6 +51,12 @@ class MainActivity : ComponentActivity() {
     lateinit var guideWindowRepository: GuideWindowRepository
 
     @Inject
+    lateinit var recentChannelsRepository: RecentChannelsRepository
+
+    @Inject
+    lateinit var epgGuideRepository: EpgGuideRepository
+
+    @Inject
     lateinit var controllerConnector: MuxTvMediaControllerConnector
 
     @Inject
@@ -80,6 +88,8 @@ class MainActivity : ComponentActivity() {
                     channelPreferencesRepository = channelPreferencesRepository,
                     channelSearchRepository = channelSearchRepository,
                     guideWindowRepository = guideWindowRepository,
+                    recentChannelsRepository = recentChannelsRepository,
+                    epgGuideRepository = epgGuideRepository,
                     controllerConnector = controllerConnector,
                     sourceRefreshStore = sourceRefreshStore,
                     sourceRefreshScheduler = sourceRefreshScheduler,

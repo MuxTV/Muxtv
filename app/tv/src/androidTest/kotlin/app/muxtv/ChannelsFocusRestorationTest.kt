@@ -11,14 +11,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
@@ -127,7 +126,7 @@ class ChannelsFocusRestorationTest {
     }
 
     @Test
-    fun favoritesFilterKeepsFocusedFavoriteChannel() {
+    fun favoritesFilterFromSecondChannelUsesDpadAndFocusesFilteredRow() {
         val catalog = MutablePlaybackCatalog(
             testChannels.map { channel ->
                 if (channel.channelId == "channel-b") channel.copy(isFavorite = true) else channel
@@ -141,11 +140,17 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         moveFocusToSecondChannel()
-        composeRule.onNodeWithTag("channels-filter-favorites").performClick()
-        composeRule.waitUntilText("★  Второй")
+        composeRule.onNodeWithTag("channel-row-1").performKeyInput {
+            keyDown(Key.DirectionUp)
+            keyUp(Key.DirectionUp)
+        }
+        openFavoritesFromFirstRowWithDpad()
+        composeRule.waitUntilText("Второй")
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("★  Второй", substring = false).assertIsFocused()
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Второй", substring = false).assertExists()
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsSelected()
     }
 
     @Test
@@ -163,11 +168,12 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         openFavoritesFromFirstRowWithDpad()
-        composeRule.waitUntilText("★  Первый")
+        composeRule.waitUntilText("Первый")
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-        composeRule.onNodeWithText("★  Первый", substring = false).assertExists()
+        composeRule.onNodeWithText("Первый", substring = false).assertExists()
+        composeRule.onNodeWithTag("channels-filter-favorites").assertIsSelected()
     }
 
     @Test
@@ -252,7 +258,7 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Второй", substring = false).assertIsFocused()
-        composeRule.onNodeWithTag("channels-filter-recent").assertTextContains("• Недавние")
+        composeRule.onNodeWithTag("channels-filter-recent").assertIsSelected()
     }
 
     @Test
@@ -311,8 +317,8 @@ class ChannelsFocusRestorationTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
-        composeRule.onNodeWithText("Сейчас: В эфире").assertExists()
-        composeRule.onNodeWithText("Далее: Следом").assertExists()
+        composeRule.onNodeWithText("Сейчас: В эфире", substring = true).assertExists()
+        composeRule.onNodeWithText("Далее: Следом", substring = true).assertExists()
     }
 
     @androidx.compose.runtime.Composable
@@ -328,6 +334,7 @@ class ChannelsFocusRestorationTest {
                 recentChannelsRepository = recentChannelsRepository,
                 epgGuideRepository = epgGuideRepository,
             ),
+            epgGuideRepository = epgGuideRepository,
             playbackSessionStateSource = NoPlaybackSessionStateSource,
             profileId = "profile-main",
             onOpenChannel = onOpenChannel,

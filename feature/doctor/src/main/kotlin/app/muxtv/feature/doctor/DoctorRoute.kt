@@ -6,11 +6,11 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
@@ -28,6 +29,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
+import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
 import app.muxtv.player.PlaybackObservationKind
@@ -58,6 +60,7 @@ fun DoctorRoute(
     exportStatus: DoctorExportStatus,
     onExport: (String) -> Unit,
     modifier: Modifier = Modifier,
+    railFocusRequester: FocusRequester? = null,
 ) {
     val refreshFocusRequester = remember { FocusRequester() }
     var snapshot by remember(observationReader) {
@@ -70,15 +73,11 @@ fun DoctorRoute(
     }
 
     val observations = (snapshot as? DoctorSnapshot.Ready)?.observations.orEmpty()
-    Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+    MuxTvScreenScaffold(
+        title = "Диагностика",
+        modifier = modifier,
+        titleTestTag = DOCTOR_TITLE_TEST_TAG,
     ) {
-        Text(
-            text = "Диагностика",
-            modifier = Modifier.testTag(DOCTOR_TITLE_TEST_TAG),
-            style = MaterialTheme.typography.displaySmall,
-        )
         Text(
             text = "Здесь только обезличенные события воспроизведения. Адреса, заголовки и учётные данные не сохраняются.",
             style = MaterialTheme.typography.bodyLarge,
@@ -90,6 +89,7 @@ fun DoctorRoute(
                 onClick = { snapshot = readSnapshot(observationReader) },
                 modifier = Modifier
                     .testTag(DOCTOR_REFRESH_TEST_TAG)
+                    .focusProperties { left = railFocusRequester ?: FocusRequester.Default }
                     .focusRequester(refreshFocusRequester),
             )
             MuxTvActionButton(
@@ -163,16 +163,23 @@ private fun DoctorObservationCard(
     index: Int,
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(TvTokens.Shape.rowCorner)
     val focusBorderColor = if (isFocused) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.borderVariant
     }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(width = 3.dp, color = focusBorderColor)
+            .background(
+                if (isFocused) TvTokens.Color.surfaceRaised else MaterialTheme.colorScheme.surface,
+            )
+            .border(
+                width = if (isFocused) TvTokens.Focus.outlineWidth else 1.dp,
+                color = focusBorderColor,
+                shape = shape,
+            )
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
             .testTag(doctorObservationTestTag(index))
