@@ -116,7 +116,11 @@ class MuxTvPlaybackService : MediaSessionService() {
         )
         player = ExoPlayer.Builder(this).build()
         player.addListener(seekConfirmationListener)
-        mediaSession = MediaSession.Builder(this, player)
+        val sessionPlayer = MuxTvSessionPlayer(
+            player = player,
+            onSeekIntent = ::handleSessionSeekIntent,
+        )
+        mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setId(SESSION_ID)
             .setCallback(SessionCallback())
             .build()
@@ -720,14 +724,19 @@ class MuxTvPlaybackService : MediaSessionService() {
         )
     }
 
-    private fun handleMediaSeekCommand(direction: Int): Boolean {
-        val token = currentSeekToken() ?: return false
-        return handleSeekRequest(
-            PlaybackSeekRequest.Relative(
+    private fun handleSessionSeekIntent(intent: MuxTvSessionSeekIntent) {
+        val token = currentSeekToken() ?: return
+        val request = when (intent) {
+            is MuxTvSessionSeekIntent.Relative -> PlaybackSeekRequest.Relative(
                 token = token,
-                direction = direction,
-            ),
-        ) is PlaybackSeekResult.Accepted
+                direction = intent.direction,
+            )
+            is MuxTvSessionSeekIntent.Absolute -> PlaybackSeekRequest.Absolute(
+                token = token,
+                targetMs = intent.targetMs,
+            )
+        }
+        handleSeekRequest(request)
     }
 
     private inner class SessionCallback : MediaSession.Callback {
@@ -746,22 +755,6 @@ class MuxTvPlaybackService : MediaSessionService() {
                     .build(),
                 base.availablePlayerCommands,
             )
-        }
-
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int,
-        ): Int {
-            // Compatibility adapter only. Internal MuxTV seek policy uses ACTION_REQUEST_SEEK.
-            val coalesced = when (playerCommand) {
-                Player.COMMAND_SEEK_FORWARD ->
-                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_FORWARD)
-                Player.COMMAND_SEEK_BACK ->
-                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_BACKWARD)
-                else -> false
-            }
-            return playerCommandSessionResult(coalescedByService = coalesced)
         }
 
         override fun onCustomCommand(
@@ -823,13 +816,6 @@ class MuxTvPlaybackService : MediaSessionService() {
         val sessionId: String,
     )
 }
-
-internal fun playerCommandSessionResult(coalescedByService: Boolean): Int =
-    if (coalescedByService) {
-        SessionResult.RESULT_INFO_SKIPPED
-    } else {
-        SessionResult.RESULT_SUCCESS
-    }
 
 private fun app.muxtv.catalog.PlaybackVariantResolution?.matches(
     candidate: PlaybackCandidateIdentity,
