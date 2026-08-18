@@ -1,9 +1,11 @@
 package app.muxtv.player.media3
 
 import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.FlagSet
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import java.util.IdentityHashMap
 
 /**
  * Semantic current-item seek emitted by standard Media3 [Player] controls.
@@ -37,6 +39,15 @@ internal fun filteredMuxTvSessionCommands(commands: Player.Commands): Player.Com
         blockedMuxTvSessionSeekCommands.forEach { command -> remove(command) }
     }.build()
 
+internal fun filteredMuxTvSessionEvents(events: Player.Events): Player.Events {
+    val flags = FlagSet.Builder()
+    for (index in 0 until events.size()) {
+        val event = events.get(index)
+        if (event != Player.EVENT_AVAILABLE_COMMANDS_CHANGED) flags.add(event)
+    }
+    return Player.Events(flags.build())
+}
+
 internal fun muxTvAbsoluteSessionSeekIntent(
     currentMediaItemIndex: Int,
     requestedMediaItemIndex: Int?,
@@ -52,27 +63,45 @@ internal fun muxTvAbsoluteSessionSeekIntent(
 /**
  * Session-facing Player adapter that closes the standard Media3 seek bypass.
  *
- * The wrapper deliberately keeps the delegate's observable playback state/listeners untouched.
- * Standard current-item seek methods are intercepted and normalized into the service authority,
- * while the actual position/discontinuity remains owned by the raw ExoPlayer when the coalesced
- * seek is finally applied. This avoids a second optimistic Player state machine in front of the
- * service.
+ * The wrapper deliberately keeps the delegate's observable playback state untouched. Standard
+ * current-item seek methods are intercepted and normalized into the service authority, while the
+ * actual position/discontinuity remains owned by the raw ExoPlayer when the coalesced seek is
+ * finally applied. This avoids a second optimistic Player state machine in front of the service.
  *
- * Default-position / playlist navigation seek commands are filtered from [getAvailableCommands]
- * and also remain defensive no-ops here. MediaSession intersects controller commands with the
- * underlying Player's actual available commands, so controllers do not advertise these unsupported
- * operations.
+ * ForwardingPlayer requires listener callbacks to stay consistent when command availability is
+ * narrowed. This adapter therefore filters both the synchronous command queries and the matching
+ * listener/event callbacks. Default-position / playlist navigation seek methods also remain
+ * defensive no-ops. The result is one coherent session-facing Player contract without forwarding a
+ * hidden seek mutation to ExoPlayer.
  */
 @AndroidXOptIn(UnstableApi::class)
 internal class MuxTvSessionPlayer(
     player: Player,
     private val onSeekIntent: (MuxTvSessionSeekIntent) -> Unit,
 ) : ForwardingPlayer(player) {
+    private val filteredListeners = IdentityHashMap<Player.Listener, Player.Listener>()
+
     override fun getAvailableCommands(): Player.Commands =
         filteredMuxTvSessionCommands(super.getAvailableCommands())
 
     override fun isCommandAvailable(command: Int): Boolean =
         command !in blockedMuxTvSessionSeekCommands && super.isCommandAvailable(command)
+
+    override fun addListener(listener: Player.Listener) {
+        val forwardingListener = synchronized(filteredListeners) {
+            filteredListeners[listener] ?: createCommandFilteringListener(listener).also {
+                filteredListeners[listener] = it
+            }
+        }
+        super.addListener(forwardingListener)
+    }
+
+    override fun removeListener(listener: Player.Listener) {
+        val forwardingListener = synchronized(filteredListeners) {
+            filteredListeners.remove(listener)
+        } ?: listener
+        super.removeListener(forwardingListener)
+    }
 
     override fun seekBack() {
         onSeekIntent(MuxTvSessionSeekIntent.Relative(PlaybackSeekPolicy.DIRECTION_BACKWARD))
@@ -109,4 +138,34 @@ internal class MuxTvSessionPlayer(
     override fun seekToPrevious() = Unit
 
     override fun seekToPreviousMediaItem() = Unit
+
+    private fun createCommandFilteringListener(listener: Player.Listener): Player.Listener {
+        var visibleCommands = getAvailableCommands()
+        var visibleCommandsChangedSinceLastEvents = false
+        return object : Player.Listener by listener {
+            override fun onAvailableCommandsChanged(availableCommands: Player.Commands) {
+                val filtered = filteredMuxTvSessionCommands(availableCommands)
+                if (filtered == visibleCommands) return
+                visibleCommands = filtered
+                visibleCommandsChangedSinceLastEvents = true
+                listener.onAvailableCommandsChanged(filtered)
+            }
+
+            override fun onEvents(player: Player, events: Player.Events) {
+                val includesCommandChange =
+                    events.contains(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)
+                val forwardedEvents = if (
+                    includesCommandChange && !visibleCommandsChangedSinceLastEvents
+                ) {
+                    filteredMuxTvSessionEvents(events)
+                } else {
+                    events
+                }
+                visibleCommandsChangedSinceLastEvents = false
+                if (forwardedEvents.size() > 0) {
+                    listener.onEvents(this@MuxTvSessionPlayer, forwardedEvents)
+                }
+            }
+        }
+    }
 }

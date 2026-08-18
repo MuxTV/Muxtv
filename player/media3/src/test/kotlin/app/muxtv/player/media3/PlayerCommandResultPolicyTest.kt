@@ -1,9 +1,13 @@
 package app.muxtv.player.media3
 
+import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.media3.common.FlagSet
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
+@AndroidXOptIn(UnstableApi::class)
 class MuxTvSessionSeekPolicyTest {
     @Test
     fun `relative intents preserve the existing service direction policy`() {
@@ -88,5 +92,31 @@ class MuxTvSessionSeekPolicyTest {
         blockedMuxTvSessionSeekCommands.forEach { command ->
             assertThat(filtered.contains(command)).isFalse()
         }
+    }
+
+    @Test
+    fun `invisible command event can be removed without dropping real player events`() {
+        val source = Player.Events(
+            FlagSet.Builder()
+                .add(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)
+                .add(Player.EVENT_PLAYBACK_STATE_CHANGED)
+                .build(),
+        )
+
+        val filtered = filteredMuxTvSessionEvents(source)
+
+        assertThat(filtered.contains(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)).isFalse()
+        assertThat(filtered.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)).isTrue()
+    }
+
+    @Test
+    fun `command-only event becomes empty when command change is invisible`() {
+        val source = Player.Events(
+            FlagSet.Builder()
+                .add(Player.EVENT_AVAILABLE_COMMANDS_CHANGED)
+                .build(),
+        )
+
+        assertThat(filteredMuxTvSessionEvents(source).size()).isEqualTo(0)
     }
 }
