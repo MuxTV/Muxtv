@@ -4,7 +4,7 @@
 
 **Goal:** Remove the UI-side seek mutation/coalescing owner and route all private and standard current-item relative/absolute seek requests through one generation-aware service-owned `PlaybackSeekController`.
 
-**Architecture:** Keep the existing typed Media3 custom `SessionCommand` for MuxTV's generation-aware requests. Put a `ForwardingSimpleBasePlayer` in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. UI keeps only provisional HUD state. The deprecated `onPlayerCommandRequest` seek policy is removed.
+**Architecture:** Keep the typed Media3 custom `SessionCommand` for MuxTV's generation-aware requests. Put a thin `ForwardingPlayer` action adapter in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. Observable Player state/discontinuity remains the raw ExoPlayer's state and is not optimistically modeled by another Player layer. UI keeps only provisional HUD state. The deprecated `onPlayerCommandRequest` seek policy is removed.
 
 **Tech Stack:** Kotlin, Coroutines/Flow, AndroidX Media3 1.10.1 session/ExoPlayer, Compose for TV, JUnit/Truth, Android instrumentation.
 
@@ -58,13 +58,14 @@
 - Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
 - Replace focused policy test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlayerCommandResultPolicyTest.kt`
 
-- [x] Wrap the raw service-owned ExoPlayer in `ForwardingSimpleBasePlayer` before passing it to `MediaSession`.
-- [x] Normalize standard `COMMAND_SEEK_BACK`, `COMMAND_SEEK_FORWARD` and current-item absolute seek into semantic service intents.
+- [x] Pass `MuxTvSessionPlayer : ForwardingPlayer`, not the raw ExoPlayer, to `MediaSession`.
+- [x] Intercept standard `seekBack`, `seekForward` and current-item absolute `seekTo` and normalize them into semantic service intents.
 - [x] Bind standard intents to the current service generation and run them through the same `handleSeekRequest()` / `PlaybackSeekController`.
-- [x] Do not delegate intercepted seek operations to the raw ExoPlayer.
-- [x] Remove default-position, cross-item and previous/next seek commands from the session-facing Player state until those semantics are explicitly modeled.
+- [x] Never delegate intercepted seek methods to the raw ExoPlayer.
+- [x] Keep observable Player state/discontinuity delegated to the raw ExoPlayer; do not introduce a second optimistic seek-state machine.
+- [x] Filter default-position, cross-item and previous/next seek commands from the session-facing Player until those semantics are explicitly modeled; keep defensive no-op overrides as a second boundary.
 - [x] Remove deprecated `onPlayerCommandRequest` seek policy and its result helper.
-- [x] Add focused command-mapping/unsupported-shape tests.
+- [x] Add focused current-item/cross-item/negative-target/command-filter tests.
 
 ### Task 5: Architecture and exact-head evidence
 
@@ -75,9 +76,9 @@
 - [x] Verify by code structure that the session is built with `MuxTvSessionPlayer`, not the raw ExoPlayer.
 - [x] Verify no production `PlayerSurfaceContent` path invokes `seekTo`.
 - [x] Verify burst, stale token, replacement/reset, finite boundaries and relative/absolute convergence in the existing focused test set.
-- [ ] Execute the new final-head host validation after the self-hosted runner is available again.
-- [ ] Execute the new final-head Android TV DeviceCurrent including EP-08 external native D-pad and Player overlay/focus journeys.
-- [ ] Merge only when both required **new exact-head** gates are green.
+- [ ] Execute the final-head host validation after the self-hosted runner is available again.
+- [ ] Execute the final-head Android TV DeviceCurrent including EP-08 external native D-pad and Player overlay/focus journeys.
+- [ ] Merge only when both required **final-head** gates are green.
 - [ ] Update #132 after acceptance: mark authority slice accepted; leave measurement/back-buffer/cache work evidence-gated under #27/#109 rather than expanding this PR.
 
-> Runner note: previous host/device successes are evidence for the previous head only. They are useful regression history, but they do not validate the final adapter commit while the self-hosted runner is offline.
+> Runner note: previous host/device successes are evidence for their previous exact head only. They are useful regression history, but they do not validate the final hardening head while the self-hosted/device runner is offline.
