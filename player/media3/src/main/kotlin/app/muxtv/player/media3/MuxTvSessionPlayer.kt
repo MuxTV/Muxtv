@@ -39,6 +39,7 @@ internal fun filteredMuxTvSessionCommands(commands: Player.Commands): Player.Com
         blockedMuxTvSessionSeekCommands.forEach { command -> remove(command) }
     }.build()
 
+@AndroidXOptIn(UnstableApi::class)
 internal fun filteredMuxTvSessionEvents(events: Player.Events): Player.Events {
     val flags = FlagSet.Builder()
     for (index in 0 until events.size()) {
