@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: integration-acceptance-${{ github.ref }}
@@ -84,9 +85,9 @@ jobs:
 
       - name: Upload integration acceptance evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name: integration-acceptance-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: integration-acceptance-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
@@ -94,10 +95,8 @@ jobs:
             .work/evidence/**/*.png
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
-          if-no-files-found: error
-          include-hidden-files: true
-          compression-level: 0
           retention-days: 14
+          github-token: ${{ github.token }}
 
       - name: Reset Android runner state
         if: always()

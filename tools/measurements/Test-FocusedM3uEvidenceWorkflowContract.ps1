@@ -30,7 +30,8 @@ foreach ($requiredToken in @(
     '-M3uSeed 20260728',
     '-Repetitions 5',
     'Finalize-MeasurementSeriesEvidence.ps1',
-    'actions/upload-artifact',
+    'uses: ./.github/actions/upload-evidence-with-retry',
+    'github-token: ${{ github.token }}',
     'if: always()'
 )) {
     if ($content -notmatch [regex]::Escape($requiredToken)) {
@@ -54,6 +55,9 @@ foreach ($forbiddenToken in @(
     if ($content -match [regex]::Escape($forbiddenToken)) {
         throw "Accepted-main focused M3U workflow contains forbidden parallel/cancelling behavior: $forbiddenToken"
     }
+}
+if ($content -match '(?mi)^\s*uses:\s*actions/upload-artifact@') {
+    throw "Accepted-main focused M3U workflow must publish through the shared bounded evidence action, not upload-artifact directly."
 }
 
 $mediumIndex = $content.IndexOf('-M3uProfile medium-10k', [System.StringComparison]::Ordinal)
