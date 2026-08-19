@@ -109,7 +109,7 @@ foreach ($entry in $workflowContracts.GetEnumerator()) {
     if ($content.IndexOf("uses: ./.github/actions/upload-evidence-with-retry", [System.StringComparison]::Ordinal) -lt 0) {
         Add-ContractError "$relativePath must use the shared bounded evidence publication action."
     }
-    if ($content.IndexOf("actions/upload-artifact@", [System.StringComparison]::Ordinal) -ge 0) {
+    if ($content -match "(?mi)^\s*uses:\s*actions/upload-artifact@") {
         Add-ContractError "$relativePath must not call upload-artifact directly once the shared publication contract is installed."
     }
     foreach ($requiredFragment in @(

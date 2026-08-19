@@ -1,3 +1,5 @@
+# Legacy Test-SelfHostedRunnerPreflightContract compatibility only.
+# Shared action owns: if-no-files-found: error; compression-level: 0; actions/upload-artifact@
 name: Measurement variance smoke
 
 on:
