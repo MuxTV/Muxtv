@@ -1,0 +1,197 @@
+name: Upload evidence with bounded retry
+description: Publish immutable CI evidence with bounded retry and post-failure reconciliation.
+
+inputs:
+  name-prefix:
+    description: Immutable artifact name prefix including run identity.
+    required: true
+  path:
+    description: Newline-delimited artifact paths.
+    required: true
+  retention-days:
+    description: Artifact retention in days.
+    required: false
+    default: "7"
+  compression-level:
+    description: upload-artifact compression level.
+    required: false
+    default: "0"
+  include-hidden-files:
+    description: Include hidden evidence files.
+    required: false
+    default: "true"
+  github-token:
+    description: GitHub token with actions:read for reconciliation.
+    required: true
+
+outputs:
+  accepted-artifact-name:
+    description: Exact immutable name selected as accepted evidence.
+    value: ${{ steps.finalize.outputs.artifact_name }}
+  accepted-artifact-id:
+    description: GitHub artifact id selected as accepted evidence.
+    value: ${{ steps.finalize.outputs.artifact_id }}
+  accepted-artifact-digest:
+    description: SHA-256 digest when available from upload or Actions REST metadata.
+    value: ${{ steps.finalize.outputs.artifact_digest }}
+  accepted-attempt:
+    description: Bounded publication attempt selected as accepted evidence.
+    value: ${{ steps.finalize.outputs.attempt }}
+
+runs:
+  using: composite
+  steps:
+    - name: Record secret-free artifact transport diagnostics
+      shell: pwsh
+      run: |
+        & "${{ github.workspace }}/tools/ci/Write-ArtifactTransportDiagnostics.ps1"
+
+    - name: Upload evidence attempt 1
+      id: upload_1
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name-prefix }}-attempt-1
+        path: ${{ inputs.path }}
+        if-no-files-found: error
+        include-hidden-files: ${{ inputs.include-hidden-files }}
+        compression-level: ${{ inputs.compression-level }}
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Reconcile evidence attempt 1
+      id: reconcile_1
+      if: always()
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        $name = "${{ inputs.name-prefix }}-attempt-1"
+        $uploadId = "${{ steps.upload_1.outputs.artifact-id }}"
+        $uploadDigest = "${{ steps.upload_1.outputs.artifact-digest }}"
+        if ("${{ steps.upload_1.outcome }}" -eq "success" -and -not [string]::IsNullOrWhiteSpace($uploadId)) {
+          "accepted=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_id=$uploadId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_digest=$uploadDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "attempt=1" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Artifact attempt 1 accepted directly from upload-artifact output: name=$name id=$uploadId"
+          exit 0
+        }
+
+        try {
+          & "${{ github.workspace }}/tools/ci/Resolve-ArtifactUploadAttempt.ps1" `
+            -UploadOutcome "${{ steps.upload_1.outcome }}" `
+            -UploadArtifactId "$uploadId" `
+            -UploadArtifactDigest "$uploadDigest" `
+            -ArtifactName "$name" `
+            -Repository "${{ github.repository }}" `
+            -RunId "${{ github.run_id }}" `
+            -AttemptNumber 1
+        } catch {
+          Write-Warning "Artifact attempt 1 reconciliation failed internally: $($_.Exception.GetType().Name)"
+          "accepted=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_digest=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "attempt=1" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        }
+
+    - name: Upload evidence attempt 2
+      id: upload_2
+      if: always() && steps.reconcile_1.outputs.accepted != 'true'
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name-prefix }}-attempt-2
+        path: ${{ inputs.path }}
+        if-no-files-found: error
+        include-hidden-files: ${{ inputs.include-hidden-files }}
+        compression-level: ${{ inputs.compression-level }}
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Reconcile evidence attempt 2
+      id: reconcile_2
+      if: always() && steps.reconcile_1.outputs.accepted != 'true'
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        $name = "${{ inputs.name-prefix }}-attempt-2"
+        $uploadId = "${{ steps.upload_2.outputs.artifact-id }}"
+        $uploadDigest = "${{ steps.upload_2.outputs.artifact-digest }}"
+        if ("${{ steps.upload_2.outcome }}" -eq "success" -and -not [string]::IsNullOrWhiteSpace($uploadId)) {
+          "accepted=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_id=$uploadId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_digest=$uploadDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "attempt=2" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Artifact attempt 2 accepted directly from upload-artifact output: name=$name id=$uploadId"
+          exit 0
+        }
+
+        try {
+          & "${{ github.workspace }}/tools/ci/Resolve-ArtifactUploadAttempt.ps1" `
+            -UploadOutcome "${{ steps.upload_2.outcome }}" `
+            -UploadArtifactId "$uploadId" `
+            -UploadArtifactDigest "$uploadDigest" `
+            -ArtifactName "$name" `
+            -Repository "${{ github.repository }}" `
+            -RunId "${{ github.run_id }}" `
+            -AttemptNumber 2
+        } catch {
+          Write-Warning "Artifact attempt 2 reconciliation failed internally: $($_.Exception.GetType().Name)"
+          "accepted=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_digest=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "attempt=2" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        }
+
+    - name: Select accepted evidence artifact
+      id: finalize
+      if: always()
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $accepted = $false
+        $artifactName = ""
+        $artifactId = ""
+        $artifactDigest = ""
+        $attempt = ""
+
+        if ("${{ steps.reconcile_1.outputs.accepted }}" -eq "true") {
+          $accepted = $true
+          $artifactName = "${{ steps.reconcile_1.outputs.artifact_name }}"
+          $artifactId = "${{ steps.reconcile_1.outputs.artifact_id }}"
+          $artifactDigest = "${{ steps.reconcile_1.outputs.artifact_digest }}"
+          $attempt = "1"
+        } elseif ("${{ steps.reconcile_2.outputs.accepted }}" -eq "true") {
+          $accepted = $true
+          $artifactName = "${{ steps.reconcile_2.outputs.artifact_name }}"
+          $artifactId = "${{ steps.reconcile_2.outputs.artifact_id }}"
+          $artifactDigest = "${{ steps.reconcile_2.outputs.artifact_digest }}"
+          $attempt = "2"
+        }
+
+        if (-not $accepted) {
+          throw "No evidence artifact was accepted after 2 bounded attempts."
+        }
+
+        "artifact_name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "artifact_id=$artifactId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "artifact_digest=$artifactDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        "attempt=$attempt" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+        if ($env:GITHUB_STEP_SUMMARY) {
+          @(
+            "### Accepted evidence artifact"
+            ""
+            "- name: ``$artifactName``"
+            "- artifact id: ``$artifactId``"
+            "- bounded attempt: ``$attempt``"
+            "- digest: ``$artifactDigest``"
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+        }
+
+        Write-Host "Accepted evidence artifact: name=$artifactName id=$artifactId attempt=$attempt"
