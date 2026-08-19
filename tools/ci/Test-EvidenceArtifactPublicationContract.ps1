@@ -18,6 +18,7 @@ $diagnosticsRelativePath = "tools\ci\Write-ArtifactTransportDiagnostics.ps1"
 $diagnosticsPath = Join-Path $repositoryRoot $diagnosticsRelativePath
 $resolverRelativePath = "tools\ci\Resolve-ArtifactUploadAttempt.ps1"
 $resolverPath = Join-Path $repositoryRoot $resolverRelativePath
+$legacyCompatibilityMarker = "Legacy Test-SelfHostedRunnerPreflightContract compatibility only."
 
 $workflowContracts = [ordered]@{
     ".github\workflows\self-hosted-validation.yml" = "self-hosted-validation-"
@@ -103,6 +104,9 @@ foreach ($entry in $workflowContracts.GetEnumerator()) {
     }
 
     $content = Get-Content -LiteralPath $workflowPath -Raw
+    if ($content.IndexOf($legacyCompatibilityMarker, [System.StringComparison]::Ordinal) -ge 0) {
+        Add-ContractError "$relativePath must not carry a fake legacy upload compatibility marker; workflow truth must describe the shared publication boundary actually in use."
+    }
     if ($content.IndexOf("actions: read", [System.StringComparison]::Ordinal) -lt 0) {
         Add-ContractError "$relativePath must grant only the additional actions: read permission required to reconcile ambiguous artifact upload failures."
     }
