@@ -98,7 +98,8 @@ class MuxTvPlaybackService : MediaSessionService() {
             reason: Int,
         ) {
             if (reason != Player.DISCONTINUITY_REASON_SEEK) return
-            activeSeekGeneration?.let(mediaSeekController::onSeekConfirmed)
+            val generation = newPosition.mediaItem?.playbackSeekToken()?.generation ?: return
+            mediaSeekController.onSeekConfirmed(generation)
         }
     }
 
