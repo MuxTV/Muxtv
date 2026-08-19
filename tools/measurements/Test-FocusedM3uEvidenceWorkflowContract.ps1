@@ -30,7 +30,8 @@ foreach ($requiredToken in @(
     '-M3uSeed 20260728',
     '-Repetitions 5',
     'Finalize-MeasurementSeriesEvidence.ps1',
-    'actions/upload-artifact',
+    'uses: ./.github/actions/upload-evidence-with-retry',
+    'github-token: ${{ github.token }}',
     'if: always()'
 )) {
     if ($content -notmatch [regex]::Escape($requiredToken)) {
@@ -49,10 +50,11 @@ foreach ($forbiddenToken in @(
     'ForEach-Object -Parallel',
     'Start-Job',
     'Start-ThreadJob',
-    'cancel-in-progress: true'
+    'cancel-in-progress: true',
+    'actions/upload-artifact@'
 )) {
     if ($content -match [regex]::Escape($forbiddenToken)) {
-        throw "Accepted-main focused M3U workflow contains forbidden parallel/cancelling behavior: $forbiddenToken"
+        throw "Accepted-main focused M3U workflow contains forbidden parallel/cancelling/publication behavior: $forbiddenToken"
     }
 }
 

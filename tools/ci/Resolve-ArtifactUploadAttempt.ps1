@@ -86,11 +86,11 @@ for ($lookup = 1; $lookup -le $LookupAttempts; $lookup++) {
             exit 0
         }
 
-        Write-Host "Artifact not visible after reconciliation lookup $lookup/$LookupAttempts: name=$ArtifactName"
+        Write-Host ("Artifact not visible after reconciliation lookup {0}/{1}: name={2}" -f $lookup, $LookupAttempts, $ArtifactName)
     } catch {
         # A reconciliation transport failure does not prove that publication failed. A later unique-name
         # attempt is safe; acceptance still requires one explicit successful/reconciled artifact.
-        Write-Warning "Artifact reconciliation lookup $lookup/$LookupAttempts failed: $($_.Exception.GetType().Name)"
+        Write-Warning ("Artifact reconciliation lookup {0}/{1} failed: {2}" -f $lookup, $LookupAttempts, $_.Exception.GetType().Name)
     }
 
     if ($lookup -lt $LookupAttempts -and $LookupDelaySeconds -gt 0) {

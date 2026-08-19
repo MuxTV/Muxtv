@@ -53,7 +53,8 @@ if (-not (Test-Path -LiteralPath $uploadActionPath -PathType Leaf)) {
         'accepted-attempt',
         'github-token',
         'github.run_id',
-        'github.repository'
+        'github.repository',
+        "if: always() && steps.reconcile_1.outputs.accepted != 'true'"
     )) {
         if ($actionContent.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
             Add-ContractError "Shared evidence upload action is missing required contract fragment: $requiredFragment"
@@ -67,11 +68,29 @@ if (-not (Test-Path -LiteralPath $uploadActionPath -PathType Leaf)) {
     }
 }
 
-if (-not (Test-Path -LiteralPath $diagnosticsPath -PathType Leaf)) {
-    Add-ContractError "Missing secret-free artifact transport diagnostics script: $diagnosticsRelativePath"
-}
-if (-not (Test-Path -LiteralPath $resolverPath -PathType Leaf)) {
-    Add-ContractError "Missing artifact attempt reconciliation script: $resolverRelativePath"
+foreach ($scriptContract in @(
+    @{ Path = $diagnosticsPath; Relative = $diagnosticsRelativePath; Missing = "Missing secret-free artifact transport diagnostics script" },
+    @{ Path = $resolverPath; Relative = $resolverRelativePath; Missing = "Missing artifact attempt reconciliation script" }
+)) {
+    if (-not (Test-Path -LiteralPath $scriptContract.Path -PathType Leaf)) {
+        Add-ContractError "$($scriptContract.Missing): $($scriptContract.Relative)"
+        continue
+    }
+
+    $tokens = $null
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile(
+        $scriptContract.Path,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    foreach ($parseError in @($parseErrors)) {
+        Add-ContractError ("{0}:{1}:{2} {3}" -f `
+            $scriptContract.Relative, `
+            $parseError.Extent.StartLineNumber, `
+            $parseError.Extent.StartColumnNumber, `
+            $parseError.Message)
+    }
 }
 
 foreach ($entry in $workflowContracts.GetEnumerator()) {
