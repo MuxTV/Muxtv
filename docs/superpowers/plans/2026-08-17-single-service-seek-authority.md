@@ -1,175 +1,139 @@
 # Single Service-Owned Seek Authority Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Goal:** Remove UI-side seek mutation/coalescing ownership and route private plus standard current-item relative/absolute seek requests through one generation-aware service-owned `PlaybackSeekController`, with authoritative service-result evidence and replacement-safe seek confirmation.
 
-**Goal:** Remove the UI-side seek mutation/coalescing owner and route all private and standard current-item relative/absolute seek requests through one generation-aware service-owned `PlaybackSeekController`, with authoritative service-result evidence and replacement-safe seek confirmation.
-
-**Architecture:** Keep the typed Media3 custom `SessionCommand` for MuxTV's generation-aware requests. Put a thin `ForwardingPlayer` action adapter in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. Observable Player state/discontinuity remains the raw ExoPlayer's state and is not optimistically modeled by another Player layer. UI keeps only provisional HUD state. Native-input submission and service acceptance are separate phases. The existing public/test `accepted` semantic tag is retained, but after hardening it is emitted only after `PlaybackSeekResult.Accepted`; provisional `submitted` is not published as an authoritative remote-input outcome. Seek confirmation is attributed from the discontinuity MediaItem generation rather than the service's current generation.
+**Architecture:** Keep the typed Media3 custom `SessionCommand` for MuxTV generation-aware requests. Put a thin `ForwardingPlayer` action adapter in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. Observable Player state/discontinuity remains raw ExoPlayer state. UI owns only provisional HUD state. Native-input submission and service acceptance are separate phases. Seek confirmation is attributed from the discontinuity MediaItem generation rather than the service's current generation.
 
 **Tech Stack:** Kotlin, Coroutines/Flow, AndroidX Media3 1.10.1 session/ExoPlayer, Compose for TV, JUnit/Truth, Android instrumentation.
 
 **Spec:** `docs/superpowers/specs/2026-08-17-single-service-seek-authority-design.md`
 
-## Global Constraints
+## Global constraints
 
 - One process-owned `ExoPlayer` remains owned by `MuxTvPlaybackService`.
 - One production seek mutation/coalescing authority remains `PlaybackSeekController` inside the service.
 - No LoadControl, back-buffer, `SimpleCache`, codec, FFmpeg or performance-policy work in this PR.
 - UI may keep provisional HUD state but may not call a Media3 seek mutation directly.
 - Playback generation remains process-local, opaque, non-persistent and secret-free.
-- Exact-head evidence is valid only for the exact commit tested; any hardening commit invalidates prior final-head acceptance until rerun.
+- Exact-head evidence is valid only for the exact commit tested; any code/doc commit after an acceptance run invalidates final-head acceptance.
+- Final execution evidence belongs in PR metadata so recording run IDs does not mutate the already-tested repository head.
 
 ---
 
-### Task 1: Define seek identity and session contract
+## Task 1: Define seek identity and session contract — COMPLETE
 
 **Files:**
-- Create: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSeekContract.kt`
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackSessionContract.kt`
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekContractTest.kt`
+- `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSeekContract.kt`
+- `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackSessionContract.kt`
+- `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekContractTest.kt`
 
 - [x] Add opaque `PlaybackSeekToken(mediaId, generation)` and relative/absolute request/result types.
 - [x] Add strict custom-command bundle encoding/parsing and typed policy result encoding/parsing.
 - [x] Reject extra/missing keys, blank media IDs, invalid directions, non-positive generations and negative absolute targets.
 - [x] Keep normal policy rejection in successful transport payload; reserve Media3 error codes for transport/permission errors.
 
-### Task 2: Add real install generation and one service scheduler
+## Task 2: Add real install generation and one service scheduler — COMPLETE
 
 **Files:**
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackMediaSourceFactory.kt`
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSeekController.kt`
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekControllerTest.kt`
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekContractTest.kt`
+- `PlaybackMediaSourceFactory.kt`
+- `PlaybackSeekController.kt`
+- `MuxTvPlaybackService.kt`
+- controller/contract unit tests
 
 - [x] Assign a monotonically increasing process-local seek generation on every installed MediaSource.
-- [x] Publish the generation in safe MediaMetadata extras so a connected controller can obtain an opaque token.
-- [x] Extend `PlaybackSeekController` with absolute-target requests sharing the existing pending-target/coalesce scheduler.
-- [x] Implement one service `handleSeekRequest()` that validates active token, command availability, live/finite duration and position before scheduling.
-- [x] Route the private custom command through that function.
+- [x] Publish generation in safe MediaMetadata extras so controllers can obtain an opaque token.
+- [x] Share one pending-target/coalesce scheduler for relative and absolute requests.
+- [x] Validate active token, command availability, live/finite duration and current position in one service `handleSeekRequest()`.
+- [x] Route private custom commands through that function.
 - [x] Reset generation/controller state on replacement/stop.
 
-### Task 3: Remove UI mutation ownership
+## Task 3: Remove UI mutation ownership — COMPLETE
 
 **Files:**
-- Modify: `feature/player/src/main/kotlin/app/muxtv/feature/player/PlayerSurfaceContent.kt`
-- Test: existing player/app Android journeys.
+- `feature/player/src/main/kotlin/app/muxtv/feature/player/PlayerSurfaceContent.kt`
 
-- [x] Delete the UI-owned `PlaybackSeekController` and its `controller.seekTo(targetMs)` callback.
-- [x] Keep only immediate provisional HUD target state using the explicit 10s step policy; no UI coalesce quiet-window.
-- [x] Send every locally admissible request through the typed service custom command.
-- [x] Reconcile accepted target/rejection asynchronously and use Media3 discontinuity only for presentation confirmation.
+- [x] Remove the UI-owned `PlaybackSeekController` and direct Media3 seek mutation callback.
+- [x] Keep immediate provisional HUD target state using explicit 10s step policy; no UI quiet-window/coalescing authority.
+- [x] Send every locally admissible request through the typed service command.
+- [x] Reconcile accepted target/rejection asynchronously; use Media3 discontinuity only for presentation confirmation.
 - [x] Keep external native D-pad and Compose preview-key paths converged on the same request function.
 
-### Task 4: Close the standard Media3 Player-command bypass
+## Task 4: Close the standard Media3 Player-command bypass — COMPLETE
 
 **Files:**
-- Create: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvSessionPlayer.kt`
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlayerCommandResultPolicyTest.kt`
-- Test: `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/MuxTvSessionPlayerInstrumentedTest.kt`
+- `MuxTvSessionPlayer.kt`
+- `MuxTvPlaybackService.kt`
+- `MuxTvSessionPlayerInstrumentedTest.kt`
+- `PlayerCommandResultPolicyTest.kt`
 
-- [x] Pass `MuxTvSessionPlayer : ForwardingPlayer`, not the raw ExoPlayer, to `MediaSession`.
-- [x] Intercept standard `seekBack`, `seekForward` and current-item absolute `seekTo` and normalize them into semantic service intents.
-- [x] Bind standard intents to the current service generation and run them through the same `handleSeekRequest()` / `PlaybackSeekController`.
-- [x] Never delegate intercepted seek methods to the raw ExoPlayer.
-- [x] Keep observable Player state/discontinuity delegated to the raw ExoPlayer; do not introduce a second optimistic seek-state machine.
-- [x] Filter default-position, cross-item and previous/next seek commands from the session-facing Player until those semantics are explicitly modeled; keep defensive no-op overrides as a second boundary.
-- [x] Remove deprecated `onPlayerCommandRequest` seek policy and its result helper.
-- [x] Add focused current-item/cross-item/negative-target/command-filter tests.
+- [x] Pass `MuxTvSessionPlayer : ForwardingPlayer`, not raw ExoPlayer, to `MediaSession`.
+- [x] Intercept `seekBack`, `seekForward` and current-item absolute `seekTo` and normalize them into semantic service intents.
+- [x] Bind standard intents to the current service generation and same `handleSeekRequest()` / `PlaybackSeekController`.
+- [x] Never delegate intercepted seek mutations to raw ExoPlayer.
+- [x] Keep observable Player state/discontinuity delegated to raw ExoPlayer; do not create a second optimistic seek-state machine.
+- [x] Filter default-position, cross-item and previous/next seek commands until explicitly modeled; keep defensive no-op overrides.
+- [x] Remove deprecated `onPlayerCommandRequest` seek policy path.
+- [x] Cover current-item/cross-item/negative-target/available-command behavior.
 
-### Task 5: Separate native-input submission from authoritative service acceptance
-
-**Files:**
-- Modify: `feature/player/src/main/kotlin/app/muxtv/feature/player/PlayerSurfaceContent.kt`
-- Add: `feature/player/src/test/kotlin/app/muxtv/feature/player/SeekInputOutcomeTest.kt`
-- Reuse unchanged acceptance journey: `app/tv/src/androidTest/kotlin/app/muxtv/external/ExternalPlaybackRangeJourneyTest.kt`
-
-**Interfaces:**
-- Consumes: `PlaybackSeekResult.Accepted` / `PlaybackSeekResult.Rejected` from the typed custom command.
-- Produces: provisional local `submitted` state and authoritative existing `accepted`/typed rejection evidence without changing D-pad event-consumption semantics.
-
-- [x] **RED contract authored before production change.**
-
-  `SeekInputOutcomeTest` requires:
-
-  - `SUBMITTED("submitted")` consumes an admissible key but does not publish a remote semantic outcome;
-  - `SERVICE_ACCEPTED("accepted")` preserves the existing evidence tag and is not the immediate dispatch result;
-  - local typed rejections remain diagnosable and do not consume the seek dispatch.
-
-- [x] **RED observed in CI.**
-
-  Self-hosted validation run `32277087227` on test-only head `c57e1ff6f43eb336f0fbae508855800be228c231` failed in `:feature:player:compileDebugUnitTestKotlin` specifically because production still lacked `SUBMITTED`, `SERVICE_ACCEPTED` and `handlesDispatch`. Checkout, provenance and runner preflight had succeeded, so this was a contract RED rather than infrastructure failure.
-
-- [x] **GREEN implementation authored.**
-
-  `PlayerSurfaceContent` now:
-
-  - returns/records provisional `SUBMITTED` for locally admissible input;
-  - does not publish `submitted` through `PlayerRemoteInputHost.lastSemanticOutcome`;
-  - emits the existing `accepted` semantic tag only after `PlaybackSeekResult.Accepted`;
-  - keeps typed rejection and timeout outcomes bounded and diagnosable;
-  - consumes the D-pad event on `SUBMITTED`, not on later service completion.
-
-- [ ] **Verify GREEN on the final integrated head.**
-
-  Required final evidence includes `:feature:player` host tests and the unchanged EP-08 external native-D-pad journey. Because the journey still waits for `external-seek-input-accepted`, it now proves service acceptance rather than immediate local submission.
-
-### Task 6: Attribute seek confirmation to the discontinuity MediaItem generation
+## Task 5: Separate input submission from authoritative service acceptance — IMPLEMENTED
 
 **Files:**
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSeekTokenProjection.kt`
-- Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
-- Add: `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/PlaybackSeekTokenProjectionInstrumentedTest.kt`
-- Reuse: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekControllerTest.kt`
+- `PlayerSurfaceContent.kt`
+- `SeekInputOutcomeTest.kt`
+- existing EP-08 `ExternalPlaybackRangeJourneyTest.kt`
 
-**Interfaces:**
-- Consumes: generation stored in each installed `MediaItem.mediaMetadata.extras`.
-- Produces: discontinuity confirmation carrying the event MediaItem's generation; stale-generation confirmation is ignored by `PlaybackSeekController`.
+- [x] Author RED contract first.
+- [x] Observe RED on test-only head `c57e1ff6f43eb336f0fbae508855800be228c231` / host run `32277087227`: compile failed specifically because production lacked `SUBMITTED`, `SERVICE_ACCEPTED` and `handlesDispatch` after checkout/provenance/preflight succeeded.
+- [x] Implement provisional `SUBMITTED` that consumes the local event but does not publish authoritative remote semantic acceptance.
+- [x] Publish existing `accepted` semantic tag only after `PlaybackSeekResult.Accepted`.
+- [x] Keep typed rejection/timeout outcomes bounded and diagnosable.
+- [x] Keep D-pad consumption bound to submission, not asynchronous service completion.
+- [ ] Final integrated exact-head host/device verification. The unchanged EP-08 journey must still wait for `external-seek-input-accepted`, proving service acceptance rather than immediate UI dispatch.
 
-- [x] **RED contract authored before production change.**
-
-  `PlaybackSeekTokenProjectionInstrumentedTest` constructs the same media ID with different install generations and requires distinct tokens; missing/non-positive generations must fail closed.
-
-- [ ] **Standalone RED execution was not observed.**
-
-  The Android TV run for test-only head `c57e1ff6f43eb336f0fbae508855800be228c231` was cancelled by subsequent PR pushes under workflow concurrency before this instrumentation RED could execute independently. Do not rewrite history as if that device RED ran. The test was present before the GREEN implementation; final exact-head instrumentation remains mandatory.
-
-- [x] **GREEN implementation authored.**
-
-  - Added internal `MediaItem.playbackSeekToken()` and made `Player.currentPlaybackSeekToken()` delegate to it.
-  - `seekConfirmationListener` now derives generation from `newPosition.mediaItem` and fails closed when provenance is missing/malformed.
-  - It no longer substitutes `activeSeekGeneration` for unknown event provenance.
-  - Existing controller behavior still rejects foreign-generation confirmation.
-
-- [ ] **Verify GREEN on final integrated host/device evidence.**
-
-  Required evidence includes player unit tests plus `:player:media3` instrumentation so the pinned Media3 API and real Android `PositionInfo.mediaItem` semantics are compiled/executed.
-
-### Task 7: Reconcile branch provenance and regenerate final evidence
+## Task 6: Attribute confirmation to discontinuity MediaItem generation — IMPLEMENTED
 
 **Files:**
-- Modify: this plan execution state.
-- Update: PR #175 body/evidence references.
-- Update: Issue #132 only after merge acceptance.
+- `PlaybackSeekTokenProjection.kt`
+- `MuxTvPlaybackService.kt`
+- `PlaybackSeekTokenProjectionInstrumentedTest.kt`
+- existing `PlaybackSeekControllerTest.kt`
 
-- [x] Merge accepted `main@7462338fd5514ef30b268ea250b6d92ecc71b27e` into the PR branch.
+- [x] Author the generation-projection regression contract before GREEN implementation.
+- [x] Preserve the historical fact that a standalone device RED was not observed: the test-only device run was cancelled by later PR pushes before instrumentation execution.
+- [x] Add `MediaItem.playbackSeekToken()`; `Player.currentPlaybackSeekToken()` delegates to it.
+- [x] Derive seek-confirmation generation from `newPosition.mediaItem` and fail closed when provenance is missing/malformed.
+- [x] Do not substitute `activeSeekGeneration` for unknown event provenance.
+- [x] Preserve controller rejection of foreign-generation confirmations.
+- [ ] Final integrated exact-head player instrumentation verification on the restacked head.
 
-  Merge commit `a1e07160babfe26278d770a20dcdf0d4ce6f8f4e` records `main` as the second parent. The merge tree is byte-identical to the pre-merge PR tree because the checkpoint content was already present; GitHub compare now reports `behind_by=0` with merge-base equal to accepted main.
+## Task 7: Integrate with accepted main and regenerate final evidence — IN PROGRESS
 
-- [ ] Run exact-final-head host validation.
-- [ ] Run exact-final-head Android TV DeviceCurrent including EP-08 external native D-pad and Player overlay/focus journeys.
-- [ ] Confirm both required checks and artifacts are bound to the same final head.
-- [ ] Obtain at least one independent submitted review for the player/session/service boundary.
-- [ ] Merge only after repository review/branch policy is satisfied.
-- [ ] Update #132 after acceptance: mark only the authority slice accepted; keep measurement/back-buffer/cache work evidence-gated under #27/#109.
+The earlier branch was valid against the pre-stabilization accepted main but accumulated unrelated accepted-main commits. On 2026-08-19 it was restacked onto the current accepted product/CI baseline without replaying or overwriting accepted subtrees.
 
-## Historical evidence
+Current integration state before final acceptance:
 
-`5f84c2a123c8e5840365668910bffdafd794f18e` previously passed:
+- [x] Accepted CI evidence publication #176 is in main.
+- [x] Accepted user-unlocked lifecycle #177 is in main.
+- [x] Restack #175 onto `main@c9a840348f175c2d7665aec2a56916e2fb81cea3` with merge-base equal to current main.
+- [x] Verify the restacked diff remains exactly the 19 seek-authority plan/spec/player files and does not revert #176/#177.
+- [x] Independent adversarial self-review of service authority, standard-command adapter, command-set/event consistency, token provenance, stale-generation handling and UI acceptance semantics found no runtime merge blocker.
+- [x] Reconcile this execution plan so it no longer claims already-implemented work is pending or requires a separate human reviewer.
+- [ ] Run exact-final-head host validation after this documentation reconciliation commit.
+- [ ] Run exact-final-head Android TV DeviceCurrent. This run is mandatory because accepted main now contains product lifecycle changes; older #175 device evidence is regression history only, not integrated acceptance.
+- [ ] Confirm required checks/artifacts are bound to the same final head and no later repository commit invalidates them.
+- [ ] Record final independent self-review verdict and exact run/artifact references in PR #175 metadata without changing the tested repository head.
+- [ ] Squash-merge only with `expected_head_sha` guard.
+- [ ] Update Issue #132 after merge: mark only the single-service authority slice accepted; keep measurement/back-buffer/cache/Doctor work evidence-gated under #27/#109 or focused follow-ups.
 
-- self-hosted validation run `32182646499`;
-- Android TV focused device run `32182646564` / API 36 DeviceCurrent;
-- `:player:media3:connectedDebugAndroidTest`: 27 tests, 0 failures/errors/skips.
+## Known non-blocking follow-up debt
 
-These runs remain useful regression history only; they are not final acceptance evidence after Tasks 5–7 changed the branch head.
+These are deliberately not bundled into this authority slice unless final integrated evidence proves otherwise:
+
+- `PlaybackSeekController` uses an untyped internal generation key (`Any`) although production generation is monotonic `Long`; tighten type safety separately if useful.
+- UI may have one suspended custom-command waiter per locally admissible repeat even though service mutation/coalescing is bounded; waiter/request traffic can be bounded separately without restoring UI mutation ownership.
+- seek-apply exceptions currently converge through controller timeout rather than a typed Doctor `SEEK_FAILED` observation; add typed diagnostic observation as a focused follow-up.
+- performance work (back-buffer, LoadControl tuning, disk cache) remains measurement-gated and is outside this PR.
+
+## Historical evidence — regression history only
+
+Earlier heads passed host and Android TV validation, including Media3 instrumentation and external-player journeys. Those runs prove the implementation had executable coverage during development, but they are **not final merge evidence** after accepted-main integration. Final acceptance is only the exact restacked head produced after this plan reconciliation, and exact run/artifact identifiers are recorded in PR #175 metadata rather than by mutating this file after the run.
