@@ -4,7 +4,7 @@
 
 **Goal:** Remove the UI-side seek mutation/coalescing owner and route all private and standard current-item relative/absolute seek requests through one generation-aware service-owned `PlaybackSeekController`, with authoritative service-result evidence and replacement-safe seek confirmation.
 
-**Architecture:** Keep the typed Media3 custom `SessionCommand` for MuxTV's generation-aware requests. Put a thin `ForwardingPlayer` action adapter in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. Observable Player state/discontinuity remains the raw ExoPlayer's state and is not optimistically modeled by another Player layer. UI keeps only provisional HUD state. Native-input handling and service acceptance are separate evidence phases. Seek confirmation is attributed from the discontinuity's MediaItem generation rather than the service's current generation.
+**Architecture:** Keep the typed Media3 custom `SessionCommand` for MuxTV's generation-aware requests. Put a thin `ForwardingPlayer` action adapter in front of the raw service-owned `ExoPlayer` for standard Media3 controls. Both transports normalize into the same service `handleSeekRequest()`. Observable Player state/discontinuity remains the raw ExoPlayer's state and is not optimistically modeled by another Player layer. UI keeps only provisional HUD state. Native-input submission and service acceptance are separate phases. The existing public/test `accepted` semantic tag is retained, but after hardening it is emitted only after `PlaybackSeekResult.Accepted`; provisional `submitted` is not published as an authoritative remote-input outcome. Seek confirmation is attributed from the discontinuity MediaItem generation rather than the service's current generation.
 
 **Tech Stack:** Kotlin, Coroutines/Flow, AndroidX Media3 1.10.1 session/ExoPlayer, Compose for TV, JUnit/Truth, Android instrumentation.
 
@@ -78,95 +78,73 @@
 - [x] Remove deprecated `onPlayerCommandRequest` seek policy and its result helper.
 - [x] Add focused current-item/cross-item/negative-target/command-filter tests.
 
-### Task 5: Separate native-input handling from authoritative service acceptance
+### Task 5: Separate native-input submission from authoritative service acceptance
 
 **Files:**
 - Modify: `feature/player/src/main/kotlin/app/muxtv/feature/player/PlayerSurfaceContent.kt`
-- Modify: `app/tv/src/androidTest/kotlin/app/muxtv/external/ExternalPlaybackRangeJourneyTest.kt`
-- Test: `feature/player/src/test/kotlin/app/muxtv/feature/player/PlayerRemoteInputHostTest.kt` only if host semantics need additional coverage.
+- Add: `feature/player/src/test/kotlin/app/muxtv/feature/player/SeekInputOutcomeTest.kt`
+- Reuse unchanged acceptance journey: `app/tv/src/androidTest/kotlin/app/muxtv/external/ExternalPlaybackRangeJourneyTest.kt`
 
 **Interfaces:**
 - Consumes: `PlaybackSeekResult.Accepted` / `PlaybackSeekResult.Rejected` from the typed custom command.
-- Produces: distinct provisional `submitted` and authoritative `service-accepted`/typed rejection evidence without changing D-pad event-consumption semantics.
+- Produces: provisional local `submitted` state and authoritative existing `accepted`/typed rejection evidence without changing D-pad event-consumption semantics.
 
-- [ ] **Step 1: RED — require authoritative service acceptance in EP-08.**
+- [x] **RED contract authored before production change.**
 
-  Update `ExternalPlaybackRangeJourneyTest` so the D-pad journey does not treat the immediate native dispatch result as service acceptance. The test must wait for `external-seek-input-service-accepted` and treat `external-seek-input-submitted` only as transport/provisional evidence.
+  `SeekInputOutcomeTest` requires:
 
-- [ ] **Step 2: Run focused Android test and verify RED.**
+  - `SUBMITTED("submitted")` consumes an admissible key but does not publish a remote semantic outcome;
+  - `SERVICE_ACCEPTED("accepted")` preserves the existing evidence tag and is not the immediate dispatch result;
+  - local typed rejections remain diagnosable and do not consume the seek dispatch.
 
-  Run:
+- [x] **RED observed in CI.**
 
-  ```text
-  ./gradlew :app:tv:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.external.ExternalPlaybackRangeJourneyTest
-  ```
+  Self-hosted validation run `32277087227` on test-only head `c57e1ff6f43eb336f0fbae508855800be228c231` failed in `:feature:player:compileDebugUnitTestKotlin` specifically because production still lacked `SUBMITTED`, `SERVICE_ACCEPTED` and `handlesDispatch`. Checkout, provenance and runner preflight had succeeded, so this was a contract RED rather than infrastructure failure.
 
-  Expected: the seek journey fails because production currently emits `accepted` immediately from `requestSeek()` and has no `service-accepted` semantic outcome.
+- [x] **GREEN implementation authored.**
 
-- [ ] **Step 3: GREEN — split submitted from service result.**
+  `PlayerSurfaceContent` now:
 
-  In `PlayerSurfaceContent`:
+  - returns/records provisional `SUBMITTED` for locally admissible input;
+  - does not publish `submitted` through `PlayerRemoteInputHost.lastSemanticOutcome`;
+  - emits the existing `accepted` semantic tag only after `PlaybackSeekResult.Accepted`;
+  - keeps typed rejection and timeout outcomes bounded and diagnosable;
+  - consumes the D-pad event on `SUBMITTED`, not on later service completion.
 
-  - add `SUBMITTED("submitted")` and `SERVICE_ACCEPTED("service-accepted")` outcomes;
-  - locally admissible D-pad input sets provisional HUD state, launches the typed request and returns/records `SUBMITTED` for event consumption;
-  - only `PlaybackSeekResult.Accepted` records `SERVICE_ACCEPTED`;
-  - `PlaybackSeekResult.Rejected` and timeout continue to record bounded typed rejection outcomes;
-  - `handleSeekInput()` returns `true` for `SUBMITTED` without re-labeling it as authoritative acceptance.
+- [ ] **Verify GREEN on the final integrated head.**
 
-- [ ] **Step 4: Run focused feature + external tests and verify GREEN.**
-
-  Run:
-
-  ```text
-  ./gradlew :feature:player:testDebugUnitTest
-  ./gradlew :app:tv:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.external.ExternalPlaybackRangeJourneyTest
-  ```
-
-  Expected: input is handled immediately; EP-08 passes only after the service returns `PlaybackSeekResult.Accepted`.
+  Required final evidence includes `:feature:player` host tests and the unchanged EP-08 external native-D-pad journey. Because the journey still waits for `external-seek-input-accepted`, it now proves service acceptance rather than immediate local submission.
 
 ### Task 6: Attribute seek confirmation to the discontinuity MediaItem generation
 
 **Files:**
 - Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSeekTokenProjection.kt`
 - Modify: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
-- Add/modify test: `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/PlaybackSeekCommandCodecTest.kt` or a focused token-projection instrumentation test.
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekControllerTest.kt`
+- Add: `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/PlaybackSeekTokenProjectionInstrumentedTest.kt`
+- Reuse: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackSeekControllerTest.kt`
 
 **Interfaces:**
 - Consumes: generation stored in each installed `MediaItem.mediaMetadata.extras`.
 - Produces: discontinuity confirmation carrying the event MediaItem's generation; stale-generation confirmation is ignored by `PlaybackSeekController`.
 
-- [ ] **Step 1: RED — prove event-media generation is the confirmation source.**
+- [x] **RED contract authored before production change.**
 
-  Add a focused instrumentation test that constructs two MediaItems with the same `mediaId` but different seek generations and proves token projection distinguishes them. Keep the existing controller test proving a foreign generation cannot complete an applying seek.
+  `PlaybackSeekTokenProjectionInstrumentedTest` constructs the same media ID with different install generations and requires distinct tokens; missing/non-positive generations must fail closed.
 
-- [ ] **Step 2: Run focused test and verify RED.**
+- [ ] **Standalone RED execution was not observed.**
 
-  Run:
+  The Android TV run for test-only head `c57e1ff6f43eb336f0fbae508855800be228c231` was cancelled by subsequent PR pushes under workflow concurrency before this instrumentation RED could execute independently. Do not rewrite history as if that device RED ran. The test was present before the GREEN implementation; final exact-head instrumentation remains mandatory.
 
-  ```text
-  ./gradlew :player:media3:connectedDebugAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.player.media3.PlaybackSeekCommandCodecTest
-  ```
+- [x] **GREEN implementation authored.**
 
-  Expected: RED until MediaItem-level seek-token projection exists.
+  - Added internal `MediaItem.playbackSeekToken()` and made `Player.currentPlaybackSeekToken()` delegate to it.
+  - `seekConfirmationListener` now derives generation from `newPosition.mediaItem` and fails closed when provenance is missing/malformed.
+  - It no longer substitutes `activeSeekGeneration` for unknown event provenance.
+  - Existing controller behavior still rejects foreign-generation confirmation.
 
-- [ ] **Step 3: GREEN — project token from MediaItem and fail closed.**
+- [ ] **Verify GREEN on final integrated host/device evidence.**
 
-  Add an internal `MediaItem.playbackSeekToken()` projection and make `Player.currentPlaybackSeekToken()` delegate to it. In `seekConfirmationListener`, derive the generation from `newPosition.mediaItem`; if it is absent or malformed, do not confirm. Never substitute `activeSeekGeneration` for unknown event provenance.
-
-- [ ] **Step 4: Run controller + Android focused tests and verify GREEN.**
-
-  Run:
-
-  ```text
-  ./gradlew :player:media3:testDebugUnitTest
-  ./gradlew :player:media3:connectedDebugAndroidTest
-  ```
-
-  Expected: stale/foreign generation remains ignored and valid current-generation discontinuity completes normally.
+  Required evidence includes player unit tests plus `:player:media3` instrumentation so the pinned Media3 API and real Android `PositionInfo.mediaItem` semantics are compiled/executed.
 
 ### Task 7: Reconcile branch provenance and regenerate final evidence
 
@@ -175,9 +153,12 @@
 - Update: PR #175 body/evidence references.
 - Update: Issue #132 only after merge acceptance.
 
-- [ ] Rebase/restack or merge the accepted `main@7462338fd5514ef30b268ea250b6d92ecc71b27e` checkpoint into the PR branch so it is no longer behind main.
-- [ ] Run exact-new-head host validation.
-- [ ] Run exact-new-head Android TV DeviceCurrent including EP-08 external native D-pad and Player overlay/focus journeys.
+- [x] Merge accepted `main@7462338fd5514ef30b268ea250b6d92ecc71b27e` into the PR branch.
+
+  Merge commit `a1e07160babfe26278d770a20dcdf0d4ce6f8f4e` records `main` as the second parent. The merge tree is byte-identical to the pre-merge PR tree because the checkpoint content was already present; GitHub compare now reports `behind_by=0` with merge-base equal to accepted main.
+
+- [ ] Run exact-final-head host validation.
+- [ ] Run exact-final-head Android TV DeviceCurrent including EP-08 external native D-pad and Player overlay/focus journeys.
 - [ ] Confirm both required checks and artifacts are bound to the same final head.
 - [ ] Obtain at least one independent submitted review for the player/session/service boundary.
 - [ ] Merge only after repository review/branch policy is satisfied.
@@ -191,4 +172,4 @@
 - Android TV focused device run `32182646564` / API 36 DeviceCurrent;
 - `:player:media3:connectedDebugAndroidTest`: 27 tests, 0 failures/errors/skips.
 
-These runs remain useful regression history but cease to be final acceptance evidence as soon as Task 5 or Task 6 changes the branch head.
+These runs remain useful regression history only; they are not final acceptance evidence after Tasks 5–7 changed the branch head.
