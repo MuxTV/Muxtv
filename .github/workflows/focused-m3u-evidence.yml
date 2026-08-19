@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: focused-m3u-manual-stress
@@ -137,18 +138,16 @@ jobs:
 
       - name: Upload focused M3U evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name: focused-m3u-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: focused-m3u-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             core/testing/build/measurements/*.json
-          if-no-files-found: error
-          include-hidden-files: true
-          compression-level: 0
           retention-days: 30
+          github-token: ${{ github.token }}
 
       - name: Reset Android runner state
         if: always()
