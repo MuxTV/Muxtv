@@ -1,4 +1,5 @@
-[CmdletBinding()]
+[CmdletBinding()
+]
 param()
 
 Set-StrictMode -Version Latest
@@ -90,11 +91,15 @@ foreach ($token in @(
     'runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]',
     'Invoke-BenchmarkDryRun.ps1',
     'Reset-SelfHostedAndroidState.ps1',
-    'actions/upload-artifact'
+    'actions: read',
+    'uses: ./.github/actions/upload-evidence-with-retry'
 )) {
     if ($workflow.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
         throw "Benchmark workflow is missing contract token: $token"
     }
+}
+if ($workflow -match '(?mi)^\s*uses:\s*actions/upload-artifact@') {
+    throw "Benchmark workflow must publish through the shared bounded evidence action."
 }
 
 $benchmarkHarness = Read-RequiredFile "tools\android\Invoke-BenchmarkDryRun.ps1"
