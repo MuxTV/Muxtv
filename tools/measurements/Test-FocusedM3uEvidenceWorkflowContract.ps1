@@ -50,12 +50,14 @@ foreach ($forbiddenToken in @(
     'ForEach-Object -Parallel',
     'Start-Job',
     'Start-ThreadJob',
-    'cancel-in-progress: true',
-    'actions/upload-artifact@'
+    'cancel-in-progress: true'
 )) {
     if ($content -match [regex]::Escape($forbiddenToken)) {
-        throw "Accepted-main focused M3U workflow contains forbidden parallel/cancelling/publication behavior: $forbiddenToken"
+        throw "Accepted-main focused M3U workflow contains forbidden parallel/cancelling behavior: $forbiddenToken"
     }
+}
+if ($content -match '(?mi)^\s*uses:\s*actions/upload-artifact@') {
+    throw "Accepted-main focused M3U workflow must publish through the shared bounded evidence action, not upload-artifact directly."
 }
 
 $mediumIndex = $content.IndexOf('-M3uProfile medium-10k', [System.StringComparison]::Ordinal)
