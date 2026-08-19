@@ -5,21 +5,32 @@ import org.junit.Test
 
 class SeekInputOutcomeTest {
     @Test
-    fun `submitted handles the key while service accepted is a later authority result`() {
+    fun `submitted handles the key without claiming authoritative acceptance`() {
         assertThat(SeekInputOutcome.SUBMITTED.diagnosticTag).isEqualTo("submitted")
         assertThat(SeekInputOutcome.SUBMITTED.handlesDispatch).isTrue()
-
-        assertThat(SeekInputOutcome.SERVICE_ACCEPTED.diagnosticTag)
-            .isEqualTo("service-accepted")
-        assertThat(SeekInputOutcome.SERVICE_ACCEPTED.handlesDispatch).isFalse()
+        assertThat(SeekInputOutcome.SUBMITTED.publishesSemanticOutcome).isFalse()
     }
 
     @Test
-    fun `local rejection does not consume seek dispatch`() {
-        assertThat(SeekInputOutcome.COMMAND_UNAVAILABLE.handlesDispatch).isFalse()
-        assertThat(SeekInputOutcome.UNKNOWN_DURATION.handlesDispatch).isFalse()
-        assertThat(SeekInputOutcome.LIVE_CONTENT.handlesDispatch).isFalse()
-        assertThat(SeekInputOutcome.INVALID_POSITION.handlesDispatch).isFalse()
-        assertThat(SeekInputOutcome.CONTROLLER_REJECTED.handlesDispatch).isFalse()
+    fun `service accepted preserves the existing accepted evidence tag`() {
+        assertThat(SeekInputOutcome.SERVICE_ACCEPTED.diagnosticTag).isEqualTo("accepted")
+        assertThat(SeekInputOutcome.SERVICE_ACCEPTED.handlesDispatch).isFalse()
+        assertThat(SeekInputOutcome.SERVICE_ACCEPTED.publishesSemanticOutcome).isTrue()
+    }
+
+    @Test
+    fun `local rejection does not consume seek dispatch but remains diagnosable`() {
+        val rejections = listOf(
+            SeekInputOutcome.COMMAND_UNAVAILABLE,
+            SeekInputOutcome.UNKNOWN_DURATION,
+            SeekInputOutcome.LIVE_CONTENT,
+            SeekInputOutcome.INVALID_POSITION,
+            SeekInputOutcome.CONTROLLER_REJECTED,
+        )
+
+        rejections.forEach { outcome ->
+            assertThat(outcome.handlesDispatch).isFalse()
+            assertThat(outcome.publishesSemanticOutcome).isTrue()
+        }
     }
 }
