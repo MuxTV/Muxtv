@@ -37,3 +37,9 @@ foreach ($relativePath in $manualEvidenceWorkflows) {
 }
 
 Write-Host "Manual evidence concurrency queue contract passed."
+
+$artifactPublicationContract = Join-Path $PSScriptRoot "Test-EvidenceArtifactPublicationContract.ps1"
+if (-not (Test-Path -LiteralPath $artifactPublicationContract -PathType Leaf)) {
+    throw "Evidence artifact publication contract test was not found."
+}
+& $artifactPublicationContract

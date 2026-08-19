@@ -337,12 +337,11 @@ try {
         $content = Get-WorkflowContent $workflowPath
         foreach ($requiredFragment in @(
             "Assert-SelfHostedRunnerPreflight.ps1",
-            "if-no-files-found: error",
-            "compression-level: 0",
             "persist-credentials: false",
             "muxtv-android",
             "ExpectedRunnerLabels",
-            "actions/upload-artifact@",
+            "actions: read",
+            "uses: ./.github/actions/upload-evidence-with-retry",
             "Reset-SelfHostedAndroidState.ps1"
         )) {
             if ($content.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
@@ -360,10 +359,10 @@ try {
                 throw "Self-hosted workflow interpolates an untrusted branch name into PowerShell: $workflowPath"
             }
         }
-        $uploadIndex = $content.IndexOf("actions/upload-artifact@", [System.StringComparison]::Ordinal)
+        $uploadIndex = $content.IndexOf("uses: ./.github/actions/upload-evidence-with-retry", [System.StringComparison]::Ordinal)
         $cleanupIndex = $content.LastIndexOf("Reset-SelfHostedAndroidState.ps1", [System.StringComparison]::Ordinal)
-        if ($cleanupIndex -lt 0 -or $cleanupIndex -lt $uploadIndex) {
-            throw "Self-hosted workflow does not run Android cleanup after artifact publication: $workflowPath"
+        if ($uploadIndex -lt 0 -or $cleanupIndex -lt 0 -or $cleanupIndex -lt $uploadIndex) {
+            throw "Self-hosted workflow does not run Android cleanup after shared artifact publication: $workflowPath"
         }
     }
 
