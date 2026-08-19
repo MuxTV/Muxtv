@@ -80,8 +80,17 @@ data class PlayerSurfaceAction(
 
 private enum class PlayerSheetKind { AUDIO, SUBTITLE }
 
-private enum class SeekInputOutcome(val diagnosticTag: String) {
-    ACCEPTED("accepted"),
+internal enum class SeekInputOutcome(
+    val diagnosticTag: String,
+    val handlesDispatch: Boolean = false,
+    val publishesSemanticOutcome: Boolean = true,
+) {
+    SUBMITTED(
+        diagnosticTag = "submitted",
+        handlesDispatch = true,
+        publishesSemanticOutcome = false,
+    ),
+    SERVICE_ACCEPTED("accepted"),
     CONTROLS_VISIBLE("controls-visible"),
     SHEET_OPEN("sheet-open"),
     COMMAND_UNAVAILABLE("command-unavailable"),
@@ -166,9 +175,11 @@ fun PlayerSurfaceContent(
     }
 
     fun recordSeekInputOutcome(outcome: SeekInputOutcome): Boolean {
-        remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
+        if (outcome.publishesSemanticOutcome) {
+            remoteInputHost?.recordSemanticOutcome(outcome.diagnosticTag)
+        }
         lastSeekInputOutcome = outcome
-        return outcome == SeekInputOutcome.ACCEPTED
+        return outcome.handlesDispatch
     }
 
     fun requestSeek(direction: Int): SeekInputOutcome {
@@ -221,7 +232,7 @@ fun PlayerSurfaceContent(
                         targetMs = result.targetMs,
                         direction = result.direction,
                     )
-                    recordSeekInputOutcome(SeekInputOutcome.ACCEPTED)
+                    recordSeekInputOutcome(SeekInputOutcome.SERVICE_ACCEPTED)
                 }
                 is PlaybackSeekResult.Rejected -> {
                     provisionalSeekTargetMs = null
@@ -235,7 +246,7 @@ fun PlayerSurfaceContent(
                 }
             }
         }
-        return SeekInputOutcome.ACCEPTED
+        return SeekInputOutcome.SUBMITTED
     }
 
     fun handleSeekInput(direction: Int): Boolean = recordSeekInputOutcome(requestSeek(direction))
