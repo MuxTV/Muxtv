@@ -1,6 +1,7 @@
 package app.muxtv.player.media3
 
 import android.os.Bundle
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 
 /**
@@ -18,15 +19,17 @@ internal fun playbackSeekMetadataExtras(generation: Long): Bundle {
     }
 }
 
-fun Player.currentPlaybackSeekToken(): PlaybackSeekToken? {
-    val mediaItem = currentMediaItem ?: return null
-    val extras = mediaItem.mediaMetadata.extras ?: return null
+internal fun MediaItem.playbackSeekToken(): PlaybackSeekToken? {
+    val extras = mediaMetadata.extras ?: return null
     val generation = extras.getLong(PLAYBACK_SEEK_GENERATION_EXTRA, 0L)
     if (generation <= 0L) return null
     return runCatching {
         PlaybackSeekToken(
-            mediaId = mediaItem.mediaId,
+            mediaId = mediaId,
             generation = generation,
         )
     }.getOrNull()
 }
+
+fun Player.currentPlaybackSeekToken(): PlaybackSeekToken? =
+    currentMediaItem?.playbackSeekToken()
