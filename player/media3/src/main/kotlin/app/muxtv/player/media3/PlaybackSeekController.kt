@@ -9,15 +9,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Kodi-like interaction state for remote seek input, Media3-native execution.
+ * Single service-owned coalescing scheduler for semantic seek requests.
  *
- * Rapid D-pad input immediately updates the virtual target and restarts the coalesce window;
- * exactly one [onApplySeek] fires per burst. New playback generations discard pending/applying
- * state from the previous session: stale generations can never seek new media.
+ * Rapid relative or absolute requests update one virtual target and restart one coalesce window;
+ * exactly one [onApplySeek] fires per burst. New opaque playback generations discard pending or
+ * applying state from the previous installed media so stale requests cannot mutate replacement
+ * playback.
  *
- * The class is deliberately free of Media3 types: generation is an opaque identity supplied by
- * the host (channel id / external session id), and the actual `player.seekTo` is performed by
- * the host callback. All state mutations happen on the [scope] dispatcher.
+ * The class is deliberately free of Media3 types. The service is the host and the only production
+ * callback that ultimately invokes `ExoPlayer.seekTo`.
  */
 class PlaybackSeekController(
     private val scope: CoroutineScope,
@@ -37,10 +37,7 @@ class PlaybackSeekController(
     private var applyJob: Job? = null
     private var lingerJob: Job? = null
 
-    /**
-     * Registers one remote seek request. Returns false when the input was rejected (unknown
-     * duration/non-seekable), so hosts can avoid consuming the key event.
-     */
+    /** Registers one relative seek request. */
     fun onDirectionRequested(
         generation: Any,
         direction: Int,
@@ -50,23 +47,27 @@ class PlaybackSeekController(
         require(direction == DIRECTION_BACKWARD || direction == DIRECTION_FORWARD) {
             "direction must be -1 or +1"
         }
-        if (durationMs == null || durationMs <= 0L || currentPositionMs < 0L) return false
-        if (this.generation != generation) {
-            beginBurst(generation, currentPositionMs)
-        } else if (mutableState.value is SeekControllerState.Applying) {
-            return false
-        }
-        if (pendingTargetMs == UNSET_POSITION) {
-            basePositionMs = currentPositionMs
-        }
+        if (!prepareRequest(generation, currentPositionMs, durationMs)) return false
+        val duration = durationMs ?: return false
         val start = if (pendingTargetMs != UNSET_POSITION) pendingTargetMs else basePositionMs
-        val target = (start + direction * stepMillis).coerceIn(0L, durationMs)
-        pendingTargetMs = target
-        lastTargetMs = target
-        lastDirection = directionOf(target - basePositionMs)
-        mutableState.value = SeekControllerState.Pending(target, lastDirection)
-        scheduleApply(generation)
-        return true
+        val target = (start + direction * stepMillis).coerceIn(0L, duration)
+        return publishPendingTarget(generation, target)
+    }
+
+    /**
+     * Registers one absolute target in the same pending/coalescing path as relative requests.
+     * The target is clamped to the current finite duration.
+     */
+    fun onTargetRequested(
+        generation: Any,
+        targetMs: Long,
+        currentPositionMs: Long,
+        durationMs: Long?,
+    ): Boolean {
+        if (targetMs < 0L) return false
+        if (!prepareRequest(generation, currentPositionMs, durationMs)) return false
+        val duration = durationMs ?: return false
+        return publishPendingTarget(generation, targetMs.coerceIn(0L, duration))
     }
 
     /** Called by the host when Media3 reports the applied seek (position discontinuity). */
@@ -79,7 +80,7 @@ class PlaybackSeekController(
         scheduleIdle(hudLingerMillis)
     }
 
-    /** Drops all pending/applying/linger state. Call on session replace or composition teardown. */
+    /** Drops all pending/applying/linger state. Call on playback replacement or terminal stop. */
     fun reset() {
         applyJob?.cancel()
         applyJob = null
@@ -93,9 +94,37 @@ class PlaybackSeekController(
         mutableState.value = SeekControllerState.Idle
     }
 
+    private fun prepareRequest(
+        generation: Any,
+        currentPositionMs: Long,
+        durationMs: Long?,
+    ): Boolean {
+        if (durationMs == null || durationMs <= 0L || currentPositionMs < 0L) return false
+        if (this.generation != generation) {
+            beginBurst(generation, currentPositionMs)
+        } else if (mutableState.value is SeekControllerState.Applying) {
+            return false
+        }
+        if (pendingTargetMs == UNSET_POSITION) {
+            basePositionMs = currentPositionMs
+        }
+        return true
+    }
+
+    private fun publishPendingTarget(generation: Any, targetMs: Long): Boolean {
+        pendingTargetMs = targetMs
+        lastTargetMs = targetMs
+        lastDirection = directionOf(targetMs - basePositionMs)
+        mutableState.value = SeekControllerState.Pending(targetMs, lastDirection)
+        scheduleApply(generation)
+        return true
+    }
+
     private fun beginBurst(generation: Any, basePositionMs: Long) {
         applyJob?.cancel()
         applyJob = null
+        lingerJob?.cancel()
+        lingerJob = null
         this.generation = generation
         this.basePositionMs = basePositionMs
         this.pendingTargetMs = UNSET_POSITION
@@ -145,7 +174,7 @@ class PlaybackSeekController(
     }
 }
 
-/** Presentation projection of the coalesced seek for the HUD/timeline preview. */
+/** Presentation projection of the service-owned coalesced seek. */
 sealed interface SeekControllerState {
     data object Idle : SeekControllerState
 

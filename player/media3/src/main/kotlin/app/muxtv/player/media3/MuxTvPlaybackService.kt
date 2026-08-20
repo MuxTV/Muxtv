@@ -72,6 +72,8 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeRequest: PlaybackStartRequest? = null
     private var activeCandidate: PlaybackCandidateIdentity? = null
     private var activeGeneration: Long? = null
+    private var activeSeekGeneration: Long? = null
+    private var seekGenerationCounter = 0L
     private var activeExternal: ActiveExternalSetup? = null
     private var activeAttemptNumber = 0
     private var lastFailure: Media3Failure? = null
@@ -84,11 +86,22 @@ class MuxTvPlaybackService : MediaSessionService() {
     private val mediaSeekController = PlaybackSeekController(
         scope = serviceScope,
         onApplySeek = { generation, targetMs ->
-            if (player.currentMediaItem?.mediaId == generation) {
+            if (activeSeekGeneration == generation) {
                 player.seekTo(targetMs)
             }
         },
     )
+    private val seekConfirmationListener = object : Player.Listener {
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+            val generation = newPosition.mediaItem?.playbackSeekToken()?.generation ?: return
+            mediaSeekController.onSeekConfirmed(generation)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -103,7 +116,12 @@ class MuxTvPlaybackService : MediaSessionService() {
             maxRecoveryDurationMillis = MAX_RECOVERY_DURATION_MILLIS,
         )
         player = ExoPlayer.Builder(this).build()
-        mediaSession = MediaSession.Builder(this, player)
+        player.addListener(seekConfirmationListener)
+        val sessionPlayer = MuxTvSessionPlayer(
+            player = player,
+            onSeekIntent = ::handleSessionSeekIntent,
+        )
+        mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setId(SESSION_ID)
             .setCallback(SessionCallback())
             .build()
@@ -117,7 +135,10 @@ class MuxTvPlaybackService : MediaSessionService() {
         serviceScope.cancel()
         removeActivePlayerListener()
         if (::mediaSession.isInitialized) mediaSession.release()
-        if (::player.isInitialized) player.release()
+        if (::player.isInitialized) {
+            player.removeListener(seekConfirmationListener)
+            player.release()
+        }
         super.onDestroy()
     }
 
@@ -262,6 +283,8 @@ class MuxTvPlaybackService : MediaSessionService() {
         )
         try {
             clearInstalled()
+            val seekGeneration = nextSeekGeneration()
+            activeSeekGeneration = seekGeneration
             activePlayerListener = object : Player.Listener {
                 override fun onRenderedFirstFrame() {
                     if (activeExternal?.setupId != setupId) return
@@ -287,7 +310,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                     )
                 }
             }.also(player::addListener)
-            player.setMediaSource(mediaSourceFactory.create(sessionRequest))
+            player.setMediaSource(mediaSourceFactory.create(sessionRequest, seekGeneration))
             player.prepare()
             player.play()
         } catch (_: Exception) {
@@ -477,10 +500,12 @@ class MuxTvPlaybackService : MediaSessionService() {
         )
         try {
             clearInstalled()
+            val seekGeneration = nextSeekGeneration()
+            activeSeekGeneration = seekGeneration
             activeAttemptNumber = action.attempt + 1
             callbackGate.activate(token)
             activePlayerListener = createPlayerListener(token).also(player::addListener)
-            player.setMediaSource(mediaSourceFactory.create(sessionRequest))
+            player.setMediaSource(mediaSourceFactory.create(sessionRequest, seekGeneration))
             firstFrameTracker.activate(setupId, request.profileId, request.channelId)
             player.prepare()
             player.play()
@@ -575,6 +600,7 @@ class MuxTvPlaybackService : MediaSessionService() {
         callbackGate.clear()
         firstFrameTracker.clearActive()
         mediaSeekController.reset()
+        activeSeekGeneration = null
         player.stop()
         player.clearMediaItems()
     }
@@ -640,16 +666,78 @@ class MuxTvPlaybackService : MediaSessionService() {
         }
     }
 
-    private fun handleMediaSeekCommand(direction: Int): Boolean {
-        val mediaId = player.currentMediaItem?.mediaId ?: return false
+    private fun nextSeekGeneration(): Long {
+        seekGenerationCounter = if (seekGenerationCounter == Long.MAX_VALUE) {
+            1L
+        } else {
+            seekGenerationCounter + 1L
+        }
+        return seekGenerationCounter
+    }
+
+    private fun currentSeekToken(): PlaybackSeekToken? {
+        val mediaId = player.currentMediaItem?.mediaId ?: return null
+        val generation = activeSeekGeneration ?: return null
+        return runCatching { PlaybackSeekToken(mediaId, generation) }.getOrNull()
+    }
+
+    private fun handleSeekRequest(request: PlaybackSeekRequest): PlaybackSeekResult {
+        if (request.token != currentSeekToken()) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.STALE_PLAYBACK)
+        }
+        if (!player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.COMMAND_UNAVAILABLE)
+        }
+        if (player.isCurrentMediaItemLive) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.LIVE_CONTENT)
+        }
         val durationMs = player.duration
-        if (durationMs == C.TIME_UNSET || durationMs <= 0L) return false
-        return mediaSeekController.onDirectionRequested(
-            generation = mediaId,
-            direction = direction,
-            currentPositionMs = player.currentPosition,
-            durationMs = durationMs,
+        if (durationMs == C.TIME_UNSET || durationMs <= 0L) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.UNKNOWN_DURATION)
+        }
+        val currentPositionMs = player.currentPosition
+        if (currentPositionMs < 0L) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.INVALID_POSITION)
+        }
+
+        val accepted = when (request) {
+            is PlaybackSeekRequest.Relative -> mediaSeekController.onDirectionRequested(
+                generation = request.token.generation,
+                direction = request.direction,
+                currentPositionMs = currentPositionMs,
+                durationMs = durationMs,
+            )
+            is PlaybackSeekRequest.Absolute -> mediaSeekController.onTargetRequested(
+                generation = request.token.generation,
+                targetMs = request.targetMs,
+                currentPositionMs = currentPositionMs,
+                durationMs = durationMs,
+            )
+        }
+        if (!accepted) {
+            return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.CONTROLLER_REJECTED)
+        }
+        val pending = mediaSeekController.state.value as? SeekControllerState.Pending
+            ?: return PlaybackSeekResult.Rejected(PlaybackSeekRejectReason.CONTROLLER_REJECTED)
+        return PlaybackSeekResult.Accepted(
+            targetMs = pending.targetMs,
+            direction = pending.direction,
         )
+    }
+
+    private fun handleSessionSeekIntent(intent: MuxTvSessionSeekIntent) {
+        val token = currentSeekToken() ?: return
+        val request = when (intent) {
+            is MuxTvSessionSeekIntent.Relative -> PlaybackSeekRequest.Relative(
+                token = token,
+                direction = intent.direction,
+            )
+            is MuxTvSessionSeekIntent.Absolute -> PlaybackSeekRequest.Absolute(
+                token = token,
+                targetMs = intent.targetMs,
+            )
+        }
+        handleSeekRequest(request)
     }
 
     private inner class SessionCallback : MediaSession.Callback {
@@ -663,25 +751,11 @@ class MuxTvPlaybackService : MediaSessionService() {
                 base.availableSessionCommands.buildUpon()
                     .add(MuxTvPlaybackSessionContract.setPlaybackRequestCommand)
                     .add(MuxTvPlaybackSessionContract.cancelPlaybackSetupCommand)
+                    .add(MuxTvPlaybackSessionContract.seekCommand)
                     .add(ExternalPlaybackSessionContract.setExternalPlaybackRequestCommand)
                     .build(),
                 base.availablePlayerCommands,
             )
-        }
-
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int,
-        ): Int {
-            val coalesced = when (playerCommand) {
-                Player.COMMAND_SEEK_FORWARD ->
-                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_FORWARD)
-                Player.COMMAND_SEEK_BACK ->
-                    handleMediaSeekCommand(PlaybackSeekController.DIRECTION_BACKWARD)
-                else -> false
-            }
-            return playerCommandSessionResult(coalescedByService = coalesced)
         }
 
         override fun onCustomCommand(
@@ -708,6 +782,13 @@ class MuxTvPlaybackService : MediaSessionService() {
                     }
                     if (id == activeSetupId) cancelActiveSetup(completeCancelled = true)
                     Futures.immediateFuture(MuxTvPlaybackSessionContract.result(PlaybackStartResult.Started))
+                }
+                MuxTvPlaybackSessionContract.ACTION_REQUEST_SEEK -> {
+                    val request = MuxTvPlaybackSessionContract.parseSeekArgs(args)
+                        ?: return Futures.immediateFuture(MuxTvPlaybackSessionContract.badValue())
+                    Futures.immediateFuture(
+                        MuxTvPlaybackSessionContract.seekSessionResult(handleSeekRequest(request)),
+                    )
                 }
                 ExternalPlaybackSessionContract.ACTION_SET_EXTERNAL_PLAYBACK_REQUEST -> {
                     val command = ExternalPlaybackSessionContract.parseSetupArgs(args)
@@ -736,13 +817,6 @@ class MuxTvPlaybackService : MediaSessionService() {
         val sessionId: String,
     )
 }
-
-internal fun playerCommandSessionResult(coalescedByService: Boolean): Int =
-    if (coalescedByService) {
-        SessionResult.RESULT_INFO_SKIPPED
-    } else {
-        SessionResult.RESULT_SUCCESS
-    }
 
 private fun app.muxtv.catalog.PlaybackVariantResolution?.matches(
     candidate: PlaybackCandidateIdentity,

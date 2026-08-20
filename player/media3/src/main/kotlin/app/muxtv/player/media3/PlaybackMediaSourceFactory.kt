@@ -25,10 +25,13 @@ internal class PlaybackMediaSourceFactory(
 ) {
     private val applicationContext = context.applicationContext
 
-    fun create(request: PlaybackSessionRequest): MediaSource {
+    fun create(
+        request: PlaybackSessionRequest,
+        seekGeneration: Long? = null,
+    ): MediaSource {
         val httpFactory = createHttpDataSourceFactory(request)
         val dataSourceFactory = DefaultDataSource.Factory(applicationContext, httpFactory)
-        val mediaItem = request.toMediaItem()
+        val mediaItem = request.toMediaItem(seekGeneration)
         return when (PlaybackTransportClassifier.classify(request.locator).sourcePolicy.kind) {
             PlaybackMediaSourceKind.HLS -> HlsMediaSource.Factory(dataSourceFactory)
                 .createMediaSource(mediaItem)
@@ -70,10 +73,13 @@ internal class PlaybackMediaSourceFactory(
     }
 }
 
-private fun PlaybackSessionRequest.toMediaItem(): MediaItem {
+internal fun PlaybackSessionRequest.toMediaItem(seekGeneration: Long? = null): MediaItem {
     val metadata = MediaMetadata.Builder().apply {
         displayName?.let(::setTitle)
         artworkUri?.let { setArtworkUri(Uri.parse(it)) }
+        seekGeneration?.let { generation ->
+            setExtras(playbackSeekMetadataExtras(generation))
+        }
     }.build()
 
     return MediaItem.Builder()

@@ -24,6 +24,8 @@ object MuxTvPlaybackSessionContract {
         "app.muxtv.player.media3.action.SET_PLAYBACK_REQUEST"
     const val ACTION_CANCEL_PLAYBACK_SETUP =
         "app.muxtv.player.media3.action.CANCEL_PLAYBACK_SETUP"
+    const val ACTION_REQUEST_SEEK =
+        "app.muxtv.player.media3.action.REQUEST_SEEK"
 
     private const val KEY_SETUP_ID = "setup_id"
     private const val KEY_REQUEST = "request"
@@ -36,11 +38,26 @@ object MuxTvPlaybackSessionContract {
     private const val KEY_FAILURE = "failure"
     private const val KEY_OBSERVATION_AVAILABLE = "observation_available"
 
+    private const val KEY_SEEK_KIND = "seek_kind"
+    private const val KEY_SEEK_MEDIA_ID = "seek_media_id"
+    private const val KEY_SEEK_GENERATION = "seek_generation"
+    private const val KEY_SEEK_DIRECTION = "seek_direction"
+    private const val KEY_SEEK_TARGET_MS = "seek_target_ms"
+    private const val KEY_SEEK_REJECT_REASON = "seek_reject_reason"
+
+    private const val SEEK_KIND_RELATIVE = "relative"
+    private const val SEEK_KIND_ABSOLUTE = "absolute"
+    private const val RESULT_KIND_SEEK_ACCEPTED = "seek_accepted"
+    private const val RESULT_KIND_SEEK_REJECTED = "seek_rejected"
+
     val setPlaybackRequestCommand: SessionCommand
         get() = SessionCommand(ACTION_SET_PLAYBACK_REQUEST, Bundle.EMPTY)
 
     val cancelPlaybackSetupCommand: SessionCommand
         get() = SessionCommand(ACTION_CANCEL_PLAYBACK_SETUP, Bundle.EMPTY)
+
+    val seekCommand: SessionCommand
+        get() = SessionCommand(ACTION_REQUEST_SEEK, Bundle.EMPTY)
 
     fun setupArgs(
         id: PlaybackSetupId,
@@ -61,6 +78,21 @@ object MuxTvPlaybackSessionContract {
 
     fun cancelArgs(id: PlaybackSetupId): Bundle = Bundle().apply {
         putString(KEY_SETUP_ID, id.encoded())
+    }
+
+    fun seekArgs(request: PlaybackSeekRequest): Bundle = Bundle().apply {
+        putString(KEY_SEEK_MEDIA_ID, request.token.mediaId)
+        putLong(KEY_SEEK_GENERATION, request.token.generation)
+        when (request) {
+            is PlaybackSeekRequest.Relative -> {
+                putString(KEY_SEEK_KIND, SEEK_KIND_RELATIVE)
+                putInt(KEY_SEEK_DIRECTION, request.direction)
+            }
+            is PlaybackSeekRequest.Absolute -> {
+                putString(KEY_SEEK_KIND, SEEK_KIND_ABSOLUTE)
+                putLong(KEY_SEEK_TARGET_MS, request.targetMs)
+            }
+        }
     }
 
     fun parseSetupArgs(args: Bundle): PlaybackSetupCommand? {
@@ -89,6 +121,50 @@ object MuxTvPlaybackSessionContract {
         return PlaybackSetupId.parse(args.getString(KEY_SETUP_ID))
     }
 
+    fun parseSeekArgs(args: Bundle): PlaybackSeekRequest? {
+        val kind = args.getString(KEY_SEEK_KIND) ?: return null
+        val token = runCatching {
+            PlaybackSeekToken(
+                mediaId = args.getString(KEY_SEEK_MEDIA_ID) ?: return null,
+                generation = args.getLong(KEY_SEEK_GENERATION, Long.MIN_VALUE),
+            )
+        }.getOrNull() ?: return null
+
+        return when (kind) {
+            SEEK_KIND_RELATIVE -> {
+                if (args.keySet() != setOf(
+                        KEY_SEEK_KIND,
+                        KEY_SEEK_MEDIA_ID,
+                        KEY_SEEK_GENERATION,
+                        KEY_SEEK_DIRECTION,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackSeekRequest.Relative(
+                        token = token,
+                        direction = args.getInt(KEY_SEEK_DIRECTION, Int.MIN_VALUE),
+                    )
+                }.getOrNull()
+            }
+            SEEK_KIND_ABSOLUTE -> {
+                if (args.keySet() != setOf(
+                        KEY_SEEK_KIND,
+                        KEY_SEEK_MEDIA_ID,
+                        KEY_SEEK_GENERATION,
+                        KEY_SEEK_TARGET_MS,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackSeekRequest.Absolute(
+                        token = token,
+                        targetMs = args.getLong(KEY_SEEK_TARGET_MS, Long.MIN_VALUE),
+                    )
+                }.getOrNull()
+            }
+            else -> null
+        }
+    }
+
     fun result(result: PlaybackStartResult): SessionResult = SessionResult(
         SessionResult.RESULT_SUCCESS,
         Bundle().apply {
@@ -103,6 +179,23 @@ object MuxTvPlaybackSessionContract {
                     putString(KEY_RESULT_KIND, "rejected")
                     putString(KEY_FAILURE, result.reason.name)
                     putBoolean(KEY_OBSERVATION_AVAILABLE, result.observationAvailable)
+                }
+            }
+        },
+    )
+
+    fun seekSessionResult(result: PlaybackSeekResult): SessionResult = SessionResult(
+        SessionResult.RESULT_SUCCESS,
+        Bundle().apply {
+            when (result) {
+                is PlaybackSeekResult.Accepted -> {
+                    putString(KEY_RESULT_KIND, RESULT_KIND_SEEK_ACCEPTED)
+                    putLong(KEY_SEEK_TARGET_MS, result.targetMs)
+                    putInt(KEY_SEEK_DIRECTION, result.direction)
+                }
+                is PlaybackSeekResult.Rejected -> {
+                    putString(KEY_RESULT_KIND, RESULT_KIND_SEEK_REJECTED)
+                    putString(KEY_SEEK_REJECT_REASON, result.reason.name)
                 }
             }
         },
@@ -143,6 +236,37 @@ object MuxTvPlaybackSessionContract {
                     reason = failure,
                     observationAvailable = extras.getBoolean(KEY_OBSERVATION_AVAILABLE),
                 )
+            }
+            else -> null
+        }
+    }
+
+    fun parseSeekResult(result: SessionResult): PlaybackSeekResult? {
+        if (result.resultCode != SessionResult.RESULT_SUCCESS) return null
+        val extras = result.extras
+        return when (extras.getString(KEY_RESULT_KIND)) {
+            RESULT_KIND_SEEK_ACCEPTED -> {
+                if (extras.keySet() != setOf(
+                        KEY_RESULT_KIND,
+                        KEY_SEEK_TARGET_MS,
+                        KEY_SEEK_DIRECTION,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackSeekResult.Accepted(
+                        targetMs = extras.getLong(KEY_SEEK_TARGET_MS, Long.MIN_VALUE),
+                        direction = extras.getInt(KEY_SEEK_DIRECTION, Int.MIN_VALUE),
+                    )
+                }.getOrNull()
+            }
+            RESULT_KIND_SEEK_REJECTED -> {
+                if (extras.keySet() != setOf(KEY_RESULT_KIND, KEY_SEEK_REJECT_REASON)) return null
+                val reason = runCatching {
+                    PlaybackSeekRejectReason.valueOf(
+                        extras.getString(KEY_SEEK_REJECT_REASON) ?: return null,
+                    )
+                }.getOrNull() ?: return null
+                PlaybackSeekResult.Rejected(reason)
             }
             else -> null
         }
