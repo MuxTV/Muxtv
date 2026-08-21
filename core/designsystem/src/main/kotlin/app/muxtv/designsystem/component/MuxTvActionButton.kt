@@ -13,11 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
@@ -43,6 +45,7 @@ fun MuxTvActionButton(
     enabled: Boolean = true,
     selected: Boolean = false,
     style: MuxTvActionStyle = MuxTvActionStyle.Secondary,
+    leadingIcon: ImageVector? = null,
 ) {
     val shape = RoundedCornerShape(TvTokens.Shape.buttonCorner)
     val primaryStyle = style == MuxTvActionStyle.Primary
@@ -98,19 +101,27 @@ fun MuxTvActionButton(
             focusedDisabledBorder = Border.None,
         ),
     ) {
-        Box(
-            modifier = Modifier
-                .size(TvTokens.Spacing.markerSlot)
-                .clip(CircleShape)
-                .background(
-                    if (selected) {
-                        if (primaryStyle) TvTokens.Color.onAccent else MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Transparent
-                    },
-                ),
-        )
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                modifier = Modifier.size(TvTokens.Spacing.markerSlot),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(TvTokens.Spacing.markerSlot)
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) {
+                            if (primaryStyle) TvTokens.Color.onAccent else MaterialTheme.colorScheme.primary
+                        } else {
+                            Color.Transparent
+                        },
+                    ),
+            )
+        }
         Spacer(Modifier.width(TvTokens.Spacing.xSmall))
-        Text(text, color = Color.Unspecified)
+        Text(text, style = MaterialTheme.typography.labelMedium, color = Color.Unspecified)
     }
 }

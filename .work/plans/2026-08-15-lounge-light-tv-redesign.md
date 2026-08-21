@@ -1,5 +1,26 @@
 # MuxTV Lounge Light — полный TV-редизайн (M6-R)
 
+## Execution update — 2026-08-21
+
+- Статус: **in progress — reference-fidelity follow-up**.
+- Live execution base: `origin/main@2302c114`, ветка `upd/lounge-light-reference-fidelity`.
+- Стадии 0–7 этого плана и review-fixes уже реализованы и приняты в `main` через `18b520a9` / PR #168; повторно их не выполняем.
+- После #168 приняты repository/CI/startup fixes и single service-owned seek authority `2302c114` / #175. Плеерные ownership-контракты не открываем заново.
+
+Оставшийся scope определяется приложенным пользователем 1920×1080 Home-референсом:
+
+1. Зафиксировать baseline текущего Home на API36 при тех же viewport/state и сохранить screenshot evidence.
+2. Сделать rail постоянно читаемой и геометрически стабильной: labels/brand видимы при фокусе в контенте, `NavDisplay` резервирует полную ширину rail, D-pad/Back restoration не меняется.
+3. Заменить кодовый hero-gradient на локальный repo-owned scenic raster, воспроизводящий approved lake/mountain art direction. Asset декоративный и офлайн; channel-specific artwork/network loader не добавляется.
+4. Подогнать только доказанные screenshot-сравнением Home geometry/spacing/typography отклонения. Уже принятые Channels/Guide/Search/Settings/Sources/Player меняются лишь при обнаруженном P0/P1/P2 regression.
+5. Пройти RED→GREEN journey-тесты rail/Home, 1080p reference comparison, 720p containment и точечные regression gates. Последний `design-qa.md` обязан завершаться `final result: passed` либо честно фиксировать blocker.
+
+Зафиксированные границы follow-up:
+
+- Референс — точный визуальный источник для Home-композиции, палитры, rail и hero; реальные данные и существующие state owners остаются источником продуктовой истины.
+- Реальные channel logos остаются отложены: `MuxTvChannelLogo` использует честный монограммный fallback, без credential reuse и нового сетевого контура.
+- Не добавляем theme engine, новую навигацию/focus framework, новые маршруты, fake content или изменения domain/data/player API.
+
 - Дата: 2026-08-15
 - База: `feat/external-player-ep04-06` @ `d9b97509` (PR #166, open; стек поверх его плеерной работы)
 - Ветка: `feat/lounge-light-tv-redesign`

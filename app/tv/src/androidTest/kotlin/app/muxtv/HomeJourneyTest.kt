@@ -222,6 +222,9 @@ class HomeJourneyTest {
             composeRule.onAllNodesWithTag("home-favorites-header").fetchSemanticsNodes().size == 1 &&
                 composeRule.onAllNodesWithTag("home-recent-header").fetchSemanticsNodes().size == 1
         }
+        composeRule.onNodeWithTag("home-card-favorites-0")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .assertIsFocused()
         composeRule.waitForIdle()
         composeRule.captureScreenshot("home-hero-rails")
     }

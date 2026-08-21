@@ -28,7 +28,7 @@ fun MuxTvClock(modifier: Modifier = Modifier) {
     Text(
         text = timeText,
         modifier = modifier,
-        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
     )

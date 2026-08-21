@@ -32,7 +32,7 @@ object TvTokens {
     object Focus {
         const val scale: Float = 1f
         const val cardScale: Float = 1.03f
-        val outlineWidth: Dp = 3.dp
+        val outlineWidth: Dp = 1.dp
         const val focusedAlpha: Float = 1f
         const val unfocusedAlpha: Float = 1f
     }
@@ -60,34 +60,34 @@ object TvTokens {
         val xLarge: Dp = 48.dp
         val screenInset: Dp = 56.dp
         val railGutter: Dp = 28.dp
-        val sectionGap: Dp = 40.dp
+        val sectionGap: Dp = 16.dp
     }
 
     object Size {
         val railCollapsed: Dp = 88.dp
-        val railExpanded: Dp = 248.dp
+        val railExpanded: Dp = 138.dp
         val channelRowHeight: Dp = 96.dp
         val channelLogo: Dp = 56.dp
-        val homeCardWidth: Dp = 300.dp
-        val homeCardHeight: Dp = 140.dp
+        val homeCardWidth: Dp = 120.dp
+        val homeCardHeight: Dp = 72.dp
     }
 
     object Shape {
         val cardCorner: Dp = 18.dp
         val buttonCorner: Dp = 14.dp
-        val heroCorner: Dp = 28.dp
-        val largeCardCorner: Dp = 22.dp
+        val heroCorner: Dp = 10.dp
+        val largeCardCorner: Dp = 8.dp
         val rowCorner: Dp = 16.dp
         val detailsCorner: Dp = 24.dp
         val logoCorner: Dp = 14.dp
     }
 
     object Typography {
-        val heroTitle: TextUnit = 48.sp
+        val heroTitle: TextUnit = 24.sp
         val screenTitle: TextUnit = 36.sp
-        val sectionTitle: TextUnit = 26.sp
-        val cardTitle: TextUnit = 20.sp
+        val sectionTitle: TextUnit = 14.sp
+        val cardTitle: TextUnit = 10.sp
         val body: TextUnit = 18.sp
-        val metadata: TextUnit = 15.sp
+        val metadata: TextUnit = 8.sp
     }
 }

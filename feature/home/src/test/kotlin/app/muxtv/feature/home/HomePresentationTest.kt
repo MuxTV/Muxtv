@@ -11,6 +11,7 @@ import app.muxtv.player.PlaybackSessionPhase
 import app.muxtv.player.PlaybackSessionState
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import java.time.ZoneId
 
 class HomePresentationTest {
     private val channel = PlayableChannelSummary(
@@ -79,6 +80,11 @@ class HomePresentationTest {
         assertThat(hero.isFavorite).isTrue()
         assertThat(hero.currentTitle).isEqualTo("Программа")
         assertThat(hero.nextTitle).isEqualTo("Далее")
+        assertThat(hero.currentStart).isEqualTo(1_000)
+        assertThat(hero.currentEnd).isEqualTo(3_000)
+        assertThat(hero.nextStart).isEqualTo(3_000)
+        assertThat(hero.nextEnd).isEqualTo(4_000)
+        assertThat(hero.positionEpochMillis).isEqualTo(2_000)
         assertThat(hero.progressFraction).isWithin(0.01f).of(0.5f)
         assertThat(hero.primaryActionLabel).isEqualTo("Смотреть")
     }
@@ -94,8 +100,13 @@ class HomePresentationTest {
         assertThat(hero.channelId).isEqualTo("channel-1")
         assertThat(hero.currentTitle).isNull()
         assertThat(hero.nextTitle).isNull()
+        assertThat(hero.currentStart).isNull()
+        assertThat(hero.currentEnd).isNull()
+        assertThat(hero.nextStart).isNull()
+        assertThat(hero.nextEnd).isNull()
+        assertThat(hero.positionEpochMillis).isNull()
         assertThat(hero.progressFraction).isNull()
-        assertThat(hero.primaryActionLabel).isEqualTo("Продолжить")
+        assertThat(hero.primaryActionLabel).isEqualTo("Продолжить просмотр")
     }
 
     @Test
@@ -165,7 +176,16 @@ class HomePresentationTest {
         )
         val cards = buildFavoritesRail(listOf(item), nowNextItem("channel-1"), nowEpochMillis = 2_000)
         assertThat(cards[0].currentTitle).isEqualTo("Программа")
+        assertThat(cards[0].currentStart).isEqualTo(1_000)
+        assertThat(cards[0].currentEnd).isEqualTo(3_000)
         assertThat(cards[0].progressFraction).isWithin(0.01f).of(0.5f)
+    }
+
+    @Test
+    fun `home time formatting uses the supplied zone`() {
+        assertThat(formatHomeTime(0L, ZoneId.of("UTC"))).isEqualTo("00:00")
+        assertThat(formatHomeTime(1_704_067_200_000L, ZoneId.of("UTC"))).isEqualTo("00:00")
+        assertThat(formatHomeTime(1_704_067_200_000L, ZoneId.of("Europe/Moscow"))).isEqualTo("03:00")
     }
 
     @Test

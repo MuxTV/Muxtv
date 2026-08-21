@@ -6,8 +6,18 @@ import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.RecentChannel
 import app.muxtv.common.programmeProgressFraction
 import app.muxtv.player.PlaybackSessionState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 const val HOME_RAIL_LIMIT = 10
+
+private val HOME_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
+
+internal fun formatHomeTime(
+    epochMillis: Long,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): String = HOME_TIME_FORMATTER.format(Instant.ofEpochMilli(epochMillis).atZone(zoneId))
 
 data class HomeHeroModel(
     val channelId: String?,
@@ -16,14 +26,19 @@ data class HomeHeroModel(
     val isFavorite: Boolean,
     val isCurrentPlayback: Boolean,
     val currentTitle: String?,
+    val currentStart: Long?,
+    val currentEnd: Long?,
     val nextTitle: String?,
+    val nextStart: Long?,
+    val nextEnd: Long?,
     val progressFraction: Float?,
+    val positionEpochMillis: Long?,
 ) {
     val hasChannel: Boolean
         get() = channelId != null
 
     val primaryActionLabel: String
-        get() = if (isCurrentPlayback) "Смотреть" else "Продолжить"
+        get() = if (isCurrentPlayback) "Смотреть" else "Продолжить просмотр"
 }
 
 data class HomeChannelCard(
@@ -33,6 +48,8 @@ data class HomeChannelCard(
     val isFavorite: Boolean,
     val isPlaying: Boolean,
     val currentTitle: String?,
+    val currentStart: Long?,
+    val currentEnd: Long?,
     val progressFraction: Float?,
 )
 
@@ -49,8 +66,13 @@ fun buildHomeHero(
         isFavorite = false,
         isCurrentPlayback = false,
         currentTitle = null,
+        currentStart = null,
+        currentEnd = null,
         nextTitle = null,
+        nextStart = null,
+        nextEnd = null,
         progressFraction = null,
+        positionEpochMillis = null,
     )
     val summary = candidate.channel
     val nowNextItem = nowNext[summary.channelId]
@@ -67,8 +89,13 @@ fun buildHomeHero(
         isFavorite = summary.isFavorite,
         isCurrentPlayback = sessionState.hasActiveChannel && sessionState.channelId == summary.channelId,
         currentTitle = currentProgramme?.title,
+        currentStart = currentProgramme?.startEpochMillis,
+        currentEnd = currentProgramme?.endEpochMillis,
         nextTitle = nextProgramme?.title,
+        nextStart = nextProgramme?.startEpochMillis,
+        nextEnd = nextProgramme?.endEpochMillis,
         progressFraction = fraction,
+        positionEpochMillis = currentProgramme?.let { nowEpochMillis },
     )
 }
 
@@ -92,6 +119,8 @@ fun buildRecentRail(
         isFavorite = summary.isFavorite,
         isPlaying = sessionState.hasActiveChannel && sessionState.channelId == summary.channelId,
         currentTitle = currentProgramme?.title,
+        currentStart = currentProgramme?.startEpochMillis,
+        currentEnd = currentProgramme?.endEpochMillis,
         progressFraction = fraction,
     )
 }
@@ -114,6 +143,8 @@ fun buildFavoritesRail(
         isFavorite = item.isFavorite,
         isPlaying = item.isCurrentPlayback,
         currentTitle = currentProgramme?.title ?: item.currentProgrammeTitle,
+        currentStart = currentProgramme?.startEpochMillis,
+        currentEnd = currentProgramme?.endEpochMillis,
         progressFraction = fraction,
     )
 }

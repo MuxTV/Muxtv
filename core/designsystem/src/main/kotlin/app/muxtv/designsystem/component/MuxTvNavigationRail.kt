@@ -1,9 +1,5 @@
 package app.muxtv.designsystem.component
 
-import android.animation.ValueAnimator
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,9 +36,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -76,18 +74,18 @@ internal data class NavigationRailMetrics(
 }
 
 private val NORMAL_RAIL_METRICS = NavigationRailMetrics(
-    verticalPadding = TvTokens.Spacing.medium,
-    brandHeight = 48.dp,
+    verticalPadding = 20.dp,
+    brandHeight = 28.dp,
     brandToItemsGap = 28.dp,
-    itemHeight = 56.dp,
-    itemGap = TvTokens.Spacing.xSmall,
+    itemHeight = 36.dp,
+    itemGap = 8.dp,
 )
 
 private val COMPACT_RAIL_METRICS = NavigationRailMetrics(
     verticalPadding = 12.dp,
-    brandHeight = 40.dp,
-    brandToItemsGap = 4.dp,
-    itemHeight = 48.dp,
+    brandHeight = 24.dp,
+    brandToItemsGap = 8.dp,
+    itemHeight = 32.dp,
     itemGap = 4.dp,
 )
 
@@ -104,18 +102,16 @@ internal fun navigationRailMetrics(
 /**
  * Lounge Light left navigation rail.
  *
- * Expansion is derived only from descendant focus. The application shell owns
- * a fixed 88dp content inset, so this composable may draw at 248dp while focused
- * without changing destination constraints. Selected destination remains a
- * persistent state independent from the currently focused rail item.
+ * The rail is permanently expanded so labels remain readable while content owns
+ * focus. Selected destination remains a persistent state independent from the
+ * currently focused rail item.
  *
  * Normal Lounge geometry is preserved whenever it fits. Low-height TV viewports
  * switch to a compact vertical profile derived from the actual item count so every
  * top-level destination is laid out before the focus graph is evaluated.
  *
- * System reduced-motion is authoritative: when platform animators are disabled,
- * the transient reveal snaps between the two rail widths while focus/selection
- * tone and outline continue to provide immediate non-motion feedback.
+ * Descendant focus is still reported to the application shell for Back and
+ * focus-restoration behavior.
  */
 @Composable
 fun MuxTvNavigationRail(
@@ -126,23 +122,10 @@ fun MuxTvNavigationRail(
     onRailFocusChanged: (Boolean) -> Unit = {},
 ) {
     var railFocused by remember { mutableStateOf(false) }
-    val motionEnabled = ValueAnimator.areAnimatorsEnabled()
-    val width by animateDpAsState(
-        targetValue = if (railFocused) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed,
-        animationSpec = if (motionEnabled) {
-            tween(
-                durationMillis = TvTokens.Motion.screenDurationMillis,
-                easing = TvTokens.Motion.easeInOut,
-            )
-        } else {
-            snap()
-        },
-        label = "navigationRailWidth",
-    )
 
     BoxWithConstraints(
         modifier = modifier
-            .width(width)
+            .width(TvTokens.Size.railExpanded)
             .fillMaxHeight(),
     ) {
         val metrics = navigationRailMetrics(
@@ -161,14 +144,14 @@ fun MuxTvNavigationRail(
                     }
                 }
                 .focusGroup()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(TvTokens.Color.accentSoft2)
                 .padding(
-                    horizontal = TvTokens.Spacing.small,
+                    horizontal = 12.dp,
                     vertical = metrics.verticalPadding,
                 ),
         ) {
             RailBrandMark(
-                expanded = railFocused,
+                expanded = true,
                 height = metrics.brandHeight,
             )
             Spacer(Modifier.height(metrics.brandToItemsGap))
@@ -179,7 +162,7 @@ fun MuxTvNavigationRail(
                     }
                     MuxTvNavigationRailItemView(
                         item = item,
-                        expanded = railFocused,
+                        expanded = true,
                         itemHeight = metrics.itemHeight,
                         onClick = { onSelect(item.key) },
                         modifier = Modifier
@@ -207,20 +190,20 @@ private fun RailBrandMark(
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-            .padding(horizontal = TvTokens.Spacing.xSmall),
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = MuxTvIcons.BrandMark,
             contentDescription = if (expanded) null else "MuxTV",
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(18.dp),
             tint = TvTokens.Color.accent,
         )
         if (expanded) {
-            Spacer(Modifier.width(TvTokens.Spacing.small))
+            Spacer(Modifier.width(8.dp))
             Text(
                 text = "MuxTV",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -238,7 +221,7 @@ private fun MuxTvNavigationRailItemView(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(TvTokens.Shape.buttonCorner)
+    val shape = RoundedCornerShape(8.dp)
     val background = when {
         focused -> TvTokens.Color.surfaceRaised
         item.selected -> TvTokens.Color.accentSoft
@@ -262,25 +245,14 @@ private fun MuxTvNavigationRailItemView(
             .onFocusChanged { focused = it.isFocused }
             .clickable(role = Role.Tab, onClick = onClick)
             .focusable()
-            .padding(horizontal = TvTokens.Spacing.small),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (item.selected) {
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-            )
-            Spacer(Modifier.width(TvTokens.Spacing.small))
-        } else {
-            Spacer(Modifier.width(16.dp))
-        }
+        Spacer(Modifier.width(10.dp))
         Icon(
             imageVector = item.icon,
             contentDescription = null,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(14.dp),
             tint = when {
                 focused -> TvTokens.Color.accentStrong
                 item.selected -> TvTokens.Color.accentStrong
@@ -288,10 +260,13 @@ private fun MuxTvNavigationRailItemView(
             },
         )
         if (expanded) {
-            Spacer(Modifier.width(TvTokens.Spacing.small))
+            Spacer(Modifier.width(14.dp))
             Text(
                 text = item.label,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Normal,
+                ),
                 color = if (item.selected) TvTokens.Color.accentStrong else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

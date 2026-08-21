@@ -8,7 +8,7 @@ class TvTokensTest {
     @Test
     fun `dense focus preserves geometry and full content visibility`() {
         assertThat(TvTokens.Focus.scale).isEqualTo(1f)
-        assertThat(TvTokens.Focus.outlineWidth.value).isAtLeast(2f)
+        assertThat(TvTokens.Focus.outlineWidth.value).isAtLeast(1f)
         assertThat(TvTokens.Focus.focusedAlpha).isEqualTo(1f)
         assertThat(TvTokens.Focus.unfocusedAlpha).isEqualTo(1f)
     }
@@ -28,10 +28,9 @@ class TvTokensTest {
     }
 
     @Test
-    fun `lounge rail keeps stable collapsed geometry and bounded expanded width`() {
-        assertThat(TvTokens.Size.railCollapsed.value).isAtLeast(80f)
-        assertThat(TvTokens.Size.railExpanded.value).isAtMost(280f)
-        assertThat(TvTokens.Size.railExpanded).isGreaterThan(TvTokens.Size.railCollapsed)
+    fun `lounge rail stays within the reference width reservation`() {
+        assertThat(TvTokens.Size.railExpanded.value).isAtLeast(128f)
+        assertThat(TvTokens.Size.railExpanded.value).isAtMost(144f)
     }
 
     @Test

@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -30,8 +33,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -127,9 +131,9 @@ fun HomeRoute(
     val recentCards = buildRecentRail(recent, nowNext, sessionState, nowEpochMillis)
     val favoriteCards = buildFavoritesRail(favoriteItems, nowNext, nowEpochMillis)
 
-    val nowNextIds = remember(hero?.channelId, favoriteCards, recentCards) {
+    val nowNextIds = remember(hero.channelId, favoriteCards, recentCards) {
         buildList {
-            hero?.channelId?.let(::add)
+            hero.channelId?.let(::add)
             addAll(favoriteCards.map(HomeChannelCard::channelId))
             addAll(recentCards.map(HomeChannelCard::channelId))
         }
@@ -148,6 +152,9 @@ fun HomeRoute(
     // second large route title restores the reference hierarchy: clock -> hero -> rails.
     MuxTvScreenScaffold(
         title = null,
+        horizontalInset = 32.dp,
+        verticalInset = 22.dp,
+        contentTopGap = 10.dp,
         modifier = modifier,
     ) {
         when (sourceState) {
@@ -173,7 +180,6 @@ fun HomeRoute(
                         hero = hero,
                         onOpenChannel = onOpenChannel,
                         onOpenChannels = onOpenChannels,
-                        onOpenGuide = onOpenGuide,
                         heroFocusRequester = heroFocusRequester,
                         railFocusRequester = railFocusRequester,
                         downFocusRequester = heroDownRequester,
@@ -275,7 +281,6 @@ private fun HomeHero(
     hero: HomeHeroModel,
     onOpenChannel: (String) -> Unit,
     onOpenChannels: () -> Unit,
-    onOpenGuide: () -> Unit,
     heroFocusRequester: FocusRequester,
     railFocusRequester: FocusRequester?,
     downFocusRequester: FocusRequester?,
@@ -289,20 +294,12 @@ private fun HomeHero(
             heroFocusRequester.requestFocus()
         }
     }
-    val heroBrush = Brush.horizontalGradient(
-        colors = listOf(
-            TvTokens.Color.surfaceRaised,
-            TvTokens.Color.accentSoft2,
-            TvTokens.Color.accentSoft,
-        ),
-    )
     MuxTvFocusSurface(
         onClick = {
             hero.channelId?.let(onOpenChannel) ?: onOpenChannels()
         },
         corner = TvTokens.Shape.heroCorner,
-        contentPadding = TvTokens.Spacing.large,
-        containerBrush = heroBrush,
+        contentPadding = 0.dp,
         modifier = modifier
             .testTag(HOME_HERO_TEST_TAG)
             .focusRequester(heroFocusRequester)
@@ -312,21 +309,33 @@ private fun HomeHero(
                 downFocusRequester?.let { down = it }
             },
     ) {
+        Image(
+            painter = painterResource(R.drawable.muxtv_home_lake),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
         Column(
             modifier = Modifier
-                .fillMaxWidth(HERO_TEXT_WIDTH_FRACTION)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
+                .width(300.dp)
+                .fillMaxHeight()
+                .padding(
+                    start = 28.dp,
+                    end = 28.dp,
+                    top = 16.dp,
+                    bottom = 52.dp,
+                ),
+            verticalArrangement = Arrangement.Top,
         ) {
             if (hero.hasChannel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     MuxTvChannelLogo(
                         name = hero.displayName.orEmpty(),
-                        size = 56.dp,
+                        size = 24.dp,
                         corner = TvTokens.Shape.logoCorner,
                     )
-                    Spacer(Modifier.width(TvTokens.Spacing.medium))
-                    Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.micro)) {
+                    Spacer(Modifier.width(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
                             text = buildString {
                                 hero.channelNumber?.takeIf(String::isNotBlank)?.let {
@@ -334,7 +343,7 @@ private fun HomeHero(
                                 }
                                 append(hero.displayName.orEmpty())
                             },
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -344,34 +353,36 @@ private fun HomeHero(
                                 Icon(
                                     imageVector = MuxTvIcons.Playing,
                                     contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(12.dp),
                                     tint = MaterialTheme.colorScheme.secondary,
                                 )
-                                Spacer(Modifier.width(TvTokens.Spacing.xSmall))
+                                Spacer(Modifier.width(4.dp))
                             }
                             if (hero.isFavorite) {
                                 Icon(
                                     imageVector = MuxTvIcons.Favorite,
                                     contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(12.dp),
                                     tint = TvTokens.Color.accent,
                                 )
-                                Spacer(Modifier.width(TvTokens.Spacing.xSmall))
+                                Spacer(Modifier.width(4.dp))
                             }
-                            Text(
-                                text = if (hero.isCurrentPlayback) "Сейчас в эфире" else "Последний просмотр",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (hero.isCurrentPlayback) {
-                                    MaterialTheme.colorScheme.secondary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                maxLines = 1,
-                            )
+                            if (hero.currentStart == null) {
+                                Text(
+                                    text = if (hero.isCurrentPlayback) "Сейчас в эфире" else "Последний просмотр",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (hero.isCurrentPlayback) {
+                                        MaterialTheme.colorScheme.secondary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(TvTokens.Spacing.medium))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = hero.currentTitle ?: hero.displayName.orEmpty(),
                     style = MaterialTheme.typography.displaySmall.copy(
@@ -382,15 +393,69 @@ private fun HomeHero(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (hero.progressFraction != null) {
-                    Spacer(Modifier.height(TvTokens.Spacing.small))
-                    MuxTvProgrammeProgress(fraction = hero.progressFraction, height = 6.dp)
-                }
-                if (hero.nextTitle != null) {
-                    Spacer(Modifier.height(TvTokens.Spacing.small))
+                if (hero.currentStart != null) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Далее · ${hero.nextTitle}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = buildString {
+                            append("Сейчас в эфире  ")
+                            append(formatHomeTime(hero.currentStart))
+                            hero.currentEnd?.let {
+                                append(" — ")
+                                append(formatHomeTime(it))
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (hero.progressFraction != null) {
+                    Spacer(Modifier.height(4.dp))
+                    MuxTvProgrammeProgress(fraction = hero.progressFraction, height = 3.dp)
+                }
+                if (hero.currentStart != null && hero.currentEnd != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = formatHomeTime(hero.positionEpochMillis ?: hero.currentStart),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = formatHomeTime(hero.currentEnd),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                if (hero.nextTitle != null || hero.nextStart != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Далее",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = buildString {
+                            hero.nextStart?.let { append(formatHomeTime(it)) }
+                            hero.nextEnd?.let {
+                                append(" — ")
+                                append(formatHomeTime(it))
+                            }
+                            hero.nextTitle?.let {
+                                if (isNotEmpty()) append("  ")
+                                append(it)
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -407,31 +472,27 @@ private fun HomeHero(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(TvTokens.Spacing.small))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Каналы из ваших источников — в едином списке.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.height(TvTokens.Spacing.medium))
-            Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                MuxTvActionButton(
-                    text = hero.primaryActionLabel,
-                    onClick = {
-                        hero.channelId?.let(onOpenChannel) ?: onOpenChannels()
-                    },
-                    style = MuxTvActionStyle.Primary,
-                    modifier = Modifier.testTag(HOME_HERO_PRIMARY_TEST_TAG),
-                )
-                MuxTvActionButton(
-                    text = "Программа",
-                    onClick = onOpenGuide,
-                    modifier = Modifier.testTag(HOME_HERO_GUIDE_TEST_TAG),
-                )
-            }
+            Spacer(Modifier.weight(1f))
+            MuxTvActionButton(
+                text = hero.primaryActionLabel,
+                onClick = {
+                    hero.channelId?.let(onOpenChannel) ?: onOpenChannels()
+                },
+                style = MuxTvActionStyle.Primary,
+                leadingIcon = MuxTvIcons.Playing,
+                modifier = Modifier
+                    .height(32.dp)
+                    .testTag(HOME_HERO_PRIMARY_TEST_TAG),
+            )
         }
     }
 }
@@ -448,39 +509,43 @@ private fun HomeRails(
     onFocusOwnerChanged: (String) -> Unit,
 ) {
     var firstRailRendered = false
-    Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.large)) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (favoriteCards.isNotEmpty()) {
-            MuxTvSectionHeader(
-                title = "Избранное",
-                modifier = Modifier.testTag(HOME_FAVORITES_HEADER_TEST_TAG),
-            )
-            HomeChannelRail(
-                railKey = HOME_FOCUS_OWNER_FAVORITES,
-                cards = favoriteCards,
-                onOpenChannel = onOpenChannel,
-                railFocusRequester = railFocusRequester,
-                upFocusRequester = heroFocusRequester,
-                firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
-                restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_FAVORITES,
-                onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_FAVORITES) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                MuxTvSectionHeader(
+                    title = "Избранное",
+                    modifier = Modifier.testTag(HOME_FAVORITES_HEADER_TEST_TAG),
+                )
+                HomeChannelRail(
+                    railKey = HOME_FOCUS_OWNER_FAVORITES,
+                    cards = favoriteCards,
+                    onOpenChannel = onOpenChannel,
+                    railFocusRequester = railFocusRequester,
+                    upFocusRequester = heroFocusRequester,
+                    firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
+                    restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_FAVORITES,
+                    onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_FAVORITES) },
+                )
+            }
             firstRailRendered = true
         }
         if (recentCards.isNotEmpty()) {
-            MuxTvSectionHeader(
-                title = "Недавние",
-                modifier = Modifier.testTag(HOME_RECENT_HEADER_TEST_TAG),
-            )
-            HomeChannelRail(
-                railKey = HOME_FOCUS_OWNER_RECENT,
-                cards = recentCards,
-                onOpenChannel = onOpenChannel,
-                railFocusRequester = railFocusRequester,
-                upFocusRequester = heroFocusRequester,
-                firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
-                restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_RECENT,
-                onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_RECENT) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                MuxTvSectionHeader(
+                    title = "Недавние",
+                    modifier = Modifier.testTag(HOME_RECENT_HEADER_TEST_TAG),
+                )
+                HomeChannelRail(
+                    railKey = HOME_FOCUS_OWNER_RECENT,
+                    cards = recentCards,
+                    onOpenChannel = onOpenChannel,
+                    railFocusRequester = railFocusRequester,
+                    upFocusRequester = heroFocusRequester,
+                    firstCardOverrideRequester = if (!firstRailRendered) firstCardFocusRequester else null,
+                    restoreFocus = activeFocusOwner == HOME_FOCUS_OWNER_RECENT,
+                    onFocused = { onFocusOwnerChanged(HOME_FOCUS_OWNER_RECENT) },
+                )
+            }
         }
     }
 }
@@ -524,7 +589,7 @@ private fun HomeChannelRail(
 
     LazyRow(
         state = listState,
-        horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(count = cards.size, key = { index -> "${railKey}-${cards[index].channelId}" }) { index ->
             val card = cards[index]
@@ -549,6 +614,7 @@ private fun HomeChannelRail(
             }
             HomeChannelCardView(
                 card = card,
+                compact = railKey == HOME_FOCUS_OWNER_RECENT,
                 onClick = {
                     captureAnchor()
                     onOpenChannel(card.channelId)
@@ -571,23 +637,27 @@ private fun HomeChannelRail(
 @Composable
 private fun HomeChannelCardView(
     card: HomeChannelCard,
+    compact: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     MuxTvFocusSurface(
         onClick = onClick,
         corner = TvTokens.Shape.largeCardCorner,
-        contentPadding = 16.dp,
+        contentPadding = 8.dp,
         focusScale = TvTokens.Focus.cardScale,
-        modifier = modifier.size(TvTokens.Size.homeCardWidth, TvTokens.Size.homeCardHeight),
+        modifier = modifier.size(
+            width = if (compact) 112.dp else TvTokens.Size.homeCardWidth,
+            height = if (compact) 52.dp else TvTokens.Size.homeCardHeight,
+        ),
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MuxTvChannelLogo(name = card.displayName, size = 44.dp)
-                Spacer(Modifier.width(TvTokens.Spacing.small))
+                MuxTvChannelLogo(name = card.displayName, size = 28.dp)
+                Spacer(Modifier.width(4.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = card.displayName,
@@ -604,23 +674,33 @@ private fun HomeChannelCardView(
                             Icon(
                                 imageVector = MuxTvIcons.Playing,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(10.dp),
                                 tint = MaterialTheme.colorScheme.secondary,
                             )
-                            Spacer(Modifier.width(TvTokens.Spacing.micro))
+                            Spacer(Modifier.width(2.dp))
                         }
-                        if (card.isFavorite) {
+                        if (card.isFavorite && !compact) {
                             Icon(
                                 imageVector = MuxTvIcons.Favorite,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(10.dp),
                                 tint = TvTokens.Color.accent,
                             )
-                            Spacer(Modifier.width(TvTokens.Spacing.micro))
+                            Spacer(Modifier.width(2.dp))
                         }
                         Text(
-                            text = card.currentTitle ?: " ",
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            text = buildString {
+                                card.currentTitle?.let(::append)
+                                if (card.currentStart != null) {
+                                    if (isNotEmpty()) append("  ")
+                                    append(formatHomeTime(card.currentStart))
+                                    card.currentEnd?.let {
+                                        append(" — ")
+                                        append(formatHomeTime(it))
+                                    }
+                                }
+                            }.ifBlank { " " },
+                            style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = TvTokens.Typography.metadata,
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -631,14 +711,13 @@ private fun HomeChannelCardView(
                 }
             }
             if (card.progressFraction != null) {
-                MuxTvProgrammeProgress(fraction = card.progressFraction, height = 4.dp)
+                MuxTvProgrammeProgress(fraction = card.progressFraction, height = 2.dp)
             }
         }
     }
 }
 
-private const val HERO_HEIGHT_FRACTION = 0.46f
-private const val HERO_TEXT_WIDTH_FRACTION = 0.68f
+private const val HERO_HEIGHT_FRACTION = 0.55f
 private const val NOW_REFRESH_MILLIS = 60_000L
 private const val HOME_FOCUS_OWNER_HERO = "hero"
 private const val HOME_FOCUS_OWNER_FAVORITES = "favorites"

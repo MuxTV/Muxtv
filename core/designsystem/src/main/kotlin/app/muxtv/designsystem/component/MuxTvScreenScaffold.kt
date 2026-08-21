@@ -31,6 +31,7 @@ fun MuxTvScreenScaffold(
     modifier: Modifier = Modifier,
     horizontalInset: Dp = TvTokens.Spacing.screenInset,
     verticalInset: Dp = 28.dp,
+    contentTopGap: Dp = TvTokens.Spacing.medium,
     showClock: Boolean = true,
     titleTestTag: String? = null,
     content: @Composable ColumnScope.() -> Unit,
@@ -65,7 +66,7 @@ fun MuxTvScreenScaffold(
                 MuxTvClock()
             }
         }
-        Spacer(Modifier.height(TvTokens.Spacing.medium))
+        Spacer(Modifier.height(contentTopGap))
         content()
     }
 }
