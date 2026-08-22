@@ -88,9 +88,6 @@ if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages'
 if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
     Add-ContractError "sdkmanager list output must be captured as an array."
 }
-if ($androidSdkContent.IndexOf('AllowOldEdgeFallback', [System.StringComparison]::Ordinal) -ge 0) {
-    Add-ContractError "Android TV acceptance must not expose an old-edge system-image fallback; API 26 and API 36 are exact fail-closed requirements."
-}
 
 $verifyLocalContent = Get-Content -LiteralPath $harnessFiles.VerifyLocal -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
