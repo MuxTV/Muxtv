@@ -67,6 +67,9 @@ $requiredFunctions = @(
     "Get-InstalledTvSystemImages",
     "Get-AvailableTvSystemImages",
     "Resolve-TvSystemImage",
+    "Get-MuxTvCanonicalAvdNames",
+    "Get-StaleMuxTvAvdNames",
+    "Remove-StaleMuxTvAvds",
     "Test-AndroidSystemImageInstalled",
     "Install-AndroidPackage",
     "Test-AndroidAcceleration",
@@ -87,6 +90,9 @@ if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages'
 }
 if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
     Add-ContractError "sdkmanager list output must be captured as an array."
+}
+if ($androidSdkContent.IndexOf('AllowOldEdgeFallback', [System.StringComparison]::Ordinal) -ge 0) {
+    Add-ContractError "Resolve-TvSystemImage must not retain a dormant old-edge fallback API."
 }
 
 $verifyLocalContent = Get-Content -LiteralPath $harnessFiles.VerifyLocal -Raw
@@ -175,11 +181,15 @@ $tvValidationContent = Get-Content -LiteralPath $harnessFiles.TvValidation -Raw
 $hostValidationIndex = $tvValidationContent.IndexOf('"-Mode", "Full"', [System.StringComparison]::Ordinal)
 $profileLoopIndex = $tvValidationContent.IndexOf('foreach ($profile in $profiles)', [System.StringComparison]::Ordinal)
 $deviceOnlyIndex = $tvValidationContent.IndexOf('"-Mode", "DeviceOnly"', [System.StringComparison]::Ordinal)
+$avdCleanupIndex = $tvValidationContent.IndexOf('Remove-StaleMuxTvAvds -Tools $tools', [System.StringComparison]::Ordinal)
 if ($hostValidationIndex -lt 0 -or $profileLoopIndex -lt 0 -or $hostValidationIndex -gt $profileLoopIndex) {
     Add-ContractError "TV device validation must complete Full host validation before the profile loop."
 }
 if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
     Add-ContractError "TV profile validation must use DeviceOnly inside the profile loop."
+}
+if ($avdCleanupIndex -lt 0 -or $avdCleanupIndex -gt $profileLoopIndex) {
+    Add-ContractError "TV device validation must remove only stale MuxTV-owned AVD identities before creating profiles."
 }
 foreach ($requiredProfileFragment in @(
     'Resolve-TvSystemImage -Tools $tools -PreferredApi 26',
@@ -211,6 +221,24 @@ if ($catalogDeviceValidationContent.IndexOf('"-EntryCount", "10000"', [System.St
 
 if ($messages.Count -eq 0) {
     . $harnessFiles.AndroidSdk
+
+    $canonicalAvdNames = @(Get-MuxTvCanonicalAvdNames)
+    if (($canonicalAvdNames -join '|') -cne 'MuxTV_TV_OLD_API26|MuxTV_TV_CURRENT_API36') {
+        Add-ContractError "Canonical MuxTV AVD identities must be exactly API26 old and API36 current."
+    }
+
+    $cleanupCandidates = @(Get-StaleMuxTvAvdNames -AvdNames @(
+        'MuxTV_TV_OLD_API26',
+        'MuxTV_TV_CURRENT_API36',
+        'MuxTV_TV_OLD_API28',
+        'MuxTV_TV_CURRENT_API35',
+        'MuxTV_TV_LOW_RAM',
+        'Pixel_8_API_36',
+        'OtherProject_TV'
+    ))
+    if (($cleanupCandidates -join '|') -cne 'MuxTV_TV_CURRENT_API35|MuxTV_TV_LOW_RAM|MuxTV_TV_OLD_API28') {
+        Add-ContractError "Stale AVD filtering must target only non-canonical MuxTV_TV_* identities."
+    }
 
     $parsedImages = @(ConvertFrom-SdkManagerTvSystemImageLines -Lines @(
         "system-images;android-36;android-tv;x86 | 1 | Android TV",
