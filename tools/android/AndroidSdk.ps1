@@ -204,12 +204,24 @@ function Get-AvailableTvSystemImages {
     return @($images)
 }
 
+function Get-MuxTvCanonicalAvdName {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$Api)
+
+    switch ($Api) {
+        26 { return "MuxTV_TV_OLD_API26" }
+        36 { return "MuxTV_TV_CURRENT_API36" }
+        default {
+            throw "MuxTV repository AVD identity is defined only for API 26 and API 36."
+        }
+    }
+}
+
 function Resolve-TvSystemImage {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Tools,
-        [Parameter(Mandatory)][int]$PreferredApi,
-        [switch]$AllowOldEdgeFallback
+        [Parameter(Mandatory)][int]$PreferredApi
     )
 
     $images = @(Get-AvailableTvSystemImages -Tools $Tools)
@@ -223,18 +235,6 @@ function Resolve-TvSystemImage {
     )
     if ($exact.Count -gt 0) {
         return $exact[0]
-    }
-
-    if ($AllowOldEdgeFallback) {
-        $fallback = @(
-            $images |
-                Where-Object { $_.Api -ge 26 -and $_.Api -le 30 } |
-                Sort-Object Api, @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } }
-        )
-        if ($fallback.Count -gt 0) {
-            Write-Warning "Android TV API $PreferredApi image is unavailable. Using old-edge API $($fallback[0].Api): $($fallback[0].Package)."
-            return $fallback[0]
-        }
     }
 
     $available = $images |
