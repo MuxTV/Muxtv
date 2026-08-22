@@ -4,14 +4,17 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$androidSdkPath = Join-Path $PSScriptRoot "AndroidSdk.ps1"
+$ownershipPath = Join-Path $PSScriptRoot "MuxTvAvdOwnership.ps1"
 $cleanupPath = Join-Path $PSScriptRoot "Remove-LegacyMuxTvAvds.ps1"
 
+if (-not (Test-Path -LiteralPath $ownershipPath -PathType Leaf)) {
+    throw "MuxTV AVD ownership policy is missing."
+}
 if (-not (Test-Path -LiteralPath $cleanupPath -PathType Leaf)) {
     throw "Legacy MuxTV AVD cleanup entry point is missing."
 }
 
-. $androidSdkPath
+. $ownershipPath
 
 $fixtureNames = @(
     "MuxTV_TV_OLD_API26",
