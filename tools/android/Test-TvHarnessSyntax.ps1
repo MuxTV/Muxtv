@@ -88,6 +88,9 @@ if ($androidSdkContent -notmatch '\$images\s*=\s*@\(Get-AvailableTvSystemImages'
 if ($androidSdkContent -notmatch '\$lines\s*=\s*@\(&\s*\$Tools\.SdkManager\s+--list') {
     Add-ContractError "sdkmanager list output must be captured as an array."
 }
+if ($androidSdkContent.IndexOf('AllowOldEdgeFallback', [System.StringComparison]::Ordinal) -ge 0) {
+    Add-ContractError "Android TV acceptance must not expose an old-edge system-image fallback; API 26 and API 36 are exact fail-closed requirements."
+}
 
 $verifyLocalContent = Get-Content -LiteralPath $harnessFiles.VerifyLocal -Raw
 if ($verifyLocalContent -notmatch 'DeviceOnly') {
@@ -180,6 +183,25 @@ if ($hostValidationIndex -lt 0 -or $profileLoopIndex -lt 0 -or $hostValidationIn
 }
 if ($deviceOnlyIndex -lt 0 -or $deviceOnlyIndex -lt $profileLoopIndex) {
     Add-ContractError "TV profile validation must use DeviceOnly inside the profile loop."
+}
+foreach ($requiredProfileFragment in @(
+    'Resolve-TvSystemImage -Tools $tools -PreferredApi 26',
+    'Resolve-TvSystemImage -Tools $tools -PreferredApi 36',
+    'AvdName = "MuxTV_TV_OLD_API26"',
+    'AvdName = "MuxTV_TV_CURRENT_API36"'
+)) {
+    if ($tvValidationContent.IndexOf($requiredProfileFragment, [System.StringComparison]::Ordinal) -lt 0) {
+        Add-ContractError ("TV device validation is missing the exact two-profile contract: " + $requiredProfileFragment)
+    }
+}
+foreach ($forbiddenProfileFragment in @(
+    '-AllowOldEdgeFallback',
+    'MuxTV_TV_OLD_API$($oldImage.Api)',
+    'MuxTV_TV_CURRENT_API$($currentImage.Api)'
+)) {
+    if ($tvValidationContent.IndexOf($forbiddenProfileFragment, [System.StringComparison]::Ordinal) -ge 0) {
+        Add-ContractError ("TV device validation still permits profile drift or fallback: " + $forbiddenProfileFragment)
+    }
 }
 
 $catalogDeviceValidationContent = Get-Content -LiteralPath $harnessFiles.CatalogDevice -Raw
