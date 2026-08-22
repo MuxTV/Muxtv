@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -36,6 +37,9 @@ enum class MuxTvActionStyle {
  * Lounge Light action button with stable geometry and explicit visual hierarchy.
  * Selection uses a reserved marker slot, while focus uses outline + tone so
  * selected and focused states never collapse into the same signal.
+ *
+ * Action labels stay on one line because TV action surfaces commonly have fixed vertical geometry;
+ * constrained layouts should truncate a long/localized label rather than silently grow or wrap it.
  */
 @Composable
 fun MuxTvActionButton(
@@ -122,6 +126,12 @@ fun MuxTvActionButton(
             )
         }
         Spacer(Modifier.width(TvTokens.Spacing.xSmall))
-        Text(text, style = MaterialTheme.typography.labelMedium, color = Color.Unspecified)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.Unspecified,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
