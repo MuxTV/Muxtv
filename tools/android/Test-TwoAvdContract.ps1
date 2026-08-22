@@ -12,6 +12,7 @@ $catalogDevicePath = Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValida
 $playerDevicePath = Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"
 $measurementProfilesPath = Join-Path $repositoryRoot "tools\measurements\MeasurementProfiles.ps1"
 $measurementSeriesPath = Join-Path $repositoryRoot "tools\measurements\Invoke-MeasurementSeriesCore.ps1"
+$legacyCleanupContractPath = Join-Path $PSScriptRoot "Test-LegacyMuxTvAvdCleanupContract.ps1"
 
 $errors = [System.Collections.Generic.List[string]]::new()
 
@@ -33,6 +34,9 @@ if ($androidSdk -notmatch '(?m)^function\s+Get-MuxTvCanonicalAvdName\s*\{') {
 }
 if ($androidSdk -match 'AllowOldEdgeFallback') {
     Add-ContractError "Android TV system-image fallback is forbidden; API 26 and API 36 must resolve exactly."
+}
+if (-not (Test-Path -LiteralPath $legacyCleanupContractPath -PathType Leaf)) {
+    Add-ContractError "Legacy MuxTV AVD cleanup contract is missing."
 }
 
 . $androidSdkPath
@@ -96,4 +100,5 @@ if ($errors.Count -gt 0) {
     throw ("MuxTV two-AVD contract failed.`n" + [string]::Join([Environment]::NewLine, $errors))
 }
 
+& $legacyCleanupContractPath
 Write-Host "MuxTV two-AVD contract is valid."
