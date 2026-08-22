@@ -45,6 +45,11 @@ jobs:
         run: |
           & .\tools\android\Test-TwoAvdContract.ps1
 
+      - name: Run legacy AVD cleanup contract
+        shell: pwsh
+        run: |
+          & .\tools\android\Test-LegacyMuxTvAvdCleanupContract.ps1
+
       - name: Run complete Android harness contracts
         shell: pwsh
         run: |
