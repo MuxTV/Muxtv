@@ -2,7 +2,8 @@
 
 ## Source contract
 
-- Reference: `C:\Users\Dmitry\AppData\Local\Temp\codex-clipboard-b99caf17-ce2c-4ff0-b1f5-427244d1c1e9.png`
+- Original reference: local clipboard capture `C:\Users\Dmitry\AppData\Local\Temp\codex-clipboard-b99caf17-ce2c-4ff0-b1f5-427244d1c1e9.png`.
+- Reproducibility note: the original reference bitmap is not repository-owned. Independent replays can verify the retained implementation captures and the normalized geometry below, but cannot reconstruct the original source pixels from the repository alone.
 - Implementation capture: `.work/evidence/screenshots/home-rail-reference-1080p.png`
 - Target viewport: 1920×1080, Android TV API 36.
 - Reference bitmap: 1672×941 (16:9), compared after normalization to 1920×1080.
@@ -44,4 +45,10 @@
 - 720p capture: `.work/evidence/screenshots/home-hero-rails-720p.png`; D-pad rail restoration and Home journey both pass, both sections remain within the viewport.
 - P1 at 720p: the long primary CTA label is squeezed by the fractional hero text column. A fixed 300dp content column has been applied from the failed visual gate, but the final rebuild/recapture is pending Android SDK access outside the sandbox.
 
-Final result: blocked — 1080p is accepted; the 720p CTA fix still needs one rebuilt device recapture.
+### Follow-up hardening — awaiting replay
+
+- `MuxTvActionButton` now constrains action copy to one line with ellipsis as a fail-safe. Fixed-height TV actions can no longer wrap and silently change their vertical text geometry under a constrained viewport or longer localization.
+- This is defensive containment, not evidence that the 720p visual mismatch is closed. The intended full label should still fit because the Home hero owns the separate 300dp content column.
+- Required acceptance replay remains: rebuild the exact follow-up head, capture the 720p Home journey, confirm the full CTA label is visually readable and contained, then rerun the 1080p reference capture to prove the shared action-button hardening did not regress the accepted surface.
+
+Final result: blocked — 1080p is accepted; the 720p CTA fix still needs a rebuilt exact-head device recapture.
