@@ -1,0 +1,45 @@
+name: Two-AVD contract temporary RED gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/two-avd-contract-temporary.yml'
+      - 'tools/android/**'
+      - 'tools/measurements/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: two-avd-contract-temporary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Two-AVD static contract
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact source head
+        shell: pwsh
+        run: |
+          $actual = (& git rev-parse HEAD).Trim()
+          $expected = '${{ github.event.pull_request.head.sha }}'
+          if ($actual -cne $expected) {
+            throw "Temporary two-AVD contract checkout mismatch."
+          }
+
+      - name: Run two-AVD repository contract
+        shell: pwsh
+        run: |
+          & .\tools\android\Test-TwoAvdContract.ps1
