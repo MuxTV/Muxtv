@@ -84,9 +84,11 @@ function Ensure-AndroidRuntimePackages {
     "Installing only missing Android runtime packages: $($packages -join ', ')" |
         Set-Content -LiteralPath $logPath -Encoding utf8
     $accept = 1..200 | ForEach-Object { "y" }
-    $accept | & $Tools.SdkManager @packages 2>&1 |
-        Tee-Object -FilePath $logPath -Append
-    if ($LASTEXITCODE -ne 0) {
+    $runtimeOutput = @($accept | & $Tools.SdkManager @packages 2>&1)
+    $runtimeExitCode = $LASTEXITCODE
+    $runtimeOutput | Add-Content -LiteralPath $logPath -Encoding utf8
+    $runtimeOutput | ForEach-Object { Write-Host $_ }
+    if ($runtimeExitCode -ne 0) {
         throw "Unable to install missing Android runtime package(s). See $logPath"
     }
 
@@ -233,7 +235,7 @@ function Wait-AndroidSystemReady {
     } while ((Get-Date) -lt $deadline)
 
     if ($bootCompleted -ne "1") {
-        throw "Android TV emulator did not complete Android boot within $TimeoutSeconds seconds. See $logPath"
+        throw "Android TV emulator $Serial did not complete Android boot within $TimeoutSeconds seconds. See $logPath"
     }
 
     $packageDeadline = (Get-Date).AddSeconds(90)
