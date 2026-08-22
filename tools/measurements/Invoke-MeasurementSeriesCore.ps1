@@ -136,22 +136,6 @@ function Invoke-MeasurementSeriesAnalysis {
         -FailureMessage "Measurement series analysis failed."
 }
 
-function Remove-MeasurementAvd {
-    param(
-        [Parameter(Mandatory)]$Tools,
-        [Parameter(Mandatory)][string]$Name
-    )
-
-    try {
-        & $Tools.AvdManager delete avd --name $Name 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Unable to remove the temporary measurement AVD."
-        }
-    } catch {
-        Write-Warning "Unable to remove the temporary measurement AVD."
-    }
-}
-
 function Reset-MeasurementAdbServer {
     param(
         [Parameter(Mandatory)]$Tools,
@@ -326,14 +310,10 @@ try {
 
     $tools = Get-AndroidSdkTools
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $seriesDirectory
-    $image = if ($profile.AllowOldEdgeFallback) {
-        Resolve-TvSystemImage -Tools $tools -PreferredApi $profile.RequestedApi -AllowOldEdgeFallback
-    } else {
-        Resolve-TvSystemImage -Tools $tools -PreferredApi $profile.RequestedApi
-    }
+    $image = Resolve-TvSystemImage -Tools $tools -PreferredApi $profile.RequestedApi
     Install-AndroidPackage -Tools $tools -Package $image.Package -EvidenceDirectory $seriesDirectory
 
-    $fallbackUsed = $image.Api -ne $profile.RequestedApi
+    $fallbackUsed = $false
     $manifest.resolvedImage = $image.Package
     $manifest.resolvedApi = $image.Api
     $manifest.resolvedAbi = $image.Abi
@@ -352,7 +332,7 @@ try {
         $consoleSerial = "emulator-$consolePort"
         $tcpSerial = "127.0.0.1:$adbPort"
         $deviceSerial = $null
-        $avdName = "MuxTV_VARIANCE_$($profile.Id.Replace('-', '_'))_${suffix}_API$($image.Api)"
+        $avdName = Get-MuxTvCanonicalAvdName -Api $image.Api
         $emulatorProcess = $null
 
         try {
@@ -460,7 +440,6 @@ try {
                     Stop-Process -Id $emulatorProcess.Id -Force -ErrorAction SilentlyContinue
                 }
             }
-            Remove-MeasurementAvd -Tools $tools -Name $avdName
             if ([string]::IsNullOrWhiteSpace($previousAndroidSerial)) {
                 Remove-Item Env:ANDROID_SERIAL -ErrorAction SilentlyContinue
             } else {
@@ -529,9 +508,6 @@ try {
                 Stop-Process -Id $emulatorProcess.Id -Force -ErrorAction SilentlyContinue
             }
         }
-    }
-    if ($null -ne $tools -and -not [string]::IsNullOrWhiteSpace($avdName)) {
-        Remove-MeasurementAvd -Tools $tools -Name $avdName
     }
     if ([string]::IsNullOrWhiteSpace($previousAndroidSerial)) {
         Remove-Item Env:ANDROID_SERIAL -ErrorAction SilentlyContinue
