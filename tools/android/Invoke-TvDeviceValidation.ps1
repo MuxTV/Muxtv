@@ -309,21 +309,21 @@ try {
     $profiles = [System.Collections.Generic.List[object]]::new()
 
     if ($Mode -eq "DeviceMatrix") {
-        $oldImage = Resolve-TvSystemImage -Tools $tools -PreferredApi 26 -AllowOldEdgeFallback
+        $oldImage = Resolve-TvSystemImage -Tools $tools -PreferredApi 26
         $profiles.Add([pscustomobject]@{
             RequestedApi = 26
             Image = $oldImage
-            AvdName = "MuxTV_TV_OLD_API$($oldImage.Api)"
+            AvdName = "MuxTV_TV_OLD_API26"
             RamMb = 1536
             CpuCores = 2
-            FallbackUsed = $oldImage.Api -ne 26
+            FallbackUsed = $false
         })
     }
 
     $profiles.Add([pscustomobject]@{
         RequestedApi = 36
         Image = $currentImage
-        AvdName = "MuxTV_TV_CURRENT_API$($currentImage.Api)"
+        AvdName = "MuxTV_TV_CURRENT_API36"
         RamMb = 2048
         CpuCores = 2
         FallbackUsed = $false
