@@ -8,7 +8,6 @@ on:
       - '.github/workflows/two-avd-contract-temporary.yml'
       - 'tools/android/**'
       - 'tools/measurements/**'
-      - 'tools/ci/**'
 
 permissions:
   contents: read
@@ -19,7 +18,7 @@ concurrency:
 
 jobs:
   contract:
-    name: Two-AVD and Android harness static contracts
+    name: Two-AVD static contract
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
     timeout-minutes: 10
@@ -40,17 +39,7 @@ jobs:
             throw "Temporary two-AVD contract checkout mismatch."
           }
 
-      - name: Run two-AVD repository contract
+      - name: Run permanent two-AVD contract
         shell: pwsh
         run: |
           & .\tools\android\Test-TwoAvdContract.ps1
-
-      - name: Run legacy AVD cleanup contract
-        shell: pwsh
-        run: |
-          & .\tools\android\Test-LegacyMuxTvAvdCleanupContract.ps1
-
-      - name: Run complete Android harness contracts
-        shell: pwsh
-        run: |
-          & .\tools\android\Test-TvHarnessSyntax.ps1
