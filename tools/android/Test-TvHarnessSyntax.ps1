@@ -251,6 +251,12 @@ if (-not (Test-Path -LiteralPath $benchmarkFoundationContract -PathType Leaf)) {
 }
 & $benchmarkFoundationContract
 
-$message = "Android TV, CI evidence, measurement, and benchmark harness contracts are valid."
+$twoAvdContract = Join-Path $PSScriptRoot "Test-TwoAvdContract.ps1"
+if (-not (Test-Path -LiteralPath $twoAvdContract -PathType Leaf)) {
+    throw "MuxTV two-AVD contract test was not found."
+}
+& $twoAvdContract
+
+$message = "Android TV, CI evidence, measurement, benchmark, and two-AVD harness contracts are valid."
 Set-Content -LiteralPath $diagnosticPath -Value $message -Encoding utf8
 Write-Host $message
