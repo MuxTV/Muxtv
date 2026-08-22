@@ -21,16 +21,16 @@ $names = if ($PSBoundParameters.ContainsKey("AvdNames")) {
     if ($null -eq $AvdNameProbe) {
         $AvdNameProbe = {
             $tools = Get-AndroidSdkTools
-            $output = @(& $tools.AvdManager list avd 2>&1)
+            $output = @(& $tools.AvdManager list avd -c 2>&1)
             $exitCode = $LASTEXITCODE
             if ($exitCode -ne 0) {
                 throw "Unable to enumerate Android Virtual Devices."
             }
 
             foreach ($line in $output) {
-                $text = [string]$line
-                if ($text -match '^\s*Name:\s*(.+?)\s*$') {
-                    $Matches[1]
+                $name = ([string]$line).Trim()
+                if (-not [string]::IsNullOrWhiteSpace($name)) {
+                    $name
                 }
             }
         }
