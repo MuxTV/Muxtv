@@ -1,0 +1,157 @@
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$androidSdkPath = Join-Path $PSScriptRoot "AndroidSdk.ps1"
+$tvValidationPath = Join-Path $PSScriptRoot "Invoke-TvDeviceValidation.ps1"
+$benchmarkPath = Join-Path $PSScriptRoot "Invoke-BenchmarkDryRun.ps1"
+$catalogDevicePath = Join-Path $PSScriptRoot "Invoke-CatalogDatabaseDeviceValidation.ps1"
+$playerDevicePath = Join-Path $PSScriptRoot "Invoke-PlayerProxyDeviceValidation.ps1"
+$legacyCleanupPath = Join-Path $PSScriptRoot "Remove-LegacyMuxTvAvds.ps1"
+$measurementProfilesPath = Join-Path $repositoryRoot "tools\measurements\MeasurementProfiles.ps1"
+$measurementSeriesPath = Join-Path $repositoryRoot "tools\measurements\Invoke-MeasurementSeriesCore.ps1"
+$legacyCleanupContractPath = Join-Path $PSScriptRoot "Test-LegacyMuxTvAvdCleanupContract.ps1"
+
+$errors = [System.Collections.Generic.List[string]]::new()
+
+function Add-ContractError {
+    param([Parameter(Mandatory)][string]$Message)
+    $script:errors.Add($Message)
+}
+
+$androidSdk = Get-Content -LiteralPath $androidSdkPath -Raw
+$tvValidation = Get-Content -LiteralPath $tvValidationPath -Raw
+$benchmark = Get-Content -LiteralPath $benchmarkPath -Raw
+$catalogDevice = Get-Content -LiteralPath $catalogDevicePath -Raw
+$playerDevice = Get-Content -LiteralPath $playerDevicePath -Raw
+$legacyCleanup = Get-Content -LiteralPath $legacyCleanupPath -Raw
+$measurementProfiles = Get-Content -LiteralPath $measurementProfilesPath -Raw
+$measurementSeries = Get-Content -LiteralPath $measurementSeriesPath -Raw
+
+if ($androidSdk -notmatch '(?m)^function\s+Get-MuxTvCanonicalAvdName\s*\{') {
+    Add-ContractError "AndroidSdk must own canonical MuxTV AVD identity."
+}
+if ($androidSdk -notmatch '(?m)^function\s+Get-MuxTvCanonicalSystemImagePackage\s*\{') {
+    Add-ContractError "AndroidSdk must own the exact canonical TV system-image package contract."
+}
+if ($androidSdk -notmatch '(?m)^function\s+Collect-AndroidToolchainEvidence\s*\{') {
+    Add-ContractError "AndroidSdk must expose Android toolchain provenance collection."
+}
+if ($androidSdk -match 'AllowOldEdgeFallback') {
+    Add-ContractError "Android TV system-image fallback is forbidden; API 26 and API 36 must resolve exactly."
+}
+if ($androidSdk.Contains('swiftshader_indirect', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "Deprecated Android Emulator GPU mode swiftshader_indirect is forbidden."
+}
+if (-not $androidSdk.Contains('"-gpu", "swiftshader"', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "Headless emulator must use explicit supported SwiftShader rendering for reproducible evidence."
+}
+if (-not (Test-Path -LiteralPath $legacyCleanupContractPath -PathType Leaf)) {
+    Add-ContractError "Legacy MuxTV AVD cleanup contract is missing."
+}
+if (-not $legacyCleanup.Contains('list avd -c', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "Legacy AVD cleanup must enumerate AVDs through avdmanager compact output (list avd -c)."
+}
+if ($tvValidation -match '(?m)^function\s+Update-AndroidRuntimePackages\s*\{') {
+    Add-ContractError "TV validation must not opportunistically update emulator/platform-tools on every run."
+}
+if ($tvValidation.Contains('$Tools.SdkManager "platform-tools" "emulator"', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "TV validation still asks sdkmanager to mutate both runtime packages unconditionally."
+}
+if ($tvValidation -notmatch '(?m)^function\s+Ensure-AndroidRuntimePackages\s*\{') {
+    Add-ContractError "TV validation must install Android runtime packages only when their executables are missing."
+}
+if (-not $tvValidation.Contains('Collect-AndroidToolchainEvidence', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "TV validation must record Android toolchain provenance in exact-head evidence."
+}
+
+. $androidSdkPath
+
+try {
+    $oldName = Get-MuxTvCanonicalAvdName -Api 26
+    $currentName = Get-MuxTvCanonicalAvdName -Api 36
+    if ($oldName -cne 'MuxTV_TV_OLD_API26') {
+        Add-ContractError "API 26 canonical AVD name is incorrect."
+    }
+    if ($currentName -cne 'MuxTV_TV_CURRENT_API36') {
+        Add-ContractError "API 36 canonical AVD name is incorrect."
+    }
+    try {
+        $null = Get-MuxTvCanonicalAvdName -Api 30
+        Add-ContractError "Canonical AVD identity must reject APIs other than 26 and 36."
+    } catch {
+        # Expected.
+    }
+} catch {
+    Add-ContractError "Canonical AVD helper is not executable."
+}
+
+if (Get-Command Get-MuxTvCanonicalSystemImagePackage -ErrorAction SilentlyContinue) {
+    try {
+        $oldPackage = Get-MuxTvCanonicalSystemImagePackage -Api 26
+        $currentPackage = Get-MuxTvCanonicalSystemImagePackage -Api 36
+        if ($oldPackage -cne 'system-images;android-26;android-tv;x86') {
+            Add-ContractError "API 26 canonical TV system-image package is incorrect."
+        }
+        if ($currentPackage -cne 'system-images;android-36;android-tv;x86_64') {
+            Add-ContractError "API 36 canonical TV system-image package is incorrect."
+        }
+        try {
+            $null = Get-MuxTvCanonicalSystemImagePackage -Api 30
+            Add-ContractError "Canonical system-image package helper must reject APIs other than 26 and 36."
+        } catch {
+            # Expected.
+        }
+    } catch {
+        Add-ContractError "Canonical system-image package helper is not executable."
+    }
+}
+if (-not $androidSdk.Contains('Get-MuxTvCanonicalSystemImagePackage -Api $PreferredApi', [System.StringComparison]::Ordinal)) {
+    Add-ContractError "Resolve-TvSystemImage must select the canonical package, not rank arbitrary same-API TV images."
+}
+
+$forbiddenByFile = [ordered]@{
+    'Invoke-BenchmarkDryRun.ps1' = @('MuxTV_BENCHMARK_API36')
+    'Invoke-CatalogDatabaseDeviceValidation.ps1' = @('MuxTV_CATALOG_MEASUREMENT_API')
+    'Invoke-PlayerProxyDeviceValidation.ps1' = @('MuxTV_PLAYER_MEASUREMENT_API')
+    'Invoke-MeasurementSeriesCore.ps1' = @('MuxTV_VARIANCE_', 'Remove-MeasurementAvd')
+}
+$fileContent = @{
+    'Invoke-BenchmarkDryRun.ps1' = $benchmark
+    'Invoke-CatalogDatabaseDeviceValidation.ps1' = $catalogDevice
+    'Invoke-PlayerProxyDeviceValidation.ps1' = $playerDevice
+    'Invoke-MeasurementSeriesCore.ps1' = $measurementSeries
+}
+foreach ($entry in $forbiddenByFile.GetEnumerator()) {
+    foreach ($forbidden in $entry.Value) {
+        if ($fileContent[$entry.Key].Contains($forbidden, [System.StringComparison]::Ordinal)) {
+            Add-ContractError "$($entry.Key) still owns a non-canonical AVD identity/lifecycle: $forbidden"
+        }
+    }
+}
+
+foreach ($caller in @(
+    @{ Name = 'Invoke-TvDeviceValidation.ps1'; Content = $tvValidation },
+    @{ Name = 'Invoke-BenchmarkDryRun.ps1'; Content = $benchmark },
+    @{ Name = 'Invoke-CatalogDatabaseDeviceValidation.ps1'; Content = $catalogDevice },
+    @{ Name = 'Invoke-PlayerProxyDeviceValidation.ps1'; Content = $playerDevice },
+    @{ Name = 'Invoke-MeasurementSeriesCore.ps1'; Content = $measurementSeries }
+)) {
+    if ($caller.Content -notmatch 'Get-MuxTvCanonicalAvdName') {
+        Add-ContractError "$($caller.Name) must obtain AVD identity from Get-MuxTvCanonicalAvdName."
+    }
+}
+
+if ($measurementProfiles -match 'AllowOldEdgeFallback') {
+    Add-ContractError "Measurement profiles must not expose Android TV fallback policy."
+}
+
+if ($errors.Count -gt 0) {
+    throw ("MuxTV two-AVD contract failed.`n" + [string]::Join([Environment]::NewLine, $errors))
+}
+
+& $legacyCleanupContractPath
+Write-Host "MuxTV two-AVD contract is valid."

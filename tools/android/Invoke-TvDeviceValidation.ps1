@@ -59,18 +59,42 @@ function Write-HarnessManifest {
     $Manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding utf8
 }
 
-function Update-AndroidRuntimePackages {
+function Ensure-AndroidRuntimePackages {
     param(
         [Parameter(Mandatory)]$Tools,
         [Parameter(Mandatory)][string]$EvidenceDirectory
     )
 
-    $logPath = Join-Path $EvidenceDirectory "sdkmanager-runtime-update.log"
+    $missingPackages = [System.Collections.Generic.List[string]]::new()
+    if (-not (Test-Path -LiteralPath $Tools.Adb -PathType Leaf)) {
+        $missingPackages.Add("platform-tools")
+    }
+    if (-not (Test-Path -LiteralPath $Tools.Emulator -PathType Leaf)) {
+        $missingPackages.Add("emulator")
+    }
+
+    $logPath = Join-Path $EvidenceDirectory "sdkmanager-runtime-ensure.log"
+    if ($missingPackages.Count -eq 0) {
+        "Android runtime executables already exist; sdkmanager update/install skipped." |
+            Set-Content -LiteralPath $logPath -Encoding utf8
+        return
+    }
+
+    $packages = @($missingPackages)
+    "Installing only missing Android runtime packages: $($packages -join ', ')" |
+        Set-Content -LiteralPath $logPath -Encoding utf8
     $accept = 1..200 | ForEach-Object { "y" }
-    $accept | & $Tools.SdkManager "platform-tools" "emulator" 2>&1 |
-        Tee-Object -FilePath $logPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to install or update platform-tools and emulator. See $logPath"
+    $runtimeOutput = @($accept | & $Tools.SdkManager @packages 2>&1)
+    $runtimeExitCode = $LASTEXITCODE
+    $runtimeOutput | Add-Content -LiteralPath $logPath -Encoding utf8
+    $runtimeOutput | ForEach-Object { Write-Host $_ }
+    if ($runtimeExitCode -ne 0) {
+        throw "Unable to install missing Android runtime package(s). See $logPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $Tools.Adb -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $Tools.Emulator -PathType Leaf)) {
+        throw "Android runtime package installation completed but required executables are still unavailable. See $logPath"
     }
 }
 
@@ -263,6 +287,7 @@ $manifest = [ordered]@{
     startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     completedAtUtc = $null
     status = "running"
+    toolchainEvidence = "android-toolchain.json"
     requestedProfiles = @()
     profiles = @()
     failure = $null
@@ -275,7 +300,9 @@ $previousAndroidSerial = $env:ANDROID_SERIAL
 
 try {
     $bootstrapTools = Get-AndroidSdkTools -AllowMissingRuntime
-    Update-AndroidRuntimePackages -Tools $bootstrapTools -EvidenceDirectory $evidenceDirectory
+    Ensure-AndroidRuntimePackages -Tools $bootstrapTools -EvidenceDirectory $evidenceDirectory
+    $tools = Get-AndroidSdkTools
+    Collect-AndroidToolchainEvidence -Tools $tools -EvidenceDirectory $evidenceDirectory
 
     if (-not $SkipHostValidation) {
         $hostValidationRoot = Join-Path $evidenceDirectory "host-validation"
@@ -301,7 +328,6 @@ try {
         Write-Host "`n==> Host validation skipped by orchestrating CI lane"
     }
 
-    $tools = Get-AndroidSdkTools
     Reset-AdbServer -Tools $tools -EvidenceDirectory $evidenceDirectory
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $evidenceDirectory
 
@@ -309,21 +335,21 @@ try {
     $profiles = [System.Collections.Generic.List[object]]::new()
 
     if ($Mode -eq "DeviceMatrix") {
-        $oldImage = Resolve-TvSystemImage -Tools $tools -PreferredApi 26 -AllowOldEdgeFallback
+        $oldImage = Resolve-TvSystemImage -Tools $tools -PreferredApi 26
         $profiles.Add([pscustomobject]@{
             RequestedApi = 26
             Image = $oldImage
-            AvdName = "MuxTV_TV_OLD_API$($oldImage.Api)"
+            AvdName = Get-MuxTvCanonicalAvdName -Api 26
             RamMb = 1536
             CpuCores = 2
-            FallbackUsed = $oldImage.Api -ne 26
+            FallbackUsed = $false
         })
     }
 
     $profiles.Add([pscustomobject]@{
         RequestedApi = 36
         Image = $currentImage
-        AvdName = "MuxTV_TV_CURRENT_API$($currentImage.Api)"
+        AvdName = Get-MuxTvCanonicalAvdName -Api 36
         RamMb = 2048
         CpuCores = 2
         FallbackUsed = $false

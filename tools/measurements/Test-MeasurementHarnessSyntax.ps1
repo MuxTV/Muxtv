@@ -53,9 +53,9 @@ foreach ($file in $files) {
 if (Test-Path $profileScript -PathType Leaf) {
     . $profileScript
     $expected = [ordered]@{
-        "current-normal" = @{ Api = 36; Ram = 2048; Cpu = 2; Fallback = $false }
-        "old-edge-normal" = @{ Api = 26; Ram = 1536; Cpu = 2; Fallback = $true }
-        "current-low-ram" = @{ Api = 36; Ram = 1024; Cpu = 2; Fallback = $false }
+        "current-normal" = @{ Api = 36; Ram = 2048; Cpu = 2 }
+        "old-edge-normal" = @{ Api = 26; Ram = 1536; Cpu = 2 }
+        "current-low-ram" = @{ Api = 36; Ram = 1024; Cpu = 2 }
     }
     $ids = @(Get-MuxTvMeasurementProfileIds)
     if ($ids.Count -ne $expected.Count -or
@@ -68,8 +68,7 @@ if (Test-Path $profileScript -PathType Leaf) {
         if ([string]$profile.Id -cne $id -or
             [int]$profile.RequestedApi -ne [int]$contract.Api -or
             [int]$profile.RamMb -ne [int]$contract.Ram -or
-            [int]$profile.CpuCores -ne [int]$contract.Cpu -or
-            [bool]$profile.AllowOldEdgeFallback -ne [bool]$contract.Fallback) {
+            [int]$profile.CpuCores -ne [int]$contract.Cpu) {
             $messages.Add("Measurement profile contract is invalid: $id")
         }
     }
@@ -100,7 +99,7 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
     $requiredTokens = @(
         "finally",
         "Stop-TvEmulator",
-        "Remove-MeasurementAvd",
+        "Get-MuxTvCanonicalAvdName",
         "Invoke-CatalogDatabaseMeasurement.ps1",
         "Invoke-PlayerProxyMeasurement.ps1",
         "Stop-MeasurementGradleDaemons",
@@ -118,11 +117,14 @@ if (Test-Path $seriesCoreScript -PathType Leaf) {
     $forbiddenTokens = @(
         "ForEach-Object -Parallel",
         "Start-Job",
-        "Start-ThreadJob"
+        "Start-ThreadJob",
+        "MuxTV_VARIANCE_",
+        "Remove-MeasurementAvd",
+        "AllowOldEdgeFallback"
     )
     foreach ($token in $forbiddenTokens) {
         if ($seriesContent -match [regex]::Escape($token)) {
-            $messages.Add("Measurement series core contains forbidden parallel execution: $token")
+            $messages.Add("Measurement series core contains forbidden execution/device ownership: $token")
         }
     }
     $catalogChildIndex = $seriesContent.IndexOf('-File", $catalogMeasurementScript')

@@ -126,6 +126,7 @@ try {
     $tools = Get-AndroidSdkTools
     Test-AndroidAcceleration -Tools $tools -EvidenceDirectory $evidenceDirectory
     $image = Resolve-TvSystemImage -Tools $tools -PreferredApi 36
+    $avdName = Get-MuxTvCanonicalAvdName -Api 36
     $manifest.systemImage = $image.Package
     Install-AndroidPackage -Tools $tools -Package $image.Package -EvidenceDirectory $evidenceDirectory
     $consolePort = Get-FreeBenchmarkEmulatorPort
@@ -133,7 +134,7 @@ try {
     $tcpSerial = "127.0.0.1:$($consolePort + 1)"
     New-TvAvd `
         -Tools $tools `
-        -Name "MuxTV_BENCHMARK_API36" `
+        -Name $avdName `
         -SystemImagePackage $image.Package `
         -RamMb 2048 `
         -CpuCores 2
@@ -142,7 +143,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Unable to start ADB before benchmark emulator startup." }
     $emulatorProcess = Start-TvEmulator `
         -Tools $tools `
-        -AvdName "MuxTV_BENCHMARK_API36" `
+        -AvdName $avdName `
         -Port $consolePort `
         -EvidenceDirectory $evidenceDirectory
     $registeredSerial = Wait-BenchmarkAdbRegistration `

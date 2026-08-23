@@ -16,7 +16,6 @@ function Get-MuxTvMeasurementProfile {
                 RequestedApi = 36
                 RamMb = 2048
                 CpuCores = 2
-                AllowOldEdgeFallback = $false
             }
         }
         "old-edge-normal" {
@@ -25,7 +24,6 @@ function Get-MuxTvMeasurementProfile {
                 RequestedApi = 26
                 RamMb = 1536
                 CpuCores = 2
-                AllowOldEdgeFallback = $true
             }
         }
         "current-low-ram" {
@@ -34,7 +32,6 @@ function Get-MuxTvMeasurementProfile {
                 RequestedApi = 36
                 RamMb = 1024
                 CpuCores = 2
-                AllowOldEdgeFallback = $false
             }
         }
         default {

@@ -152,7 +152,7 @@ try {
 
     $port = Get-FreeEmulatorPort
     $serial = "emulator-$port"
-    $avdName = "MuxTV_PLAYER_MEASUREMENT_API$($image.Api)"
+    $avdName = Get-MuxTvCanonicalAvdName -Api $image.Api
     $manifest.image = [ordered]@{
         api = $image.Api
         package = $image.Package

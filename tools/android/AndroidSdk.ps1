@@ -204,43 +204,53 @@ function Get-AvailableTvSystemImages {
     return @($images)
 }
 
+function Get-MuxTvCanonicalAvdName {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$Api)
+
+    switch ($Api) {
+        26 { return "MuxTV_TV_OLD_API26" }
+        36 { return "MuxTV_TV_CURRENT_API36" }
+        default {
+            throw "MuxTV repository AVD identity is defined only for API 26 and API 36."
+        }
+    }
+}
+
+function Get-MuxTvCanonicalSystemImagePackage {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][int]$Api)
+
+    switch ($Api) {
+        26 { return "system-images;android-26;android-tv;x86" }
+        36 { return "system-images;android-36;android-tv;x86_64" }
+        default {
+            throw "MuxTV TV system-image contract is defined only for API 26 and API 36."
+        }
+    }
+}
+
 function Resolve-TvSystemImage {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Tools,
-        [Parameter(Mandatory)][int]$PreferredApi,
-        [switch]$AllowOldEdgeFallback
+        [Parameter(Mandatory)][int]$PreferredApi
     )
 
     $images = @(Get-AvailableTvSystemImages -Tools $Tools)
-    $flavorRank = @{ "android-tv" = 0; "google-tv" = 1 }
-    $abiRank = @{ "x86_64" = 0; "x86" = 1 }
-
+    $requiredPackage = Get-MuxTvCanonicalSystemImagePackage -Api $PreferredApi
     $exact = @(
         $images |
-            Where-Object { $_.Api -eq $PreferredApi } |
-            Sort-Object @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } }
+            Where-Object { $_.Package -ceq $requiredPackage }
     )
-    if ($exact.Count -gt 0) {
+    if ($exact.Count -eq 1) {
         return $exact[0]
-    }
-
-    if ($AllowOldEdgeFallback) {
-        $fallback = @(
-            $images |
-                Where-Object { $_.Api -ge 26 -and $_.Api -le 30 } |
-                Sort-Object Api, @{ Expression = { $flavorRank[$_.Flavor] } }, @{ Expression = { $abiRank[$_.Abi] } }
-        )
-        if ($fallback.Count -gt 0) {
-            Write-Warning "Android TV API $PreferredApi image is unavailable. Using old-edge API $($fallback[0].Api): $($fallback[0].Package)."
-            return $fallback[0]
-        }
     }
 
     $available = $images |
         Sort-Object Api, Flavor, Abi |
         ForEach-Object { $_.Package }
-    throw "Required Android TV API $PreferredApi image is unavailable. Available TV images: $($available -join ', ')"
+    throw "Required canonical Android TV image $requiredPackage is unavailable. Available TV images: $($available -join ', ')"
 }
 
 function Test-AndroidSystemImageInstalled {
@@ -297,6 +307,52 @@ function Install-AndroidPackage {
     if ($LASTEXITCODE -ne 0) {
         throw "sdkmanager failed to install $Package. See $logPath"
     }
+}
+
+function Collect-AndroidToolchainEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$EvidenceDirectory
+    )
+
+    New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
+
+    $adbVersion = @(& $Tools.Adb version 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read adb version for Android toolchain evidence."
+    }
+    $emulatorVersion = @(& $Tools.Emulator -version 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read Android Emulator version for Android toolchain evidence."
+    }
+    $sdkManagerVersion = @(& $Tools.SdkManager --version 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read sdkmanager version for Android toolchain evidence."
+    }
+
+    $cmdlineToolsRoot = Split-Path (Split-Path $Tools.SdkManager -Parent) -Parent
+    $cmdlineSourcePropertiesPath = Join-Path $cmdlineToolsRoot "source.properties"
+    $cmdlineSourceProperties = if (Test-Path -LiteralPath $cmdlineSourcePropertiesPath -PathType Leaf) {
+        @(Get-Content -LiteralPath $cmdlineSourcePropertiesPath)
+    } else {
+        @()
+    }
+
+    $evidence = [ordered]@{
+        sdkRoot = $Tools.Root
+        adbPath = $Tools.Adb
+        adbVersion = [string]::Join([Environment]::NewLine, $adbVersion)
+        emulatorPath = $Tools.Emulator
+        emulatorVersion = [string]::Join([Environment]::NewLine, $emulatorVersion)
+        sdkManagerPath = $Tools.SdkManager
+        sdkManagerVersion = [string]::Join([Environment]::NewLine, $sdkManagerVersion)
+        avdManagerPath = $Tools.AvdManager
+        commandLineToolsRoot = $cmdlineToolsRoot
+        commandLineToolsSourceProperties = @($cmdlineSourceProperties)
+    }
+    $evidence | ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath (Join-Path $EvidenceDirectory "android-toolchain.json") -Encoding utf8
 }
 
 function Test-AndroidAcceleration {
@@ -399,7 +455,7 @@ function Start-TvEmulator {
         "-no-boot-anim",
         "-no-snapshot",
         "-wipe-data",
-        "-gpu", "swiftshader_indirect",
+        "-gpu", "swiftshader",
         "-accel", "on",
         "-camera-back", "none",
         "-camera-front", "none",

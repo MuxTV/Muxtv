@@ -369,6 +369,7 @@ try {
     $prSelfHostedWorkflows = @(
         ".github\workflows\self-hosted-validation.yml",
         ".github\workflows\android-tv-focused-device.yml",
+        ".github\workflows\android-tv-product-device-matrix.yml",
         ".github\workflows\database-migration-device-matrix.yml",
         ".github\workflows\measurement-variance-smoke.yml"
     )
@@ -383,7 +384,6 @@ try {
     }
 
     $manualOnlyWorkflows = @(
-        ".github\workflows\android-tv-product-device-matrix.yml",
         ".github\workflows\benchmark-foundation.yml",
         ".github\workflows\integration-gate.yml",
         ".github\workflows\focused-m3u-evidence.yml"
@@ -402,6 +402,17 @@ try {
         if ($content.IndexOf("cancel-in-progress: false", [System.StringComparison]::Ordinal) -lt 0) {
             throw "Manual-only workflow may cancel an already-selected evidence run: $workflowPath"
         }
+    }
+
+    $productMatrixWorkflow = Get-WorkflowContent ".github\workflows\android-tv-product-device-matrix.yml"
+    if ($productMatrixWorkflow.IndexOf("workflow_dispatch:", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Risk-routed product matrix must preserve manual workflow_dispatch support."
+    }
+    if ($productMatrixWorkflow.IndexOf('ref: ${{ github.event_name == ''pull_request'' && github.event.pull_request.head.sha || github.sha }}', [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Risk-routed product matrix must check out the exact PR head when pull-request triggered."
+    }
+    if ($productMatrixWorkflow.IndexOf("cancel-in-progress: `${{ github.event_name == 'pull_request' }}", [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Risk-routed product matrix must cancel superseded PR evidence without cancelling manual evidence."
     }
 
     $varianceWorkflow = Get-WorkflowContent ".github\workflows\measurement-variance-smoke.yml"

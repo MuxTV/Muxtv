@@ -153,8 +153,8 @@ Assert-WorkflowEvidenceContract `
 
 Assert-WorkflowEvidenceContract `
     -RelativePath ".github\workflows\android-tv-product-device-matrix.yml" `
-    -CheckoutToken 'ref: ${{ github.sha }}' `
-    -SourceCommitToken 'github.sha'
+    -CheckoutToken $prOrDispatchCheckout `
+    -SourceCommitToken $prOrDispatchSource
 
 Assert-WorkflowEvidenceContract `
     -RelativePath ".github\workflows\database-migration-device-matrix.yml" `
@@ -217,15 +217,15 @@ if ($messages.Count -eq 0) {
     function Get-AvailableTvSystemImages {
         param([Parameter(Mandatory)]$Tools)
         return [pscustomobject]@{
-            Package = "system-images;android-36;android-tv;x86"
+            Package = "system-images;android-36;android-tv;x86_64"
             Api = 36
             Flavor = "android-tv"
-            Abi = "x86"
+            Abi = "x86_64"
         }
     }
     $singletonResult = Resolve-TvSystemImage -Tools ([pscustomobject]@{}) -PreferredApi 36
-    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86") {
-        Add-ContractError "Resolve-TvSystemImage did not handle singleton image output."
+    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86_64") {
+        Add-ContractError "Resolve-TvSystemImage did not handle singleton canonical image output."
     }
 }
 
@@ -251,6 +251,12 @@ if (-not (Test-Path -LiteralPath $benchmarkFoundationContract -PathType Leaf)) {
 }
 & $benchmarkFoundationContract
 
-$message = "Android TV, CI evidence, measurement, and benchmark harness contracts are valid."
+$twoAvdContract = Join-Path $PSScriptRoot "Test-TwoAvdContract.ps1"
+if (-not (Test-Path -LiteralPath $twoAvdContract -PathType Leaf)) {
+    throw "MuxTV two-AVD contract test was not found."
+}
+& $twoAvdContract
+
+$message = "Android TV, CI evidence, measurement, benchmark, and two-AVD harness contracts are valid."
 Set-Content -LiteralPath $diagnosticPath -Value $message -Encoding utf8
 Write-Host $message
