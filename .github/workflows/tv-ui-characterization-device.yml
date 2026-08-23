@@ -104,6 +104,12 @@ jobs:
           & .\tools\android\Test-TvHarnessSyntax.ps1
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
 
+      - name: Collect immutable A B C UI source facts
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Collect-TvUiSourceFacts.ps1 `
+            -OutputPath '.work\evidence\ui-characterization\source-facts.json'
+
       - name: Run immutable A B C characterization
         shell: pwsh
         env:
