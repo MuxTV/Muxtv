@@ -11,6 +11,7 @@ $collectorPath = Join-Path $PSScriptRoot 'Collect-TvUiSourceFacts.ps1'
 $sourceFactsTestPath = Join-Path $PSScriptRoot 'Test-TvUiSourceFacts.ps1'
 $analyzerPath = Join-Path $PSScriptRoot 'Analyze-TvUiCharacterization.ps1'
 $probePath = Join-Path $PSScriptRoot 'probe\UiCharacterizationProbeTest.kt'
+$resetScriptPath = Join-Path $repositoryRoot 'tools\ci\Reset-SelfHostedAndroidState.ps1'
 $staticWorkflowPath = Join-Path $repositoryRoot '.github\workflows\tv-ui-characterization-static.yml'
 $deviceWorkflowPath = Join-Path $repositoryRoot '.github\workflows\tv-ui-characterization-device.yml'
 
@@ -25,7 +26,7 @@ function Assert-ContainsLiteral {
 
 foreach ($required in @(
     $orchestratorPath, $compileHelperPath, $collectorPath, $sourceFactsTestPath,
-    $analyzerPath, $probePath, $staticWorkflowPath, $deviceWorkflowPath
+    $analyzerPath, $probePath, $resetScriptPath, $staticWorkflowPath, $deviceWorkflowPath
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required UI characterization component is missing: $required"
@@ -37,6 +38,7 @@ $compileHelper = Get-Content -LiteralPath $compileHelperPath -Raw
 $collector = Get-Content -LiteralPath $collectorPath -Raw
 $analyzer = Get-Content -LiteralPath $analyzerPath -Raw
 $probe = Get-Content -LiteralPath $probePath -Raw
+$resetScript = Get-Content -LiteralPath $resetScriptPath -Raw
 $staticWorkflow = Get-Content -LiteralPath $staticWorkflowPath -Raw
 $deviceWorkflow = Get-Content -LiteralPath $deviceWorkflowPath -Raw
 
@@ -70,6 +72,8 @@ foreach ($component in @($orchestrator, $compileHelper)) {
     Assert-ContainsLiteral $component 'Get-FileHash' 'Characterization must verify common-probe SHA256 identity.'
     Assert-ContainsLiteral $component 'worktree' 'Characterization must isolate immutable refs in Git worktrees.'
 }
+Assert-ContainsLiteral $orchestrator "'--project-dir'" 'Runtime characterization must bind Gradle to the immutable comparison worktree.'
+Assert-ContainsLiteral $orchestrator '$worktreePath' 'Runtime characterization must pass the immutable worktree as Gradle project-dir.'
 
 Assert-ContainsLiteral $staticWorkflow 'fail-fast: false' 'Static compatibility must preserve all A/B/C verdicts when one ref fails.'
 foreach ($id in @('A', 'B', 'C')) {
@@ -146,6 +150,60 @@ foreach ($literal in @(
     'validatedCompiledParent', 'HEAD^', 'triggerOnly'
 )) {
     Assert-ContainsLiteral $deviceWorkflow $literal "Device characterization workflow is missing required control: $literal"
+}
+
+# Regression contract for the self-hosted cleanup TOCTOU race observed after run 32640877508.
+# A process may disappear between enumeration and Stop-Process; that is benign. A still-live process
+# that cannot be stopped must remain a hard failure.
+Assert-ContainsLiteral $resetScript 'Emulator process exited before cleanup stop completed' 'Runner reset must explicitly tolerate a process that disappears before stop completes.'
+Assert-ContainsLiteral $resetScript '$sameProcess.Count -gt 0' 'Runner reset must re-probe the same emulator identity before suppressing a stop error.'
+
+$resetRaceRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('muxtv-reset-race-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $resetRaceRoot | Out-Null
+try {
+    $goneState = [pscustomobject]@{ Calls = 0 }
+    $goneProbe = {
+        $goneState.Calls++
+        if ($goneState.Calls -eq 1) {
+            @([pscustomobject]@{ ProcessName = 'emulator'; Id = 424242 })
+        } else {
+            @()
+        }
+    }.GetNewClosure()
+    $failingStop = {
+        param([object]$Process)
+        throw [System.InvalidOperationException]::new("simulated stop race for $($Process.Id)")
+    }
+    $noopAdb = { param([string]$Command) }
+    $noBuilds = { param([string]$ResolvedRepositoryRoot) @() }
+    $noopRemoval = { param([string]$Path) }
+
+    & $resetScriptPath `
+        -RepositoryRoot $resetRaceRoot `
+        -EmulatorProcessProbe $goneProbe `
+        -StopEmulatorProcess $failingStop `
+        -AdbAction $noopAdb `
+        -BuildDirectoryProbe $noBuilds `
+        -PathRemoval $noopRemoval
+
+    $liveProbe = { @([pscustomobject]@{ ProcessName = 'emulator'; Id = 424243 }) }
+    $liveFailureObserved = $false
+    try {
+        & $resetScriptPath `
+            -RepositoryRoot $resetRaceRoot `
+            -EmulatorProcessProbe $liveProbe `
+            -StopEmulatorProcess $failingStop `
+            -AdbAction $noopAdb `
+            -BuildDirectoryProbe $noBuilds `
+            -PathRemoval $noopRemoval
+    } catch {
+        $liveFailureObserved = $true
+    }
+    if (-not $liveFailureObserved) {
+        throw 'Runner reset incorrectly suppressed a stop failure while the emulator process was still present.'
+    }
+} finally {
+    Remove-Item -LiteralPath $resetRaceRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $productionMutationPatterns = @('src/main/kotlin', 'AppNavigation.kt', 'TvTokens.kt')
