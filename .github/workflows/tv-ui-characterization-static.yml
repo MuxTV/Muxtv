@@ -20,14 +20,13 @@ jobs:
     name: TV UI characterization static contract
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout exact PR head with comparison history
+      - name: Checkout exact PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify exact source head
@@ -44,62 +43,43 @@ jobs:
         run: |
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
 
-      - name: Compile byte-identical probe against A B C
+  compile:
+    name: Compile common probe (${{ matrix.id }})
+    needs: contract
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: A
+            commit: 2302c11441c85b8b5752d7f03cc5bc13be8c6d92
+          - id: B
+            commit: 515072022d11b218fcb20f43079f94098b3ea973
+          - id: C
+            commit: 7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9
+
+    steps:
+      - name: Checkout exact PR head with comparison history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact source head
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-            $PSNativeCommandUseErrorActionPreference = $false
+          $actual = (& git rev-parse HEAD).Trim()
+          $expected = '${{ github.event.pull_request.head.sha }}'
+          if ($actual -cne $expected) {
+            throw "UI characterization compile checkout mismatch: expected $expected, got $actual"
           }
 
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to enable Git long-path support.' }
-
-          $probe = (Resolve-Path '.\tools\ui-characterization\probe\UiCharacterizationProbeTest.kt').Path
-          $probeHash = (Get-FileHash -LiteralPath $probe -Algorithm SHA256).Hash
-          $refs = @(
-            @{ Id = 'A'; Sha = '2302c11441c85b8b5752d7f03cc5bc13be8c6d92' },
-            @{ Id = 'B'; Sha = '515072022d11b218fcb20f43079f94098b3ea973' },
-            @{ Id = 'C'; Sha = '7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9' }
-          )
-          $worktrees = [System.Collections.Generic.List[string]]::new()
-          try {
-            foreach ($ref in $refs) {
-              $path = Join-Path $env:RUNNER_TEMP "muxtv-ui-compile-$($ref.Id)"
-              & git worktree add --detach $path $ref.Sha
-              if ($LASTEXITCODE -ne 0) { throw "Unable to create comparison worktree $($ref.Id)." }
-              $worktrees.Add($path)
-
-              $actual = (& git -C $path rev-parse HEAD).Trim()
-              if ($actual -cne $ref.Sha) {
-                throw "Comparison worktree $($ref.Id) checkout mismatch."
-              }
-
-              $target = Join-Path $path 'app\tv\src\androidTest\kotlin\app\muxtv\UiCharacterizationProbeTest.kt'
-              Copy-Item -LiteralPath $probe -Destination $target -Force
-              $targetHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-              if ($targetHash -cne $probeHash) {
-                throw "Comparison worktree $($ref.Id) did not receive the byte-identical probe."
-              }
-
-              Push-Location $path
-              try {
-                .\gradlew.bat :app:tv:compileDebugAndroidTestKotlin `
-                  --no-daemon `
-                  --console=plain `
-                  --stacktrace `
-                  --warning-mode all `
-                  --no-problems-report
-                if ($LASTEXITCODE -ne 0) {
-                  throw "Common characterization probe failed to compile on comparison $($ref.Id)."
-                }
-              } finally {
-                Pop-Location
-              }
-            }
-          } finally {
-            foreach ($path in @($worktrees)) {
-              & git worktree remove --force $path 2>$null
-            }
-            git worktree prune
-          }
+      - name: Compile byte-identical probe on comparison ${{ matrix.id }}
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Compile-TvUiCharacterizationProbe.ps1 `
+            -ComparisonId '${{ matrix.id }}' `
+            -Commit '${{ matrix.commit }}'
