@@ -51,7 +51,7 @@ class UiCharacterizationProbeTest {
         }
 
         val root = JSONObject()
-            .put("schemaVersion", 1)
+            .put("schemaVersion", 2)
             .put("sourceCommit", arguments.getString("sourceCommit") ?: "unknown")
             .put("displayProfile", arguments.getString("displayProfile") ?: "unknown")
             .put("displayWidthPx", arguments.getString("displayWidthPx")?.toIntOrNull())
@@ -99,7 +99,7 @@ class UiCharacterizationProbeTest {
             root = root,
             destination = "settings",
             navTag = "nav-settings",
-            anchor = Anchor.Title("Настройки"),
+            anchor = Anchor.Tag("settings-section-sources"),
             navigate = { openRailDestination("nav-settings") },
         )
 
@@ -126,41 +126,79 @@ class UiCharacterizationProbeTest {
         screenshot(outputDirectory, "$destination-before")
 
         // RequestFocus is only a deterministic setup seam. Movement itself goes through the
-        // Android framework Instrumentation input path, so the historical refs need no UiAutomator
+        // Android framework Instrumentation input path, so historical refs need no UiAutomator
         // dependency or build-file mutation.
         runCatching {
             anchorInteraction.requestFocus()
             composeRule.waitForIdle()
         }
         val focusBeforeLeft = focusedNodeDescription()
+
+        // Sequence 1: content -> rail -> Back. This characterizes AppNavigation's BackHandler
+        // contract independently from the ordinary Right movement path.
         pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
         composeRule.waitForIdle()
-        val duringBounds = anchorInteraction.bounds()
+        val duringBackRailBounds = anchorInteraction.bounds()
         val railBounds = composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
             .fetchSemanticsNode().boundsInRoot
-        val focusOnRail = focusedNodeDescription()
-        screenshot(outputDirectory, "$destination-rail")
+        val focusOnRailBeforeBack = focusedNodeDescription()
+        screenshot(outputDirectory, "$destination-rail-before-back")
+
+        pressKey(KeyEvent.KEYCODE_BACK)
+        composeRule.waitForIdle()
+        val afterBackBounds = anchorInteraction.bounds()
+        val focusAfterBack = focusedNodeDescription()
+        screenshot(outputDirectory, "$destination-after-back")
+
+        // Sequence 2: content -> rail -> Right. Re-seed the content anchor when it is explicitly
+        // focusable so the Right trace cannot inherit accidental state from the Back sequence.
+        runCatching {
+            anchorInteraction.requestFocus()
+            composeRule.waitForIdle()
+        }
+        val focusBeforeSecondLeft = focusedNodeDescription()
+        pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
+        composeRule.waitForIdle()
+        val duringRightRailBounds = anchorInteraction.bounds()
+        val focusOnRailBeforeRight = focusedNodeDescription()
+        screenshot(outputDirectory, "$destination-rail-before-right")
 
         pressKey(KeyEvent.KEYCODE_DPAD_RIGHT)
         composeRule.waitForIdle()
-        val afterBounds = anchorInteraction.bounds()
+        val afterRightBounds = anchorInteraction.bounds()
         val focusAfterRight = focusedNodeDescription()
-        screenshot(outputDirectory, "$destination-after")
+        screenshot(outputDirectory, "$destination-after-right")
 
         val entry = JSONObject()
             .put("destination", destination)
             .put("navTag", navTag)
             .put("anchor", anchor.description)
+            .put("anchorHasExplicitFocusAction", anchorInteraction.hasFocusAction)
             .put("beforeBounds", beforeBounds.toJson())
-            .put("duringRailBounds", duringBounds.toJson())
-            .put("afterBounds", afterBounds.toJson())
+            .put("duringRailBounds", duringRightRailBounds.toJson())
+            .put("duringBackRailBounds", duringBackRailBounds.toJson())
+            .put("duringRightRailBounds", duringRightRailBounds.toJson())
+            .put("afterBounds", afterRightBounds.toJson())
+            .put("afterBackBounds", afterBackBounds.toJson())
+            .put("afterRightBounds", afterRightBounds.toJson())
             .put("railBounds", railBounds.toJson())
             .put("focusInitial", beforeFocus)
             .put("focusBeforeLeft", focusBeforeLeft)
-            .put("focusOnRail", focusOnRail)
+            .put("focusOnRail", focusOnRailBeforeRight)
+            .put("focusBeforeBack", focusOnRailBeforeBack)
+            .put("focusAfterBack", focusAfterBack)
+            .put("focusBeforeSecondLeft", focusBeforeSecondLeft)
+            .put("focusOnRailBeforeRight", focusOnRailBeforeRight)
             .put("focusAfterRight", focusAfterRight)
-            .put("contentOriginStableDuringRail", beforeBounds.left == duringBounds.left)
-            .put("contentOriginRestored", beforeBounds.left == afterBounds.left)
+            .put("backReachedExpectedRailItem", focusOnRailBeforeBack == navTag)
+            .put("backMovedFocusAwayFromRail", focusOnRailBeforeBack == navTag && focusAfterBack != navTag)
+            .put("rightReachedExpectedRailItem", focusOnRailBeforeRight == navTag)
+            .put("rightMovedFocusAwayFromRail", focusOnRailBeforeRight == navTag && focusAfterRight != navTag)
+            .put("contentOriginStableDuringRail", beforeBounds.left == duringRightRailBounds.left)
+            .put("contentOriginStableDuringBackRail", beforeBounds.left == duringBackRailBounds.left)
+            .put("contentOriginRestored", beforeBounds.left == afterRightBounds.left)
+            .put("contentOriginRestoredAfterBack", beforeBounds.left == afterBackBounds.left)
+            .put("contentOriginRestoredAfterRight", beforeBounds.left == afterRightBounds.left)
 
         root.getJSONArray("destinations").put(entry)
     }
@@ -267,6 +305,7 @@ class UiCharacterizationProbeTest {
         val boundsProvider: () -> Rect,
         val focusAction: (() -> Unit)?,
     ) {
+        val hasFocusAction: Boolean get() = focusAction != null
         fun bounds(): Rect = boundsProvider()
         fun requestFocus() {
             focusAction?.invoke()
