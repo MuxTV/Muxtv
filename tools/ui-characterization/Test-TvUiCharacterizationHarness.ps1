@@ -95,12 +95,25 @@ foreach ($literal in @('sourceCommit', 'displayWidthPx', 'displayHeightPx', 'dis
     Assert-ContainsLiteral $orchestrator $literal "UI characterization evidence is missing provenance field: $literal"
 }
 
+# Common probe stays on the Compose test API already proven by immutable A/B/C tests. In those refs
+# collection interactions expose fetchSemanticsNodes() as a member and focus checks use assertIsFocused().
+# Newer single-node import extensions and SemanticsConfiguration.getOrNull are explicitly forbidden.
 foreach ($literal in @(
-    'fetchSemanticsNode', 'boundsInRoot', 'sendKeyDownUpSync', 'KEYCODE_DPAD_LEFT',
+    'fetchSemanticsNodes()', 'boundsInRoot', 'assertIsFocused()', 'sendKeyDownUpSync', 'KEYCODE_DPAD_LEFT',
     'KEYCODE_DPAD_RIGHT', 'KEYCODE_BACK', 'focusAfterBack', 'backMovedFocusAwayFromRail',
     'contentOriginRestoredAfterBack', 'uiAutomation.takeScreenshot', 'printToString'
 )) {
     Assert-ContainsLiteral $probe $literal "Common UI probe is missing required characterization primitive: $literal"
+}
+foreach ($forbidden in @(
+    'import androidx.compose.ui.test.fetchSemanticsNode',
+    'import androidx.compose.ui.test.fetchSemanticsNodes',
+    '.fetchSemanticsNode()',
+    '.getOrNull(SemanticsProperties.'
+)) {
+    if ($probe.Contains($forbidden, [System.StringComparison]::Ordinal)) {
+        throw "Common UI probe uses a Compose semantics API not available on immutable A/B/C refs: $forbidden"
+    }
 }
 if ($probe.Contains('androidx.test.uiautomator', [System.StringComparison]::Ordinal) -or
     $probe.Contains('UiDevice', [System.StringComparison]::Ordinal)) {
