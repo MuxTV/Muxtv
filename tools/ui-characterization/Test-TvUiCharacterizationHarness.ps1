@@ -20,21 +20,12 @@ function Assert-ContainsLiteral {
         [Parameter(Mandatory)][string]$Literal,
         [Parameter(Mandatory)][string]$Failure
     )
-
-    if (-not $Text.Contains($Literal, [System.StringComparison]::Ordinal)) {
-        throw $Failure
-    }
+    if (-not $Text.Contains($Literal, [System.StringComparison]::Ordinal)) { throw $Failure }
 }
 
 foreach ($required in @(
-    $orchestratorPath,
-    $compileHelperPath,
-    $collectorPath,
-    $sourceFactsTestPath,
-    $analyzerPath,
-    $probePath,
-    $staticWorkflowPath,
-    $deviceWorkflowPath
+    $orchestratorPath, $compileHelperPath, $collectorPath, $sourceFactsTestPath,
+    $analyzerPath, $probePath, $staticWorkflowPath, $deviceWorkflowPath
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required UI characterization component is missing: $required"
@@ -59,10 +50,8 @@ foreach ($literal in @(
     Assert-ContainsLiteral $collector $literal "Immutable source-fact collector must pin comparison ref $literal"
 }
 
-Assert-ContainsLiteral $orchestrator 'MuxTV_TV_CURRENT_API36' `
-    'UI characterization must reuse the canonical API36 AVD.'
-Assert-ContainsLiteral $analyzer 'MuxTV_TV_CURRENT_API36' `
-    'UI characterization analyzer must reject non-canonical AVD evidence.'
+Assert-ContainsLiteral $orchestrator 'MuxTV_TV_CURRENT_API36' 'UI characterization must reuse the canonical API36 AVD.'
+Assert-ContainsLiteral $analyzer 'MuxTV_TV_CURRENT_API36' 'UI characterization analyzer must reject non-canonical AVD evidence.'
 $forbiddenAvdTokens = @('MuxTV_UI_', 'MuxTV_720', 'MuxTV_1080', 'MuxTV_CHARACTERIZATION_')
 foreach ($token in $forbiddenAvdTokens) {
     foreach ($component in @($orchestrator, $compileHelper, $analyzer, $deviceWorkflow)) {
@@ -77,50 +66,39 @@ foreach ($literal in @('1920x1080', '1280x720', '213', 'compact-stress')) {
 }
 
 foreach ($component in @($orchestrator, $compileHelper)) {
-    Assert-ContainsLiteral $component 'UiCharacterizationProbeTest.kt' `
-        'Characterization must overlay the repository-owned common probe.'
-    Assert-ContainsLiteral $component 'Get-FileHash' `
-        'Characterization must verify common-probe SHA256 identity.'
-    Assert-ContainsLiteral $component 'worktree' `
-        'Characterization must isolate immutable refs in Git worktrees.'
+    Assert-ContainsLiteral $component 'UiCharacterizationProbeTest.kt' 'Characterization must overlay the repository-owned common probe.'
+    Assert-ContainsLiteral $component 'Get-FileHash' 'Characterization must verify common-probe SHA256 identity.'
+    Assert-ContainsLiteral $component 'worktree' 'Characterization must isolate immutable refs in Git worktrees.'
 }
 
-Assert-ContainsLiteral $staticWorkflow 'fail-fast: false' `
-    'Static compatibility must preserve all A/B/C verdicts when one ref fails.'
+Assert-ContainsLiteral $staticWorkflow 'fail-fast: false' 'Static compatibility must preserve all A/B/C verdicts when one ref fails.'
 foreach ($id in @('A', 'B', 'C')) {
     Assert-ContainsLiteral $staticWorkflow "id: $id" "Static compatibility matrix is missing comparison $id."
 }
-Assert-ContainsLiteral $staticWorkflow 'Compile-TvUiCharacterizationProbe.ps1' `
-    'Static compatibility workflow must call the isolated compile helper.'
-Assert-ContainsLiteral $staticWorkflow 'Test-TvUiSourceFacts.ps1' `
-    'Static admission must execute immutable source-fact verification.'
+Assert-ContainsLiteral $staticWorkflow 'Compile-TvUiCharacterizationProbe.ps1' 'Static compatibility workflow must call the isolated compile helper.'
+Assert-ContainsLiteral $staticWorkflow 'Test-TvUiSourceFacts.ps1' 'Static admission must execute immutable source-fact verification.'
 
-Assert-ContainsLiteral $orchestrator 'finally' `
-    'UI characterization must restore display configuration in a finally block.'
-Assert-ContainsLiteral $orchestrator 'wm size reset' `
-    'UI characterization must reset display size.'
-Assert-ContainsLiteral $orchestrator 'wm density reset' `
-    'UI characterization must reset display density.'
+foreach ($literal in @('finally', 'wm size reset', 'wm density reset')) {
+    Assert-ContainsLiteral $orchestrator $literal "UI characterization display-reset safety contract is missing: $literal"
+}
+
+# A clean canonical AVD does not necessarily have app.muxtv.tv.debug installed before the first
+# connectedDebugAndroidTest. The harness must probe package presence and only clear installed state.
+foreach ($literal in @('Clear-AppStateIfInstalled', 'shell pm path', 'shell pm clear', 'skipping pre-test pm clear')) {
+    Assert-ContainsLiteral $orchestrator $literal "UI characterization clean-AVD package-state guard is missing: $literal"
+}
+if ($orchestrator -match '(?m)^\s*&\s*\$tools\.Adb\s+-s\s+\$serial\s+shell\s+pm\s+clear\s+app\.muxtv\.tv\.debug') {
+    throw 'UI characterization must not unconditionally pm clear a package before its first install.'
+}
 
 foreach ($literal in @('sourceCommit', 'displayWidthPx', 'displayHeightPx', 'displayDensityDpi', 'probeSha256', 'avdName')) {
     Assert-ContainsLiteral $orchestrator $literal "UI characterization evidence is missing provenance field: $literal"
 }
 
-# Probe records raw semantics/layout and uses only framework/test APIs already available on A/B/C.
-# Back and Right are characterized as separate native input paths. UiAutomator is forbidden because
-# the immutable app/tv androidTest classpath does not own it.
 foreach ($literal in @(
-    'fetchSemanticsNode',
-    'boundsInRoot',
-    'sendKeyDownUpSync',
-    'KEYCODE_DPAD_LEFT',
-    'KEYCODE_DPAD_RIGHT',
-    'KEYCODE_BACK',
-    'focusAfterBack',
-    'backMovedFocusAwayFromRail',
-    'contentOriginRestoredAfterBack',
-    'uiAutomation.takeScreenshot',
-    'printToString'
+    'fetchSemanticsNode', 'boundsInRoot', 'sendKeyDownUpSync', 'KEYCODE_DPAD_LEFT',
+    'KEYCODE_DPAD_RIGHT', 'KEYCODE_BACK', 'focusAfterBack', 'backMovedFocusAwayFromRail',
+    'contentOriginRestoredAfterBack', 'uiAutomation.takeScreenshot', 'printToString'
 )) {
     Assert-ContainsLiteral $probe $literal "Common UI probe is missing required characterization primitive: $literal"
 }
@@ -130,53 +108,29 @@ if ($probe.Contains('androidx.test.uiautomator', [System.StringComparison]::Ordi
 }
 
 foreach ($literal in @(
-    'railItemWidthDp',
-    'ExpectedSharedShellShiftDp = 50.0',
-    'allRepresentativeRowsMatchExpectedShift',
-    'allRepresentativeCandidateRowsMatchB',
-    'allRepresentativeOriginsRestoredAfterBack',
-    'allEligibleFocusRowsMoveAwayFromRailOnBack',
-    'focusContractEligible'
+    'railItemWidthDp', 'ExpectedSharedShellShiftDp = 50.0', 'allRepresentativeRowsMatchExpectedShift',
+    'allRepresentativeCandidateRowsMatchB', 'allRepresentativeOriginsRestoredAfterBack',
+    'allEligibleFocusRowsMoveAwayFromRailOnBack', 'focusContractEligible'
 )) {
     Assert-ContainsLiteral $analyzer $literal "Analyzer is missing required geometry/focus contract: $literal"
 }
 
-# Source facts must distinguish the actual shared-shell change from runtime geometry observations.
 foreach ($literal in @(
-    'contentReservationToken',
-    'railMode',
-    'railLabels',
-    'railCollapsedDp',
-    'railExpandedDp',
-    'focusOutlineDp',
-    'screenInsetDp',
-    'sectionGapDp',
-    'homeCardWidthDp',
-    'homeCardHeightDp',
-    'heroTitleSp',
-    'sectionTitleSp',
-    'cardTitleSp',
-    'metadataSp',
-    'expectedContentOriginShiftDp'
+    'contentReservationToken', 'railMode', 'railLabels', 'railCollapsedDp', 'railExpandedDp',
+    'focusOutlineDp', 'screenInsetDp', 'sectionGapDp', 'homeCardWidthDp', 'homeCardHeightDp',
+    'heroTitleSp', 'sectionTitleSp', 'cardTitleSp', 'metadataSp', 'expectedContentOriginShiftDp'
 )) {
     Assert-ContainsLiteral $collector $literal "Immutable source-fact collector is missing: $literal"
 }
 
-Assert-ContainsLiteral $deviceWorkflow "- '.github/ui-characterization/run.request'" `
-    'Device characterization must be gated by the explicit one-shot request marker.'
+Assert-ContainsLiteral $deviceWorkflow "- '.github/ui-characterization/run.request'" 'Device characterization must be gated by the explicit one-shot request marker.'
 if ($deviceWorkflow.Contains('workflow_dispatch:', [System.StringComparison]::Ordinal)) {
     throw 'Device characterization must not expose an unproven broad manual dispatch path during U0.'
 }
 foreach ($literal in @(
-    'Collect-TvUiSourceFacts.ps1',
-    'Invoke-TvUiCharacterization.ps1',
-    'Analyze-TvUiCharacterization.ps1',
-    'upload-evidence-with-retry',
-    'Reset-SelfHostedAndroidState.ps1',
-    'fetch-depth: 0',
-    'validatedCompiledParent',
-    'HEAD^',
-    'triggerOnly'
+    'Collect-TvUiSourceFacts.ps1', 'Invoke-TvUiCharacterization.ps1', 'Analyze-TvUiCharacterization.ps1',
+    'upload-evidence-with-retry', 'Reset-SelfHostedAndroidState.ps1', 'fetch-depth: 0',
+    'validatedCompiledParent', 'HEAD^', 'triggerOnly'
 )) {
     Assert-ContainsLiteral $deviceWorkflow $literal "Device characterization workflow is missing required control: $literal"
 }
