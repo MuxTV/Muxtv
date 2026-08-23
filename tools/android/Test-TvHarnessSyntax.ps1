@@ -217,15 +217,15 @@ if ($messages.Count -eq 0) {
     function Get-AvailableTvSystemImages {
         param([Parameter(Mandatory)]$Tools)
         return [pscustomobject]@{
-            Package = "system-images;android-36;android-tv;x86"
+            Package = "system-images;android-36;android-tv;x86_64"
             Api = 36
             Flavor = "android-tv"
-            Abi = "x86"
+            Abi = "x86_64"
         }
     }
     $singletonResult = Resolve-TvSystemImage -Tools ([pscustomobject]@{}) -PreferredApi 36
-    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86") {
-        Add-ContractError "Resolve-TvSystemImage did not handle singleton image output."
+    if ($singletonResult.Package -ne "system-images;android-36;android-tv;x86_64") {
+        Add-ContractError "Resolve-TvSystemImage did not handle singleton canonical image output."
     }
 }
 
