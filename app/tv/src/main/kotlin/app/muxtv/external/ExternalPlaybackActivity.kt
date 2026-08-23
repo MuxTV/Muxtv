@@ -1,6 +1,7 @@
 package app.muxtv.external
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -104,6 +105,11 @@ class ExternalPlaybackActivity : ComponentActivity() {
         acceptIntent(intent)
     }
 
+    // EP-08 intentionally intercepts native Android TV D-pad events at the Activity boundary
+    // before the focused Compose hierarchy. ComponentActivity inherits this public Activity
+    // callback through an AndroidX restricted implementation, so keep the suppression local to
+    // this documented dispatch boundary rather than weakening semantics by moving to onKeyDown.
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             val command = when (event.keyCode) {

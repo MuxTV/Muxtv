@@ -1,0 +1,105 @@
+name: App TV lint
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/app-tv-lint.yml'
+      - 'app/tv/**'
+      - 'core/designsystem/**'
+      - 'core/ui/**'
+      - 'feature/**'
+      - 'player/api/**'
+      - 'player/media3/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: app-tv-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: App TV lint
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Windows, X64, muxtv-android]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Clean workspace with Windows long paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.longpaths true
+          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Failed to inspect the checked-out workspace.`n$dirty" }
+          if ($dirty) { throw "Workspace remains dirty after explicit reset/clean.`n$dirty" }
+
+      - name: Verify evidence commit provenance
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.event.pull_request.head.sha }}"
+
+      - name: Preflight dedicated self-hosted runner
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
+            -RequireNoConnectedDevice `
+            -ExpectedRunnerLabels muxtv-android
+
+      - name: Initialize Android SDK
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Run App TV Android lint
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          .\gradlew.bat :app:tv:lintDebug `
+            --no-daemon `
+            --console=plain `
+            --stacktrace `
+            --warning-mode all `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "App TV lint failed with exit code $LASTEXITCODE." }
+
+      - name: Upload lint evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: app-tv-lint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/tv/build/reports/lint-results-debug.html
+            app/tv/build/reports/lint-results-debug.txt
+            app/tv/build/reports/lint-results-debug.xml
+            .work/evidence/**/*.json
+            .work/evidence/**/*.log
+            .work/evidence/**/*.txt
+          retention-days: 14
+          github-token: ${{ github.token }}
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
