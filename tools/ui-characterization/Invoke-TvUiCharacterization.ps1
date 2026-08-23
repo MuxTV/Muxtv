@@ -23,7 +23,6 @@ $baselineB = '515072022d11b218fcb20f43079f94098b3ea973'
 $baselineC = $CandidateCommit
 $avdName = 'MuxTV_TV_CURRENT_API36'
 $probeSource = Join-Path $PSScriptRoot 'probe\UiCharacterizationProbeTest.kt'
-$probeFileName = 'UiCharacterizationProbeTest.kt'
 $targetProbeRelativePath = 'app\tv\src\androidTest\kotlin\app\muxtv\UiCharacterizationProbeTest.kt'
 $worktreeRoot = Join-Path $repositoryRoot '.work\ui-characterization\worktrees'
 $resolvedEvidenceRoot = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
@@ -33,6 +32,7 @@ $resolvedEvidenceRoot = if ([System.IO.Path]::IsPathRooted($EvidenceRoot)) {
 }
 $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
 $runRoot = Join-Path $resolvedEvidenceRoot $timestamp
+$appPackage = 'app.muxtv.tv.debug'
 
 $comparisonRefs = @(
     [pscustomobject]@{ Id = 'A'; Commit = $baselineA },
@@ -41,38 +41,13 @@ $comparisonRefs = @(
 )
 
 $displayProfiles = @(
-    [pscustomobject]@{
-        Id = '1080p-tv'
-        Label = 'representative-1080p'
-        Size = '1920x1080'
-        Width = 1920
-        Height = 1080
-        Density = 320
-        Representative = $true
-    },
-    [pscustomobject]@{
-        Id = '720p-tv'
-        Label = 'representative-720p-tv'
-        Size = '1280x720'
-        Width = 1280
-        Height = 720
-        Density = 213
-        Representative = $true
-    },
-    [pscustomobject]@{
-        Id = 'compact-stress'
-        Label = 'compact-stress'
-        Size = '1280x720'
-        Width = 1280
-        Height = 720
-        Density = 320
-        Representative = $false
-    }
+    [pscustomobject]@{ Id = '1080p-tv'; Label = 'representative-1080p'; Size = '1920x1080'; Width = 1920; Height = 1080; Density = 320; Representative = $true },
+    [pscustomobject]@{ Id = '720p-tv'; Label = 'representative-720p-tv'; Size = '1280x720'; Width = 1280; Height = 720; Density = 213; Representative = $true },
+    [pscustomobject]@{ Id = 'compact-stress'; Label = 'compact-stress'; Size = '1280x720'; Width = 1280; Height = 720; Density = 320; Representative = $false }
 )
 
 function Invoke-CheckedGit {
     param([Parameter(Mandatory)][string[]]$Arguments)
-
     $output = @(& git @Arguments 2>&1)
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
@@ -83,7 +58,6 @@ function Invoke-CheckedGit {
 
 function Assert-CommitAvailable {
     param([Parameter(Mandatory)][string]$Commit)
-
     & git cat-file -e "$Commit^{commit}" 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Required immutable UI comparison commit is not available locally: $Commit. Checkout the workflow with full history."
@@ -92,14 +66,10 @@ function Assert-CommitAvailable {
 
 function Test-PortPairAvailable {
     param([Parameter(Mandatory)][int]$ConsolePort)
-
     foreach ($port in @($ConsolePort, $ConsolePort + 1)) {
         $listener = $null
         try {
-            $listener = [System.Net.Sockets.TcpListener]::new(
-                [System.Net.IPAddress]::Loopback,
-                $port
-            )
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $port)
             $listener.Start()
         } catch {
             return $false
@@ -122,7 +92,6 @@ function Test-AdbReady {
         [Parameter(Mandatory)]$Tools,
         [Parameter(Mandatory)][string]$Serial
     )
-
     $state = @(& $Tools.Adb -s $Serial get-state 2>$null)
     return $LASTEXITCODE -eq 0 -and $state.Count -gt 0 -and ([string]$state[0]).Trim() -eq 'device'
 }
@@ -134,7 +103,6 @@ function Wait-UiCharacterizationDevice {
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
         [int]$TimeoutSeconds = 180
     )
-
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
         if ($Process.HasExited) {
@@ -143,7 +111,6 @@ function Wait-UiCharacterizationDevice {
         if (Test-AdbReady -Tools $Tools -Serial $Serial) { return }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
-
     throw "UI characterization emulator did not register as $Serial within $TimeoutSeconds seconds."
 }
 
@@ -153,7 +120,6 @@ function Set-DisplayProfile {
         [Parameter(Mandatory)][string]$Serial,
         [Parameter(Mandatory)]$Profile
     )
-
     & $Tools.Adb -s $Serial shell wm size reset | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Unable to reset display size before characterization.' }
     & $Tools.Adb -s $Serial shell wm density reset | Out-Null
@@ -170,10 +136,36 @@ function Reset-DisplayProfile {
         [Parameter(Mandatory)]$Tools,
         [Parameter(Mandatory)][string]$Serial
     )
-
     # Literal reset commands are part of the static safety contract.
     & $Tools.Adb -s $Serial shell wm size reset | Out-Null
     & $Tools.Adb -s $Serial shell wm density reset | Out-Null
+}
+
+function Clear-AppStateIfInstalled {
+    param(
+        [Parameter(Mandatory)]$Tools,
+        [Parameter(Mandatory)][string]$Serial,
+        [Parameter(Mandatory)][string]$PackageName
+    )
+
+    # A clean canonical AVD may not contain the target package before the first
+    # connectedDebugAndroidTest install. Probe package presence first so the initial
+    # characterization case is not rejected simply because there is nothing to clear yet.
+    $packagePaths = @(& $Tools.Adb -s $Serial shell pm path $PackageName 2>$null)
+    $pathExitCode = $LASTEXITCODE
+    $installed = $pathExitCode -eq 0 -and @(
+        $packagePaths | Where-Object { ([string]$_).Trim().StartsWith('package:', [StringComparison]::Ordinal) }
+    ).Count -gt 0
+    if (-not $installed) {
+        Write-Host "Package $PackageName is not installed yet; skipping pre-test pm clear."
+        return
+    }
+
+    $clearOutput = @(& $Tools.Adb -s $Serial shell pm clear $PackageName 2>&1)
+    $clearExitCode = $LASTEXITCODE
+    if ($clearExitCode -ne 0 -or -not ($clearOutput -join "`n").Contains('Success', [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unable to clear MuxTV debug app state for installed package $PackageName.`n$($clearOutput -join [Environment]::NewLine)"
+    }
 }
 
 function Write-CaseManifest {
@@ -186,7 +178,6 @@ function Write-CaseManifest {
         [Parameter(Mandatory)][string]$Status,
         [string]$Failure = ''
     )
-
     [ordered]@{
         schemaVersion = 1
         sourceCommit = $SourceCommit
@@ -208,9 +199,7 @@ if (-not (Test-Path -LiteralPath $probeSource -PathType Leaf)) {
 }
 
 Set-Location $repositoryRoot
-foreach ($comparison in $comparisonRefs) {
-    Assert-CommitAvailable -Commit $comparison.Commit
-}
+foreach ($comparison in $comparisonRefs) { Assert-CommitAvailable -Commit $comparison.Commit }
 
 $probeSha256 = (Get-FileHash -LiteralPath $probeSource -Algorithm SHA256).Hash.ToLowerInvariant()
 New-Item -ItemType Directory -Force -Path $worktreeRoot, $runRoot | Out-Null
@@ -232,11 +221,7 @@ $previousAndroidSerial = $env:ANDROID_SERIAL
 
 try {
     New-TvAvd -Tools $tools -Name $avdName -SystemImagePackage $image.Package -RamMb 2048 -CpuCores 2
-    $emulatorProcess = Start-TvEmulator `
-        -Tools $tools `
-        -AvdName $avdName `
-        -Port $consolePort `
-        -EvidenceDirectory $runRoot
+    $emulatorProcess = Start-TvEmulator -Tools $tools -AvdName $avdName -Port $consolePort -EvidenceDirectory $runRoot
     Wait-UiCharacterizationDevice -Tools $tools -Serial $serial -Process $emulatorProcess
     Wait-AndroidBoot -Tools $tools -Serial $serial -TimeoutSeconds 360
     $env:ANDROID_SERIAL = $serial
@@ -244,11 +229,8 @@ try {
     foreach ($comparison in $comparisonRefs) {
         $worktreePath = Join-Path $worktreeRoot $comparison.Id
         if (Test-Path -LiteralPath $worktreePath) {
-            # Safety: only this repository-owned .work subtree is ever removed.
             Invoke-CheckedGit -Arguments @('worktree', 'remove', '--force', $worktreePath) | Out-Null
         }
-
-        # Keep the literal command form visible for the static contract: git worktree add.
         Invoke-CheckedGit -Arguments @('worktree', 'add', '--detach', $worktreePath, $comparison.Commit) | Out-Null
         $createdWorktrees.Add($worktreePath)
 
@@ -271,18 +253,11 @@ try {
             $caseDirectory = Join-Path $comparisonEvidence $profile.Id
             New-Item -ItemType Directory -Force -Path $caseDirectory | Out-Null
             $manifestPath = Join-Path $caseDirectory 'case-manifest.json'
-            Write-CaseManifest `
-                -Path $manifestPath `
-                -SourceCommit $comparison.Commit `
-                -Profile $profile `
-                -ProbeSha256 $probeSha256 `
-                -AvdName $avdName `
-                -Status 'running'
+            Write-CaseManifest -Path $manifestPath -SourceCommit $comparison.Commit -Profile $profile -ProbeSha256 $probeSha256 -AvdName $avdName -Status 'running'
 
             try {
                 Set-DisplayProfile -Tools $tools -Serial $serial -Profile $profile
-                & $tools.Adb -s $serial shell pm clear app.muxtv.tv.debug | Out-Null
-                if ($LASTEXITCODE -ne 0) { throw 'Unable to clear MuxTV debug app state.' }
+                Clear-AppStateIfInstalled -Tools $tools -Serial $serial -PackageName $appPackage
 
                 $arguments = @(
                     ':app:tv:connectedDebugAndroidTest',
@@ -305,29 +280,16 @@ try {
                     throw "UI characterization instrumentation failed for $($comparison.Id)/$($profile.Id)."
                 }
 
-                $remoteEvidence = '/sdcard/Android/data/app.muxtv.tv.debug/files/ui-characterization/.'
+                $remoteEvidence = "/sdcard/Android/data/$appPackage/files/ui-characterization/."
                 & $tools.Adb -s $serial pull $remoteEvidence $caseDirectory 2>&1 |
                     Set-Content -LiteralPath (Join-Path $caseDirectory 'adb-pull.log') -Encoding utf8
                 if ($LASTEXITCODE -ne 0) {
                     throw "Unable to pull UI characterization evidence for $($comparison.Id)/$($profile.Id)."
                 }
 
-                Write-CaseManifest `
-                    -Path $manifestPath `
-                    -SourceCommit $comparison.Commit `
-                    -Profile $profile `
-                    -ProbeSha256 $probeSha256 `
-                    -AvdName $avdName `
-                    -Status 'passed'
+                Write-CaseManifest -Path $manifestPath -SourceCommit $comparison.Commit -Profile $profile -ProbeSha256 $probeSha256 -AvdName $avdName -Status 'passed'
             } catch {
-                Write-CaseManifest `
-                    -Path $manifestPath `
-                    -SourceCommit $comparison.Commit `
-                    -Profile $profile `
-                    -ProbeSha256 $probeSha256 `
-                    -AvdName $avdName `
-                    -Status 'failed' `
-                    -Failure $_.Exception.Message
+                Write-CaseManifest -Path $manifestPath -SourceCommit $comparison.Commit -Profile $profile -ProbeSha256 $probeSha256 -AvdName $avdName -Status 'failed' -Failure $_.Exception.Message
                 throw
             } finally {
                 Reset-DisplayProfile -Tools $tools -Serial $serial
@@ -354,7 +316,6 @@ try {
 
     foreach ($worktreePath in @($createdWorktrees)) {
         if (Test-Path -LiteralPath $worktreePath) {
-            # Equivalent command contract: git worktree remove --force <path>
             try { Invoke-CheckedGit -Arguments @('worktree', 'remove', '--force', $worktreePath) | Out-Null } catch { Write-Warning $_.Exception.Message }
         }
     }
