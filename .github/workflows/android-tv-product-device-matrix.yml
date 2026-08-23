@@ -19,7 +19,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: android-tv-product-device-matrix-${{ github.event.pull_request.number || github.ref }}
+  group: android-tv-product-device-matrix-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
