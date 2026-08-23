@@ -85,10 +85,9 @@ try {
         }
     }
 
+    # PowerShell script invocation surfaces terminating errors directly under ErrorActionPreference=Stop.
+    # LASTEXITCODE is intentionally not inspected here because it belongs to native executables.
     & $analyzer -RunRoot $fixtureRoot -ExpectedSharedShellShiftDp 50 -ToleranceDp 0.01
-    if ($LASTEXITCODE -ne 0) {
-        throw "Synthetic UI characterization analyzer invocation failed with exit code $LASTEXITCODE."
-    }
 
     $analysisPath = Join-Path $fixtureRoot 'ui-characterization-analysis.json'
     if (-not (Test-Path -LiteralPath $analysisPath -PathType Leaf)) {
@@ -100,12 +99,12 @@ try {
     if ([int]$analysis.failedCaseCount -ne 0) { throw 'Synthetic fixture unexpectedly contains failed cases.' }
     if ([int]$analysis.comparisonCount -ne 3) { throw "Expected 3 profile comparison rows, got $($analysis.comparisonCount)." }
     if ([int]$analysis.representativeComparisonCount -ne 2) { throw 'Expected exactly two representative TV comparison rows.' }
-    if (-not [bool]$analysis.allRepresentativeRowsMatchExpectedShift) { throw 'Analyzer failed to identify the +50dp A→B fixture shift.' }
-    if (-not [bool]$analysis.allRepresentativeCandidateRowsMatchB) { throw 'Analyzer failed to identify C=B in the fixture.' }
-    if (-not [bool]$analysis.allRepresentativeOriginsStableDuringRail) { throw 'Analyzer failed the stable-during-rail fixture invariant.' }
-    if (-not [bool]$analysis.allRepresentativeOriginsRestored) { throw 'Analyzer failed the restored-after-rail fixture invariant.' }
+    if (-not ([bool]$analysis.allRepresentativeRowsMatchExpectedShift)) { throw 'Analyzer failed to identify the +50dp A→B fixture shift.' }
+    if (-not ([bool]$analysis.allRepresentativeCandidateRowsMatchB)) { throw 'Analyzer failed to identify C=B in the fixture.' }
+    if (-not ([bool]$analysis.allRepresentativeOriginsStableDuringRail)) { throw 'Analyzer failed the stable-during-rail fixture invariant.' }
+    if (-not ([bool]$analysis.allRepresentativeOriginsRestored)) { throw 'Analyzer failed the restored-after-rail fixture invariant.' }
 
-    $representative = @($analysis.comparisons | Where-Object representativeTvMode)
+    $representative = @($analysis.comparisons | Where-Object { $_.representativeTvMode })
     foreach ($row in $representative) {
         if ([math]::Abs([double]$row.deltaABDp - 50.0) -gt 0.01) {
             throw "Unexpected A→B delta for $($row.displayProfile): $($row.deltaABDp)dp"
