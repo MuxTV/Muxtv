@@ -103,6 +103,7 @@ jobs:
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
           & .\tools\android\Test-TvHarnessSyntax.ps1
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+          & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
 
       - name: Collect immutable A B C UI source facts
         shell: pwsh
@@ -115,7 +116,51 @@ jobs:
         env:
           MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
         run: |
-          & .\tools\ui-characterization\Invoke-TvUiCharacterization.ps1 -NoDaemon
+          $ErrorActionPreference = 'Stop'
+          . .\tools\ui-characterization\UiCharacterizationStartupRecovery.ps1
+
+          $evidenceRoot = '.work\evidence\ui-characterization'
+          $runnerEvidence = '.work\evidence\ui-characterization-runner'
+          $completed = $false
+          $maxAttempts = 2
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              & .\tools\ui-characterization\Invoke-TvUiCharacterization.ps1 -NoDaemon
+              $completed = $true
+              break
+            } catch {
+              $failureMessage = $_.Exception.Message
+              $recoverable = $attempt -lt $maxAttempts -and (
+                Test-TvUiRecoverableEmulatorStartupFailure `
+                  -EvidenceRoot $evidenceRoot `
+                  -FailureMessage $failureMessage
+              )
+
+              if (-not $recoverable) {
+                throw
+              }
+
+              New-Item -ItemType Directory -Force -Path $runnerEvidence | Out-Null
+              [ordered]@{
+                schemaVersion = 1
+                firstAttemptFailure = $failureMessage
+                classification = 'android-emulator-modem-transport-startup'
+                retryAttempt = $attempt + 1
+                maxAttempts = $maxAttempts
+                avdName = 'MuxTV_TV_CURRENT_API36'
+                createsAdditionalAvdIdentity = $false
+              } | ConvertTo-Json -Depth 3 |
+                Set-Content -LiteralPath (Join-Path $runnerEvidence 'startup-recovery.json') -Encoding utf8
+
+              Write-Warning "Recoverable Android Emulator modem transport startup failure detected. Retrying characterization once on the same canonical API36 AVD identity."
+              Start-Sleep -Seconds 3
+            }
+          }
+
+          if (-not $completed) {
+            throw 'UI characterization did not complete within the bounded startup recovery contract.'
+          }
 
       - name: Analyze A B C geometry and focus evidence
         shell: pwsh
