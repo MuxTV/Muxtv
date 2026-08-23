@@ -21,13 +21,14 @@ jobs:
     name: TV UI characterization static contract
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact PR head with comparison history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify exact source head
@@ -43,6 +44,11 @@ jobs:
         shell: pwsh
         run: |
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+
+      - name: Verify immutable A B C UI source facts
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
 
       - name: Run synthetic UI characterization analyzer fixture
         shell: pwsh
