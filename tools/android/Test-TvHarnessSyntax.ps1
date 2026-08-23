@@ -153,8 +153,8 @@ Assert-WorkflowEvidenceContract `
 
 Assert-WorkflowEvidenceContract `
     -RelativePath ".github\workflows\android-tv-product-device-matrix.yml" `
-    -CheckoutToken 'ref: ${{ github.sha }}' `
-    -SourceCommitToken 'github.sha'
+    -CheckoutToken $prOrDispatchCheckout `
+    -SourceCommitToken $prOrDispatchSource
 
 Assert-WorkflowEvidenceContract `
     -RelativePath ".github\workflows\database-migration-device-matrix.yml" `
