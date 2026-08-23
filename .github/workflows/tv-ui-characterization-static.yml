@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - '.github/workflows/tv-ui-characterization-static.yml'
+      - '.github/workflows/tv-ui-characterization-device.yml'
       - 'tools/ui-characterization/**'
 
 permissions:
@@ -42,6 +43,11 @@ jobs:
         shell: pwsh
         run: |
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+
+      - name: Run synthetic UI characterization analyzer fixture
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Test-TvUiCharacterizationAnalyzer.ps1
 
   compile:
     name: Compile common probe (${{ matrix.id }})
