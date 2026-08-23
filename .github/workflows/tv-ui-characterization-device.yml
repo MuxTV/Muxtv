@@ -1,0 +1,117 @@
+name: TV UI characterization device
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/ui-characterization/run.request'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tv-ui-characterization-device-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  characterize:
+    name: Characterize A B C on canonical API36
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout exact PR head with comparison history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Clean workspace with Windows long paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config --local core.longpaths true
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to enable Git long paths.' }
+          git reset --hard HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to reset workspace.' }
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
+
+      - name: Verify exact source head
+        shell: pwsh
+        run: |
+          $expected = '${{ github.event.pull_request.head.sha }}'
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
+
+      - name: Preflight dedicated Android TV runner
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
+            -RequireNoConnectedDevice `
+            -ExpectedRunnerLabels muxtv-android,muxtv-device `
+            -ExpectedSystemImageApis 26,36
+
+      - name: Initialize SDK and validate characterization harness
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+          & .\tools\android\Test-TvHarnessSyntax.ps1
+          & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+
+      - name: Run immutable A B C characterization
+        shell: pwsh
+        env:
+          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
+        run: |
+          & .\tools\ui-characterization\Invoke-TvUiCharacterization.ps1 -NoDaemon
+
+      - name: Analyze A B C geometry and focus evidence
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Analyze-TvUiCharacterization.ps1
+
+      - name: Record repository AVD inventory
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $evidenceDirectory = '.work\evidence\ui-characterization-runner'
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          $inventory = @(& $tools.AvdManager list avd -c 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Unable to enumerate Android Virtual Devices after UI characterization.'
+          }
+          $inventory | Set-Content -LiteralPath (Join-Path $evidenceDirectory 'avd-inventory.txt') -Encoding utf8
+
+          & .\tools\android\Remove-LegacyMuxTvAvds.ps1 *>&1 |
+            Tee-Object -FilePath (Join-Path $evidenceDirectory 'legacy-muxtv-avds-dry-run.txt')
+
+      - name: Upload UI characterization evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: tv-ui-characterization-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/ui-characterization/**
+            .work/evidence/ui-characterization-runner/**
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          retention-days: 14
+          github-token: ${{ github.token }}
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
