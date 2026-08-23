@@ -1,6 +1,17 @@
 name: Android TV product device matrix
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/android-tv-product-device-matrix.yml'
+      - 'tools/android/**'
+      - 'tools/measurements/**'
+      - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
+      - 'tools/ci/Assert-EvidenceCommit.ps1'
+      - 'tools/ci/Assert-SelfHostedRunnerPreflight.ps1'
+      - 'tools/ci/Reset-SelfHostedAndroidState.ps1'
   workflow_dispatch:
 
 permissions:
@@ -8,15 +19,16 @@ permissions:
   actions: read
 
 concurrency:
-  group: android-tv-product-device-matrix-${{ github.ref }}
+  group: android-tv-product-device-matrix-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   queue: max
-  cancel-in-progress: false
 
 jobs:
   validate:
     name: Android TV product device matrix
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 180
+    timeout-minutes: 240
 
     steps:
       - name: Checkout without pre-clean
@@ -24,26 +36,26 @@ jobs:
         with:
           clean: false
           persist-credentials: false
-          ref: ${{ github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Clean workspace with Windows long paths
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
           git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
           $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
           $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to inspect the checked-out workspace.`n$dirty" }
-          if ($dirty) { throw "Workspace remains dirty after explicit reset/clean.`n$dirty" }
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
 
       - name: Verify evidence commit provenance
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.sha }}"
+          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
 
       - name: Preflight dedicated self-hosted runner
         shell: pwsh
@@ -53,41 +65,43 @@ jobs:
             -ExpectedRunnerLabels muxtv-android,muxtv-device `
             -ExpectedSystemImageApis 26,36
 
-      - name: Inspect runner environment
+      - name: Initialize Android SDK and validate harness
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          Write-Host "Runner: $env:RUNNER_NAME"
-          Write-Host "OS: $env:RUNNER_OS"
-          Write-Host "Architecture: $env:RUNNER_ARCH"
-          java -version
-          if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
-          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
-
-      - name: Validate Android TV harness syntax
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Test-TvHarnessSyntax.ps1
 
-      - name: Run old-edge and current Android TV product matrix
+      - name: Run exact API26 and API36 product matrix
         shell: pwsh
         env:
-          MUXTV_SOURCE_BRANCH: ${{ github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.sha }}
+          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          $ErrorActionPreference = "Stop"
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
           & .\tools\android\Invoke-TvDeviceValidation.ps1 `
             -Mode DeviceMatrix `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
             -NoDaemon
+
+      - name: Record repository AVD inventory
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $evidenceDirectory = ".work\evidence\avd-inventory"
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          $avdInventory = @(& $tools.AvdManager list avd -c 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to enumerate Android Virtual Devices after the matrix run."
+          }
+          $avdInventory | Set-Content -Path (Join-Path $evidenceDirectory "avd-inventory.txt") -Encoding utf8
+
+          & .\tools\android\Remove-LegacyMuxTvAvds.ps1 *>&1 |
+            Tee-Object -FilePath (Join-Path $evidenceDirectory "legacy-muxtv-avds-dry-run.txt")
 
       - name: Upload product matrix evidence
         if: always()
@@ -101,7 +115,7 @@ jobs:
             .work/evidence/**/*.png
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
-          retention-days: 7
+          retention-days: 14
           github-token: ${{ github.token }}
 
       - name: Reset Android runner state
