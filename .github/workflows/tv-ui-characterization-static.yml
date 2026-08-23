@@ -45,6 +45,11 @@ jobs:
         run: |
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
 
+      - name: Run startup transport recovery contract
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
+
       - name: Verify immutable A B C UI source facts
         shell: pwsh
         run: |
