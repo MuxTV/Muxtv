@@ -64,6 +64,40 @@ Assert-ContainsOrdinal `
 Assert-NotContainsOrdinal `
     -Content $standaloneMatrixWorkflow `
     -Token '-SkipHostValidation' `
-    -Message "Standalone manual Android TV product matrix must remain self-contained and preserve host Full validation."
+    -Message "Standalone Android TV product matrix must remain self-contained and preserve host Full validation."
+
+# Device-harness changes are exactly the class of changes that can invalidate the
+# API26/API36 execution contract. They must receive automatic exact-head matrix
+# evidence rather than relying on a manual workflow_dispatch click.
+foreach ($requiredMatrixRoutingToken in @(
+    'pull_request:',
+    'tools/android/**',
+    'tools/measurements/**',
+    'tools/ci/Test-RiskBasedDeviceLaneContract.ps1',
+    '.github/workflows/android-tv-product-device-matrix.yml'
+)) {
+    Assert-ContainsOrdinal `
+        -Content $standaloneMatrixWorkflow `
+        -Token $requiredMatrixRoutingToken `
+        -Message "Android TV product matrix is missing required risk-based PR routing token: $requiredMatrixRoutingToken"
+}
+
+$exactHeadExpression = "github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha"
+Assert-ContainsOrdinal `
+    -Content $standaloneMatrixWorkflow `
+    -Token $exactHeadExpression `
+    -Message "Android TV product matrix must checkout and attribute PR evidence to the exact PR head, not GITHUB_SHA merge-ref."
+Assert-ContainsOrdinal `
+    -Content $standaloneMatrixWorkflow `
+    -Token 'github.head_ref || github.ref_name' `
+    -Message "Android TV product matrix must preserve the PR head branch identity in evidence."
+Assert-ContainsOrdinal `
+    -Content $standaloneMatrixWorkflow `
+    -Token 'Remove-LegacyMuxTvAvds.ps1' `
+    -Message "Android TV product matrix must record a non-destructive legacy MuxTV AVD inventory before acceptance."
+Assert-NotContainsOrdinal `
+    -Content $standaloneMatrixWorkflow `
+    -Token 'Remove-LegacyMuxTvAvds.ps1 -Apply' `
+    -Message "Automatic matrix routing must not delete legacy AVDs before the dry-run candidate set is reviewed."
 
 Write-Host "Risk-based Android TV device lane contract is valid."
