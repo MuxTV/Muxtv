@@ -4,7 +4,6 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $analyzer = Join-Path $PSScriptRoot 'Analyze-TvUiCharacterization.ps1'
 $tempBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
     [System.IO.Path]::GetTempPath()
@@ -57,8 +56,16 @@ try {
 
             $originPx = Convert-DpToPx -Dp $comparison.OriginDp -DensityDpi $profile.Density
             $railItemWidthPx = Convert-DpToPx -Dp $comparison.RailItemWidthDp -DensityDpi $profile.Density
+            $bounds = [ordered]@{
+                left = $originPx
+                top = 50
+                right = $originPx + 300
+                bottom = 250
+                width = 300
+                height = 200
+            }
             [ordered]@{
-                schemaVersion = 1
+                schemaVersion = 2
                 sourceCommit = $comparison.Commit
                 displayProfile = $profile.Id
                 displayWidthPx = $profile.Width
@@ -69,24 +76,38 @@ try {
                         destination = 'home'
                         navTag = 'nav-home'
                         anchor = 'tag:home-add-source'
-                        beforeBounds = [ordered]@{ left = $originPx; top = 50; right = $originPx + 300; bottom = 250; width = 300; height = 200 }
-                        duringRailBounds = [ordered]@{ left = $originPx; top = 50; right = $originPx + 300; bottom = 250; width = 300; height = 200 }
-                        afterBounds = [ordered]@{ left = $originPx; top = 50; right = $originPx + 300; bottom = 250; width = 300; height = 200 }
+                        anchorHasExplicitFocusAction = $true
+                        beforeBounds = $bounds
+                        duringRailBounds = $bounds
+                        duringBackRailBounds = $bounds
+                        duringRightRailBounds = $bounds
+                        afterBounds = $bounds
+                        afterBackBounds = $bounds
+                        afterRightBounds = $bounds
                         railBounds = [ordered]@{ left = 0; top = 100; right = $railItemWidthPx; bottom = 156; width = $railItemWidthPx; height = 56 }
                         focusInitial = 'home-add-source'
                         focusBeforeLeft = 'home-add-source'
                         focusOnRail = 'nav-home'
+                        focusBeforeBack = 'nav-home'
+                        focusAfterBack = 'home-add-source'
+                        focusBeforeSecondLeft = 'home-add-source'
+                        focusOnRailBeforeRight = 'nav-home'
                         focusAfterRight = 'home-add-source'
+                        backReachedExpectedRailItem = $true
+                        backMovedFocusAwayFromRail = $true
+                        rightReachedExpectedRailItem = $true
+                        rightMovedFocusAwayFromRail = $true
                         contentOriginStableDuringRail = $true
+                        contentOriginStableDuringBackRail = $true
                         contentOriginRestored = $true
+                        contentOriginRestoredAfterBack = $true
+                        contentOriginRestoredAfterRight = $true
                     }
                 )
             } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $caseDirectory 'probe-result.json') -Encoding utf8
         }
     }
 
-    # PowerShell script invocation surfaces terminating errors directly under ErrorActionPreference=Stop.
-    # LASTEXITCODE is intentionally not inspected here because it belongs to native executables.
     & $analyzer -RunRoot $fixtureRoot -ExpectedSharedShellShiftDp 50 -ToleranceDp 0.01
 
     $analysisPath = Join-Path $fixtureRoot 'ui-characterization-analysis.json'
@@ -99,10 +120,16 @@ try {
     if ([int]$analysis.failedCaseCount -ne 0) { throw 'Synthetic fixture unexpectedly contains failed cases.' }
     if ([int]$analysis.comparisonCount -ne 3) { throw "Expected 3 profile comparison rows, got $($analysis.comparisonCount)." }
     if ([int]$analysis.representativeComparisonCount -ne 2) { throw 'Expected exactly two representative TV comparison rows.' }
+    if ([int]$analysis.representativeFocusContractRowCount -ne 2) { throw 'Expected two representative focus-contract rows.' }
     if (-not ([bool]$analysis.allRepresentativeRowsMatchExpectedShift)) { throw 'Analyzer failed to identify the +50dp A→B fixture shift.' }
     if (-not ([bool]$analysis.allRepresentativeCandidateRowsMatchB)) { throw 'Analyzer failed to identify C=B in the fixture.' }
     if (-not ([bool]$analysis.allRepresentativeOriginsStableDuringRail)) { throw 'Analyzer failed the stable-during-rail fixture invariant.' }
-    if (-not ([bool]$analysis.allRepresentativeOriginsRestored)) { throw 'Analyzer failed the restored-after-rail fixture invariant.' }
+    if (-not ([bool]$analysis.allRepresentativeOriginsRestoredAfterBack)) { throw 'Analyzer failed the restored-after-Back fixture invariant.' }
+    if (-not ([bool]$analysis.allRepresentativeOriginsRestoredAfterRight)) { throw 'Analyzer failed the restored-after-Right fixture invariant.' }
+    if (-not ([bool]$analysis.allEligibleFocusRowsReachRailForBack)) { throw 'Analyzer failed the Back rail-entry fixture invariant.' }
+    if (-not ([bool]$analysis.allEligibleFocusRowsMoveAwayFromRailOnBack)) { throw 'Analyzer failed the Back focus-restoration fixture invariant.' }
+    if (-not ([bool]$analysis.allEligibleFocusRowsReachRailForRight)) { throw 'Analyzer failed the Right rail-entry fixture invariant.' }
+    if (-not ([bool]$analysis.allEligibleFocusRowsMoveAwayFromRailOnRight)) { throw 'Analyzer failed the Right focus-restoration fixture invariant.' }
 
     $representative = @($analysis.comparisons | Where-Object { $_.representativeTvMode })
     foreach ($row in $representative) {
