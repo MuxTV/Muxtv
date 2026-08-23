@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $orchestratorPath = Join-Path $PSScriptRoot 'Invoke-TvUiCharacterization.ps1'
 $compileHelperPath = Join-Path $PSScriptRoot 'Compile-TvUiCharacterizationProbe.ps1'
+$collectorPath = Join-Path $PSScriptRoot 'Collect-TvUiSourceFacts.ps1'
+$sourceFactsTestPath = Join-Path $PSScriptRoot 'Test-TvUiSourceFacts.ps1'
 $analyzerPath = Join-Path $PSScriptRoot 'Analyze-TvUiCharacterization.ps1'
 $probePath = Join-Path $PSScriptRoot 'probe\UiCharacterizationProbeTest.kt'
 $staticWorkflowPath = Join-Path $repositoryRoot '.github\workflows\tv-ui-characterization-static.yml'
@@ -27,6 +29,8 @@ function Assert-ContainsLiteral {
 foreach ($required in @(
     $orchestratorPath,
     $compileHelperPath,
+    $collectorPath,
+    $sourceFactsTestPath,
     $analyzerPath,
     $probePath,
     $staticWorkflowPath,
@@ -39,6 +43,7 @@ foreach ($required in @(
 
 $orchestrator = Get-Content -LiteralPath $orchestratorPath -Raw
 $compileHelper = Get-Content -LiteralPath $compileHelperPath -Raw
+$collector = Get-Content -LiteralPath $collectorPath -Raw
 $analyzer = Get-Content -LiteralPath $analyzerPath -Raw
 $probe = Get-Content -LiteralPath $probePath -Raw
 $staticWorkflow = Get-Content -LiteralPath $staticWorkflowPath -Raw
@@ -51,6 +56,7 @@ foreach ($literal in @(
 )) {
     Assert-ContainsLiteral $orchestrator $literal "UI characterization orchestrator must pin immutable comparison ref $literal"
     Assert-ContainsLiteral $staticWorkflow $literal "Static compile matrix must pin immutable comparison ref $literal"
+    Assert-ContainsLiteral $collector $literal "Immutable source-fact collector must pin comparison ref $literal"
 }
 
 Assert-ContainsLiteral $orchestrator 'MuxTV_TV_CURRENT_API36' `
@@ -86,6 +92,8 @@ foreach ($id in @('A', 'B', 'C')) {
 }
 Assert-ContainsLiteral $staticWorkflow 'Compile-TvUiCharacterizationProbe.ps1' `
     'Static compatibility workflow must call the isolated compile helper.'
+Assert-ContainsLiteral $staticWorkflow 'Test-TvUiSourceFacts.ps1' `
+    'Static admission must execute immutable source-fact verification.'
 
 Assert-ContainsLiteral $orchestrator 'finally' `
     'UI characterization must restore display configuration in a finally block.'
@@ -99,13 +107,18 @@ foreach ($literal in @('sourceCommit', 'displayWidthPx', 'displayHeightPx', 'dis
 }
 
 # Probe records raw semantics/layout and uses only framework/test APIs already available on A/B/C.
-# It must not require UiAutomator because the historical app/tv androidTest classpath does not own it.
+# Back and Right are characterized as separate native input paths. UiAutomator is forbidden because
+# the immutable app/tv androidTest classpath does not own it.
 foreach ($literal in @(
     'fetchSemanticsNode',
     'boundsInRoot',
     'sendKeyDownUpSync',
     'KEYCODE_DPAD_LEFT',
     'KEYCODE_DPAD_RIGHT',
+    'KEYCODE_BACK',
+    'focusAfterBack',
+    'backMovedFocusAwayFromRail',
+    'contentOriginRestoredAfterBack',
     'uiAutomation.takeScreenshot',
     'printToString'
 )) {
@@ -116,14 +129,38 @@ if ($probe.Contains('androidx.test.uiautomator', [System.StringComparison]::Ordi
     throw 'Common UI probe must not depend on UiAutomator or mutate historical build files to add it.'
 }
 
-Assert-ContainsLiteral $analyzer 'railItemWidthDp' `
-    'Analyzer must label nav-item geometry honestly instead of treating it as rail-container width.'
-Assert-ContainsLiteral $analyzer 'ExpectedSharedShellShiftDp = 50.0' `
-    'Analyzer must encode the falsifiable A→B +50dp shared-shell hypothesis.'
-Assert-ContainsLiteral $analyzer 'allRepresentativeRowsMatchExpectedShift' `
-    'Analyzer must summarize the representative A→B shared-shell hypothesis.'
-Assert-ContainsLiteral $analyzer 'allRepresentativeCandidateRowsMatchB' `
-    'Analyzer must report whether candidate C preserves B content-origin behavior.'
+foreach ($literal in @(
+    'railItemWidthDp',
+    'ExpectedSharedShellShiftDp = 50.0',
+    'allRepresentativeRowsMatchExpectedShift',
+    'allRepresentativeCandidateRowsMatchB',
+    'allRepresentativeOriginsRestoredAfterBack',
+    'allEligibleFocusRowsMoveAwayFromRailOnBack',
+    'focusContractEligible'
+)) {
+    Assert-ContainsLiteral $analyzer $literal "Analyzer is missing required geometry/focus contract: $literal"
+}
+
+# Source facts must distinguish the actual shared-shell change from runtime geometry observations.
+foreach ($literal in @(
+    'contentReservationToken',
+    'railMode',
+    'railLabels',
+    'railCollapsedDp',
+    'railExpandedDp',
+    'focusOutlineDp',
+    'screenInsetDp',
+    'sectionGapDp',
+    'homeCardWidthDp',
+    'homeCardHeightDp',
+    'heroTitleSp',
+    'sectionTitleSp',
+    'cardTitleSp',
+    'metadataSp',
+    'expectedContentOriginShiftDp'
+)) {
+    Assert-ContainsLiteral $collector $literal "Immutable source-fact collector is missing: $literal"
+}
 
 Assert-ContainsLiteral $deviceWorkflow "- '.github/ui-characterization/run.request'" `
     'Device characterization must be gated by the explicit one-shot request marker.'
@@ -131,6 +168,7 @@ if ($deviceWorkflow.Contains('workflow_dispatch:', [System.StringComparison]::Or
     throw 'Device characterization must not expose an unproven broad manual dispatch path during U0.'
 }
 foreach ($literal in @(
+    'Collect-TvUiSourceFacts.ps1',
     'Invoke-TvUiCharacterization.ps1',
     'Analyze-TvUiCharacterization.ps1',
     'upload-evidence-with-retry',
