@@ -82,9 +82,7 @@ foreach ($manifestFile in $manifestFiles) {
     }
     $caseRecords.Add($caseRecord)
 
-    if ($caseRecord.status -ne 'passed') {
-        continue
-    }
+    if ($caseRecord.status -ne 'passed') { continue }
     if ($null -eq $probePath) {
         throw "Passed case $comparisonId/$($caseRecord.displayProfile) does not contain exactly one probe-result.json"
     }
@@ -100,7 +98,8 @@ foreach ($manifestFile in $manifestFiles) {
     foreach ($destination in @($probe.destinations)) {
         $beforeLeft = [double]$destination.beforeBounds.left
         $duringLeft = [double]$destination.duringRailBounds.left
-        $afterLeft = [double]$destination.afterBounds.left
+        $afterRightLeft = [double]$destination.afterRightBounds.left
+        $afterBackLeft = [double]$destination.afterBackBounds.left
         $railItemWidthPx = [double]$destination.railBounds.width
         $densityDpi = [double]$caseRecord.displayDensityDpi
 
@@ -112,17 +111,28 @@ foreach ($manifestFile in $manifestFiles) {
             displayDensityDpi = $caseRecord.displayDensityDpi
             destination = [string]$destination.destination
             anchor = [string]$destination.anchor
+            anchorHasExplicitFocusAction = [bool]$destination.anchorHasExplicitFocusAction
             beforeLeftPx = $beforeLeft
             duringRailLeftPx = $duringLeft
-            afterLeftPx = $afterLeft
+            afterBackLeftPx = $afterBackLeft
+            afterRightLeftPx = $afterRightLeft
             beforeLeftDp = [math]::Round((Convert-PxToDp -Pixels $beforeLeft -DensityDpi $densityDpi), 3)
             railItemWidthPx = $railItemWidthPx
             railItemWidthDp = [math]::Round((Convert-PxToDp -Pixels $railItemWidthPx -DensityDpi $densityDpi), 3)
             contentOriginStableDuringRail = [bool]$destination.contentOriginStableDuringRail
-            contentOriginRestored = [bool]$destination.contentOriginRestored
+            contentOriginStableDuringBackRail = [bool]$destination.contentOriginStableDuringBackRail
+            contentOriginRestoredAfterBack = [bool]$destination.contentOriginRestoredAfterBack
+            contentOriginRestoredAfterRight = [bool]$destination.contentOriginRestoredAfterRight
+            backReachedExpectedRailItem = [bool]$destination.backReachedExpectedRailItem
+            backMovedFocusAwayFromRail = [bool]$destination.backMovedFocusAwayFromRail
+            rightReachedExpectedRailItem = [bool]$destination.rightReachedExpectedRailItem
+            rightMovedFocusAwayFromRail = [bool]$destination.rightMovedFocusAwayFromRail
             focusInitial = $destination.focusInitial
             focusBeforeLeft = $destination.focusBeforeLeft
-            focusOnRail = $destination.focusOnRail
+            focusBeforeBack = $destination.focusBeforeBack
+            focusAfterBack = $destination.focusAfterBack
+            focusBeforeSecondLeft = $destination.focusBeforeSecondLeft
+            focusOnRailBeforeRight = $destination.focusOnRailBeforeRight
             focusAfterRight = $destination.focusAfterRight
         })
     }
@@ -145,9 +155,7 @@ foreach ($group in $groups) {
     $byId = @{}
     foreach ($row in $rows) { $byId[$row.comparisonId] = $row }
     $missing = @($expectedComparisons | Where-Object { -not $byId.ContainsKey($_) })
-    if ($missing.Count -gt 0) {
-        continue
-    }
+    if ($missing.Count -gt 0) { continue }
 
     $a = $byId['A']
     $b = $byId['B']
@@ -157,18 +165,17 @@ foreach ($group in $groups) {
         throw "Density mismatch inside comparison group $($group.Name)"
     }
 
-    $deltaAbPx = [double]$b.beforeLeftPx - [double]$a.beforeLeftPx
-    $deltaBcPx = [double]$c.beforeLeftPx - [double]$b.beforeLeftPx
-    $deltaAcPx = [double]$c.beforeLeftPx - [double]$a.beforeLeftPx
-    $deltaAbDp = Convert-PxToDp -Pixels $deltaAbPx -DensityDpi $density
-    $deltaBcDp = Convert-PxToDp -Pixels $deltaBcPx -DensityDpi $density
-    $deltaAcDp = Convert-PxToDp -Pixels $deltaAcPx -DensityDpi $density
+    $deltaAbDp = Convert-PxToDp -Pixels ([double]$b.beforeLeftPx - [double]$a.beforeLeftPx) -DensityDpi $density
+    $deltaBcDp = Convert-PxToDp -Pixels ([double]$c.beforeLeftPx - [double]$b.beforeLeftPx) -DensityDpi $density
+    $deltaAcDp = Convert-PxToDp -Pixels ([double]$c.beforeLeftPx - [double]$a.beforeLeftPx) -DensityDpi $density
+    $focusContractEligible = $a.anchorHasExplicitFocusAction -and $b.anchorHasExplicitFocusAction -and $c.anchorHasExplicitFocusAction
 
     $comparisons.Add([pscustomobject]@{
         displayProfile = $a.displayProfile
         representativeTvMode = $a.representativeTvMode
         destination = $a.destination
         densityDpi = [int]$density
+        focusContractEligible = $focusContractEligible
         aContentOriginDp = $a.beforeLeftDp
         bContentOriginDp = $b.beforeLeftDp
         cContentOriginDp = $c.beforeLeftDp
@@ -183,12 +190,30 @@ foreach ($group in $groups) {
         aStableDuringRail = $a.contentOriginStableDuringRail
         bStableDuringRail = $b.contentOriginStableDuringRail
         cStableDuringRail = $c.contentOriginStableDuringRail
-        aRestoredAfterRail = $a.contentOriginRestored
-        bRestoredAfterRail = $b.contentOriginRestored
-        cRestoredAfterRail = $c.contentOriginRestored
-        aFocusOnRail = $a.focusOnRail
-        bFocusOnRail = $b.focusOnRail
-        cFocusOnRail = $c.focusOnRail
+        aRestoredAfterBack = $a.contentOriginRestoredAfterBack
+        bRestoredAfterBack = $b.contentOriginRestoredAfterBack
+        cRestoredAfterBack = $c.contentOriginRestoredAfterBack
+        aRestoredAfterRight = $a.contentOriginRestoredAfterRight
+        bRestoredAfterRight = $b.contentOriginRestoredAfterRight
+        cRestoredAfterRight = $c.contentOriginRestoredAfterRight
+        aBackReachedRail = $a.backReachedExpectedRailItem
+        bBackReachedRail = $b.backReachedExpectedRailItem
+        cBackReachedRail = $c.backReachedExpectedRailItem
+        aBackMovedAway = $a.backMovedFocusAwayFromRail
+        bBackMovedAway = $b.backMovedFocusAwayFromRail
+        cBackMovedAway = $c.backMovedFocusAwayFromRail
+        aRightReachedRail = $a.rightReachedExpectedRailItem
+        bRightReachedRail = $b.rightReachedExpectedRailItem
+        cRightReachedRail = $c.rightReachedExpectedRailItem
+        aRightMovedAway = $a.rightMovedFocusAwayFromRail
+        bRightMovedAway = $b.rightMovedFocusAwayFromRail
+        cRightMovedAway = $c.rightMovedFocusAwayFromRail
+        aFocusAfterBack = $a.focusAfterBack
+        bFocusAfterBack = $b.focusAfterBack
+        cFocusAfterBack = $c.focusAfterBack
+        aFocusAfterRight = $a.focusAfterRight
+        bFocusAfterRight = $b.focusAfterRight
+        cFocusAfterRight = $c.focusAfterRight
     })
 }
 
@@ -196,16 +221,31 @@ $representative = @($comparisons | Where-Object { $_.representativeTvMode })
 $expectedShiftRows = @($representative | Where-Object { $_.abMatchesExpectedSharedShellShift })
 $cMatchesBRows = @($representative | Where-Object { $_.cMatchesBContentOrigin })
 $stableRows = @($representative | Where-Object { $_.aStableDuringRail -and $_.bStableDuringRail -and $_.cStableDuringRail })
-$restoredRows = @($representative | Where-Object { $_.aRestoredAfterRail -and $_.bRestoredAfterRail -and $_.cRestoredAfterRail })
+$backRestoredRows = @($representative | Where-Object { $_.aRestoredAfterBack -and $_.bRestoredAfterBack -and $_.cRestoredAfterBack })
+$rightRestoredRows = @($representative | Where-Object { $_.aRestoredAfterRight -and $_.bRestoredAfterRight -and $_.cRestoredAfterRight })
+$focusRows = @($representative | Where-Object { $_.focusContractEligible })
+$backReachedRows = @($focusRows | Where-Object { $_.aBackReachedRail -and $_.bBackReachedRail -and $_.cBackReachedRail })
+$backMovedRows = @($focusRows | Where-Object { $_.aBackMovedAway -and $_.bBackMovedAway -and $_.cBackMovedAway })
+$rightReachedRows = @($focusRows | Where-Object { $_.aRightReachedRail -and $_.bRightReachedRail -and $_.cRightReachedRail })
+$rightMovedRows = @($focusRows | Where-Object { $_.aRightMovedAway -and $_.bRightMovedAway -and $_.cRightMovedAway })
+
+$sourceFactsPath = Join-Path (Split-Path -Parent $RunRoot) 'source-facts.json'
+$sourceFacts = if (Test-Path -LiteralPath $sourceFactsPath -PathType Leaf) {
+    Get-Content -LiteralPath $sourceFactsPath -Raw | ConvertFrom-Json
+} else {
+    $null
+}
 
 $analysis = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     runRoot = $RunRoot
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     probeSha256 = $probeHashes[0]
     avdName = $avdNames[0]
     expectedSharedShellShiftDp = $ExpectedSharedShellShiftDp
     toleranceDp = $ToleranceDp
+    sourceFactsPath = if ($null -eq $sourceFacts) { $null } else { $sourceFactsPath }
+    sourceFacts = $sourceFacts
     caseCount = $caseRecords.Count
     failedCaseCount = $failedCases.Count
     destinationObservationCount = $destinationRecords.Count
@@ -214,17 +254,28 @@ $analysis = [ordered]@{
     representativeExpectedShiftMatchCount = $expectedShiftRows.Count
     representativeCandidateMatchesBCount = $cMatchesBRows.Count
     representativeStableDuringRailCount = $stableRows.Count
-    representativeRestoredAfterRailCount = $restoredRows.Count
+    representativeRestoredAfterBackCount = $backRestoredRows.Count
+    representativeRestoredAfterRightCount = $rightRestoredRows.Count
+    representativeFocusContractRowCount = $focusRows.Count
+    representativeBackReachedRailCount = $backReachedRows.Count
+    representativeBackMovedAwayCount = $backMovedRows.Count
+    representativeRightReachedRailCount = $rightReachedRows.Count
+    representativeRightMovedAwayCount = $rightMovedRows.Count
     allRepresentativeRowsMatchExpectedShift = $representative.Count -gt 0 -and $expectedShiftRows.Count -eq $representative.Count
     allRepresentativeCandidateRowsMatchB = $representative.Count -gt 0 -and $cMatchesBRows.Count -eq $representative.Count
     allRepresentativeOriginsStableDuringRail = $representative.Count -gt 0 -and $stableRows.Count -eq $representative.Count
-    allRepresentativeOriginsRestored = $representative.Count -gt 0 -and $restoredRows.Count -eq $representative.Count
+    allRepresentativeOriginsRestoredAfterBack = $representative.Count -gt 0 -and $backRestoredRows.Count -eq $representative.Count
+    allRepresentativeOriginsRestoredAfterRight = $representative.Count -gt 0 -and $rightRestoredRows.Count -eq $representative.Count
+    allEligibleFocusRowsReachRailForBack = $focusRows.Count -gt 0 -and $backReachedRows.Count -eq $focusRows.Count
+    allEligibleFocusRowsMoveAwayFromRailOnBack = $focusRows.Count -gt 0 -and $backMovedRows.Count -eq $focusRows.Count
+    allEligibleFocusRowsReachRailForRight = $focusRows.Count -gt 0 -and $rightReachedRows.Count -eq $focusRows.Count
+    allEligibleFocusRowsMoveAwayFromRailOnRight = $focusRows.Count -gt 0 -and $rightMovedRows.Count -eq $focusRows.Count
     cases = @($caseRecords)
     comparisons = @($comparisons)
 }
 
 $jsonPath = Join-Path $RunRoot 'ui-characterization-analysis.json'
-$analysis | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $jsonPath -Encoding utf8
+$analysis | ConvertTo-Json -Depth 14 | Set-Content -LiteralPath $jsonPath -Encoding utf8
 
 $markdownPath = Join-Path $RunRoot 'ui-characterization-analysis.md'
 $lines = [System.Collections.Generic.List[string]]::new()
@@ -236,11 +287,14 @@ $lines.Add("- Cases: $($caseRecords.Count); failed: $($failedCases.Count)")
 $lines.Add("- Representative comparison rows: $($representative.Count)")
 $lines.Add("- A→B expected +$ExpectedSharedShellShiftDp dp matches: $($expectedShiftRows.Count)/$($representative.Count)")
 $lines.Add("- C matches B content origin within ±$ToleranceDp dp: $($cMatchesBRows.Count)/$($representative.Count)")
+$lines.Add("- Representative focus-contract rows: $($focusRows.Count)")
+$lines.Add("- Back reaches rail: $($backReachedRows.Count)/$($focusRows.Count); Back moves away: $($backMovedRows.Count)/$($focusRows.Count)")
+$lines.Add("- Right reaches rail: $($rightReachedRows.Count)/$($focusRows.Count); Right moves away: $($rightMovedRows.Count)/$($focusRows.Count)")
 $lines.Add('')
-$lines.Add('| Profile | Destination | A origin dp | B origin dp | C origin dp | A→B dp | B→C dp | A item width dp | B item width dp | C item width dp |')
-$lines.Add('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |')
+$lines.Add('| Profile | Destination | Focus contract | A origin dp | B origin dp | C origin dp | A→B dp | B→C dp | A item width dp | B item width dp | C item width dp |')
+$lines.Add('| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |')
 foreach ($row in $comparisons | Sort-Object displayProfile, destination) {
-    $lines.Add("| $($row.displayProfile) | $($row.destination) | $($row.aContentOriginDp) | $($row.bContentOriginDp) | $($row.cContentOriginDp) | $($row.deltaABDp) | $($row.deltaBCDp) | $($row.aRailItemWidthDp) | $($row.bRailItemWidthDp) | $($row.cRailItemWidthDp) |")
+    $lines.Add("| $($row.displayProfile) | $($row.destination) | $($row.focusContractEligible) | $($row.aContentOriginDp) | $($row.bContentOriginDp) | $($row.cContentOriginDp) | $($row.deltaABDp) | $($row.deltaBCDp) | $($row.aRailItemWidthDp) | $($row.bRailItemWidthDp) | $($row.cRailItemWidthDp) |")
 }
 $lines | Set-Content -LiteralPath $markdownPath -Encoding utf8
 
