@@ -50,6 +50,45 @@ jobs:
           $expected = '${{ github.event.pull_request.head.sha }}'
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
 
+      - name: Verify trigger-only marker against compiled parent
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $markerPath = '.github/ui-characterization/run.request'
+          if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            throw "UI characterization request marker is missing: $markerPath"
+          }
+
+          $validatedHead = (Get-Content -LiteralPath $markerPath -Raw).Trim()
+          if ($validatedHead -notmatch '^[0-9a-f]{40}$') {
+            throw "UI characterization marker must contain exactly one validated 40-hex commit SHA. Got: '$validatedHead'"
+          }
+
+          $triggerHead = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger head.' }
+          $parentHead = (& git rev-parse HEAD^).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger parent.' }
+          if ($parentHead -cne $validatedHead) {
+            throw "Device trigger parent mismatch: marker validates $validatedHead but HEAD^ is $parentHead"
+          }
+
+          $changed = @(& git diff --name-only $parentHead $triggerHead)
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect trigger-only marker diff.' }
+          $changed = @($changed | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+          if ($changed.Count -ne 1 -or $changed[0] -cne $markerPath) {
+            throw "Device trigger commit must change only $markerPath. Changed: $($changed -join ', ')"
+          }
+
+          $evidenceDirectory = '.work\evidence\ui-characterization-runner'
+          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+          [ordered]@{
+            schemaVersion = 1
+            triggerHead = $triggerHead
+            validatedCompiledParent = $validatedHead
+            markerPath = $markerPath
+            triggerOnly = $true
+          } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $evidenceDirectory 'admission.json') -Encoding utf8
+
       - name: Preflight dedicated Android TV runner
         shell: pwsh
         run: |
