@@ -37,7 +37,8 @@ foreach ($relativePath in $manualEvidenceWorkflows) {
 
 # The product matrix is intentionally hybrid: risky harness PRs auto-run it, while
 # operators can still dispatch explicit evidence. PR runs should cancel superseded
-# heads; manual runs must never share that cancellable PR concurrency identity.
+# heads; every manual run gets its own concurrency identity and cannot collide with
+# a cancellable PR group or serialize behind another manual evidence run.
 $productMatrixPath = Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml"
 if (-not (Test-Path -LiteralPath $productMatrixPath -PathType Leaf)) {
     throw "Product matrix workflow was not found."
@@ -45,20 +46,35 @@ if (-not (Test-Path -LiteralPath $productMatrixPath -PathType Leaf)) {
 $productMatrix = Get-Content -LiteralPath $productMatrixPath -Raw -Encoding utf8
 foreach ($requiredFragment in @(
     "pull_request:",
-    "workflow_dispatch:",
-    "github.event_name == 'pull_request'",
-    "github.event.pull_request.number",
-    "github.run_id",
-    "cancel-in-progress: `${{ github.event_name == 'pull_request' }}"
+    "workflow_dispatch:"
 )) {
     if ($productMatrix.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
-        throw "Hybrid product matrix concurrency contract is missing: $requiredFragment"
+        throw "Hybrid product matrix trigger contract is missing: $requiredFragment"
     }
 }
-if ($productMatrix.IndexOf("queue: max", [System.StringComparison]::Ordinal) -ge 0) {
+
+$concurrencyMatch = [regex]::Match(
+    $productMatrix,
+    '(?ms)^concurrency:\s*\r?\n.*?(?=^jobs:\s*$)'
+)
+if (-not $concurrencyMatch.Success) {
+    throw "Hybrid product matrix concurrency block was not found."
+}
+$concurrencyBlock = $concurrencyMatch.Value
+$expectedGroup = "group: android-tv-product-device-matrix-`${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}"
+$expectedCancellation = "cancel-in-progress: `${{ github.event_name == 'pull_request' }}"
+foreach ($requiredFragment in @($expectedGroup, $expectedCancellation)) {
+    if ($concurrencyBlock.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Hybrid product matrix concurrency block is missing: $requiredFragment"
+    }
+}
+if ($concurrencyBlock.IndexOf("github.ref", [System.StringComparison]::Ordinal) -ge 0) {
+    throw "Hybrid product matrix manual concurrency must use github.run_id, not github.ref."
+}
+if ($concurrencyBlock.IndexOf("queue: max", [System.StringComparison]::Ordinal) -ge 0) {
     throw "Hybrid product matrix must not combine queue: max with cancellable PR concurrency."
 }
-if ($productMatrix.IndexOf("cancel-in-progress: true", [System.StringComparison]::Ordinal) -ge 0) {
+if ($concurrencyBlock.IndexOf("cancel-in-progress: true", [System.StringComparison]::Ordinal) -ge 0) {
     throw "Hybrid product matrix must not unconditionally cancel manual evidence."
 }
 
