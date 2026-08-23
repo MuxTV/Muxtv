@@ -260,6 +260,8 @@ try {
                 Clear-AppStateIfInstalled -Tools $tools -Serial $serial -PackageName $appPackage
 
                 $arguments = @(
+                    '--project-dir',
+                    $worktreePath,
                     ':app:tv:connectedDebugAndroidTest',
                     '--stacktrace',
                     '--console=plain',
