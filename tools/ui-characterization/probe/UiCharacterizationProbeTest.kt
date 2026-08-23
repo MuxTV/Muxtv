@@ -1,5 +1,6 @@
 package app.muxtv
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
@@ -16,8 +17,8 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import java.io.File
+import java.io.FileOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Rule
@@ -38,7 +39,6 @@ class UiCharacterizationProbeTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val device = UiDevice.getInstance(instrumentation)
     private val arguments: Bundle = InstrumentationRegistry.getArguments()
 
     @Test
@@ -125,14 +125,15 @@ class UiCharacterizationProbeTest {
         val beforeFocus = focusedNodeDescription()
         screenshot(outputDirectory, "$destination-before")
 
-        // RequestFocus is only a deterministic setup seam. The transition into/out of the rail
-        // itself uses the native UiDevice DPAD path that the product receives on Android TV.
+        // RequestFocus is only a deterministic setup seam. Movement itself goes through the
+        // Android framework Instrumentation input path, so the historical refs need no UiAutomator
+        // dependency or build-file mutation.
         runCatching {
             anchorInteraction.requestFocus()
             composeRule.waitForIdle()
         }
         val focusBeforeLeft = focusedNodeDescription()
-        device.pressKeyCode(KeyEvent.KEYCODE_DPAD_LEFT)
+        pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
         composeRule.waitForIdle()
         val duringBounds = anchorInteraction.bounds()
         val railBounds = composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
@@ -140,7 +141,7 @@ class UiCharacterizationProbeTest {
         val focusOnRail = focusedNodeDescription()
         screenshot(outputDirectory, "$destination-rail")
 
-        device.pressKeyCode(KeyEvent.KEYCODE_DPAD_RIGHT)
+        pressKey(KeyEvent.KEYCODE_DPAD_RIGHT)
         composeRule.waitForIdle()
         val afterBounds = anchorInteraction.bounds()
         val focusAfterRight = focusedNodeDescription()
@@ -168,8 +169,12 @@ class UiCharacterizationProbeTest {
         composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.RequestFocus)
         composeRule.waitForIdle()
-        device.pressKeyCode(KeyEvent.KEYCODE_ENTER)
+        pressKey(KeyEvent.KEYCODE_ENTER)
         composeRule.waitForIdle()
+    }
+
+    private fun pressKey(keyCode: Int) {
+        instrumentation.sendKeyDownUpSync(keyCode)
     }
 
     private fun awaitHomePrimary(): String {
@@ -231,7 +236,18 @@ class UiCharacterizationProbeTest {
 
     private fun screenshot(directory: File, name: String) {
         val file = File(directory, "$name.png")
-        check(device.takeScreenshot(file)) { "Unable to capture screenshot $name" }
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot()) {
+            "Unable to capture screenshot $name"
+        }
+        try {
+            FileOutputStream(file).use { stream ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                    "Unable to encode screenshot $name"
+                }
+            }
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private sealed interface Anchor {
