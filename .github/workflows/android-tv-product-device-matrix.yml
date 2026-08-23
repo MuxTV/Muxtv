@@ -21,7 +21,6 @@ permissions:
 concurrency:
   group: android-tv-product-device-matrix-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-  queue: max
 
 jobs:
   validate:
