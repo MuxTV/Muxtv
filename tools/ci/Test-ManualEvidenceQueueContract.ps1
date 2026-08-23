@@ -6,7 +6,6 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $manualEvidenceWorkflows = @(
-    ".github\workflows\android-tv-product-device-matrix.yml",
     ".github\workflows\benchmark-foundation.yml",
     ".github\workflows\integration-gate.yml",
     ".github\workflows\focused-m3u-evidence.yml"
@@ -36,7 +35,34 @@ foreach ($relativePath in $manualEvidenceWorkflows) {
     }
 }
 
-Write-Host "Manual evidence concurrency queue contract passed."
+# The product matrix is intentionally hybrid: risky harness PRs auto-run it, while
+# operators can still dispatch explicit evidence. PR runs should cancel superseded
+# heads; manual runs must never share that cancellable PR concurrency identity.
+$productMatrixPath = Join-Path $repositoryRoot ".github\workflows\android-tv-product-device-matrix.yml"
+if (-not (Test-Path -LiteralPath $productMatrixPath -PathType Leaf)) {
+    throw "Product matrix workflow was not found."
+}
+$productMatrix = Get-Content -LiteralPath $productMatrixPath -Raw -Encoding utf8
+foreach ($requiredFragment in @(
+    "pull_request:",
+    "workflow_dispatch:",
+    "github.event_name == 'pull_request'",
+    "github.event.pull_request.number",
+    "github.run_id",
+    "cancel-in-progress: `${{ github.event_name == 'pull_request' }}"
+)) {
+    if ($productMatrix.IndexOf($requiredFragment, [System.StringComparison]::Ordinal) -lt 0) {
+        throw "Hybrid product matrix concurrency contract is missing: $requiredFragment"
+    }
+}
+if ($productMatrix.IndexOf("queue: max", [System.StringComparison]::Ordinal) -ge 0) {
+    throw "Hybrid product matrix must not combine queue: max with cancellable PR concurrency."
+}
+if ($productMatrix.IndexOf("cancel-in-progress: true", [System.StringComparison]::Ordinal) -ge 0) {
+    throw "Hybrid product matrix must not unconditionally cancel manual evidence."
+}
+
+Write-Host "Manual and hybrid evidence concurrency contracts passed."
 
 $artifactPublicationContract = Join-Path $PSScriptRoot "Test-EvidenceArtifactPublicationContract.ps1"
 if (-not (Test-Path -LiteralPath $artifactPublicationContract -PathType Leaf)) {
