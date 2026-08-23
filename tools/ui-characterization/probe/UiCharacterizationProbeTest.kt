@@ -5,11 +5,9 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.fetchSemanticsNode
-import androidx.compose.ui.test.fetchSemanticsNodes
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -40,6 +38,27 @@ class UiCharacterizationProbeTest {
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val arguments: Bundle = InstrumentationRegistry.getArguments()
+
+    /**
+     * Focus discovery deliberately uses only stable product test tags plus assertIsFocused().
+     * This is the lowest-common-denominator API already exercised by the immutable A/B/C tests;
+     * it avoids newer SemanticsConfiguration and single-node fetch extensions.
+     */
+    private val knownFocusTags = listOf(
+        "nav-home",
+        "nav-channels",
+        "nav-guide",
+        "nav-search",
+        "nav-settings",
+        "home-add-source",
+        "home-hero",
+        "channels-filter-all",
+        "channels-filter-favorites",
+        "channels-filter-recent",
+        "channel-row-0",
+        "settings-section-sources",
+        "settings-section-doctor",
+    )
 
     @Test
     fun capturesSharedShellGeometryAndFocusTrace() {
@@ -139,8 +158,7 @@ class UiCharacterizationProbeTest {
         pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
         composeRule.waitForIdle()
         val duringBackRailBounds = anchorInteraction.bounds()
-        val railBounds = composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot
+        val railBounds = boundsForUniqueTag(navTag)
         val focusOnRailBeforeBack = focusedNodeDescription()
         screenshot(outputDirectory, "$destination-rail-before-back")
 
@@ -223,18 +241,20 @@ class UiCharacterizationProbeTest {
         return if (nodeExists("home-add-source")) "home-add-source" else "home-hero"
     }
 
-    private fun nodeExists(tag: String): Boolean = runCatching {
-        composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-        true
-    }.getOrDefault(false)
+    private fun nodeExists(tag: String): Boolean =
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+
+    private fun boundsForUniqueTag(tag: String): Rect {
+        val nodes = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+        check(nodes.size == 1) { "Expected one semantics node for tag '$tag', got ${nodes.size}." }
+        return nodes.single().boundsInRoot
+    }
 
     private fun Anchor.resolve(): NodeHandle = when (this) {
         is Anchor.Tag -> NodeHandle(
             description = "tag:$tag",
-            boundsProvider = {
-                composeRule.onNodeWithTag(tag, useUnmergedTree = true)
-                    .fetchSemanticsNode().boundsInRoot
-            },
+            boundsProvider = { boundsForUniqueTag(tag) },
             focusAction = {
                 composeRule.onNodeWithTag(tag, useUnmergedTree = true)
                     .performSemanticsAction(SemanticsActions.RequestFocus)
@@ -258,18 +278,15 @@ class UiCharacterizationProbeTest {
         )
     }
 
-    private fun focusedNodeDescription(): String? {
-        val rootNode = composeRule.onRoot(useUnmergedTree = true).fetchSemanticsNode()
-        val focused = rootNode.depthFirst()
-            .firstOrNull { node -> node.config.getOrNull(SemanticsProperties.Focused) == true }
-            ?: return null
-        return focused.config.getOrNull(SemanticsProperties.TestTag)
-            ?: focused.config.toString()
-    }
-
-    private fun SemanticsNode.depthFirst(): Sequence<SemanticsNode> = sequence {
-        yield(this@depthFirst)
-        children.forEach { child -> yieldAll(child.depthFirst()) }
+    private fun focusedNodeDescription(): String? = knownFocusTags.firstOrNull { tag ->
+        if (!nodeExists(tag)) {
+            false
+        } else {
+            runCatching {
+                composeRule.onNodeWithTag(tag, useUnmergedTree = true).assertIsFocused()
+                true
+            }.getOrDefault(false)
+        }
     }
 
     private fun screenshot(directory: File, name: String) {
