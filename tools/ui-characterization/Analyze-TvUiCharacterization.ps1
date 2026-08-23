@@ -128,9 +128,9 @@ foreach ($manifestFile in $manifestFiles) {
     }
 }
 
-$failedCases = @($caseRecords | Where-Object status -ne 'passed')
-$probeHashes = @($caseRecords.probeSha256 | Sort-Object -Unique)
-$avdNames = @($caseRecords.avdName | Sort-Object -Unique)
+$failedCases = @($caseRecords | Where-Object { $_.status -ne 'passed' })
+$probeHashes = @($caseRecords | ForEach-Object probeSha256 | Sort-Object -Unique)
+$avdNames = @($caseRecords | ForEach-Object avdName | Sort-Object -Unique)
 if ($probeHashes.Count -ne 1) {
     throw "Characterization cases do not share one probe SHA256: $($probeHashes -join ', ')"
 }
@@ -192,9 +192,9 @@ foreach ($group in $groups) {
     })
 }
 
-$representative = @($comparisons | Where-Object representativeTvMode)
-$expectedShiftRows = @($representative | Where-Object abMatchesExpectedSharedShellShift)
-$cMatchesBRows = @($representative | Where-Object cMatchesBContentOrigin)
+$representative = @($comparisons | Where-Object { $_.representativeTvMode })
+$expectedShiftRows = @($representative | Where-Object { $_.abMatchesExpectedSharedShellShift })
+$cMatchesBRows = @($representative | Where-Object { $_.cMatchesBContentOrigin })
 $stableRows = @($representative | Where-Object { $_.aStableDuringRail -and $_.bStableDuringRail -and $_.cStableDuringRail })
 $restoredRows = @($representative | Where-Object { $_.aRestoredAfterRail -and $_.bRestoredAfterRail -and $_.cRestoredAfterRail })
 
@@ -230,8 +230,8 @@ $markdownPath = Join-Path $RunRoot 'ui-characterization-analysis.md'
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add('# MuxTV TV UI characterization analysis')
 $lines.Add('')
-$lines.Add("- Probe SHA256: `$($probeHashes[0])`")
-$lines.Add("- AVD: `$($avdNames[0])`")
+$lines.Add(('- Probe SHA256: `{0}`' -f $probeHashes[0]))
+$lines.Add(('- AVD: `{0}`' -f $avdNames[0]))
 $lines.Add("- Cases: $($caseRecords.Count); failed: $($failedCases.Count)")
 $lines.Add("- Representative comparison rows: $($representative.Count)")
 $lines.Add("- A→B expected +$ExpectedSharedShellShiftDp dp matches: $($expectedShiftRows.Count)/$($representative.Count)")
