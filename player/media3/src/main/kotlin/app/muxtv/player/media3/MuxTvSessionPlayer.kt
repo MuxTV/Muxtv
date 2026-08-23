@@ -34,6 +34,7 @@ internal val blockedMuxTvSessionSeekCommands: Set<Int> = setOf(
     Player.COMMAND_SEEK_TO_NEXT,
 )
 
+@AndroidXOptIn(UnstableApi::class)
 internal fun filteredMuxTvSessionCommands(commands: Player.Commands): Player.Commands =
     commands.buildUpon().apply {
         blockedMuxTvSessionSeekCommands.forEach { command -> remove(command) }
