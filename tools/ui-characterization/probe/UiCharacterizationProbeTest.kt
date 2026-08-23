@@ -1,7 +1,5 @@
 package app.muxtv
 
-import android.content.Context
-import android.graphics.Rect as AndroidRect
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
@@ -64,9 +62,6 @@ class UiCharacterizationProbeTest {
         composeRule.waitForIdle()
         val homePrimary = awaitHomePrimary()
 
-        // Home proves the native D-pad boundary and focus-restoration path. Other destinations
-        // reuse the same native Left/Right inputs when a focusable content target is available,
-        // but absence of a target is recorded rather than treated as a characterization failure.
         captureDestination(
             outputDirectory = outputDirectory,
             root = root,
@@ -75,7 +70,6 @@ class UiCharacterizationProbeTest {
             anchor = Anchor.Tag(homePrimary),
             navigate = null,
         )
-
         captureDestination(
             outputDirectory = outputDirectory,
             root = root,
@@ -131,9 +125,8 @@ class UiCharacterizationProbeTest {
         val beforeFocus = focusedNodeDescription()
         screenshot(outputDirectory, "$destination-before")
 
-        // Seed the content target deterministically when it is focusable, then exercise the
-        // actual platform key path. RequestFocus is used only as a setup seam; movement itself
-        // is native UiDevice DPAD input.
+        // RequestFocus is only a deterministic setup seam. The transition into/out of the rail
+        // itself uses the native UiDevice DPAD path that the product receives on Android TV.
         runCatching {
             anchorInteraction.requestFocus()
             composeRule.waitForIdle()
@@ -142,7 +135,8 @@ class UiCharacterizationProbeTest {
         device.pressKeyCode(KeyEvent.KEYCODE_DPAD_LEFT)
         composeRule.waitForIdle()
         val duringBounds = anchorInteraction.bounds()
-        val railBounds = composeRule.onNodeWithTag(navTag, useUnmergedTree = true).bounds()
+        val railBounds = composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
         val focusOnRail = focusedNodeDescription()
         screenshot(outputDirectory, "$destination-rail")
 
@@ -171,7 +165,8 @@ class UiCharacterizationProbeTest {
     }
 
     private fun openRailDestination(navTag: String) {
-        composeRule.onNodeWithTag(navTag, useUnmergedTree = true).requestFocus()
+        composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.RequestFocus)
         composeRule.waitForIdle()
         device.pressKeyCode(KeyEvent.KEYCODE_ENTER)
         composeRule.waitForIdle()
@@ -179,29 +174,16 @@ class UiCharacterizationProbeTest {
 
     private fun awaitHomePrimary(): String {
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                composeRule.onNodeWithTag("home-add-source", useUnmergedTree = true)
-                    .fetchSemanticsNode()
-                true
-            }.getOrDefault(false) || runCatching {
-                composeRule.onNodeWithTag("home-hero", useUnmergedTree = true)
-                    .fetchSemanticsNode()
-                true
-            }.getOrDefault(false)
+            nodeExists("home-add-source") || nodeExists("home-hero")
         }
         composeRule.waitForIdle()
-        return if (
-            runCatching {
-                composeRule.onNodeWithTag("home-add-source", useUnmergedTree = true)
-                    .fetchSemanticsNode()
-                true
-            }.getOrDefault(false)
-        ) {
-            "home-add-source"
-        } else {
-            "home-hero"
-        }
+        return if (nodeExists("home-add-source")) "home-add-source" else "home-hero"
     }
+
+    private fun nodeExists(tag: String): Boolean = runCatching {
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+        true
+    }.getOrDefault(false)
 
     private fun Anchor.resolve(): NodeHandle = when (this) {
         is Anchor.Tag -> NodeHandle(
