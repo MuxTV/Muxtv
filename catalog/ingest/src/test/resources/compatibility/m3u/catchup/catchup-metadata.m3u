@@ -1,0 +1,3 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="synthetic.catchup" catchup="append" catchup-source="?utc={utc}&token=TEST_CATCHUP_SECRET" catchup-days="7" catchup-correction="+2.0",Synthetic Catch-up
+https://streams.invalid/live/catchup.m3u8?token=TEST_CATCHUP_SECRET
