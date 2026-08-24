@@ -1,0 +1,233 @@
+name: U0 self-hosted executor
+
+on:
+  push:
+    branches:
+      - exec/u0-self-hosted-20260824
+    paths:
+      - '.github/workflows/u0-self-hosted-executor.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: u0-self-hosted-executor-20260824
+  cancel-in-progress: false
+
+env:
+  U0_SOURCE_SHA: 6d26ca89b8ea3404c8d766d790c28133c9a481d1
+  U0_A_SHA: 2302c11441c85b8b5752d7f03cc5bc13be8c6d92
+  U0_B_SHA: 515072022d11b218fcb20f43079f94098b3ea973
+  U0_C_SHA: 7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9
+
+jobs:
+  characterize:
+    name: U0 A B C on canonical API36
+    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout immutable U0 source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ env.U0_SOURCE_SHA }}
+
+      - name: Clean workspace and verify immutable source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config --local core.longpaths true
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to enable Git long paths.' }
+          git reset --hard $env:U0_SOURCE_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to reset to immutable U0 source.' }
+          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Failed to clean U0 workspace.`n$cleanOutput" }
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $env:U0_SOURCE_SHA
+          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "U0 workspace is not clean.`n$dirty" }
+
+          $runnerEvidence = '.work\evidence\ui-characterization-runner'
+          New-Item -ItemType Directory -Force -Path $runnerEvidence | Out-Null
+          [ordered]@{
+            schemaVersion = 1
+            executorTriggerSha = '${{ github.sha }}'
+            sourceSha = $env:U0_SOURCE_SHA
+            comparisonA = $env:U0_A_SHA
+            comparisonB = $env:U0_B_SHA
+            comparisonC = $env:U0_C_SHA
+            avdName = 'MuxTV_TV_CURRENT_API36'
+            usesGitHubHostedRunner = $false
+            usesAdditionalAvdIdentity = $false
+          } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath (Join-Path $runnerEvidence 'executor-provenance.json') -Encoding utf8
+
+      - name: Preflight dedicated Android TV runner
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
+            -RequireNoConnectedDevice `
+            -ExpectedRunnerLabels muxtv-android,muxtv-device `
+            -ExpectedSystemImageApis 26,36
+
+      - name: Initialize SDK and run U0 static contracts
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+          & .\tools\android\Test-TvHarnessSyntax.ps1
+          & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+          & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
+          & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
+          & .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
+          & .\tools\ui-characterization\Test-TvUiCharacterizationAnalyzer.ps1
+
+      - name: Compile identical probe against immutable A B C
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Compile-TvUiCharacterizationProbe.ps1 `
+            -ComparisonId 'A' -Commit $env:U0_A_SHA
+          & .\tools\ui-characterization\Compile-TvUiCharacterizationProbe.ps1 `
+            -ComparisonId 'B' -Commit $env:U0_B_SHA
+          & .\tools\ui-characterization\Compile-TvUiCharacterizationProbe.ps1 `
+            -ComparisonId 'C' -Commit $env:U0_C_SHA
+
+      - name: Collect immutable A B C source facts
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Collect-TvUiSourceFacts.ps1 `
+            -OutputPath '.work\evidence\ui-characterization\source-facts.json'
+
+      - name: Run immutable A B C characterization
+        shell: pwsh
+        env:
+          MUXTV_SOURCE_COMMIT: ${{ env.U0_SOURCE_SHA }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\tools\ui-characterization\UiCharacterizationStartupRecovery.ps1
+
+          $evidenceRoot = '.work\evidence\ui-characterization'
+          $runnerEvidence = '.work\evidence\ui-characterization-runner'
+          $completed = $false
+          $maxAttempts = 2
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              & .\tools\ui-characterization\Invoke-TvUiCharacterization.ps1 -NoDaemon
+              $completed = $true
+              break
+            } catch {
+              $failureMessage = $_.Exception.Message
+              $recoverable = $attempt -lt $maxAttempts -and (
+                Test-TvUiRecoverableEmulatorStartupFailure `
+                  -EvidenceRoot $evidenceRoot `
+                  -FailureMessage $failureMessage
+              )
+
+              if (-not $recoverable) { throw }
+
+              New-Item -ItemType Directory -Force -Path $runnerEvidence | Out-Null
+              [ordered]@{
+                schemaVersion = 1
+                firstAttemptFailure = $failureMessage
+                classification = 'android-emulator-modem-transport-startup'
+                retryAttempt = $attempt + 1
+                maxAttempts = $maxAttempts
+                avdName = 'MuxTV_TV_CURRENT_API36'
+                createsAdditionalAvdIdentity = $false
+              } | ConvertTo-Json -Depth 4 |
+                Set-Content -LiteralPath (Join-Path $runnerEvidence 'startup-recovery.json') -Encoding utf8
+
+              Write-Warning 'Recoverable emulator modem transport startup failure detected. Retrying once on the same canonical API36 AVD.'
+              Start-Sleep -Seconds 3
+            }
+          }
+
+          if (-not $completed) {
+            throw 'U0 characterization did not complete within the bounded startup recovery contract.'
+          }
+
+      - name: Analyze A B C geometry and focus evidence
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Analyze-TvUiCharacterization.ps1
+
+      - name: Record canonical AVD inventory
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runnerEvidence = '.work\evidence\ui-characterization-runner'
+          New-Item -ItemType Directory -Force -Path $runnerEvidence | Out-Null
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
+          . .\tools\android\AndroidSdk.ps1
+          $tools = Get-AndroidSdkTools
+          $inventory = @(& $tools.AvdManager list avd -c 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate AVDs after U0.' }
+          $inventory | Set-Content -LiteralPath (Join-Path $runnerEvidence 'avd-inventory.txt') -Encoding utf8
+          & .\tools\android\Remove-LegacyMuxTvAvds.ps1 *>&1 |
+            Tee-Object -FilePath (Join-Path $runnerEvidence 'legacy-muxtv-avds-dry-run.txt')
+
+      - name: Persist U0 evidence outside runner workspace
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shortSource = $env:U0_SOURCE_SHA.Substring(0, 12)
+          $destination = Join-Path $env:USERPROFILE "MuxTV-Evidence\U0\${{ github.run_id }}-$shortSource"
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+
+          foreach ($source in @(
+            '.work\evidence\ui-characterization',
+            '.work\evidence\ui-characterization-runner'
+          )) {
+            if (Test-Path -LiteralPath $source) {
+              Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+            }
+          }
+
+          $manifest = @(
+            Get-ChildItem -LiteralPath $destination -Recurse -File | ForEach-Object {
+              [ordered]@{
+                path = [System.IO.Path]::GetRelativePath($destination, $_.FullName)
+                length = $_.Length
+                sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              }
+            }
+          )
+          [ordered]@{
+            schemaVersion = 1
+            repository = 'MuxTV/Muxtv'
+            executorRunId = '${{ github.run_id }}'
+            executorTriggerSha = '${{ github.sha }}'
+            sourceSha = $env:U0_SOURCE_SHA
+            persistedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+            files = $manifest
+          } | ConvertTo-Json -Depth 8 |
+            Set-Content -LiteralPath (Join-Path $destination 'evidence-manifest.json') -Encoding utf8
+
+          Write-Host "U0_LOCAL_EVIDENCE_PATH=$destination"
+          Write-Host "U0_EVIDENCE_FILE_COUNT=$($manifest.Count)"
+
+          $analysisMd = Get-ChildItem -LiteralPath $destination -Recurse -File -Filter 'ui-characterization-analysis.md' |
+            Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          if ($null -ne $analysisMd) {
+            Write-Host '===== U0_ANALYSIS_MARKDOWN_BEGIN ====='
+            Get-Content -LiteralPath $analysisMd.FullName -Raw | Write-Host
+            Write-Host '===== U0_ANALYSIS_MARKDOWN_END ====='
+          }
+
+          $analysisJson = Get-ChildItem -LiteralPath $destination -Recurse -File -Filter 'ui-characterization-analysis.json' |
+            Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          if ($null -ne $analysisJson) {
+            Write-Host '===== U0_ANALYSIS_JSON_BEGIN ====='
+            Get-Content -LiteralPath $analysisJson.FullName -Raw | Write-Host
+            Write-Host '===== U0_ANALYSIS_JSON_END ====='
+          }
+
+      - name: Reset Android runner state
+        if: always()
+        shell: pwsh
+        run: |
+          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
