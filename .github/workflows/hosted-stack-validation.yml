@@ -25,7 +25,7 @@ jobs:
   validate:
     name: Hosted stack compatibility
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 45
 
     steps:
@@ -36,18 +36,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify exact-head provenance
-        shell: bash
+        shell: pwsh
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          set -euo pipefail
-          actual_head="$(git rev-parse HEAD)"
-          if [[ "$actual_head" != "$EXPECTED_HEAD" ]]; then
-            echo "Expected exact PR head $EXPECTED_HEAD but checked out $actual_head" >&2
-            exit 1
-          fi
+          $ErrorActionPreference = "Stop"
+          $actualHead = (& git rev-parse HEAD 2>&1 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Unable to resolve checked-out HEAD: $actualHead" }
+          if ($actualHead -ne $env:EXPECTED_HEAD) {
+            throw "Expected exact PR head $env:EXPECTED_HEAD but checked out $actualHead"
+          }
           git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw "Working tree differs from exact PR head." }
           git diff --cached --exit-code
+          if ($LASTEXITCODE -ne 0) { throw "Index differs from exact PR head." }
 
       - name: Set up JDK 17
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
@@ -59,70 +61,72 @@ jobs:
         uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
 
       - name: Report Gradle and Java versions
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = "Stop"
           java -version
-          ./gradlew --version --no-daemon --console=plain
+          if ($LASTEXITCODE -ne 0) { throw "Java version inspection failed." }
+          .\gradlew.bat --version --no-daemon --console=plain
+          if ($LASTEXITCODE -ne 0) { throw "Gradle version inspection failed." }
 
       - name: Validate convention build logic
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          ./gradlew -p build-logic :convention:test \
-            --no-daemon \
-            --console=plain \
-            --stacktrace \
-            --warning-mode all \
+          $ErrorActionPreference = "Stop"
+          .\gradlew.bat -p build-logic :convention:test `
+            --no-daemon `
+            --console=plain `
+            --stacktrace `
+            --warning-mode all `
             --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Convention build-logic validation failed." }
 
       - name: Validate configuration cache twice
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          ./gradlew help --configuration-cache \
-            --no-daemon \
-            --console=plain \
-            --stacktrace \
-            --warning-mode all \
-            --no-problems-report
-          ./gradlew help --configuration-cache \
-            --no-daemon \
-            --console=plain \
-            --stacktrace \
-            --warning-mode all \
-            --no-problems-report
+          $ErrorActionPreference = "Stop"
+          foreach ($attempt in 1..2) {
+            .\gradlew.bat help --configuration-cache `
+              --no-daemon `
+              --console=plain `
+              --stacktrace `
+              --warning-mode all `
+              --no-problems-report
+            if ($LASTEXITCODE -ne 0) { throw "Configuration-cache validation attempt $attempt failed." }
+          }
 
       - name: Run stack-sensitive unit and JVM compilation gates
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          ./gradlew \
-            :app:tv:testDebugUnitTest \
-            :core:database:testDebugUnitTest \
-            :core:designsystem:testDebugUnitTest \
-            :feature:search:testDebugUnitTest \
-            :player:media3:testDebugUnitTest \
-            :benchmark:jvm:jmhClasses \
-            --no-daemon \
-            --console=plain \
-            --stacktrace \
-            --warning-mode all \
+          $ErrorActionPreference = "Stop"
+          .\gradlew.bat `
+            :app:tv:testDebugUnitTest `
+            :core:database:testDebugUnitTest `
+            :core:designsystem:testDebugUnitTest `
+            :feature:search:testDebugUnitTest `
+            :player:media3:testDebugUnitTest `
+            :benchmark:jvm:jmhClasses `
+            --no-daemon `
+            --console=plain `
+            --stacktrace `
+            --warning-mode all `
             --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Stack-sensitive unit/JVM validation failed." }
 
       - name: Compile Android instrumentation and benchmark surfaces
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          ./gradlew \
-            :core:database:assembleDebugAndroidTest \
-            :player:media3:assembleDebugAndroidTest \
-            :app:tv:assembleDebugAndroidTest \
-            :benchmark:macrobenchmark:assembleBenchmarkRelease \
-            :benchmark:macrobenchmark:assembleNonMinifiedRelease \
-            :app:tv:assembleDebug \
-            --no-daemon \
-            --console=plain \
-            --stacktrace \
-            --warning-mode all \
+          $ErrorActionPreference = "Stop"
+          .\gradlew.bat `
+            :core:database:assembleDebugAndroidTest `
+            :player:media3:assembleDebugAndroidTest `
+            :app:tv:assembleDebugAndroidTest `
+            :benchmark:macrobenchmark:assembleBenchmarkRelease `
+            :benchmark:macrobenchmark:assembleNonMinifiedRelease `
+            :app:tv:assembleDebug `
+            --no-daemon `
+            --console=plain `
+            --stacktrace `
+            --warning-mode all `
             --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Android instrumentation/benchmark compilation failed." }
