@@ -16,9 +16,87 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  admission:
+    name: Admit trigger-only UI characterization request
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      allowed: ${{ steps.classify.outputs.allowed }}
+      reason: ${{ steps.classify.outputs.reason }}
+      trigger_head: ${{ steps.classify.outputs.trigger_head }}
+      parent_head: ${{ steps.classify.outputs.parent_head }}
+      validated_parent: ${{ steps.classify.outputs.validated_parent }}
+
+    steps:
+      - name: Checkout exact PR head for hosted admission
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact source head
+        shell: pwsh
+        run: |
+          $actual = (& git rev-parse HEAD).Trim()
+          $expected = '${{ github.event.pull_request.head.sha }}'
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $expected) {
+            throw "UI characterization admission checkout mismatch: expected $expected, got $actual"
+          }
+
+      - name: Classify trigger-only marker
+        id: classify
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . .\tools\ui-characterization\UiCharacterizationDeviceAdmission.ps1
+
+          $markerPath = '.github/ui-characterization/run.request'
+          $markerContent = if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+            Get-Content -LiteralPath $markerPath -Raw
+          } else {
+            ''
+          }
+
+          $triggerHead = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger head.' }
+          $parentHead = (& git rev-parse HEAD^).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger parent.' }
+          $changed = @(& git diff --name-only $parentHead $triggerHead)
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect trigger commit diff during hosted admission.' }
+
+          $decision = Resolve-TvUiDeviceAdmissionState `
+            -TriggerHead $triggerHead `
+            -ParentHead $parentHead `
+            -MarkerContent $markerContent `
+            -ChangedPaths $changed `
+            -MarkerPath $markerPath
+
+          "allowed=$($decision.Allowed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "reason=$($decision.Reason)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "trigger_head=$($decision.TriggerHead)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "parent_head=$($decision.ParentHead)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "validated_parent=$($decision.ValidatedCompiledParent)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          if ($env:GITHUB_STEP_SUMMARY) {
+            @(
+              '### UI characterization hosted admission'
+              ''
+              "- allowed: ``$($decision.Allowed.ToString().ToLowerInvariant())``"
+              "- reason: ``$($decision.Reason)``"
+              "- trigger: ``$($decision.TriggerHead)``"
+              "- parent: ``$($decision.ParentHead)``"
+              "- marker validates: ``$($decision.ValidatedCompiledParent)``"
+            ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+
+          Write-Host "Hosted UI characterization admission: allowed=$($decision.Allowed) reason=$($decision.Reason)"
+
   characterize:
     name: Characterize A B C on canonical API36
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    needs: admission
+    if: ${{ needs.admission.outputs.allowed == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
     timeout-minutes: 240
 
@@ -50,43 +128,52 @@ jobs:
           $expected = '${{ github.event.pull_request.head.sha }}'
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
 
-      - name: Verify trigger-only marker against compiled parent
+      - name: Re-verify trigger-only marker against compiled parent
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $markerPath = '.github/ui-characterization/run.request'
-          if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
-            throw "UI characterization request marker is missing: $markerPath"
-          }
+          . .\tools\ui-characterization\UiCharacterizationDeviceAdmission.ps1
 
-          $validatedHead = (Get-Content -LiteralPath $markerPath -Raw).Trim()
-          if ($validatedHead -notmatch '^[0-9a-f]{40}$') {
-            throw "UI characterization marker must contain exactly one validated 40-hex commit SHA. Got: '$validatedHead'"
+          $markerPath = '.github/ui-characterization/run.request'
+          $markerContent = if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+            Get-Content -LiteralPath $markerPath -Raw
+          } else {
+            ''
           }
 
           $triggerHead = (& git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger head.' }
           $parentHead = (& git rev-parse HEAD^).Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger parent.' }
-          if ($parentHead -cne $validatedHead) {
-            throw "Device trigger parent mismatch: marker validates $validatedHead but HEAD^ is $parentHead"
-          }
-
           $changed = @(& git diff --name-only $parentHead $triggerHead)
           if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect trigger-only marker diff.' }
-          $changed = @($changed | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
-          if ($changed.Count -ne 1 -or $changed[0] -cne $markerPath) {
-            throw "Device trigger commit must change only $markerPath. Changed: $($changed -join ', ')"
+
+          $decision = Resolve-TvUiDeviceAdmissionState `
+            -TriggerHead $triggerHead `
+            -ParentHead $parentHead `
+            -MarkerContent $markerContent `
+            -ChangedPaths $changed `
+            -MarkerPath $markerPath
+
+          if (-not $decision.Allowed) {
+            throw "Hosted-admitted UI characterization trigger failed device-side re-verification: $($decision.Reason)"
+          }
+          if ($decision.TriggerHead -cne '${{ needs.admission.outputs.trigger_head }}' -or
+              $decision.ParentHead -cne '${{ needs.admission.outputs.parent_head }}' -or
+              $decision.ValidatedCompiledParent -cne '${{ needs.admission.outputs.validated_parent }}') {
+            throw 'Device-side UI characterization admission provenance differs from hosted admission outputs.'
           }
 
           $evidenceDirectory = '.work\evidence\ui-characterization-runner'
           New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
           [ordered]@{
-            schemaVersion = 1
-            triggerHead = $triggerHead
-            validatedCompiledParent = $validatedHead
-            markerPath = $markerPath
+            schemaVersion = 2
+            triggerHead = $decision.TriggerHead
+            parentHead = $decision.ParentHead
+            validatedCompiledParent = $decision.ValidatedCompiledParent
+            markerPath = $decision.MarkerPath
             triggerOnly = $true
+            hostedAdmissionReason = '${{ needs.admission.outputs.reason }}'
           } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $evidenceDirectory 'admission.json') -Encoding utf8
 
       - name: Preflight dedicated Android TV runner
@@ -104,6 +191,7 @@ jobs:
           & .\tools\android\Test-TvHarnessSyntax.ps1
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
           & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
+          & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
 
       - name: Collect immutable A B C UI source facts
         shell: pwsh
