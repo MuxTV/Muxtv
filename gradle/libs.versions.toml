@@ -24,8 +24,8 @@ androidx-test-core = "1.7.0"
 androidx-test-runner = "1.7.0"
 androidx-test-ext-junit = "1.3.0"
 espresso = "3.7.0"
-# Benchmark 1.5 is required for AGP 9's new DSL. Keep the newest 1.5 RC until that line reaches stable.
-benchmark = "1.5.0-rc01"
+# Benchmark 1.5.0-alpha07 is the last repository-proven AGP 9 DSL baseline; #27/#31 own later 1.5 tooling migration.
+benchmark = "1.5.0-alpha07"
 profileinstaller = "1.4.1"
 tracing = "1.3.0"
 uiautomator = "2.4.0"
