@@ -1,0 +1,5 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="synthetic.malformed" Missing required comma
+https://streams.invalid/live/bare-after-malformed.m3u8
+#EXTINF:-1 tvg-id="synthetic.valid",Synthetic Valid After Malformed
+https://streams.invalid/live/valid-after-malformed.m3u8
