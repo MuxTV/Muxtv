@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   validate:
+    # Stack-refresh staging uses this existing workflow as the device compatibility gate;
+    # the production landing PRs remain independently reviewable and revertible.
     name: Android TV product device matrix
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
