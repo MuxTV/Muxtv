@@ -50,6 +50,11 @@ jobs:
         run: |
           & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
 
+      - name: Run hosted device admission contract
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
+
       - name: Verify immutable A B C UI source facts
         shell: pwsh
         run: |
