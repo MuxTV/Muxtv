@@ -1,23 +1,27 @@
 ---
 status: accepted
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-25
 ---
 
 # Roadmap
 
 ## Current alpha checkpoint
 
-Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite. Search S5 принят через PR #159/#160 на `main@1249624d`.
+Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Media3 playback/recovery, Doctor Lite и Lounge Light TV shell. Accepted stabilization baseline — `main@5aa9c108cc63187d8066494fb30c73b82f4e0f97`.
 
-Текущая последовательность до alpha:
+После #175 final seek mutation/coalescing имеет одного service-owned authority. После D0/#181 repository-owned Android TV AVD identities — **ровно** `MuxTV_TV_OLD_API26` и `MuxTV_TV_CURRENT_API36`; 720p/1080p/compact modes являются display configurations этих canonical devices, а не отдельными AVD.
 
-1. Guide S6 — bounded-performance и presentation closure поверх существующего `RoomGuideWindowRepository`/`GuideViewModel`;
-2. M4-R — Player overlay/recovery UX и source-refresh Doctor diagnostics;
-3. M6-R — remote interaction, accessibility и минимальный Lounge Light shell;
-4. L1 — reboot/unlock/package-replace lifecycle contract (#118);
-5. D1 — dependency hardening и freeze;
-6. M3-C — Baseline Profile/CUJ и performance closure;
-7. M7-R — release engineering, signing и provenance; RC — API37 smoke и physical Android/Google TV gate.
+Текущая причинная последовательность до MVP 0.1 alpha:
+
+1. **U0 / #188 — TV UI characterization.** Сравнить immutable A/B/C одним byte-identical probe на canonical API36 без production UI changes. Representative modes: `1920x1080 @ 320dpi` и `1280x720 @ 213dpi`; `1280x720 @ 320dpi` — compact stress only.
+2. **U1 — evidence-driven UI correction.** Только observed RED → minimal GREEN. Shared shell reservation, rail visual state и typography/tokens исправляются отдельными owners; destination-specific compensation не используется вместо общего исправления.
+3. **M0 / #178 — measurement correctness.** До принятия M0 DB/query/performance conclusions не используются как authority для tuning.
+4. **Dependency hardening / freeze.** Combined compatibility probe не является merge unit; Room, Navigation3, Paging, Media3, Compose и toolchain changes остаются отдельно reviewable/revertible.
+5. **Observability boundary.** Typed bounded WorkManager/network/player evidence без generic raw telemetry event bus и без secrets.
+6. **Measured optimization.** HTTP validators, Room experiments, parser tuning и playback buffer/cache policy меняются только по trustworthy #27/#31 evidence; «оставить defaults» является допустимым результатом.
+7. **Alpha release closure / #31.** Baseline Profile/CUJ, R8 review, signing/SBOM, API37 smoke и physical Android/Google/Fire TV evidence до hardware-specific compatibility/performance claims.
+
+Parallel preparation допустима для docs, release matrix, sanitized compatibility corpus и observability design, если она не меняет accepted runtime behavior и не загрязняет U0/U1/M0 attribution boundary.
 
 Timed/repeated 50k Search/M3U execution является manual stress evidence, а не обязательным PR/release gate; 50k corpus остаётся synthetic correctness/stress asset.
 
