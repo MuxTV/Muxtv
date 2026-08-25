@@ -1,19 +1,19 @@
 schema_version: 2
 state: reviewed_snapshot
-updated_at: 2026-08-17
-phase: phase_01_functional_pre_alpha
+updated_at: 2026-08-24
+phase: stabilization_before_mvp_0_1_alpha
 architecture_version: 2
 
 # Compatibility alias for older repository tooling. This is a reviewed snapshot commit,
 # never the dynamic branch HEAD. Live HEAD is resolved from Git at execution time.
-implementation_source_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
+implementation_source_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
 
 truth_snapshot:
-  reviewed_main_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
-  reviewed_main_short: 18b520a
-  reviewed_through_pr: 173
-  latest_integration_pr: 168
-  reviewed_at: 2026-08-17
+  reviewed_main_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
+  reviewed_main_short: 5aa9c108
+  reviewed_through_pr: 181
+  latest_integration_pr: 181
+  reviewed_at: 2026-08-24
   live_git_authority: git
   live_github_authority: github_api
   dynamic_pr_state_is_durable_truth: false
@@ -21,10 +21,10 @@ truth_snapshot:
 repository_state:
   application_code: present
   gradle_project: present_modular_27_projects
-  ci: present_risk_based_exact_source_head_fast_focused_device_and_manual_integration_matrix
-  tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_and_measurement
-  release_pipeline: alpha_identity_present_signing_and_physical_release_gate_pending
-  documentation: reviewed_through_post_stabilization_main_18b520a
+  ci: present_risk_based_exact_source_head_and_exact_two_avd_harness
+  tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_measurement_benchmark
+  release_pipeline: alpha_identity_present_signing_r8_analysis_and_physical_release_evidence_pending
+  documentation: reviewed_through_d0_main_5aa9c108
   room_schema: 10
 
 implemented:
@@ -46,6 +46,7 @@ implemented:
   - bounded_unicode_search_top_n
   - search_debounce_cancellation_retry_truncation_and_focus
   - media3_single_process_owned_session_and_player
+  - single_service_owned_semantic_seek_authority
   - service_owned_first_rendered_frame_success
   - bounded_same_channel_recovery
   - bounded_redacted_playback_observations
@@ -53,18 +54,18 @@ implemented:
   - external_http_https_playback_via_shared_playback_service
   - external_playback_opaque_lease_and_cleartext_approval
   - external_progressive_resilience_ep08_evidence
-  - native_external_dpad_seek_evidence
   - api37_local_network_permission_boundary
+  - user_unlocked_background_work_lifecycle_contract
   - shared_tv_player_surface_audio_subtitle_selection_and_seek_hud
   - deterministic_m3u_corpus_profiles_1k_10k_50k
   - repository_owned_measurement_profiles_and_series
   - jmh_macrobenchmark_and_baseline_profile_foundation
-  - api26_api36_android_tv_device_harness
+  - exact_two_avd_repository_contract_api26_api36
   - exact_source_head_evidence_contract
   - dependency_aware_architecture_guards
   - repository_reviewed_snapshot_and_live_state_separation
   - risk_based_pr_validation_and_single_integration_acceptance_lane
-  - alpha_release_identity_and_r8
+  - alpha_release_identity_and_r8_foundation
 
 verified_evidence:
   provider_readiness_merge: 8fadb411e20c6a854fafd2005c5c5b17e868f858
@@ -83,57 +84,57 @@ verified_evidence:
   search_s5_measurement_merge: b8ab064aed58b2b6789514ae858c979f0ccb4713
   search_s5_top_n_merge: 1249624db5010e8140814a56553ea194c6d25d66
   repository_live_state_merge: 6ebb8f408b2609ad4509f108d1773bf9d3cfb067
-  media_session_result_hotfix_merge: ff83cc4b
   external_progressive_ep08_merge: b40145ed5756a03ac52130e321fd05325c1a0836
   lounge_light_integration_merge: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
+  single_service_seek_authority_merge: 2302c11441c85b8b5752d7f03cc5bc13be8c6d92
+  exact_two_avd_contract_merge: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
 
-active_work:
-  semantics: reviewed_work_records_not_live_github_state
-  guide_s6_closure:
-    status: accepted_in_reviewed_snapshot
-    source_pr: 162
-  external_playback_ep08:
-    status: accepted_in_reviewed_snapshot
-    source_pr: 167
-    delivered:
-      - stock_media3_progressive_resilience_evidence
-      - first_frame_then_native_non_terminal_dpad_seek
-      - typed_secret_free_failure_and_cleanup_evidence
-  lounge_light_tv:
-    status: accepted_in_reviewed_snapshot
-    source_pr: 168
-    delivered:
-      - stable_overlay_navigation_geometry
-      - deterministic_channels_focus_restoration
-      - bounded_720p_source_details_focus_containment
-      - ep08_player_surface_integration
-  shared_player_surface:
-    status: accepted_with_known_architecture_deviation
-    source_prs: [166, 167, 168]
-    known_deviation:
-      - issue_132_dual_seek_ownership_requires_single_service_owner
-  architecture_guard:
-    status: accepted_in_reviewed_snapshot
-    source_pr: 169
-  ci_admission:
-    status: accepted_in_reviewed_snapshot
-    source_pr: 171
+accepted_contracts:
+  playback_seek_authority:
+    status: accepted
+    source_pr: 175
+    owner: media_session_service
+  background_lifecycle:
+    status: accepted
+    source_issue: 118
+    direct_boot_functional_refresh: false
+  android_tv_virtual_devices:
+    status: accepted
+    source_pr: 181
+    persistent_identities:
+      - MuxTV_TV_OLD_API26
+      - MuxTV_TV_CURRENT_API36
+    extra_repository_avd_identities_allowed: false
 
 next_milestone:
   id: stabilization_before_mvp_0_1_alpha
   sequence:
-    - issue_132_single_service_owned_seek_authority
-    - seek_and_rebuffer_measurement_evidence
-    - measured_playback_buffer_policy_if_justified
-    - source_refresh_doctor_diagnostics_residual
-    - ci_issue_and_branch_hygiene
-    - api37_and_physical_tv_release_evidence
+    - u0_ui_characterization_no_product_fix
+    - u1_evidence_driven_ui_correction
+    - m0_issue_178_measurement_correctness
+    - observability_evidence_closure
+    - source_304_and_measured_runtime_optimizations
+    - alpha_release_r8_baseline_profile_and_physical_tv_evidence
+
+planned_observability_owners:
+  semantics: execution_plan_references_not_live_completion_state
+  workmanager_failure_diagnostics: issue_191
+  tracing_2_boundary: issue_192
+  okhttp_phase_timings: issue_193
+  release_r8_and_benchmark: issue_31
+  media3_analytics_and_buffer_decision: issue_109
+  database_experiments_after_measurement_fix: issue_196
+  gradle_9_7_post_alpha_experiments: issue_195
 
 known_gaps:
-  - dual_seek_ownership_issue_132
-  - source_refresh_doctor_diagnostics_residual
-  - lifecycle_reboot_package_replace_contract
-  - baseline_profile_cuj_closure
+  - lounge_ui_geometry_characterization_and_root_fix
+  - catalog_measurement_boundary_issue_178
+  - workmanager_framework_failure_diagnostics_issue_191
+  - tracing_2_evidence_boundary_issue_192
+  - okhttp_phase_timing_issue_193
+  - source_conditional_http_304_issue_100
+  - media3_measurement_before_buffer_policy_issue_109
+  - baseline_profile_real_cuj_and_r8_analyzer_release_evidence
   - signed_release_sbom_and_physical_device_evidence
   - api37_private_lan_permission_smoke
 
@@ -146,6 +147,14 @@ live_coordination:
 
 blocked: []
 deferred:
+  - separate_low_ram_or_mainstream_avd
+  - media3_player_pool_or_second_player
+  - simplecache_before_measurement
+  - room_pool_tuning_before_issue_178
+  - fts5_without_measurement
+  - without_rowid_without_measurement
+  - compose_experimental_styles_or_runtime_flags
+  - gradle_isolated_projects_on_alpha_main
   - xtream
   - stalker_ministra
   - catchup_timeshift_runtime

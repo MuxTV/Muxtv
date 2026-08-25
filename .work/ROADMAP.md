@@ -1,27 +1,59 @@
 ---
 status: accepted
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-24
 ---
 
 # Roadmap
 
 ## Current alpha checkpoint
 
-Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite. Search S5 принят через PR #159/#160 на `main@1249624d`.
+Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player/recovery/seek authority и Doctor Lite.
 
-Текущая последовательность до alpha:
+Текущий pre-alpha checkpoint — **stabilization before MVP 0.1 alpha**, а не продолжение старой feature-последовательности.
 
-1. Guide S6 — bounded-performance и presentation closure поверх существующего `RoomGuideWindowRepository`/`GuideViewModel`;
-2. M4-R — Player overlay/recovery UX и source-refresh Doctor diagnostics;
-3. M6-R — remote interaction, accessibility и минимальный Lounge Light shell;
-4. L1 — reboot/unlock/package-replace lifecycle contract (#118);
-5. D1 — dependency hardening и freeze;
-6. M3-C — Baseline Profile/CUJ и performance closure;
-7. M7-R — release engineering, signing и provenance; RC — API37 smoke и physical Android/Google TV gate.
+Принятая база: `main@5aa9c108cc63187d8066494fb30c73b82f4e0f97` после PR #181/D0. PR #175 уже устранил dual seek ownership; Issue #118 lifecycle contract завершён.
 
-Timed/repeated 50k Search/M3U execution является manual stress evidence, а не обязательным PR/release gate; 50k corpus остаётся synthetic correctness/stress asset.
+### Критическая последовательность стабилизации
 
-Эта секция описывает текущий checkpoint. Фазы ниже остаются capability roadmap и не являются утверждением, что для уже реализованной функции нужно создать отдельный симметричный модуль.
+1. **D0 — exact two-AVD contract: принято.** Repository-owned persistent AVD identities are exactly `MuxTV_TV_OLD_API26` and `MuxTV_TV_CURRENT_API36`; нет fallback API и отдельных low-RAM/mainstream/720p/benchmark/measurement AVD.
+2. **U0 — UI characterization.** Детерминированно сравнить A/B/C geometry/focus на canonical API36 без product UI fix.
+3. **U1 — evidence-driven UI correction.** Исправить только proven shared/root layout owner и перепроверить focus/navigation, используя те же canonical AVD identities.
+4. **M0 / #178 — measurement correctness.** Restack measurement fix на стабильную post-U1 базу; до этого DB/Search performance conclusions не считаются доверенными.
+5. **Performance/release train.** Только после M0 принимать решения по Room/Search/parser/player/Compose tuning на before/after evidence.
+
+Canonical plan: `docs/superpowers/plans/2026-08-22-muxtv-stabilization-master-plan.md`.
+
+### Параллельный observability/evidence train
+
+Observability можно готовить host-first параллельно U0/U1, если он не меняет U0 baseline и не используется как разрешение на speculative tuning:
+
+- #191 — WorkManager typed secret-safe failure diagnostics;
+- #192 — AndroidX Tracing 2.0 `MuxTvTrace` boundary;
+- #193 — OkHttp DNS/connect/TLS/TTFB/body timing;
+- #109/#27 — Media3 analytics evidence before adaptive buffer policy;
+- #31 — R8 Configuration Analyzer + sustained Macrobenchmark/Baseline Profile CUJs;
+- #196 — Room3 pool/FTS5/WITHOUT ROWID measurement experiments only after #178;
+- #195 — Gradle 9.7 parallel configuration-cache/Isolated Projects experiment, non-blocking/post-alpha.
+
+Design and execution: `docs/superpowers/specs/2026-08-24-observability-modernization-design.md` and `docs/superpowers/plans/2026-08-24-observability-modernization-implementation-plan.md`.
+
+### После M0
+
+Приоритет высоко-ROI work:
+
+1. #100 conditional HTTP validators / 304 so unchanged source can skip body -> parser -> staging -> DB/WAL -> publication;
+2. measured M3U/Search/Channels hot-path optimization only where #27 evidence shows a bottleneck;
+3. #109 adaptive Media3 buffering only after first-frame/rebuffer/seek/memory evidence;
+4. Room3/FTS/schema experiments only through #196;
+5. release closure #31: R8, Baseline Profile/CUJ, signing/SBOM/provenance and physical weak/current TV evidence.
+
+Timed/repeated 50k Search/M3U execution остаётся manual synthetic stress/correctness evidence, а не обязательным PR/release gate.
+
+### Device policy
+
+Development/CI virtual-device truth uses exactly API26/API36 canonical AVD identities. 720p/1080p/density/stress are modes of the same devices. Emulator timing is not weak-ARM/vendor-codec/HDR/passthrough/thermal truth; those claims require physical hardware.
+
+Эта секция описывает текущий checkpoint. Фазы ниже остаются capability roadmap и не означают, что для уже реализованной функции нужно создавать новый симметричный модуль.
 
 ## Phase 00 — Foundation
 
