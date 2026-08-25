@@ -1,10 +1,10 @@
 ---
 status: reviewed_snapshot
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-25
 architecture_version: 2
 # Compatibility alias: reviewed snapshot, not dynamic HEAD.
-implementation_source_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
-reviewed_main_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
+implementation_source_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
+reviewed_main_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
 live_state_authority: git
 ---
 
@@ -12,7 +12,7 @@ live_state_authority: git
 
 ## Что означает этот документ
 
-Этот файл — **durable reviewed snapshot**, а не динамический снимок GitHub. Он проверен против принятого `main@18b520a92836f9e61161dc9ce94e4fc7ded58b6b` после стабилизационного merge train PR #172/#173/#167/#168.
+Этот файл — **durable reviewed snapshot**, а не динамический снимок GitHub. Он синхронизирован с принятым `main@5aa9c108cc63187d8066494fb30c73b82f4e0f97` после принятия single service-owned seek authority и точного двух-AVD Android TV contract.
 
 Точный `HEAD`, текущая ветка и dirty-state берутся из Git во время выполнения. Состояние PR/Issues берётся из GitHub во время выполнения и намеренно не фиксируется здесь как «текущее»: оно может измениться без единого commit и поэтому не является versioned repository truth.
 
@@ -22,20 +22,21 @@ live_state_authority: git
 
 MuxTV находится в стадии **functional pre-alpha / stabilization before MVP 0.1 alpha**.
 
-Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Guide контур, service-owned Media3 playback/recovery, Doctor Lite, внешний HTTP/HTTPS playback, EP-08 progressive resilience evidence, Lounge Light TV shell/focus stabilization, dependency-aware architecture guards и risk-based CI.
+Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Guide контур, service-owned Media3 playback/recovery, Doctor Lite, внешний HTTP/HTTPS playback, EP-08 progressive resilience evidence, Lounge Light TV shell/focus stabilization, один service-owned semantic seek authority, dependency-aware architecture guards, risk-based CI и точный repository-owned API26/API36 device contract.
 
-Главный оставшийся архитектурный долг перед performance/release tuning — **Issue #132: удалить dual seek ownership и оставить один service-owned seek mutation/coalescing authority**. После него решения по back-buffer/cache принимаются только на измерениях #27/#109.
+Главный причинный контур перед измерениями и dependency freeze теперь не seek ownership. Стабилизационная последовательность — **U0 UI characterization → U1 evidence-driven correction → M0 measurement correctness**. Только после неё dependency/performance conclusions получают стабильную attribution boundary.
 
 ## Принятая база snapshot
 
 - Repository: `MuxTV/Muxtv`, default branch `main`, private, BSD 3-Clause.
-- Reviewed main: `18b520a92836f9e61161dc9ce94e4fc7ded58b6b` — integration merge PR #168 поверх принятого #167, #172 и #173.
+- Reviewed main: `5aa9c108cc63187d8066494fb30c73b82f4e0f97` — принятый D0/#181 exact two-AVD baseline поверх ранее принятого playback/input stabilization.
 - Android application: `app.muxtv.tv`, versionCode=1001, versionName=`0.1.0-alpha.1`, minSdk=26.
 - Architecture: нормативная v2; implementation progress не повышает architecture version.
 - Stack: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp, Media3.
 - Room schema: v10.
 - Gradle graph snapshot: 27 модулей плюс included build `build-logic`.
-- CI: PR Fast host validation, risk-based Android TV `DeviceCurrent`, manual exact-candidate Integration acceptance gate с host Full + API26/API36 DeviceMatrix, отдельные measurement/benchmark/migration lanes.
+- Repository-owned Android TV AVD identities: **ровно** `MuxTV_TV_OLD_API26` и `MuxTV_TV_CURRENT_API36`.
+- CI: exact-source-head host validation, risk-routed focused/device lanes, API26/API36 Product Matrix и отдельные measurement/benchmark/migration lanes.
 
 ## Реализованный продуктовый контур
 
@@ -62,19 +63,19 @@ Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Gu
 - audio/subtitle selectors и transient seek HUD;
 - EP-08: stock Media3 progressive/retry/range/no-range evidence и реальный Android D-pad non-terminal external seek после first frame;
 - MediaSession callback result contract исправлен без dependency bump;
-- Lounge Light player presentation интегрирован с native remote-input boundary.
-
-**Известное архитектурное отклонение:** UI `PlayerSurfaceContent` всё ещё создаёт собственный `PlaybackSeekController` и в итоге вызывает `MediaController.seekTo(targetMs)`, тогда как service отдельно владеет `PlaybackSeekController` и перехватывает relative seek commands. Это остаточный dual ownership из #166; Issue #132 должен свести оба входа к одному service-owned semantic seek protocol.
+- Lounge Light player presentation интегрирован с native remote-input boundary;
+- **PR #175 accepted:** один generation-aware service-owned semantic seek/mutation/coalescing authority; UI остаётся presentation/provisional boundary и не является вторым final mutation owner;
+- Android lint boundaries для Media3 unstable API и Activity-level external D-pad dispatch зафиксированы targeted gates (#183/#185).
 
 ### Lounge Light TV
 
-- стабильный 88dp layout slot для rail и overlay-like expansion без reflow content;
+- Lounge Light shared shell, Home/Channels/Guide/Search/Settings workspace и warm player presentation;
 - bidirectional D-pad filter graph;
 - deterministic focus restoration в Channels/Settings;
 - bounded `LazyColumn` Source details с 720p focus containment;
 - reduced-motion policy для optional scaling;
 - real-data-only Home/Guide/Search/Settings presentation;
-- принятый exact-head DeviceCurrent после интеграции #167.
+- U0 characterization требуется перед следующей production Compose correction, потому что более поздний reference-fidelity push изменил shared rail reservation/visual scale и должен быть отделён от ранее принятого shell behavior по runtime evidence.
 
 ### Diagnostics, measurement и release foundation
 
@@ -85,10 +86,15 @@ Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Gu
 - self-hosted runner preflight/cleanup и exact-source-head provenance;
 - dependency-aware architecture guards;
 - reviewed-snapshot/live-state separation;
-- risk-based PR routing и manual integration acceptance lane.
+- risk-based PR routing и exact API26/API36 Product Matrix;
+- canonical AVD ownership/cleanup/runtime contract, запрещающий отдельные 720p/low-RAM/benchmark AVD identities.
 
 ## Последние принятые этапы reviewed snapshot
 
+- PR #175 — единый service-owned semantic seek authority;
+- PR #183 — targeted Media3 lint boundary для session command filtering;
+- PR #185 — targeted App TV lint boundary для external D-pad dispatch;
+- PR #181 — D0 exact two-AVD repository/device-matrix contract, merged as reviewed `main@5aa9c108`;
 - PR #169 — dependency-aware architecture guards;
 - PR #170 — корректная API37 boundary для `ACCESS_LOCAL_NETWORK`;
 - PR #171 — risk-based PR gates и single integration acceptance lane;
@@ -101,12 +107,13 @@ Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Gu
 
 ## Следующая последовательность перед MVP 0.1 alpha
 
-1. **Issue #132 — single service-owned seek authority.** Один semantic request contract для relative/absolute seek; UI хранит только provisional presentation state и не вызывает final player mutation.
-2. **Seek/rebuffer measurements (#27).** После единого owner измерить input→apply/render, coalescing ratio, rebuffer и memory/startup trade-offs.
-3. **Measured buffer policy (#109), только если evidence оправдывает изменение.** Никаких скопированных constants или SimpleCache до измерений.
-4. **Doctor residual (#30).** Подключить coarse secret-free seek/rebuffer observations к уже существующей диагностике.
-5. **Repository/CI hygiene.** Закрыть остаточные issue/branch/protection и focused DB contracts без расширения feature scope.
-6. **Alpha release evidence (#31).** API37 private-LAN smoke, API matrix, Baseline Profile/CUJ, signing/SBOM, physical weak/current TV и hardware-specific codec/HDR/audio claims.
+1. **U0 / #188 — runtime characterization без production UI mutation.** Один byte-identical probe сравнивает immutable A/B/C на canonical `MuxTV_TV_CURRENT_API36`; 1080p/320 и 720p/213 являются representative TV modes, 720p/320 — только compact stress.
+2. **U1 — только evidence-driven correction.** Каждый production UI change начинается с observed RED contract; shared-shell, rail visual state и typography/tokens имеют отдельных owners.
+3. **M0 / #178 — measurement correctness.** До принятия M0 DB/query/performance conclusions считаются недостаточно надёжными для tuning decisions.
+4. **Dependency hardening.** Combined stack probe используется только как compatibility evidence; финальные Room/Navigation/Paging/Media3/Compose/toolchain изменения остаются независимо reviewable и revertible.
+5. **Observability.** Typed bounded WorkManager/network/player evidence boundaries без generic raw telemetry bus и без secrets.
+6. **Measured performance decisions.** Buffer/cache/Room/parser/HTTP optimization принимаются только по trustworthy #27/#31 evidence; valid outcome может быть «оставить defaults».
+7. **Alpha release evidence (#31).** Baseline Profile/CUJ, R8 review, signing/SBOM, API37 smoke и physical Android/Google/Fire TV evidence перед hardware-specific claims.
 
 ## Политика 50k evidence
 
@@ -114,12 +121,16 @@ Timed/repeated 50k Search/M3U execution не является обязатель
 
 ## Известные gaps reviewed snapshot
 
-- dual seek ownership (#132);
+- U0 Lounge shared-shell/visual characterization и последующий U1 только по observed evidence;
+- measurement correctness M0/#178 до DB/performance tuning conclusions;
 - source-refresh Doctor diagnostics residual (#30);
 - reboot/unlock/package-replace lifecycle contract (#118);
 - Baseline Profile/CUJ closure;
 - signing/SBOM/physical-device release evidence (#31);
-- API37 private-LAN permission smoke.
+- API37 private-LAN permission smoke;
+- isolated dependency owner PRs после стабилизационного baseline.
+
+**Не является gap:** dual seek ownership. Он закрыт принятым #175 и не должен снова появляться в execution plans как незавершённая архитектурная миграция.
 
 ## Live-state protocol
 
