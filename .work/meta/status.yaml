@@ -1,19 +1,19 @@
 schema_version: 2
 state: reviewed_snapshot
-updated_at: 2026-08-17
+updated_at: 2026-08-25
 phase: phase_01_functional_pre_alpha
 architecture_version: 2
 
 # Compatibility alias for older repository tooling. This is a reviewed snapshot commit,
 # never the dynamic branch HEAD. Live HEAD is resolved from Git at execution time.
-implementation_source_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
+implementation_source_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
 
 truth_snapshot:
-  reviewed_main_commit: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
-  reviewed_main_short: 18b520a
-  reviewed_through_pr: 173
-  latest_integration_pr: 168
-  reviewed_at: 2026-08-17
+  reviewed_main_commit: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
+  reviewed_main_short: 5aa9c108
+  reviewed_through_pr: 185
+  latest_integration_pr: 181
+  reviewed_at: 2026-08-25
   live_git_authority: git
   live_github_authority: github_api
   dynamic_pr_state_is_durable_truth: false
@@ -21,11 +21,14 @@ truth_snapshot:
 repository_state:
   application_code: present
   gradle_project: present_modular_27_projects
-  ci: present_risk_based_exact_source_head_fast_focused_device_and_manual_integration_matrix
-  tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_and_measurement
+  ci: present_risk_based_exact_source_head_host_focused_and_api26_api36_product_matrix
+  tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_measurement_and_ui_characterization
   release_pipeline: alpha_identity_present_signing_and_physical_release_gate_pending
-  documentation: reviewed_through_post_stabilization_main_18b520a
+  documentation: reviewed_through_accepted_main_5aa9c108
   room_schema: 10
+  repository_owned_android_tv_avds:
+    - MuxTV_TV_OLD_API26
+    - MuxTV_TV_CURRENT_API36
 
 implemented:
   - android_tv_application_shell
@@ -47,6 +50,7 @@ implemented:
   - search_debounce_cancellation_retry_truncation_and_focus
   - media3_single_process_owned_session_and_player
   - service_owned_first_rendered_frame_success
+  - single_service_owned_semantic_seek_authority
   - bounded_same_channel_recovery
   - bounded_redacted_playback_observations
   - doctor_lite_presentation_and_export
@@ -59,7 +63,7 @@ implemented:
   - deterministic_m3u_corpus_profiles_1k_10k_50k
   - repository_owned_measurement_profiles_and_series
   - jmh_macrobenchmark_and_baseline_profile_foundation
-  - api26_api36_android_tv_device_harness
+  - exact_api26_api36_android_tv_device_contract
   - exact_source_head_evidence_contract
   - dependency_aware_architecture_guards
   - repository_reviewed_snapshot_and_live_state_separation
@@ -86,9 +90,13 @@ verified_evidence:
   media_session_result_hotfix_merge: ff83cc4b
   external_progressive_ep08_merge: b40145ed5756a03ac52130e321fd05325c1a0836
   lounge_light_integration_merge: 18b520a92836f9e61161dc9ce94e4fc7ded58b6b
+  single_seek_authority_merge: 2302c11441c85b8b5752d7f03cc5bc13be8c6d92
+  media3_lint_boundary_merge: 3fba522cd125ce33ea2740e71bf935b68b74b435
+  external_dpad_lint_boundary_merge: e208076da52a0e1462efd17d2c826265d974fac3
+  exact_two_avd_contract_merge: 5aa9c108cc63187d8066494fb30c73b82f4e0f97
 
 active_work:
-  semantics: reviewed_work_records_not_live_github_state
+  semantics: reviewed_execution_contracts_not_live_github_state
   guide_s6_closure:
     status: accepted_in_reviewed_snapshot
     source_pr: 162
@@ -100,42 +108,53 @@ active_work:
       - first_frame_then_native_non_terminal_dpad_seek
       - typed_secret_free_failure_and_cleanup_evidence
   lounge_light_tv:
-    status: accepted_in_reviewed_snapshot
+    status: accepted_with_pending_runtime_characterization_before_next_ui_correction
     source_pr: 168
     delivered:
-      - stable_overlay_navigation_geometry
+      - lounge_light_shell_and_workspace
       - deterministic_channels_focus_restoration
       - bounded_720p_source_details_focus_containment
       - ep08_player_surface_integration
+    next_boundary:
+      - u0_characterize_immutable_a_b_c_before_production_ui_change
+      - u1_observed_red_then_minimal_green
   shared_player_surface:
-    status: accepted_with_known_architecture_deviation
-    source_prs: [166, 167, 168]
-    known_deviation:
-      - issue_132_dual_seek_ownership_requires_single_service_owner
+    status: accepted_single_service_owned_seek_authority
+    source_prs: [166, 167, 168, 175]
   architecture_guard:
     status: accepted_in_reviewed_snapshot
     source_pr: 169
   ci_admission:
     status: accepted_in_reviewed_snapshot
-    source_pr: 171
+    source_prs: [171, 181, 183, 185]
+  exact_two_avd_contract:
+    status: accepted_in_reviewed_snapshot
+    source_pr: 181
+    identities:
+      - MuxTV_TV_OLD_API26
+      - MuxTV_TV_CURRENT_API36
 
 next_milestone:
   id: stabilization_before_mvp_0_1_alpha
   sequence:
-    - issue_132_single_service_owned_seek_authority
-    - seek_and_rebuffer_measurement_evidence
-    - measured_playback_buffer_policy_if_justified
-    - source_refresh_doctor_diagnostics_residual
-    - ci_issue_and_branch_hygiene
-    - api37_and_physical_tv_release_evidence
+    - u0_tv_ui_characterization
+    - u1_evidence_driven_ui_correction
+    - m0_measurement_correctness
+    - isolated_dependency_hardening
+    - typed_bounded_observability_boundaries
+    - trustworthy_measured_performance_decisions
+    - alpha_release_evidence
 
 known_gaps:
-  - dual_seek_ownership_issue_132
+  - u0_lounge_shared_shell_runtime_characterization
+  - u1_evidence_driven_ui_correction
+  - m0_measurement_correctness
   - source_refresh_doctor_diagnostics_residual
   - lifecycle_reboot_package_replace_contract
   - baseline_profile_cuj_closure
   - signed_release_sbom_and_physical_device_evidence
   - api37_private_lan_permission_smoke
+  - isolated_dependency_owner_prs_after_stabilization
 
 live_coordination:
   git_head: resolve_at_execution_time
