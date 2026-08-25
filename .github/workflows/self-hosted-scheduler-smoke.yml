@@ -1,0 +1,34 @@
+name: Self-hosted scheduler smoke
+
+on:
+  push:
+    branches:
+      - exec/u0-self-hosted-20260824
+    paths:
+      - '.github/workflows/self-hosted-scheduler-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-scheduler-smoke-20260825
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Resolve self-hosted runner scheduler
+    runs-on: self-hosted
+    timeout-minutes: 5
+
+    steps:
+      - name: Report assigned runner identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "RUNNER_NAME=$env:RUNNER_NAME"
+          Write-Host "RUNNER_OS=$env:RUNNER_OS"
+          Write-Host "RUNNER_ARCH=$env:RUNNER_ARCH"
+          Write-Host "GITHUB_REPOSITORY=$env:GITHUB_REPOSITORY"
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_NAME)) {
+            throw 'GitHub assigned the job without a runner identity.'
+          }
