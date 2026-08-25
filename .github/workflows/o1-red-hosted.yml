@@ -1,0 +1,28 @@
+name: O1 WorkManager RED hosted
+
+on:
+  push:
+    branches:
+      - feat/workmanager-failure-observation-191
+
+permissions:
+  contents: read
+
+concurrency:
+  group: o1-red-hosted-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-common-red:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3
+      - name: Observe O1 pure-contract RED
+        shell: bash
+        run: ./gradlew :core:common:test --tests "*BackgroundWorkFailureTest" --no-daemon --console=plain --stacktrace
