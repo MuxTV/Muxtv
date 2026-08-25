@@ -1,23 +1,26 @@
 ---
 status: accepted
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-25
 ---
 
 # Roadmap
 
 ## Current alpha checkpoint
 
-Phase 00 foundation и основной daily-use контур Phase 01/02 уже реализованы на Room v10: source/EPG revisions, Channels Paging, Favorites, Recent, bounded Search, bounded Guide, service-owned Player, recovery и Doctor Lite. Search S5 принят через PR #159/#160 на `main@1249624d`.
+MuxTV находится в **functional pre-alpha / stabilization before MVP 0.1 alpha**. Durable accepted baseline — `main@5aa9c108cc63187d8066494fb30c73b82f4e0f97`: Source/Catalog/EPG/Search/Guide, service-owned Media3 playback/recovery, Doctor Lite, Lounge Light TV shell, single service-owned seek authority и exact two-AVD Android TV contract уже приняты.
 
-Текущая последовательность до alpha:
+Текущий стабилизационный critical path до alpha:
 
-1. Guide S6 — bounded-performance и presentation closure поверх существующего `RoomGuideWindowRepository`/`GuideViewModel`;
-2. M4-R — Player overlay/recovery UX и source-refresh Doctor diagnostics;
-3. M6-R — remote interaction, accessibility и минимальный Lounge Light shell;
-4. L1 — reboot/unlock/package-replace lifecycle contract (#118);
-5. D1 — dependency hardening и freeze;
-6. M3-C — Baseline Profile/CUJ и performance closure;
-7. M7-R — release engineering, signing и provenance; RC — API37 smoke и physical Android/Google TV gate.
+1. **U0 — runtime TV UI characterization (#188 / implementation owner #189).** Зафиксировать exact-source A/B/C evidence на canonical `MuxTV_TV_CURRENT_API36`; production UI fixes до evidence запрещены.
+2. **U1 — evidence-driven minimal UI correction.** RED regression contract создаётся только для дефекта, подтверждённого U0; затем минимальный GREEN без новой focus architecture или scope expansion.
+3. **M0 — measurement correctness (#178).** Measurement authority/correctness должна быть принята до DB/performance conclusions.
+4. **Measured optimization only after M0.** Buffer/cache/Room/parser/Compose tuning допускается только при owner issue и before/after evidence.
+5. **Dependency modernization после stabilization baseline.** PR #190 — только combined compatibility probe; финальные dependency changes должны быть изолированными owner PR.
+6. **Release closure.** Baseline Profile/CUJ, API37 private-LAN smoke, signing/SBOM и physical-device evidence для weak ARM/vendor codec/HDR/passthrough/absolute performance claims.
+
+Параллельно с critical path допускается **host-first observability preparation**, если она не меняет product/performance semantics: #191 WorkManager failure observations, #192 secret-safe AndroidX Tracing 2.0 boundary, #193 bounded secret-safe OkHttp phase timings. Эта работа не разрешает performance changes до принятого M0.
+
+Android TV device policy фиксирован: repository использует ровно две canonical AVD identities — `MuxTV_TV_OLD_API26` и `MuxTV_TV_CURRENT_API36`. 720p/1080p/density/compact stress variants выполняются на этих же устройствах; отдельные low-RAM/mainstream/benchmark AVD не создаются.
 
 Timed/repeated 50k Search/M3U execution является manual stress evidence, а не обязательным PR/release gate; 50k corpus остаётся synthetic correctness/stress asset.
 
