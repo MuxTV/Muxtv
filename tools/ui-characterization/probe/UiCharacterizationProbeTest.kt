@@ -225,6 +225,16 @@ class UiCharacterizationProbeTest {
         composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.RequestFocus)
         composeRule.waitForIdle()
+
+        val focusBeforeEnter = focusedNodeDescription()
+        if (focusBeforeEnter != navTag) {
+            val tree = composeRule.onRoot(useUnmergedTree = true).printToString(maxDepth = 100)
+            throw IllegalStateException(
+                "Navigation focus mismatch before Enter: expected '$navTag', actual '$focusBeforeEnter'.\n" +
+                    "Unmerged semantics:\n$tree",
+            )
+        }
+
         pressKey(KeyEvent.KEYCODE_ENTER)
         composeRule.waitForIdle()
     }
@@ -269,7 +279,14 @@ class UiCharacterizationProbeTest {
                     substring = false,
                     useUnmergedTree = true,
                 ).fetchSemanticsNodes()
-                check(nodes.isNotEmpty()) { "No semantics node found for title '$text'." }
+                if (nodes.isEmpty()) {
+                    val focus = focusedNodeDescription()
+                    val tree = composeRule.onRoot(useUnmergedTree = true).printToString(maxDepth = 100)
+                    throw IllegalStateException(
+                        "No semantics node found for title '$text'. Focus owner after navigation: '$focus'.\n" +
+                            "Unmerged semantics:\n$tree",
+                    )
+                }
                 // Rail labels can share the route name. The actual content title is the
                 // right-most match, independent of whether the rail label is currently visible.
                 nodes.maxBy { it.boundsInRoot.left }.boundsInRoot
