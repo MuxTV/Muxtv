@@ -94,7 +94,7 @@ class UiCharacterizationProbeTest {
             root = root,
             destination = "channels",
             navTag = "nav-channels",
-            anchor = Anchor.Title("Все каналы"),
+            anchor = Anchor.Title("Эфир"),
             navigate = { openRailDestination("nav-channels") },
         )
         captureDestination(
