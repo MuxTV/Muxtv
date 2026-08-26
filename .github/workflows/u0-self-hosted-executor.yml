@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  U0_SOURCE_SHA: 6d26ca89b8ea3404c8d766d790c28133c9a481d1
+  U0_SOURCE_SHA: 279e318ee1f031ad84dc60b0b3816cc71b2698a3
   U0_A_SHA: 2302c11441c85b8b5752d7f03cc5bc13be8c6d92
   U0_B_SHA: 515072022d11b218fcb20f43079f94098b3ea973
   U0_C_SHA: 7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9
@@ -78,6 +78,7 @@ jobs:
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
           & .\tools\android\Test-TvHarnessSyntax.ps1
           & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+          & .\tools\ui-characterization\Test-TvUiProbeAnchorCompatibility.ps1
           & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
           & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
           & .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
