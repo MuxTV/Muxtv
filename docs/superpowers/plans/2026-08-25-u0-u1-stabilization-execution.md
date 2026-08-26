@@ -1,293 +1,284 @@
-# MuxTV U0 -> U1 Stabilization Execution Plan
+# MuxTV U0 -> U1 -> M0 Stabilization Execution Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` or `superpowers:executing-plans` task-by-task. Production changes require observed RED -> minimal GREEN -> exact-head verification.
 
-**Goal:** Finish U0 runtime characterization on the frozen #189 implementation, convert only observed UI regressions into RED contracts, apply the smallest shared-layout correction, and hand a stable UI baseline to M0/#178 without contaminating evidence with dependency or player changes.
+**Goal:** finish trustworthy U0 runtime characterization, convert only observed TV UI regressions into permanent RED contracts, apply the smallest owner-scoped U1 corrections, accept the corrected UI baseline, then restack M0/#178 before returning to dependency modernization.
 
-**Architecture:** U0 remains characterization-only and executes immutable A/B/C through one byte-identical probe on the canonical API36 AVD. U1 begins only after `ui-characterization-analysis.json` proves or falsifies H1-H4. The preferred H1 correction separates destination content reservation from the rail's visual width; focus restoration remains Compose-owned through `focusRestorer()` unless runtime evidence proves a separate defect.
+**Authority:** issue #179 is the execution-order authority. The critical path is:
 
-**Tech Stack:** Kotlin 2.4.10, Compose for TV, Navigation3, PowerShell 7, Android instrumentation/Compose UI test, Gradle, self-hosted Windows GitHub Actions.
+```text
+U0/#188 / PR #189 runtime characterization
+    ↓
+U1 evidence-driven minimal UI correction
+    ↓
+M0/#178 measurement correctness
+    ↓
+accepted stabilization baseline
+    ↓
+#190 combined compatibility diagnosis only
+    ↓
+isolated dependency owners
+```
 
-**Spec:** `docs/superpowers/plans/2026-08-22-muxtv-stabilization-master-plan.md`; issue #188; PR #189 frozen source `6d26ca89b8ea3404c8d766d790c28133c9a481d1`.
+PR #190 must not move the product/runtime baseline while U0/U1/M0 is unresolved and must never be merged as one combined dependency bundle.
 
-## Global Constraints
+**Architecture:** U0 remains characterization-only and executes immutable A/B/C through one byte-identical probe on the canonical API36 AVD. U1 begins only after runtime evidence proves or falsifies H1-H4. Shared-shell defects stay owned by `AppNavigation`; rail visual behavior stays owned by `MuxTvNavigationRail`; token changes remain separately evidence-gated. Focus restoration stays Compose-owned through `focusRestorer()` unless runtime evidence proves a distinct focus defect.
+
+**Tech stack:** Kotlin 2.4.10, Compose for TV, Navigation3, PowerShell 7, Android instrumentation/Compose UI test, Gradle, self-hosted Windows GitHub Actions.
+
+**Primary sources:** issue #179; issue #188; PR #189; issue #180; issue #178. Live Git/GitHub state overrides stale SHAs in this document.
+
+## Current U0 checkpoint
+
+The original characterization source `6d26ca89b8ea3404c8d766d790c28133c9a481d1` is historical, not the current acceptance source.
+
+Observed runtime sequence:
+
+- historical runtime failed at A/1080p because the probe searched Channels title `Все каналы`;
+- source-contract analysis proved the historical screen title is `Эфир`;
+- minimal probe-only correction `279e318ee1f031ad84dc60b0b3816cc71b2698a3` passed repository validation and the canonical API26/API36 Product Matrix workloads, but U0 runtime still failed at A/1080p because `Эфир` was absent from the observed semantics query;
+- therefore the narrow wrong-string hypothesis is falsified as a complete explanation;
+- diagnostic-only head `33d166b1a3b046f3998e3bff421c8528a7fe3bae` verifies the actual rail focus owner before framework ENTER and emits the unmerged semantics tree on navigation/title failure;
+- temporary self-hosted executor pins an exact PR source SHA per run. A source becomes accepted U0 evidence only after its own static compatibility, runtime and analyzer gates succeed.
+
+No production UI change is admitted from these probe failures.
+
+## Global constraints
 
 - Repository-owned Android TV AVD identities are exactly `MuxTV_TV_OLD_API26` and `MuxTV_TV_CURRENT_API36`.
 - U0 runtime uses only `MuxTV_TV_CURRENT_API36`; 1080p/720p/stress are display overrides on that same AVD.
-- Do not use GitHub-hosted CI while hosted quota is unavailable.
-- Do not advance #189 `.github/ui-characterization/run.request` while the hosted admission design remains in that PR.
-- Do not modify product UI before U0 runtime evidence exists.
+- Representative 1080p is `1920x1080 @ 320dpi`.
+- Representative TV 720p is `1280x720 @ 213dpi`.
+- `1280x720 @ 320dpi` is compact stress evidence only.
+- Do not modify product UI before complete U0 runtime evidence exists.
 - Do not modify seek ownership, player architecture, Room schema, dependency versions, buffering/cache policy or measurement semantics in U1.
-- Every production change follows observed RED -> minimal GREEN -> exact-head verification.
-- Compact `1280x720 @ 320dpi` is stress evidence only; representative 720p TV evidence is `1280x720 @ 213dpi`.
-- Preserve `Modifier.focusRestorer()` and the current Back -> content-group focus model unless U0 proves a concrete focus defect.
+- Preserve `Modifier.focusRestorer()` and the current Back -> content-group model unless U0 proves a concrete focus defect.
+- A failed artifact upload does not erase a successful substantive workload, but publication acceptance is not weakened: classify workload and artifact transport separately.
+- No third/low-RAM/720p/benchmark AVD identity may be created.
+- Live exact-head provenance is mandatory for every acceptance claim.
 
 ---
 
-## Task 1: Finish #190 compatibility probe without contaminating U0
+## Task 1: Finish U0 probe/runtime correctness
 
 **Files:**
-- Existing diagnostic branch only: `chore/stack-update-20260824`
-- No U0/U1 production files.
+- PR #189 characterization-only branch.
+- `tools/ui-characterization/probe/UiCharacterizationProbeTest.kt`
+- `tools/ui-characterization/Invoke-TvUiCharacterization.ps1`
+- `tools/ui-characterization/Analyze-TvUiCharacterization.ps1`
+- characterization static/source-fact/admission/recovery contracts.
+- temporary executor `.github/workflows/u0-self-hosted-executor.yml` on `exec/u0-self-hosted-20260824`.
 
-**Interfaces:**
-- Consumes: exact head `1ab773f49f28602890ab067439f3e5a3fb6204da`.
-- Produces: classified host/device compatibility evidence for later isolated dependency PRs.
+**Immutable comparison refs:**
+- A `2302c11441c85b8b5752d7f03cc5bc13be8c6d92`
+- B `515072022d11b218fcb20f43079f94098b3ea973`
+- C `7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9`
 
-- [ ] **Step 1:** Let current self-hosted `App TV lint` finish; do not rerun while it is active.
-- [ ] **Step 2:** Inspect job steps. Classify workload success separately from `Upload ... evidence` storage-quota failure.
-- [ ] **Step 3:** Let exact-head `Self-hosted validation` execute. Required substantive gates: build-logic, configuration-cache create/reuse, JVM/unit suites, Android test compilation, Room schema check, lint/release assembly.
-- [ ] **Step 4:** Let exact-head `Android TV product device matrix` execute only after host gate. It must sequentially use `MuxTV_TV_OLD_API26` then `MuxTV_TV_CURRENT_API36` and require non-empty `TEST-*.xml` with zero failures/errors.
-- [ ] **Step 5:** If workload succeeds and only evidence upload fails, record `WORKLOAD_PASS / ARTIFACT_TRANSPORT_BLOCKED`; do not change product code.
-- [ ] **Step 6:** If a substantive step fails, stop stack expansion and debug that exact step before any further version changes.
-- [ ] **Step 7:** Freeze #190 as diagnostic evidence only. Do not merge the combined dependency bundle.
+- [ ] **Step 1:** For every runtime failure, identify the failing boundary before modifying the probe. Do not replace anchors by guesswork.
+- [ ] **Step 2:** For the current Channels failure, distinguish `focus acquisition`, `framework ENTER/navigation`, and `post-navigation semantics` using exact runtime diagnostics.
+- [ ] **Step 3:** If the diagnostic proves a probe defect, create the smallest probe/harness correction only; do not alter immutable A/B/C product source.
+- [ ] **Step 4:** Executor checkout must resolve exactly to the selected PR source SHA, never the executor branch SHA.
+- [ ] **Step 5:** Run self-hosted preflight with required labels `muxtv-android,muxtv-device`, no pre-connected device, and API26/API36 system-image ownership.
+- [ ] **Step 6:** Run static contracts, including probe/source compatibility, startup recovery, admission, source facts and analyzer fixtures.
+- [ ] **Step 7:** Compile the byte-identical probe against A/B/C. All three outputs must report one identical `probeSha256`.
+- [ ] **Step 8:** Run A/B/C sequentially at all three display profiles on `MuxTV_TV_CURRENT_API36` only.
+- [ ] **Step 9:** Permit only the existing bounded one-time retry for the exact early QEMU modem transport signature when no characterization case has passed.
+- [ ] **Step 10:** Run `Analyze-TvUiCharacterization.ps1` only after the full runtime corpus exists.
+- [ ] **Step 11:** Persist evidence outside the runner workspace under `%USERPROFILE%\MuxTV-Evidence\U0\<run-id>-<source-short-sha>` with SHA-256 manifest.
+- [ ] **Step 12:** Reset Android state in `always()` and verify canonical AVD inventory.
+
+**U0 acceptance predicates:**
+
+- `failedCaseCount == 0`;
+- one byte-identical `probeSha256` across A/B/C;
+- exactly 3 refs × 3 display profiles represented;
+- `avdName == "MuxTV_TV_CURRENT_API36"`;
+- representative comparisons are present;
+- focus conclusions are used only where `focusContractEligible == true`;
+- requested display profile and observed display state are attributable;
+- no production UI source changed as part of U0.
 
 ---
 
-## Task 2: Execute frozen U0 without hosted runners
+## Task 2: Classify H1-H4 from runtime evidence
 
-**Files:**
-- Frozen source: PR #189 at `6d26ca89b8ea3404c8d766d790c28133c9a481d1`.
-- Temporary executor: `.github/workflows/u0-self-hosted-executor.yml` on `exec/u0-self-hosted-20260824`.
-- Probe: `tools/ui-characterization/probe/UiCharacterizationProbeTest.kt`.
-- Harness: `tools/ui-characterization/Invoke-TvUiCharacterization.ps1`.
-- Analyzer: `tools/ui-characterization/Analyze-TvUiCharacterization.ps1`.
+**Output:** create `docs/superpowers/reports/2026-08-25-lounge-ui-regression-forensics.md` on the future U1 branch after U0 evidence is complete.
 
-**Interfaces:**
-- Consumes immutable refs:
-  - A `2302c11441c85b8b5752d7f03cc5bc13be8c6d92`
-  - B `515072022d11b218fcb20f43079f94098b3ea973`
-  - C `7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9`
-- Produces `ui-characterization-analysis.json`, `ui-characterization-analysis.md`, screenshots, semantics tree, per-case manifests, focus traces and SHA-256 evidence manifest.
-
-- [ ] **Step 1:** Executor checkout must resolve exactly to frozen source SHA, not executor branch SHA.
-- [ ] **Step 2:** Run self-hosted preflight with required labels `muxtv-android,muxtv-device`, no pre-connected device, and only API26/API36 system-image ownership.
-- [ ] **Step 3:** Run U0 static contracts:
-  - `tools/android/Test-TvHarnessSyntax.ps1`
-  - `tools/ui-characterization/Test-TvUiCharacterizationHarness.ps1`
-  - `tools/ui-characterization/Test-TvUiStartupRecovery.ps1`
-  - `tools/ui-characterization/Test-TvUiDeviceAdmission.ps1`
-  - `tools/ui-characterization/Test-TvUiSourceFacts.ps1`
-  - `tools/ui-characterization/Test-TvUiCharacterizationAnalyzer.ps1`
-- [ ] **Step 4:** Compile the byte-identical probe against A, B and C with `Compile-TvUiCharacterizationProbe.ps1`; all three outputs must report one identical `probeSha256`.
-- [ ] **Step 5:** Run A/B/C sequentially at:
-  - `1920x1080 @ 320dpi`
-  - `1280x720 @ 213dpi`
-  - `1280x720 @ 320dpi` stress
-- [ ] **Step 6:** Permit only the existing bounded one-time retry when the exact early QEMU modem transport signature is present and no characterization case has passed.
-- [ ] **Step 7:** Run `Analyze-TvUiCharacterization.ps1`.
-- [ ] **Step 8:** Persist complete evidence outside the runner workspace under `%USERPROFILE%\MuxTV-Evidence\U0\<run-id>-6d26ca89b8ea` and generate SHA-256 manifest.
-- [ ] **Step 9:** Reset Android runner state in `always()` and verify final AVD inventory still contains only canonical identities.
-
-**U0 acceptance predicates from analyzer:**
-
-- `failedCaseCount == 0`
-- exactly one `probeSha256`
-- `avdName == "MuxTV_TV_CURRENT_API36"`
-- `representativeComparisonCount > 0`
-- focus conclusions are used only where `focusContractEligible == true`
+- [ ] **H1 — shared reservation:** prove only when representative rows across multiple destinations satisfy the expected A→B shared-shell shift and C matches B. Expected source-level candidate delta is `+50dp ±2dp`; runtime must confirm it.
+- [ ] **H2 — rail visual semantics:** compare rail widths/state and screenshots independently from H1. A permanent/narrow rail may be a visual regression even if content origin is stable.
+- [ ] **Focus:** evaluate Back and Right only for focus-contract-eligible anchors. Title-only geometry anchors do not support focus correctness claims.
+- [ ] **H3 — global tokens:** compare focus outline, section gap, typography and Home-card geometry against representative runtime evidence. Never bulk-revert A tokens from source diffs alone.
+- [ ] **H4/#180:** treat `1280x720 @ 213dpi` as representative 720p evidence. If the defect exists only at 320dpi stress, classify #180 as stress hardening rather than a TV-720 fix.
+- [ ] Assign exactly one owner to each proven defect: `AppNavigation`, `MuxTvNavigationRail`, shared `TvTokens`, or a local surface.
+- [ ] Explicitly record rejected hypotheses so later work does not reintroduce them.
 
 ---
 
-## Task 3: Classify H1-H4 from runtime evidence
+## Task 3: Create the isolated U1 branch
 
-**Files:**
-- Read: U0 `ui-characterization-analysis.json` and `.md`.
-- Create after runtime: `docs/superpowers/reports/2026-08-25-lounge-ui-regression-forensics.md` on the future U1 branch.
-
-**Interfaces:**
-- Consumes analyzer fields.
-- Produces explicit U1 admission decision; no product mutation.
-
-- [ ] **Step 1: H1 shared reservation.** Mark H1 proven only when representative rows across multiple destinations satisfy `abMatchesExpectedSharedShellShift == true` and `cMatchesBContentOrigin == true`. Expected A->B delta is `+50dp ±2dp`.
-- [ ] **Step 2: H2 rail visual semantics.** Compare `aRailItemWidthDp`, `bRailItemWidthDp`, `cRailItemWidthDp` plus before/during-rail screenshots. H2 is independent from H1: permanent/narrow B rail can be visually wrong even if content origin is stable while focused.
-- [ ] **Step 3: Focus.** Use `allEligibleFocusRowsReachRailForBack`, `allEligibleFocusRowsMoveAwayFromRailOnBack`, `allEligibleFocusRowsReachRailForRight`, and `allEligibleFocusRowsMoveAwayFromRailOnRight`. Do not infer focus correctness from title-only geometry anchors.
-- [ ] **Step 4: H3 global tokens.** Compare runtime screenshots against source facts for focus outline, section gap, hero/section/card/metadata typography and Home card size. A token rollback is admissible only for regressions visible in representative TV modes, not stress-only differences.
-- [ ] **Step 5: H4 #180.** Keep one-line CTA containment only if `1280x720 @ 213dpi` demonstrates actual wrapping/clipping/overflow. If the failure exists only at `1280x720 @ 320dpi`, classify #180 as stress hardening rather than representative-TV fix.
-- [ ] **Step 6:** Write one owner per proven defect: `AppNavigation` shared shell, `MuxTvNavigationRail`, shared `TvTokens`, or Home-local surface. Reject compensating per-screen padding when common-shell evidence explains the shift.
+- [ ] Re-read live `main`, #179, #189, #188, #180 and #178.
+- [ ] Branch from accepted current `main`, never from #190.
+- [ ] Carry only durable U0 report/regression contracts needed by U1; do not carry the temporary executor or dependency probe.
+- [ ] Keep each proven defect independently revertible.
 
 ---
 
-## Task 4: Create U1 branch only after U0 evidence
+## Task 4: H1 permanent RED contract
 
-**Files:**
-- Branch from accepted current `main` after U0 report is frozen.
-- Do not branch from #190 dependency probe.
+**Execute only if Task 2 proves H1.**
 
-**Interfaces:**
-- Consumes U0 report and exact current main.
-- Produces isolated U1 history.
+**Create:** `app/tv/src/androidTest/kotlin/app/muxtv/AppNavigationShellGeometryTest.kt`
 
-- [ ] **Step 1:** Re-read live `main`, #189, #180 and #178 before branching.
-- [ ] **Step 2:** Create one U1 branch from current main.
-- [ ] **Step 3:** Copy only the durable regression test/report needed from U0; do not carry executor workflow or dependency changes.
-
----
-
-## Task 5: H1 RED regression contract
-
-**Execute this task only if Task 3 proves H1.**
-
-**Files:**
-- Create: `app/tv/src/androidTest/kotlin/app/muxtv/AppNavigationShellGeometryTest.kt`
-- Reuse behavior patterns from: `tools/ui-characterization/probe/UiCharacterizationProbeTest.kt`
-- Existing source under test: `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
-
-**Interfaces:**
-- Consumes stable product test tags `nav-home`, `nav-settings`, `home-hero`/`home-add-source`, `settings-section-sources`.
-- Produces a permanent behavioral regression proving content reservation is the collapsed rail slot and does not change during rail focus.
-
-- [ ] **Step 1:** Build the test around the real `MainActivity`/application shell using `createAndroidComposeRule<MainActivity>()`, matching U0 rather than a fake shell.
-- [ ] **Step 2:** For Home and Settings, capture anchor `boundsInRoot.left` before rail entry.
-- [ ] **Step 3:** Send native `KEYCODE_DPAD_LEFT`, assert expected rail item owns focus, capture anchor left while rail owns focus.
-- [ ] **Step 4:** Send `KEYCODE_DPAD_RIGHT`, assert focus moved away from rail and capture anchor left again.
-- [ ] **Step 5:** Assert `beforeLeft == duringRailLeft == afterRightLeft`.
-- [ ] **Step 6:** Assert expected content origin in dp equals the U0 accepted A contract within the same rounding tolerance. The expected value must be derived from U0 evidence and shared shell token, not screenshot pixels.
-- [ ] **Step 7:** Run only the new test on the uncorrected U1 base and observe RED specifically on content reservation/origin. If it passes before production change, H1 is not represented by this test and production code must not be edited from it.
-- [ ] **Step 8:** Commit RED alone.
+- [ ] Use the real `MainActivity`/application shell with `createAndroidComposeRule<MainActivity>()`.
+- [ ] Use the same real D-pad path proven by product integration tests; assert actual focus ownership at each transition.
+- [ ] For deterministic Home and Settings anchors, record `boundsInRoot.left` before rail entry, while rail owns focus and after Right/Back restoration.
+- [ ] Assert `beforeLeft == duringRailLeft == afterRightLeft` and the corresponding Back restoration predicate.
+- [ ] Derive the expected content origin from accepted U0 runtime evidence/shared-shell token, not screenshot literals.
+- [ ] Run the new test against the uncorrected U1 base and observe RED specifically on the proven reservation defect.
+- [ ] If it passes before production change, stop: the test does not represent H1 and no production edit is admitted from it.
+- [ ] Commit RED separately.
 
 ---
 
-## Task 6: Minimal H1 production GREEN
+## Task 5: Minimal H1 GREEN
 
-**Execute only after Task 5 observed RED.**
+**Execute only after Task 4 has an observed RED.**
 
-**Files:**
-- Modify: `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
-- Do not modify destination-specific Home/Channels/Guide/Search/Settings padding for H1.
+**Owner:** `app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt`
 
-**Interfaces:**
-- Current regressed expression: `Modifier.padding(start = TvTokens.Size.railExpanded)`.
-- Required shared-shell expression when H1 is proven: `Modifier.padding(start = TvTokens.Size.railCollapsed)`.
-
-- [ ] **Step 1:** Change only the shared NavDisplay reservation from `railExpanded` to `railCollapsed`.
-- [ ] **Step 2:** Run the exact RED test; it must turn GREEN.
-- [ ] **Step 3:** Run `HomeJourneyTest`, `ChannelsFocusRestorationTest`, `GuideFocusJourneyTest`, `AppNavigationSourceJourneyTest`, Search/Settings focus journeys present on the branch, and Android test compilation.
-- [ ] **Step 4:** Do not restore the historical 248dp rail or typography in the same commit. H2/H3 are separate evidence owners.
-- [ ] **Step 5:** Commit the one-owner GREEN.
+- [ ] If U0 proves the source-level candidate, change only the shared `NavDisplay` reservation from `TvTokens.Size.railExpanded` to `TvTokens.Size.railCollapsed`.
+- [ ] Do not add compensating destination-specific padding.
+- [ ] Run the exact RED test and observe GREEN.
+- [ ] Run Home, Channels, Guide, Search/Settings and source-navigation focus journeys plus Android test compilation.
+- [ ] Do not restore historical rail width or typography in this commit.
+- [ ] Commit one-owner GREEN.
 
 ---
 
-## Task 7: H2 rail behavior RED/GREEN
+## Task 6: H2 rail RED/GREEN
 
-**Execute only if Task 3 proves H2 as a user-visible regression after H1 is separated.**
+**Execute only if U0 proves a distinct rail visual-state regression.**
 
-**Files:**
-- Modify only after RED: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/component/MuxTvNavigationRail.kt`
-- Potential token change only if evidence supports it: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/TvTokens.kt`
-- Test: add/extend design-system Android/Compose test nearest existing navigation rail tests.
+**Owner:** `core/designsystem/src/main/kotlin/app/muxtv/designsystem/component/MuxTvNavigationRail.kt`
 
-**Required behavior contract:**
-- content reservation remains owned by `AppNavigation` and is constant;
-- rail visual width may transition independently;
-- selected state is independent from focus state;
-- labels/brand visibility follows the evidence-approved rail focus state;
-- reduced-motion path snaps rather than animates;
-- no new global focus state machine.
-
-- [ ] **Step 1:** Write a RED rail test for the exact U0-proven visual-state defect.
-- [ ] **Step 2:** Observe RED on current permanent-expanded rail.
-- [ ] **Step 3:** Implement only the necessary rail visual-state behavior.
-- [ ] **Step 4:** Run rail tests plus shell geometry test to prove visual width no longer affects destination constraints.
-- [ ] **Step 5:** Commit separately from H1.
+- [ ] Write a RED design-system/Compose test for the exact observed defect.
+- [ ] Keep content reservation owned by `AppNavigation` and constant.
+- [ ] Keep selected state independent from focus state.
+- [ ] Preserve reduced-motion snap behavior.
+- [ ] Do not introduce a global focus state machine.
+- [ ] Apply the smallest rail visual-state change and verify the shell geometry test remains GREEN.
+- [ ] Commit separately from H1.
 
 ---
 
-## Task 8: H3 token restoration by owner
+## Task 7: H3 token restoration by owner
 
-**Execute only for representative-mode regressions proven in Task 3. Do not bulk-revert A tokens.**
+**Execute only for representative-mode regressions proven by U0.**
 
-**Files:**
-- Modify selectively: `core/designsystem/src/main/kotlin/app/muxtv/designsystem/TvTokens.kt`
-- Modify Home-local files only when runtime evidence proves the size is Home-owned.
+Candidate source-level deltas include focus outline, section gap, Home-card dimensions and hero/section/card/metadata typography, but none is an automatic rollback target.
 
-**Candidate deltas requiring separate justification:**
-- `Focus.outlineWidth`: A `3dp`, current `1dp`
-- `Spacing.sectionGap`: A `40dp`, current `16dp`
-- `Size.homeCardWidth`: A `300dp`, current `120dp`
-- `Size.homeCardHeight`: A `140dp`, current `72dp`
-- `Typography.heroTitle`: A `48sp`, current `24sp`
-- `Typography.sectionTitle`: A `26sp`, current `14sp`
-- `Typography.cardTitle`: A `20sp`, current `10sp`
-- `Typography.metadata`: A `15sp`, current `8sp`
-
-- [ ] **Step 1:** Group only values that share one visual owner and one RED test.
-- [ ] **Step 2:** Observe RED on representative 1080p/320 or 720p/213 evidence-derived contract.
-- [ ] **Step 3:** Restore/minimally adjust the smallest set needed for GREEN.
-- [ ] **Step 4:** Verify both representative modes; stress mode is diagnostic and must not force representative-TV shrinkage.
-- [ ] **Step 5:** Commit each owner separately so it can be reverted independently.
+- [ ] Group only values sharing one visual owner and one RED contract.
+- [ ] Observe RED on representative 1080p/320 or 720p/213 evidence-derived behavior.
+- [ ] Restore/adjust the minimum token set needed for GREEN.
+- [ ] Re-verify both representative modes.
+- [ ] Stress-only differences must not force representative-TV shrinkage.
+- [ ] Commit each owner independently.
 
 ---
 
-## Task 9: Decide PR #180 from real 720p evidence
+## Task 8: Decide #180 using real 720p evidence
 
-**Files:**
-- Review PR #180 head `7a45487a0c17d22cda3dd726cdee6d5d7b7f57f9`.
-- Shared action component modified by #180 only if representative evidence supports it.
-
-- [ ] **Step 1:** Inspect C at `1280x720 @ 213dpi` and compare with B.
-- [ ] **Step 2:** If CTA containment is broken in B and corrected in C at 213dpi with no 1080p regression, restack the defensive one-line policy into U1 as its own commit.
-- [ ] **Step 3:** If C only helps 320dpi stress, do not present it as a 720p-TV fix; close/supersede #180 after U1 disposition is recorded.
+- [ ] Compare B and C specifically at `1280x720 @ 213dpi`.
+- [ ] If CTA containment is broken in B and corrected in C at 213dpi without 1080p regression, restack the one-line policy into U1 as its own commit.
+- [ ] If C helps only `1280x720 @ 320dpi`, do not describe it as a representative 720p-TV correction; record stress-hardening disposition instead.
 
 ---
 
-## Task 10: U1 exact-head acceptance
+## Task 9: U1 exact-head acceptance
 
-**Files:**
-- U1 branch only.
-
-- [ ] **Step 1:** Run focused local/self-hosted test set for every changed owner.
-- [ ] **Step 2:** Run exact-head self-hosted host validation.
-- [ ] **Step 3:** Run API36 device acceptance and capture both representative display modes on the same canonical API36 AVD.
-- [ ] **Step 4:** If shared design-system/navigation code changed, run API26 -> API36 Product Matrix sequentially.
-- [ ] **Step 5:** Treat artifact-upload quota errors separately from substantive workload conclusions.
-- [ ] **Step 6:** Verify final AVD inventory contains no third MuxTV AVD.
-- [ ] **Step 7:** Merge U1 only with fresh exact-head substantive evidence.
+- [ ] Run focused tests for every changed owner.
+- [ ] Run exact-head self-hosted host validation.
+- [ ] Run API36 device acceptance and capture both representative display profiles on the same canonical API36 AVD.
+- [ ] If shared navigation/design-system code changed, run the sequential API26 → API36 Product Matrix.
+- [ ] Separate substantive workload verdict from artifact-transport quota failures.
+- [ ] Verify final AVD inventory contains no third MuxTV AVD.
+- [ ] Merge U1 only with fresh exact-head substantive evidence.
 
 ---
 
-## Task 11: Durable truth sync
+## Task 10: Synchronize durable repository truth after U1
 
-**Files:**
-- Modify after U1 acceptance:
-  - `.work/CURRENT-STATE.md`
-  - `.work/ROADMAP.md`
-  - `.work/meta/status.yaml`
-  - `docs/superpowers/reports/2026-08-25-lounge-ui-regression-forensics.md`
+**Modify:**
+- `.work/CURRENT-STATE.md`
+- `.work/ROADMAP.md`
+- `.work/meta/status.yaml`
+- U0/U1 forensics report
 
-- [ ] **Step 1:** Remove stale dual-seek debt already closed by #175.
-- [ ] **Step 2:** Record exact two-AVD infrastructure truth from #181.
-- [ ] **Step 3:** Record the U0 proven cause(s), rejected hypotheses and U1 correction with exact SHAs/evidence paths.
-- [ ] **Step 4:** Do not describe #190 combined dependency branch as accepted product baseline.
+- [ ] Remove stale dual-seek debt already closed by #175.
+- [ ] Record accepted D0/two-AVD infrastructure truth.
+- [ ] Record U0 proven causes, rejected hypotheses, U1 corrections and exact evidence SHAs/paths.
+- [ ] Do not describe #190 combined dependency branch as accepted baseline.
 
 ---
 
-## Task 12: Handoff to M0/#178
+## Task 11: Restack and accept M0/#178
 
-**Files:**
-- Restack PR #178 only after U1 lands.
+- [ ] Restack/rebuild #178 from accepted post-U1 `main`, not its old divergent history.
+- [ ] Preserve product Search behavior while correcting measurement expectation to published-result boundaries.
+- [ ] Extend measurement variance ownership/static contract as required by #178.
+- [ ] Obtain exact-head host + measurement-variance substantive GREEN.
+- [ ] Accept M0 before any DB-query/performance conclusions are trusted.
 
-- [ ] **Step 1:** Rebuild #178 from accepted post-U1 main instead of merging its old divergent history.
-- [ ] **Step 2:** Preserve product Search behavior; correct measurement expectation to published-result boundaries.
-- [ ] **Step 3:** Extend measurement variance path ownership/static contract.
-- [ ] **Step 4:** Obtain exact-head host + measurement variance substantive GREEN before any performance tuning.
+---
+
+## Task 12: Run #190 as compatibility diagnosis only
+
+**This task is intentionally after U0/U1/M0.**
+
+- [ ] Re-read live isolated dependency versions/issues before using the old combined probe.
+- [ ] Rebase/recreate diagnostic probe if accepted main moved materially.
+- [ ] Run host validation first, then API26/API36 matrix only if host is substantive GREEN.
+- [ ] Classify substantive failures by dependency owner.
+- [ ] Classify artifact quota failures separately as transport failures.
+- [ ] Freeze findings as diagnostic evidence.
+- [ ] Do **not** merge the combined #190 bundle.
+
+---
+
+## Task 13: Cut isolated dependency owners
+
+Only after the stabilization baseline is accepted:
+
+- #146 Room3 `3.0.0 -> 3.0.1`;
+- #197 Navigation3 `1.1.4 -> 1.1.6`;
+- #198 Paging `3.5.0 -> 3.5.1`;
+- #199 Media3 `1.10.1 -> 1.11.0`;
+- #200 Compose August 2026 line;
+- #192 Tracing 2.0 as separately owned observability infrastructure;
+- #27/#31 Benchmark 1.5 tooling;
+- #195 post-alpha Gradle isolated-project experiments.
+
+Each owner gets its own RED/compatibility evidence, rollback boundary and merge decision.
 
 ---
 
 ## Stop conditions
 
-Stop production implementation and classify the blocker if any of the following occurs:
+Stop production implementation and classify the blocker when any of the following occurs:
 
-- U0 has any failed case unrelated to the already-classified one-time emulator modem startup failure;
+- U0 has an unexplained failed case;
+- the probe is guessing around a failure instead of identifying its boundary;
 - A/B/C probe hashes differ;
 - any non-canonical AVD identity appears;
-- H1 analyzer predicates do not support a cross-destination +50dp representative-mode shift;
-- a proposed U1 RED test passes before the fix;
-- AppNavigation correction requires destination-specific padding to make tests pass;
-- focus restoration fails after the shell correction;
-- API26 regression appears after shared design-system/navigation changes;
-- measurement or dependency changes become necessary to make U1 pass.
+- the 3×3 evidence corpus is incomplete;
+- H1 runtime predicates do not support a cross-destination representative-mode shift;
+- a proposed U1 RED passes before the production fix;
+- an H1 correction needs destination-specific padding;
+- focus restoration regresses after shell correction;
+- API26 regresses after shared navigation/design-system changes;
+- measurement or dependency changes become necessary merely to make U1 pass;
+- a combined dependency probe is about to become an accepted product baseline.
 
 ## Completion definition
 
-U1 is complete only when U0 evidence is reproducible, each accepted change has an observed RED and minimal GREEN, representative 1080p/720p geometry is stable, Back/Right focus restoration remains valid, the two-AVD contract is intact, repository truth is synchronized, and #178 can be restacked onto a stable product baseline.
+The stabilization train reaches its accepted baseline only when U0 evidence is reproducible and complete, every U1 production change has an observed RED and minimal GREEN, representative 1080p/720p geometry and D-pad restoration are verified, the exact two-AVD contract remains intact, durable repository truth is synchronized, and M0/#178 is accepted. Only then may #190 and isolated dependency modernization resume.
