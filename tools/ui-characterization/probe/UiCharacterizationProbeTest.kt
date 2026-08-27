@@ -106,7 +106,7 @@ class UiCharacterizationProbeTest {
             destination = "channels",
             navTag = "nav-channels",
             anchor = Anchor.Title("Эфир"),
-            navigate = { openRailDestination("nav-channels") },
+            navigate = { routeAnchor -> openRailDestination("nav-channels", routeAnchor) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -114,7 +114,7 @@ class UiCharacterizationProbeTest {
             destination = "guide",
             navTag = "nav-guide",
             anchor = Anchor.Title("Телепрограмма"),
-            navigate = { openRailDestination("nav-guide") },
+            navigate = { routeAnchor -> openRailDestination("nav-guide", routeAnchor) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -122,7 +122,7 @@ class UiCharacterizationProbeTest {
             destination = "search",
             navTag = "nav-search",
             anchor = Anchor.Title("Поиск"),
-            navigate = { openRailDestination("nav-search") },
+            navigate = { routeAnchor -> openRailDestination("nav-search", routeAnchor) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -130,7 +130,7 @@ class UiCharacterizationProbeTest {
             destination = "settings",
             navTag = "nav-settings",
             anchor = Anchor.Tag("settings-section-sources"),
-            navigate = { openRailDestination("nav-settings") },
+            navigate = { routeAnchor -> openRailDestination("nav-settings", routeAnchor) },
         )
 
         File(outputDirectory, "semantics-tree.txt").writeText(
@@ -145,13 +145,13 @@ class UiCharacterizationProbeTest {
         destination: String,
         navTag: String,
         anchor: Anchor,
-        navigate: (() -> String)?,
+        navigate: ((Anchor) -> String)?,
     ) {
-        val routeActivation = navigate?.invoke() ?: "already-selected"
+        val routeActivation = navigate?.invoke(anchor) ?: "already-selected"
         composeRule.waitForIdle()
 
-        check(navIsSelected(navTag)) {
-            "Destination '$navTag' was not selected before geometry capture."
+        check(awaitRouteReady(navTag, anchor, timeoutMillis = 1_500)) {
+            "Destination '$navTag' was not ready before geometry capture."
         }
 
         val anchorInteraction = anchor.resolve()
@@ -238,7 +238,10 @@ class UiCharacterizationProbeTest {
         root.getJSONArray("destinations").put(entry)
     }
 
-    private fun openRailDestination(navTag: String): String {
+    private fun openRailDestination(
+        navTag: String,
+        routeAnchor: Anchor,
+    ): String {
         check(navigationTags.contains(navTag)) {
             "Unknown rail destination '$navTag'."
         }
@@ -256,7 +259,7 @@ class UiCharacterizationProbeTest {
 
         repeat(navigationTags.size) {
             if (focus == navTag) {
-                return activateFocusedRailDestination(navTag)
+                return activateFocusedRailDestination(navTag, routeAnchor)
             }
 
             pressKey(KeyEvent.KEYCODE_DPAD_DOWN)
@@ -273,19 +276,28 @@ class UiCharacterizationProbeTest {
 
     /**
      * Route activation is deterministic setup, not the Left/Back/Right behavior being measured.
-     * First try the two Android-framework TV key paths. If neither publishes the selected route,
-     * fall back to the exact Compose Enter path already proven by immutable A's smoke test. The
-     * selected navigation semantics is the route oracle; localized title text is only resolved
-     * after that route transition has been independently observed.
+     * First try the two Android-framework TV key paths. If neither publishes both the requested
+     * selected rail state and destination-owned content, fall back to the exact Compose Enter path
+     * already proven by immutable A's smoke test. This prevents a transient Selected=true state
+     * from being mistaken for a completed Navigation3 route transition.
      */
-    private fun activateFocusedRailDestination(navTag: String): String {
+    private fun activateFocusedRailDestination(
+        navTag: String,
+        routeAnchor: Anchor,
+    ): String {
         val attempts = mutableListOf<String>()
 
         fun attempt(label: String, action: () -> Unit): Boolean {
             attempts += label
             action()
             composeRule.waitForIdle()
-            return awaitNavSelected(navTag)
+            val ready = awaitRouteReady(navTag, routeAnchor)
+            println(
+                "U0 route activation: label=$label nav=$navTag ready=$ready " +
+                    "selected=${navIsSelected(navTag)} anchorPresent=${routeAnchor.isPresent()} " +
+                    "focus=${focusedNodeDescription()}",
+            )
+            return ready
         }
 
         if (attempt("framework-enter") { pressKey(KeyEvent.KEYCODE_ENTER) }) {
@@ -318,14 +330,16 @@ class UiCharacterizationProbeTest {
         composeRule.waitForIdle()
     }
 
-    private fun awaitNavSelected(
+    private fun awaitRouteReady(
         navTag: String,
-        timeoutMillis: Long = 1_500,
+        routeAnchor: Anchor,
+        timeoutMillis: Long = 5_000,
     ): Boolean = runCatching {
         composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            navIsSelected(navTag)
+            navIsSelected(navTag) && routeAnchor.isPresent()
         }
-        true
+        composeRule.waitForIdle()
+        navIsSelected(navTag) && routeAnchor.isPresent()
     }.getOrDefault(false)
 
     private fun navIsSelected(tag: String): Boolean =
@@ -372,6 +386,15 @@ class UiCharacterizationProbeTest {
         val nodes = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         check(nodes.size == 1) { "Expected one semantics node for tag '$tag', got ${nodes.size}." }
         return nodes.single().boundsInRoot
+    }
+
+    private fun Anchor.isPresent(): Boolean = when (this) {
+        is Anchor.Tag -> nodeExists(tag)
+        is Anchor.Title -> composeRule.onAllNodesWithText(
+            text = text,
+            substring = false,
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().isNotEmpty()
     }
 
     private fun Anchor.resolve(): NodeHandle = when (this) {
