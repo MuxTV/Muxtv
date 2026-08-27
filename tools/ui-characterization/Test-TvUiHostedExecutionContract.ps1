@@ -23,7 +23,7 @@ function Require-Token {
 }
 function Reject-Token {
     param([string]$Text, [string]$Token, [string]$Owner)
-    if ($Text.IndexOf($Token, [System.StringComparison]::Ordinal) -ge 0) { throw "$Owner still contains removed self-hosted U0 ownership token: $Token" }
+    if ($Text.IndexOf($Token, [System.StringComparison]::Ordinal) -ge 0) { throw "$Owner still contains forbidden hosted U0 token: $Token" }
 }
 
 $setupGradleAction = 'gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb'
@@ -95,6 +95,7 @@ foreach ($token in @(
     ':app:tv:assembleDebugAndroidTest',
     'adb -s "$ANDROID_SERIAL" install -r -t',
     'adb -s "$ANDROID_SERIAL" shell am instrument',
+    "grep -Fq 'OK (1 test)'",
     'adb -s "$ANDROID_SERIAL" pull',
     'adb -s "$ANDROID_SERIAL" uninstall "$TEST_PACKAGE"',
     'adb -s "$ANDROID_SERIAL" uninstall "$APP_PACKAGE"'
@@ -104,9 +105,10 @@ foreach ($token in @(
     'avdmanager create avd',
     'emulator @',
     'sdkmanager --install',
-    'connectedDebugAndroidTest'
+    'connectedDebugAndroidTest',
+    'INSTRUMENTATION_CODE: -1'
 )) {
     Reject-Token -Text $entrypoint -Token $token -Owner 'Hosted U0 entrypoint'
 }
 
-Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, evidence-safe instrumentation lifecycle, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
+Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, AndroidJUnitRunner success parsing, evidence-safe instrumentation lifecycle, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
