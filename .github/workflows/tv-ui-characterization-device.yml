@@ -63,7 +63,7 @@ jobs:
 
       - name: Verify immutable A B C source facts
         shell: pwsh
-        run: .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
+        run: .\tools\ui-characterization\Test-TvUiSourceFacts.ps1 -OutputPath "$env:MUXTV_UI_EVIDENCE/source-facts.json"
 
       - name: Enable KVM for Android Emulator
         shell: bash

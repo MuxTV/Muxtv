@@ -1,24 +1,35 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$OutputPath = ''
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $collector = Join-Path $PSScriptRoot 'Collect-TvUiSourceFacts.ps1'
-$tempBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
-    [System.IO.Path]::GetTempPath()
+$deleteAfterValidation = [string]::IsNullOrWhiteSpace($OutputPath)
+
+$resolvedOutputPath = if ($deleteAfterValidation) {
+    $tempBase = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
+        [System.IO.Path]::GetTempPath()
+    } else {
+        $env:RUNNER_TEMP
+    }
+    Join-Path $tempBase ("muxtv-ui-source-facts-" + [Guid]::NewGuid().ToString('N') + '.json')
+} elseif ([System.IO.Path]::IsPathRooted($OutputPath)) {
+    $OutputPath
 } else {
-    $env:RUNNER_TEMP
+    Join-Path $repositoryRoot $OutputPath
 }
-$outputPath = Join-Path $tempBase ("muxtv-ui-source-facts-" + [Guid]::NewGuid().ToString('N') + '.json')
 
 try {
-    & $collector -OutputPath $outputPath
-    if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+    & $collector -OutputPath $resolvedOutputPath
+    if (-not (Test-Path -LiteralPath $resolvedOutputPath -PathType Leaf)) {
         throw 'Immutable UI source-fact collector did not produce JSON evidence.'
     }
 
-    $document = Get-Content -LiteralPath $outputPath -Raw | ConvertFrom-Json
+    $document = Get-Content -LiteralPath $resolvedOutputPath -Raw -Encoding utf8 | ConvertFrom-Json
     $facts = @($document.comparisons)
     if ($facts.Count -ne 3) { throw "Expected A/B/C source facts, got $($facts.Count)." }
     $byId = @{}
@@ -77,7 +88,9 @@ try {
         if (-not [bool]$document.derived.$name) { throw "Derived immutable source fact is false: $name" }
     }
 
-    Write-Host 'TV UI immutable source-fact contract passed.'
+    Write-Host "TV UI immutable source-fact contract passed: $resolvedOutputPath"
 } finally {
-    Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+    if ($deleteAfterValidation) {
+        Remove-Item -LiteralPath $resolvedOutputPath -Force -ErrorAction SilentlyContinue
+    }
 }
