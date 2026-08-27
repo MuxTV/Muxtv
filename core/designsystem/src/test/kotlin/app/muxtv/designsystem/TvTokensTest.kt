@@ -14,6 +14,18 @@ class TvTokensTest {
     }
 
     @Test
+    fun `u1 restores evidence proven lounge light scale`() {
+        assertThat(TvTokens.Focus.outlineWidth.value).isEqualTo(3f)
+        assertThat(TvTokens.Spacing.sectionGap.value).isEqualTo(40f)
+        assertThat(TvTokens.Size.homeCardWidth.value).isEqualTo(300f)
+        assertThat(TvTokens.Size.homeCardHeight.value).isEqualTo(140f)
+        assertThat(TvTokens.Typography.heroTitle.value).isEqualTo(48f)
+        assertThat(TvTokens.Typography.sectionTitle.value).isEqualTo(26f)
+        assertThat(TvTokens.Typography.cardTitle.value).isEqualTo(20f)
+        assertThat(TvTokens.Typography.metadata.value).isEqualTo(15f)
+    }
+
+    @Test
     fun `repeated dpad focus has no geometric transition delay`() {
         assertThat(TvTokens.Motion.focusDurationMillis).isEqualTo(0)
         assertThat(TvTokens.Motion.screenDurationMillis).isAtMost(300)
