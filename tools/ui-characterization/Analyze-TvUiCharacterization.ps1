@@ -47,6 +47,22 @@ function Convert-PxToDp {
     return $Pixels * 160.0 / $DensityDpi
 }
 
+function Get-NullableBoundsLeft {
+    param($Bounds)
+    if ($null -eq $Bounds) { return $null }
+    return [double]$Bounds.left
+}
+
+function Get-OptionalBoolean {
+    param(
+        [Parameter(Mandatory)][object]$Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return $null }
+    return [bool]$property.Value
+}
+
 $caseRecords = [System.Collections.Generic.List[object]]::new()
 $destinationRecords = [System.Collections.Generic.List[object]]::new()
 
@@ -98,8 +114,8 @@ foreach ($manifestFile in $manifestFiles) {
     foreach ($destination in @($probe.destinations)) {
         $beforeLeft = [double]$destination.beforeBounds.left
         $duringLeft = [double]$destination.duringRailBounds.left
-        $afterRightLeft = [double]$destination.afterRightBounds.left
-        $afterBackLeft = [double]$destination.afterBackBounds.left
+        $afterRightLeft = Get-NullableBoundsLeft -Bounds $destination.afterRightBounds
+        $afterBackLeft = Get-NullableBoundsLeft -Bounds $destination.afterBackBounds
         $railItemWidthPx = [double]$destination.railBounds.width
         $densityDpi = [double]$caseRecord.displayDensityDpi
 
@@ -119,6 +135,10 @@ foreach ($manifestFile in $manifestFiles) {
             beforeLeftDp = [math]::Round((Convert-PxToDp -Pixels $beforeLeft -DensityDpi $densityDpi), 3)
             railItemWidthPx = $railItemWidthPx
             railItemWidthDp = [math]::Round((Convert-PxToDp -Pixels $railItemWidthPx -DensityDpi $densityDpi), 3)
+            routeSelectedAfterBack = Get-OptionalBoolean -Object $destination -Name 'routeSelectedAfterBack'
+            anchorPresentAfterBack = Get-OptionalBoolean -Object $destination -Name 'anchorPresentAfterBack'
+            routeSelectedAfterRight = Get-OptionalBoolean -Object $destination -Name 'routeSelectedAfterRight'
+            anchorPresentAfterRight = Get-OptionalBoolean -Object $destination -Name 'anchorPresentAfterRight'
             contentOriginStableDuringRail = [bool]$destination.contentOriginStableDuringRail
             contentOriginStableDuringBackRail = [bool]$destination.contentOriginStableDuringBackRail
             contentOriginRestoredAfterBack = [bool]$destination.contentOriginRestoredAfterBack
@@ -196,6 +216,18 @@ foreach ($group in $groups) {
         aRestoredAfterRight = $a.contentOriginRestoredAfterRight
         bRestoredAfterRight = $b.contentOriginRestoredAfterRight
         cRestoredAfterRight = $c.contentOriginRestoredAfterRight
+        aRouteSelectedAfterBack = $a.routeSelectedAfterBack
+        bRouteSelectedAfterBack = $b.routeSelectedAfterBack
+        cRouteSelectedAfterBack = $c.routeSelectedAfterBack
+        aAnchorPresentAfterBack = $a.anchorPresentAfterBack
+        bAnchorPresentAfterBack = $b.anchorPresentAfterBack
+        cAnchorPresentAfterBack = $c.anchorPresentAfterBack
+        aRouteSelectedAfterRight = $a.routeSelectedAfterRight
+        bRouteSelectedAfterRight = $b.routeSelectedAfterRight
+        cRouteSelectedAfterRight = $c.routeSelectedAfterRight
+        aAnchorPresentAfterRight = $a.anchorPresentAfterRight
+        bAnchorPresentAfterRight = $b.anchorPresentAfterRight
+        cAnchorPresentAfterRight = $c.anchorPresentAfterRight
         aBackReachedRail = $a.backReachedExpectedRailItem
         bBackReachedRail = $b.backReachedExpectedRailItem
         cBackReachedRail = $c.backReachedExpectedRailItem
@@ -223,6 +255,10 @@ $cMatchesBRows = @($representative | Where-Object { $_.cMatchesBContentOrigin })
 $stableRows = @($representative | Where-Object { $_.aStableDuringRail -and $_.bStableDuringRail -and $_.cStableDuringRail })
 $backRestoredRows = @($representative | Where-Object { $_.aRestoredAfterBack -and $_.bRestoredAfterBack -and $_.cRestoredAfterBack })
 $rightRestoredRows = @($representative | Where-Object { $_.aRestoredAfterRight -and $_.bRestoredAfterRight -and $_.cRestoredAfterRight })
+$backRouteRetainedRows = @($representative | Where-Object { $_.aRouteSelectedAfterBack -eq $true -and $_.bRouteSelectedAfterBack -eq $true -and $_.cRouteSelectedAfterBack -eq $true })
+$rightRouteRetainedRows = @($representative | Where-Object { $_.aRouteSelectedAfterRight -eq $true -and $_.bRouteSelectedAfterRight -eq $true -and $_.cRouteSelectedAfterRight -eq $true })
+$backAnchorPresentRows = @($representative | Where-Object { $_.aAnchorPresentAfterBack -eq $true -and $_.bAnchorPresentAfterBack -eq $true -and $_.cAnchorPresentAfterBack -eq $true })
+$rightAnchorPresentRows = @($representative | Where-Object { $_.aAnchorPresentAfterRight -eq $true -and $_.bAnchorPresentAfterRight -eq $true -and $_.cAnchorPresentAfterRight -eq $true })
 $focusRows = @($representative | Where-Object { $_.focusContractEligible })
 $backReachedRows = @($focusRows | Where-Object { $_.aBackReachedRail -and $_.bBackReachedRail -and $_.cBackReachedRail })
 $backMovedRows = @($focusRows | Where-Object { $_.aBackMovedAway -and $_.bBackMovedAway -and $_.cBackMovedAway })
@@ -237,7 +273,7 @@ $sourceFacts = if (Test-Path -LiteralPath $sourceFactsPath -PathType Leaf) {
 }
 
 $analysis = [ordered]@{
-    schemaVersion = 2
+    schemaVersion = 3
     runRoot = $RunRoot
     generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     probeSha256 = $probeHashes[0]
@@ -256,6 +292,10 @@ $analysis = [ordered]@{
     representativeStableDuringRailCount = $stableRows.Count
     representativeRestoredAfterBackCount = $backRestoredRows.Count
     representativeRestoredAfterRightCount = $rightRestoredRows.Count
+    representativeRoutesRetainedAfterBackCount = $backRouteRetainedRows.Count
+    representativeRoutesRetainedAfterRightCount = $rightRouteRetainedRows.Count
+    representativeAnchorsPresentAfterBackCount = $backAnchorPresentRows.Count
+    representativeAnchorsPresentAfterRightCount = $rightAnchorPresentRows.Count
     representativeFocusContractRowCount = $focusRows.Count
     representativeBackReachedRailCount = $backReachedRows.Count
     representativeBackMovedAwayCount = $backMovedRows.Count
@@ -266,6 +306,10 @@ $analysis = [ordered]@{
     allRepresentativeOriginsStableDuringRail = $representative.Count -gt 0 -and $stableRows.Count -eq $representative.Count
     allRepresentativeOriginsRestoredAfterBack = $representative.Count -gt 0 -and $backRestoredRows.Count -eq $representative.Count
     allRepresentativeOriginsRestoredAfterRight = $representative.Count -gt 0 -and $rightRestoredRows.Count -eq $representative.Count
+    allRepresentativeRoutesRetainedAfterBack = $representative.Count -gt 0 -and $backRouteRetainedRows.Count -eq $representative.Count
+    allRepresentativeRoutesRetainedAfterRight = $representative.Count -gt 0 -and $rightRouteRetainedRows.Count -eq $representative.Count
+    allRepresentativeAnchorsPresentAfterBack = $representative.Count -gt 0 -and $backAnchorPresentRows.Count -eq $representative.Count
+    allRepresentativeAnchorsPresentAfterRight = $representative.Count -gt 0 -and $rightAnchorPresentRows.Count -eq $representative.Count
     allEligibleFocusRowsReachRailForBack = $focusRows.Count -gt 0 -and $backReachedRows.Count -eq $focusRows.Count
     allEligibleFocusRowsMoveAwayFromRailOnBack = $focusRows.Count -gt 0 -and $backMovedRows.Count -eq $focusRows.Count
     allEligibleFocusRowsReachRailForRight = $focusRows.Count -gt 0 -and $rightReachedRows.Count -eq $focusRows.Count
@@ -287,6 +331,8 @@ $lines.Add("- Cases: $($caseRecords.Count); failed: $($failedCases.Count)")
 $lines.Add("- Representative comparison rows: $($representative.Count)")
 $lines.Add("- A→B expected +$ExpectedSharedShellShiftDp dp matches: $($expectedShiftRows.Count)/$($representative.Count)")
 $lines.Add("- C matches B content origin within ±$ToleranceDp dp: $($cMatchesBRows.Count)/$($representative.Count)")
+$lines.Add("- Back retains route: $($backRouteRetainedRows.Count)/$($representative.Count); anchor remains: $($backAnchorPresentRows.Count)/$($representative.Count)")
+$lines.Add("- Right retains route: $($rightRouteRetainedRows.Count)/$($representative.Count); anchor remains: $($rightAnchorPresentRows.Count)/$($representative.Count)")
 $lines.Add("- Representative focus-contract rows: $($focusRows.Count)")
 $lines.Add("- Back reaches rail: $($backReachedRows.Count)/$($focusRows.Count); Back moves away: $($backMovedRows.Count)/$($focusRows.Count)")
 $lines.Add("- Right reaches rail: $($rightReachedRows.Count)/$($focusRows.Count); Right moves away: $($rightMovedRows.Count)/$($focusRows.Count)")
