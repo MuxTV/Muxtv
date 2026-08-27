@@ -40,6 +40,11 @@ jobs:
             throw "UI characterization static checkout mismatch: expected $expected, got $actual"
           }
 
+      - name: Verify hosted U0 execution contract
+        shell: pwsh
+        run: |
+          & .\tools\ui-characterization\Test-TvUiHostedExecutionContract.ps1
+
       - name: Run UI characterization harness contract
         shell: pwsh
         run: |
