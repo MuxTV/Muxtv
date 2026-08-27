@@ -66,8 +66,20 @@ foreach ($literal in @('1920x1080', '1280x720', '213', 'compact-stress')) {
 foreach ($literal in @('wm size reset', 'wm density reset', 'trap cleanup EXIT INT TERM')) {
     Assert-ContainsLiteral $entrypoint $literal "Hosted U0 display/worktree cleanup contract is missing: $literal"
 }
-foreach ($literal in @('UiCharacterizationProbeTest.kt', 'sha256sum', 'git worktree add --detach', 'connectedDebugAndroidTest', 'adb -s "$ANDROID_SERIAL" pull')) {
+foreach ($literal in @(
+    'UiCharacterizationProbeTest.kt',
+    'sha256sum',
+    'git worktree add --detach',
+    ':app:tv:assembleDebug',
+    ':app:tv:assembleDebugAndroidTest',
+    'adb -s "$ANDROID_SERIAL" install -r -t',
+    'adb -s "$ANDROID_SERIAL" shell am instrument',
+    'adb -s "$ANDROID_SERIAL" pull'
+)) {
     Assert-ContainsLiteral $entrypoint $literal "Hosted U0 is missing characterization primitive: $literal"
+}
+if ($entrypoint.IndexOf('connectedDebugAndroidTest', [System.StringComparison]::Ordinal) -ge 0) {
+    throw 'Hosted U0 must pull characterization evidence before AGP/UTP teardown; connectedDebugAndroidTest uninstalls the target before the host can pull app-specific external files.'
 }
 foreach ($literal in @('UiCharacterizationProbeTest.kt', 'Get-FileHash', 'worktree')) {
     Assert-ContainsLiteral $compileHelper $literal "Static comparison compile is missing byte-identical probe primitive: $literal"
