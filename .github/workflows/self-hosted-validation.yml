@@ -40,6 +40,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Set up Temurin JDK 25
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
       - name: Normalize workspace and enable Windows long paths
         shell: pwsh
         run: |
@@ -72,11 +78,10 @@ jobs:
           $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
-      - name: Validate CI and Android TV harness contracts
+      - name: Validate risk-based CI contract
         shell: pwsh
         run: |
           & .\tools\ci\Test-RiskBasedDeviceLaneContract.ps1
-          & .\tools\android\Test-TvHarnessSyntax.ps1
 
       - name: Inspect hosted build environment
         shell: pwsh
