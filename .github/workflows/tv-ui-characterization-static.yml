@@ -101,6 +101,14 @@ jobs:
       - name: Set up MuxTV JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
 
+      - name: Set up persistent Gradle cache
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: enhanced
+          cache-read-only: ${{ matrix.id != 'A' }}
+          cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
+          cache-cleanup: on-success
+
       - name: Initialize hosted Android SDK
         shell: pwsh
         run: . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
