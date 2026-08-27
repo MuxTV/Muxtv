@@ -9,94 +9,123 @@ permissions:
 
 concurrency:
   group: benchmark-foundation-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 jobs:
-  dry-run:
-    name: Benchmark foundation dry run
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 120
-
+  jmh:
+    name: Benchmark JMH dry run
+    runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
           ref: ${{ github.sha }}
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
-          git clean -ffdx
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace." }
-          if ((git status --porcelain=v1)) { throw "Workspace remains dirty." }
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Verify exact source commit
+      - name: Verify benchmark foundation contract
         shell: pwsh
         run: |
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.sha }}"
-
-      - name: Initialize Android SDK
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-
-      - name: Preflight dedicated benchmark runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 36
-
-      - name: Validate benchmark foundation contract
-        shell: pwsh
-        run: |
           & .\tools\ci\Test-BenchmarkFoundationContract.ps1
-          & .\tools\android\Test-TvHarnessSyntax.ps1
 
       - name: Run JMH smoke with GC allocation profiler
         shell: pwsh
         run: |
-          .\gradlew.bat :benchmark:jvm:jmh --no-daemon --stacktrace --console=plain -PmuxtvJmhDryRun=true
+          .\gradlew.bat :benchmark:jvm:jmh `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report `
+            -PmuxtvJmhDryRun=true
           if ($LASTEXITCODE -ne 0) { throw "JMH dry-run failed." }
 
-      - name: Run Macrobenchmark CUJ dry run
-        shell: pwsh
-        env:
-          MUXTV_SOURCE_BRANCH: ${{ github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.sha }}
-        run: |
-          & .\tools\android\Invoke-BenchmarkDryRun.ps1 `
-            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
-            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -NoDaemon
-
-      - name: Upload benchmark evidence
+      - name: Upload JMH dry-run evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: benchmark-foundation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: benchmark-jmh-dry-run-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .work/evidence/**/*.json
-            .work/evidence/**/*.log
-            .work/evidence/**/*.txt
-            .work/evidence/**/*.png
             benchmark/jvm/build/reports/jmh/**
+            benchmark/jvm/build/results/jmh/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+  macrobenchmark:
+    name: Benchmark Macrobenchmark API36 dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/benchmark-hosted-api36
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run Macrobenchmark API36 dry run
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+          MUXTV_BENCHMARK_EVIDENCE: .work/evidence/benchmark-hosted-api36
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedMacrobenchmarkDryRun.sh
+
+      - name: Upload Macrobenchmark dry-run evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: benchmark-macro-api36-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/benchmark-hosted-api36/**
             benchmark/macrobenchmark/build/outputs/androidTest-results/**
             benchmark/macrobenchmark/build/outputs/connected_android_test_additional_output/**
           retention-days: 7
           github-token: ${{ github.token }}
 
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
+  gate:
+    name: Benchmark foundation dry run
+    if: always()
+    needs:
+      - jmh
+      - macrobenchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require both dry-run foundations
+        shell: bash
+        env:
+          JMH_RESULT: ${{ needs.jmh.result }}
+          MACRO_RESULT: ${{ needs.macrobenchmark.result }}
         run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
+          set -euo pipefail
+          if [[ "$JMH_RESULT" != "success" || "$MACRO_RESULT" != "success" ]]; then
+            echo "Benchmark foundation failed: jmh=$JMH_RESULT macrobenchmark=$MACRO_RESULT" >&2
+            exit 1
+          fi
+          echo "Benchmark foundation dry run passed. Hosted results validate benchmark correctness only, not longitudinal absolute performance."

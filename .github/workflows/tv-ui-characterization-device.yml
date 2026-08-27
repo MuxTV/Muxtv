@@ -5,291 +5,90 @@ on:
     branches:
       - main
     paths:
-      - '.github/ui-characterization/run.request'
+      - '.github/workflows/tv-ui-characterization-device.yml'
+      - '.github/workflows/tv-ui-characterization-static.yml'
+      - 'tools/ui-characterization/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: tv-ui-characterization-device-${{ github.event.pull_request.number || github.run_id }}
+  group: tv-ui-characterization-device-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  admission:
-    name: Admit trigger-only UI characterization request
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: windows-latest
-    timeout-minutes: 10
-    outputs:
-      allowed: ${{ steps.classify.outputs.allowed }}
-      reason: ${{ steps.classify.outputs.reason }}
-      trigger_head: ${{ steps.classify.outputs.trigger_head }}
-      parent_head: ${{ steps.classify.outputs.parent_head }}
-      validated_parent: ${{ steps.classify.outputs.validated_parent }}
-
-    steps:
-      - name: Checkout exact PR head for hosted admission
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Verify exact source head
-        shell: pwsh
-        run: |
-          $actual = (& git rev-parse HEAD).Trim()
-          $expected = '${{ github.event.pull_request.head.sha }}'
-          if ($LASTEXITCODE -ne 0 -or $actual -cne $expected) {
-            throw "UI characterization admission checkout mismatch: expected $expected, got $actual"
-          }
-
-      - name: Classify trigger-only marker
-        id: classify
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          . .\tools\ui-characterization\UiCharacterizationDeviceAdmission.ps1
-
-          $markerPath = '.github/ui-characterization/run.request'
-          $markerContent = if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
-            Get-Content -LiteralPath $markerPath -Raw
-          } else {
-            ''
-          }
-
-          $triggerHead = (& git rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger head.' }
-          $parentHead = (& git rev-parse HEAD^).Trim()
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger parent.' }
-          $changed = @(& git diff --name-only $parentHead $triggerHead)
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect trigger commit diff during hosted admission.' }
-
-          $decision = Resolve-TvUiDeviceAdmissionState `
-            -TriggerHead $triggerHead `
-            -ParentHead $parentHead `
-            -MarkerContent $markerContent `
-            -ChangedPaths $changed `
-            -MarkerPath $markerPath
-
-          "allowed=$($decision.Allowed.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "reason=$($decision.Reason)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "trigger_head=$($decision.TriggerHead)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "parent_head=$($decision.ParentHead)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "validated_parent=$($decision.ValidatedCompiledParent)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-          if ($env:GITHUB_STEP_SUMMARY) {
-            @(
-              '### UI characterization hosted admission'
-              ''
-              "- allowed: ``$($decision.Allowed.ToString().ToLowerInvariant())``"
-              "- reason: ``$($decision.Reason)``"
-              "- trigger: ``$($decision.TriggerHead)``"
-              "- parent: ``$($decision.ParentHead)``"
-              "- marker validates: ``$($decision.ValidatedCompiledParent)``"
-            ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          }
-
-          Write-Host "Hosted UI characterization admission: allowed=$($decision.Allowed) reason=$($decision.Reason)"
-
   characterize:
-    name: Characterize A B C on canonical API36
-    needs: admission
-    if: ${{ needs.admission.outputs.allowed == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 240
+    name: TV UI characterization API36
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+      MUXTV_UI_EVIDENCE: .work/evidence/ui-characterization
+      MUXTV_KVM_EVIDENCE: .work/evidence/ui-characterization/kvm
 
     steps:
-      - name: Checkout exact PR head with comparison history
+      - name: Checkout exact source with immutable comparison history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to enable Git long paths.' }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw 'Failed to reset workspace.' }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
+          persist-credentials: false
 
       - name: Verify exact source head
-        shell: pwsh
-        run: |
-          $expected = '${{ github.event.pull_request.head.sha }}'
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
-
-      - name: Re-verify trigger-only marker against compiled parent
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          . .\tools\ui-characterization\UiCharacterizationDeviceAdmission.ps1
-
-          $markerPath = '.github/ui-characterization/run.request'
-          $markerContent = if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
-            Get-Content -LiteralPath $markerPath -Raw
-          } else {
-            ''
-          }
-
-          $triggerHead = (& git rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger head.' }
-          $parentHead = (& git rev-parse HEAD^).Trim()
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve UI characterization trigger parent.' }
-          $changed = @(& git diff --name-only $parentHead $triggerHead)
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect trigger-only marker diff.' }
-
-          $decision = Resolve-TvUiDeviceAdmissionState `
-            -TriggerHead $triggerHead `
-            -ParentHead $parentHead `
-            -MarkerContent $markerContent `
-            -ChangedPaths $changed `
-            -MarkerPath $markerPath
-
-          if (-not $decision.Allowed) {
-            throw "Hosted-admitted UI characterization trigger failed device-side re-verification: $($decision.Reason)"
-          }
-          if ($decision.TriggerHead -cne '${{ needs.admission.outputs.trigger_head }}' -or
-              $decision.ParentHead -cne '${{ needs.admission.outputs.parent_head }}' -or
-              $decision.ValidatedCompiledParent -cne '${{ needs.admission.outputs.validated_parent }}') {
-            throw 'Device-side UI characterization admission provenance differs from hosted admission outputs.'
-          }
-
-          $evidenceDirectory = '.work\evidence\ui-characterization-runner'
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-          [ordered]@{
-            schemaVersion = 2
-            triggerHead = $decision.TriggerHead
-            parentHead = $decision.ParentHead
-            validatedCompiledParent = $decision.ValidatedCompiledParent
-            markerPath = $decision.MarkerPath
-            triggerOnly = $true
-            hostedAdmissionReason = '${{ needs.admission.outputs.reason }}'
-          } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $evidenceDirectory 'admission.json') -Encoding utf8
-
-      - name: Preflight dedicated Android TV runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 26,36
-
-      - name: Initialize SDK and validate characterization harness
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          & .\tools\android\Test-TvHarnessSyntax.ps1
-          & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
-          & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
-          & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
-
-      - name: Collect immutable A B C UI source facts
-        shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Collect-TvUiSourceFacts.ps1 `
-            -OutputPath '.work\evidence\ui-characterization\source-facts.json'
-
-      - name: Run immutable A B C characterization
-        shell: pwsh
+        shell: bash
         env:
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          . .\tools\ui-characterization\UiCharacterizationStartupRecovery.ps1
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          [[ "$actual" == "$EXPECTED_HEAD" ]] || { echo "U0 checkout mismatch: expected $EXPECTED_HEAD, got $actual" >&2; exit 1; }
 
-          $evidenceRoot = '.work\evidence\ui-characterization'
-          $runnerEvidence = '.work\evidence\ui-characterization-runner'
-          $completed = $false
-          $maxAttempts = 2
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
-          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            try {
-              & .\tools\ui-characterization\Invoke-TvUiCharacterization.ps1 -NoDaemon
-              $completed = $true
-              break
-            } catch {
-              $failureMessage = $_.Exception.Message
-              $recoverable = $attempt -lt $maxAttempts -and (
-                Test-TvUiRecoverableEmulatorStartupFailure `
-                  -EvidenceRoot $evidenceRoot `
-                  -FailureMessage $failureMessage
-              )
+      - name: Verify hosted U0 execution contract
+        shell: pwsh
+        run: .\tools\ui-characterization\Test-TvUiHostedExecutionContract.ps1
 
-              if (-not $recoverable) {
-                throw
-              }
+      - name: Verify immutable A B C source facts
+        shell: pwsh
+        run: .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
 
-              New-Item -ItemType Directory -Force -Path $runnerEvidence | Out-Null
-              [ordered]@{
-                schemaVersion = 1
-                firstAttemptFailure = $failureMessage
-                classification = 'android-emulator-modem-transport-startup'
-                retryAttempt = $attempt + 1
-                maxAttempts = $maxAttempts
-                avdName = 'MuxTV_TV_CURRENT_API36'
-                createsAdditionalAvdIdentity = $false
-              } | ConvertTo-Json -Depth 3 |
-                Set-Content -LiteralPath (Join-Path $runnerEvidence 'startup-recovery.json') -Encoding utf8
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-              Write-Warning "Recoverable Android Emulator modem transport startup failure detected. Retrying characterization once on the same canonical API36 AVD identity."
-              Start-Sleep -Seconds 3
-            }
-          }
-
-          if (-not $completed) {
-            throw 'UI characterization did not complete within the bounded startup recovery contract.'
-          }
+      - name: Run immutable A B C UI characterization on API36
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ui-characterization/Run-HostedTvUiCharacterization.sh
 
       - name: Analyze A B C geometry and focus evidence
         shell: pwsh
         run: |
-          & .\tools\ui-characterization\Analyze-TvUiCharacterization.ps1
-
-      - name: Record repository AVD inventory
-        if: always()
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $evidenceDirectory = '.work\evidence\ui-characterization-runner'
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          $inventory = @(& $tools.AvdManager list avd -c 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Unable to enumerate Android Virtual Devices after UI characterization.'
+          if ([string]::IsNullOrWhiteSpace($env:MUXTV_UI_RUN_ROOT)) {
+            throw 'Hosted U0 did not publish MUXTV_UI_RUN_ROOT.'
           }
-          $inventory | Set-Content -LiteralPath (Join-Path $evidenceDirectory 'avd-inventory.txt') -Encoding utf8
+          & .\tools\ui-characterization\Analyze-TvUiCharacterization.ps1 -RunRoot $env:MUXTV_UI_RUN_ROOT
 
-          & .\tools\android\Remove-LegacyMuxTvAvds.ps1 *>&1 |
-            Tee-Object -FilePath (Join-Path $evidenceDirectory 'legacy-muxtv-avds-dry-run.txt')
-
-      - name: Upload UI characterization evidence
+      - name: Upload U0 characterization evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
           name-prefix: tv-ui-characterization-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/ui-characterization/**
-            .work/evidence/ui-characterization-runner/**
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
-          retention-days: 14
+          retention-days: 7
           github-token: ${{ github.token }}
-
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
-        run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

@@ -42,45 +42,30 @@ jobs:
 
       - name: Verify hosted U0 execution contract
         shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiHostedExecutionContract.ps1
+        run: .\tools\ui-characterization\Test-TvUiHostedExecutionContract.ps1
 
       - name: Run UI characterization harness contract
         shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
+        run: .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
 
-      - name: Verify immutable A B C probe title anchors
+      - name: Verify immutable A B C probe source anchors
         shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiProbeAnchorCompatibility.ps1
-
-      - name: Run startup transport recovery contract
-        shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiStartupRecovery.ps1
-
-      - name: Run hosted device admission contract
-        shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiDeviceAdmission.ps1
+        run: .\tools\ui-characterization\Test-TvUiProbeAnchorCompatibility.ps1
 
       - name: Verify immutable A B C UI source facts
         shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
+        run: .\tools\ui-characterization\Test-TvUiSourceFacts.ps1
 
       - name: Run synthetic UI characterization analyzer fixture
         shell: pwsh
-        run: |
-          & .\tools\ui-characterization\Test-TvUiCharacterizationAnalyzer.ps1
+        run: .\tools\ui-characterization\Test-TvUiCharacterizationAnalyzer.ps1
 
   compile:
     name: Compile common probe (${{ matrix.id }})
     needs: contract
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -108,6 +93,13 @@ jobs:
           if ($actual -cne $expected) {
             throw "UI characterization compile checkout mismatch: expected $expected, got $actual"
           }
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Initialize hosted Android SDK
+        shell: pwsh
+        run: . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
 
       - name: Compile byte-identical probe on comparison ${{ matrix.id }}
         shell: pwsh

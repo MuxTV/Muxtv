@@ -11,6 +11,7 @@ on:
       - tools/measurements/**
       - tools/android/Invoke-CatalogDatabaseMeasurement.ps1
       - tools/android/Invoke-PlayerProxyMeasurement.ps1
+      - '.github/workflows/measurement-variance-smoke.yml'
 
 permissions:
   contents: read
@@ -21,91 +22,74 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  current-profile-smoke:
-    name: Current Android TV variance smoke
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 180
+  methodology-smoke:
+    name: Measurement methodology smoke
+    runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace is not clean after reset and clean." }
+          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
 
-      - name: Verify evidence commit provenance
+      - name: Validate measurement harness contracts
         shell: pwsh
         run: |
-          $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
+          pwsh -NoProfile -File .\tools\measurements\Test-MeasurementHarnessSyntax.ps1
 
-      - name: Preflight dedicated self-hosted runner
+      - name: Run measurement analysis unit tests
         shell: pwsh
         run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 36
+          .\gradlew.bat :core:testing:test `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Measurement analysis unit tests failed." }
 
-      - name: Resolve Android SDK and validate harness
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          Write-Host "Android SDK tools resolved."
-          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
-          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
-          & .\tools\android\Test-TvHarnessSyntax.ps1
-
-      - name: Start repository-selected ADB server
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          $evidenceDirectory = ".work\evidence\measurement-adb"
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-          $logPath = Join-Path $evidenceDirectory "adb-server.log"
-          & $tools.Adb version 2>&1 | Set-Content -Path $logPath -Encoding utf8
-          & $tools.Adb kill-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
-          Start-Sleep -Seconds 1
-          & $tools.Adb start-server 2>&1 | Add-Content -Path $logPath -Encoding utf8
-          if ($LASTEXITCODE -ne 0) { throw "Unable to start the repository-selected ADB server." }
-          & $tools.Adb devices -l 2>&1 | Add-Content -Path $logPath -Encoding utf8
-
-      - name: Run two current-profile variance repetitions
+      - name: Run deterministic two-repeat M3U variance smoke
         shell: pwsh
         env:
           MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
           MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          $ErrorActionPreference = "Stop"
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          & .\tools\measurements\Invoke-MeasurementSeries.ps1 `
+          pwsh -NoProfile -File .\tools\measurements\Invoke-M3uCorpusSeries.ps1 `
             -SourceBranch $env:MUXTV_SOURCE_BRANCH `
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -ProfileId current-normal `
+            -M3uProfile small-1k `
+            -M3uSeed 20260728 `
             -Repetitions 2 `
-            -EvidenceRoot .work\evidence `
+            -RunnerLabel github-hosted-windows-x64-v1 `
             -NoDaemon
+
+      - name: Assert hosted smoke remains non-claim-eligible
+        shell: pwsh
+        run: |
+          $manifests = @(Get-ChildItem .work\evidence -Recurse -File -Filter 'm3u-series-run-manifest.json')
+          if ($manifests.Count -ne 1) {
+            throw "Expected exactly one M3U smoke manifest, got $($manifests.Count)."
+          }
+          $manifest = Get-Content -LiteralPath $manifests[0].FullName -Raw | ConvertFrom-Json
+          if ([bool]$manifest.claimEligible) {
+            throw "GitHub-hosted measurement smoke must never be claim-eligible."
+          }
+          if ([string]$manifest.status -cne 'passed') {
+            throw "Hosted measurement smoke did not complete successfully."
+          }
+          Write-Host "Hosted measurement smoke is correctness-only and non-claim-eligible."
 
       - name: Finalize interrupted series manifests
         if: always()
@@ -113,23 +97,15 @@ jobs:
         run: |
           pwsh -NoProfile -File .\tools\measurements\Finalize-MeasurementSeriesEvidence.ps1 -EvidenceRoot .work\evidence
 
-      - name: Upload variance evidence
+      - name: Upload methodology smoke evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: measurement-variance-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: measurement-methodology-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
-            .work/evidence/**/*.png
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
-          retention-days: 14
+            core/testing/build/measurements/*.json
+          retention-days: 7
           github-token: ${{ github.token }}
-
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
-        run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

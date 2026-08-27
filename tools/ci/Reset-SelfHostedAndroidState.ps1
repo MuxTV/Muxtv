@@ -88,21 +88,7 @@ Write-Host "Resetting Android state for self-hosted runner workspace: $resolvedR
 $initialProcesses = @(& $EmulatorProcessProbe)
 foreach ($process in $initialProcesses) {
     Write-Host "Stopping emulator process: $($process.ProcessName) ($($process.Id))"
-    try {
-        & $StopEmulatorProcess $process
-    } catch {
-        $sameProcess = @(
-            & $EmulatorProcessProbe |
-                Where-Object {
-                    [int]$_.Id -eq [int]$process.Id -and
-                    [string]$_.ProcessName -ceq [string]$process.ProcessName
-                }
-        )
-        if ($sameProcess.Count -gt 0) {
-            throw
-        }
-        Write-Host "Emulator process exited before cleanup stop completed: $($process.ProcessName) ($($process.Id))"
-    }
+    & $StopEmulatorProcess $process
 }
 
 & $AdbAction "disconnect"
