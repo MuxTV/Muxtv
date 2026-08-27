@@ -82,6 +82,20 @@ foreach ($literal in @(
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing route-owned readiness evidence: $literal"
 }
 
+# A's focus-expanded rail and B/C's permanently expanded rail all render the selected Channels
+# label while route setup owns rail focus. ChannelsRoute renders the same exact title in every
+# loading/error/empty/content state. Therefore the collision is proven structurally by a second
+# exact-text semantics node; full rail bounds are not a valid separator because A overlays its
+# expanded rail over destination content.
+foreach ($literal in @(
+    'private fun exactTextNodeCount(text: String): Int',
+    'exactTextNodeCount(text) >= 2'
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe is missing collision-safe content-title readiness evidence: $literal"
+}
+Assert-DoesNotContainLiteral $probe 'private fun navigationRailRight()' 'Content-title readiness must not derive route ownership from the expanded rail right edge.'
+Assert-DoesNotContainLiteral $probe 'node.boundsInRoot.left >= railRight' 'Content-title readiness must not reject content geometrically overlapped by immutable A rail.'
+
 # A transient Selected=true is not sufficient: activation may succeed only when the selected rail
 # item and destination-owned readiness anchor are visible in the same synchronized observation.
 foreach ($literal in @(
