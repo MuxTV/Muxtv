@@ -6,9 +6,12 @@ on:
       - main
     paths:
       - catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/EpgRevisionImporter.kt
+      - catalog/importer/src/androidTest/**
       - core/database/src/main/kotlin/app/muxtv/database/**
       - core/database/src/androidTest/kotlin/app/muxtv/database/**
       - core/database/schemas/**
+      - tools/ci/Assert-AndroidTestResults.ps1
+      - '.github/workflows/database-migration-device-matrix.yml'
   workflow_dispatch:
 
 permissions:
@@ -20,96 +23,117 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  validate:
-    name: Database migration device matrix
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 180
+  device:
+    name: Database migration API${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            arch: x86
+            avd: MuxTV_TV_OLD_API26
+            ram: 1536M
+          - api: 36
+            arch: x86_64
+            avd: MuxTV_TV_CURRENT_API36
+            ram: 2048M
 
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
+      - name: Set up Temurin JDK 25
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
         run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable repository-local Git long-path support." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset the checked-out workspace." }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean the checked-out workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to inspect the checked-out workspace.`n$dirty" }
-          if ($dirty) { throw "Workspace remains dirty after explicit reset/clean.`n$dirty" }
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
 
-      - name: Verify evidence commit provenance
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.event.pull_request.head.sha || github.sha }}"
-
-      - name: Preflight dedicated self-hosted runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 26,36
-
-      - name: Inspect runner environment
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          java -version
-          if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
-          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
-
-      - name: Validate Android TV harness syntax
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          & .\tools\android\Test-TvHarnessSyntax.ps1
-
-      - name: Run old-edge and current Android TV matrix
-        shell: pwsh
+      - name: Run database migration API${{ matrix.api }} tests
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         env:
-          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceMatrix `
-            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
-            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -NoDaemon
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
+          MUXTV_DEVICE_EVIDENCE: .work/evidence/database-migration/api-${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: android-tv
+          arch: ${{ matrix.arch }}
+          profile: tv_1080p
+          avd-name: ${{ matrix.avd }}
+          force-avd-creation: true
+          cores: 2
+          ram-size: ${{ matrix.ram }}
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: |
+            set -euo pipefail
+            mkdir -p "$MUXTV_DEVICE_EVIDENCE"
+            avdmanager list avd -c | tee "$MUXTV_DEVICE_EVIDENCE/avd-inventory.txt"
+            mapfile -t avds < <(avdmanager list avd -c | sed '/^[[:space:]]*$/d')
+            if [[ "${#avds[@]}" -ne 1 || "${avds[0]}" != "$MUXTV_EXPECTED_AVD" ]]; then
+              echo "Expected exactly canonical AVD $MUXTV_EXPECTED_AVD; got: ${avds[*]-<none>}" >&2
+              exit 1
+            fi
+            chmod +x ./gradlew
+            ./gradlew \
+              :core:database:connectedDebugAndroidTest \
+              :catalog:importer:connectedDebugAndroidTest \
+              --no-daemon \
+              --stacktrace \
+              --console=plain \
+              --no-problems-report
+            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
+              -ModulePaths core/database,catalog/importer \
+              -OutputPath "$MUXTV_DEVICE_EVIDENCE/android-test-results.json"
 
-      - name: Upload matrix evidence
+      - name: Upload database migration evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: database-migration-device-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: database-migration-api${{ matrix.api }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .work/evidence/**/*.json
-            .work/evidence/**/*.log
-            .work/evidence/**/*.txt
-            .work/evidence/**/*.png
+            .work/evidence/database-migration/api-${{ matrix.api }}/**
+            core/database/build/outputs/androidTest-results/**
+            catalog/importer/build/outputs/androidTest-results/**
             core/database/schemas/**/*.json
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
           retention-days: 7
           github-token: ${{ github.token }}
 
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
+  gate:
+    name: Database migration device matrix
+    if: always()
+    needs:
+      - device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require old-edge and current database coverage
+        shell: bash
+        env:
+          DEVICE_RESULT: ${{ needs.device.result }}
         run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
+          set -euo pipefail
+          if [[ "$DEVICE_RESULT" != "success" ]]; then
+            echo "Hosted database migration matrix result: $DEVICE_RESULT" >&2
+            exit 1
+          fi
+          echo "Database migration matrix passed on canonical API26 and API36 Android TV emulators."
