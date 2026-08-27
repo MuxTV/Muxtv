@@ -32,7 +32,6 @@ import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.DatabaseDefaults
 import app.muxtv.database.SourceRefreshStore
-import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvNavigationRail
 import app.muxtv.designsystem.component.MuxTvNavigationRailItem
 import app.muxtv.designsystem.icon.MuxTvIcons
@@ -111,13 +110,7 @@ fun AppNavigation(
         NavDisplay(
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (railVisible) {
-                        Modifier.padding(start = TvTokens.Size.railCollapsed)
-                    } else {
-                        Modifier
-                    },
-                )
+                .padding(start = railContentReservation(railVisible))
                 .focusRestorer(),
             backStack = backStack,
             onBack = ::goBack,
