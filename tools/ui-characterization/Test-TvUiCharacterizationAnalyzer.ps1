@@ -64,6 +64,12 @@ try {
                 width = 300
                 height = 200
             }
+            # compact-stress deliberately models a measured Back/Right route loss. U0 must retain
+            # the observation as null bounds + explicit route/anchor state instead of treating it
+            # as a malformed or failed characterization case.
+            $routeRetained = $profile.Id -ne 'compact-stress'
+            $afterInteractionBounds = if ($routeRetained) { $bounds } else { $null }
+
             [ordered]@{
                 schemaVersion = 2
                 sourceCommit = $comparison.Commit
@@ -75,33 +81,40 @@ try {
                     [ordered]@{
                         destination = 'home'
                         navTag = 'nav-home'
+                        routeActivation = 'already-selected'
+                        rightSequenceRouteActivation = if ($routeRetained) { 'retained-after-back' } else { 'compose-enter' }
+                        routeSelected = $routeRetained
+                        routeSelectedAfterBack = $routeRetained
+                        anchorPresentAfterBack = $routeRetained
+                        routeSelectedAfterRight = $routeRetained
+                        anchorPresentAfterRight = $routeRetained
                         anchor = 'tag:home-add-source'
                         anchorHasExplicitFocusAction = $true
                         beforeBounds = $bounds
                         duringRailBounds = $bounds
                         duringBackRailBounds = $bounds
                         duringRightRailBounds = $bounds
-                        afterBounds = $bounds
-                        afterBackBounds = $bounds
-                        afterRightBounds = $bounds
+                        afterBounds = $afterInteractionBounds
+                        afterBackBounds = $afterInteractionBounds
+                        afterRightBounds = $afterInteractionBounds
                         railBounds = [ordered]@{ left = 0; top = 100; right = $railItemWidthPx; bottom = 156; width = $railItemWidthPx; height = 56 }
                         focusInitial = 'home-add-source'
                         focusBeforeLeft = 'home-add-source'
                         focusOnRail = 'nav-home'
                         focusBeforeBack = 'nav-home'
-                        focusAfterBack = 'home-add-source'
+                        focusAfterBack = if ($routeRetained) { 'home-add-source' } else { $null }
                         focusBeforeSecondLeft = 'home-add-source'
                         focusOnRailBeforeRight = 'nav-home'
-                        focusAfterRight = 'home-add-source'
+                        focusAfterRight = if ($routeRetained) { 'home-add-source' } else { $null }
                         backReachedExpectedRailItem = $true
                         backMovedFocusAwayFromRail = $true
                         rightReachedExpectedRailItem = $true
                         rightMovedFocusAwayFromRail = $true
                         contentOriginStableDuringRail = $true
                         contentOriginStableDuringBackRail = $true
-                        contentOriginRestored = $true
-                        contentOriginRestoredAfterBack = $true
-                        contentOriginRestoredAfterRight = $true
+                        contentOriginRestored = $routeRetained
+                        contentOriginRestoredAfterBack = $routeRetained
+                        contentOriginRestoredAfterRight = $routeRetained
                     }
                 )
             } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $caseDirectory 'probe-result.json') -Encoding utf8
@@ -130,6 +143,8 @@ try {
     if (-not ([bool]$analysis.allEligibleFocusRowsMoveAwayFromRailOnBack)) { throw 'Analyzer failed the Back focus-restoration fixture invariant.' }
     if (-not ([bool]$analysis.allEligibleFocusRowsReachRailForRight)) { throw 'Analyzer failed the Right rail-entry fixture invariant.' }
     if (-not ([bool]$analysis.allEligibleFocusRowsMoveAwayFromRailOnRight)) { throw 'Analyzer failed the Right focus-restoration fixture invariant.' }
+    if (-not ([bool]$analysis.allRepresentativeRoutesRetainedAfterBack)) { throw 'Representative fixture routes should remain selected after Back.' }
+    if (-not ([bool]$analysis.allRepresentativeRoutesRetainedAfterRight)) { throw 'Representative fixture routes should remain selected after Right.' }
 
     $representative = @($analysis.comparisons | Where-Object { $_.representativeTvMode })
     foreach ($row in $representative) {
@@ -138,6 +153,20 @@ try {
         }
         if ([math]::Abs([double]$row.deltaBCDp) -gt 0.01) {
             throw "Unexpected B→C delta for $($row.displayProfile): $($row.deltaBCDp)dp"
+        }
+    }
+
+    $compactRows = @($analysis.comparisons | Where-Object { $_.displayProfile -eq 'compact-stress' })
+    if ($compactRows.Count -ne 1) { throw "Expected one compact-stress comparison row, got $($compactRows.Count)." }
+    $compact = $compactRows[0]
+    foreach ($property in @(
+        'aRouteSelectedAfterBack', 'bRouteSelectedAfterBack', 'cRouteSelectedAfterBack',
+        'aRouteSelectedAfterRight', 'bRouteSelectedAfterRight', 'cRouteSelectedAfterRight',
+        'aAnchorPresentAfterBack', 'bAnchorPresentAfterBack', 'cAnchorPresentAfterBack',
+        'aAnchorPresentAfterRight', 'bAnchorPresentAfterRight', 'cAnchorPresentAfterRight'
+    )) {
+        if ([bool]$compact.$property) {
+            throw "Analyzer lost synthetic route-loss evidence: $property should be false."
         }
     }
 
