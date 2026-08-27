@@ -66,7 +66,7 @@ foreach ($literal in @('1920x1080', '1280x720', '213', 'compact-stress')) {
 foreach ($literal in @('wm size reset', 'wm density reset', 'trap cleanup EXIT INT TERM')) {
     Assert-ContainsLiteral $entrypoint $literal "Hosted U0 display/worktree cleanup contract is missing: $literal"
 }
-foreach ($literal in @('UiCharacterizationProbeTest.kt', 'sha256sum', 'git worktree add --detach', 'connectedDebugAndroidTest', 'adb pull')) {
+foreach ($literal in @('UiCharacterizationProbeTest.kt', 'sha256sum', 'git worktree add --detach', 'connectedDebugAndroidTest', 'adb -s "$ANDROID_SERIAL" pull')) {
     Assert-ContainsLiteral $entrypoint $literal "Hosted U0 is missing characterization primitive: $literal"
 }
 foreach ($literal in @('UiCharacterizationProbeTest.kt', 'Get-FileHash', 'worktree')) {
