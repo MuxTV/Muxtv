@@ -72,7 +72,7 @@ foreach ($requiredKvmToken in @(
 }
 
 foreach ($requiredProductToken in @(
-    'MuxTV_EXPECTED_AVD',
+    'MUXTV_EXPECTED_AVD',
     'mapfile -t avds',
     ':catalog:importer:connectedDebugAndroidTest',
     ':catalog:refresh:connectedDebugAndroidTest',
