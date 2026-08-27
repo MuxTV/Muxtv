@@ -80,17 +80,7 @@ foreach ($requiredProductToken in @(
     ':core:database:connectedDebugAndroidTest',
     ':player:media3:connectedDebugAndroidTest',
     ':app:tv:connectedDebugAndroidTest',
-    'Assert-AndroidTestResults.ps1',
-    'MUXTV_REPRESENTATIVE_TV_PROFILE_GATE',
-    'MuxTV_TV_CURRENT_API36',
-    '1280x720',
-    '213',
-    '320',
-    'RailNavigationJourneyTest',
-    'wm size',
-    'wm density',
-    'display-state-1080p-tv.txt',
-    'profile-result.json'
+    'Assert-AndroidTestResults.ps1'
 )) {
     Assert-ContainsOrdinal -Content $productEntrypoint -Token $requiredProductToken -Message "Hosted product entrypoint is missing token: $requiredProductToken"
 }
@@ -106,7 +96,7 @@ foreach ($requiredBenchmarkToken in @(
     Assert-ContainsOrdinal -Content $benchmarkEntrypoint -Token $requiredBenchmarkToken -Message "Hosted benchmark entrypoint is missing token: $requiredBenchmarkToken"
 }
 
-foreach ($requiredFocusedToken in @('name: Android TV focused device', 'runs-on: ubuntu-latest', 'api-level: 36', 'target: android-tv', 'arch: x86_64', 'profile: tv_1080p', 'avd-name: MuxTV_TV_CURRENT_API36', 'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d', 'Assert-AndroidTestResults.ps1', 'MUXTV_REPRESENTATIVE_TV_PROFILE_GATE: "true"')) {
+foreach ($requiredFocusedToken in @('name: Android TV focused device', 'runs-on: ubuntu-latest', 'api-level: 36', 'target: android-tv', 'arch: x86_64', 'profile: tv_1080p', 'avd-name: MuxTV_TV_CURRENT_API36', 'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d', 'Assert-AndroidTestResults.ps1')) {
     Assert-ContainsOrdinal -Content $focusedWorkflow -Token $requiredFocusedToken -Message "Focused Android TV workflow is missing hosted API36 contract token: $requiredFocusedToken"
 }
 Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $focusedWorkflow -WorkflowName 'Focused Android TV workflow'
@@ -120,7 +110,6 @@ Assert-ContainsOrdinal -Content $standaloneMatrixWorkflow -Token $exactHeadExpre
 foreach ($requiredHostedToken in @('runs-on: ubuntu-latest', 'fail-fast: false', 'api: 26', 'arch: x86', 'avd: MuxTV_TV_OLD_API26', 'api: 36', 'arch: x86_64', 'avd: MuxTV_TV_CURRENT_API36', 'target: android-tv', 'profile: tv_1080p', 'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d', 'name: Android TV product device matrix', 'needs:', '- device')) {
     Assert-ContainsOrdinal -Content $standaloneMatrixWorkflow -Token $requiredHostedToken -Message "Android TV product matrix is missing hosted execution contract token: $requiredHostedToken"
 }
-Assert-NotContainsOrdinal -Content $standaloneMatrixWorkflow -Token 'MUXTV_REPRESENTATIVE_TV_PROFILE_GATE' -Message 'Standalone Android TV product matrix must not duplicate the focused representative-profile gate.'
 Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $standaloneMatrixWorkflow -WorkflowName 'Android TV product matrix'
 Assert-HostedEmulatorEntrypoint -Content $standaloneMatrixWorkflow -WorkflowName 'Android TV product matrix' -Entrypoint 'Run-HostedAndroidProductTests.sh'
 
@@ -132,7 +121,6 @@ foreach ($expectedAvd in $expectedAvds) { if ($expectedAvd -notin $avdMatches) {
 foreach ($requiredIntegrationToken in @('name: Integration host Full', 'runs-on: windows-latest', 'name: Integration Android TV API${{ matrix.api }}', 'api: 26', 'avd: MuxTV_TV_OLD_API26', 'api: 36', 'avd: MuxTV_TV_CURRENT_API36', 'name: Full + Android TV DeviceMatrix', 'HOST_RESULT:', 'DEVICE_RESULT:')) {
     Assert-ContainsOrdinal -Content $integrationWorkflow -Token $requiredIntegrationToken -Message "Integration workflow is missing hosted acceptance token: $requiredIntegrationToken"
 }
-Assert-NotContainsOrdinal -Content $integrationWorkflow -Token 'MUXTV_REPRESENTATIVE_TV_PROFILE_GATE' -Message 'Integration matrix must not duplicate the focused representative-profile gate.'
 Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $integrationWorkflow -WorkflowName 'Integration workflow'
 Assert-HostedEmulatorEntrypoint -Content $integrationWorkflow -WorkflowName 'Integration workflow' -Entrypoint 'Run-HostedAndroidProductTests.sh'
 

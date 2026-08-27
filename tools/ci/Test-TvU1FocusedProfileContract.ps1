@@ -32,7 +32,7 @@ $u1Entrypoint = Get-RepositoryFileContent "tools\ci\Run-HostedTvU1ShellTests.sh"
 
 foreach ($token in @(
     'tools/ci/Run-HostedTvU1ShellTests.sh',
-    'script: bash ./tools/ci/Run-HostedTvU1ShellTests.sh',
+    'script: bash ./tools/ci/Run-HostedAndroidProductTests.sh && bash ./tools/ci/Run-HostedTvU1ShellTests.sh',
     'avd-name: MuxTV_TV_CURRENT_API36',
     'api-level: 36'
 )) {
@@ -41,7 +41,6 @@ foreach ($token in @(
 
 foreach ($token in @(
     'MuxTV_TV_CURRENT_API36',
-    'bash ./tools/ci/Run-HostedAndroidProductTests.sh',
     'app.muxtv.RailNavigationJourneyTest',
     '1920x1080',
     '1280x720',
@@ -49,7 +48,7 @@ foreach ($token in @(
     '320',
     'wm size',
     'wm density',
-    'OK \\([0-9]+ tests?\\)',
+    'OK \([0-9]+ tests?\)',
     'FAILURES!!!',
     'profile-result.json'
 )) {
