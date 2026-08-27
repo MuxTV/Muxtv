@@ -39,8 +39,21 @@ foreach ($literal in @(
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing route-setup characterization primitive: $literal"
 }
 
-# A title can remain a geometry anchor after route selection is independently proven, but it must
-# never again be the only evidence that navigation happened.
-Assert-ContainsLiteral $probe 'awaitNavSelected' 'Common U0 probe must await a stable selected-navigation seam before resolving destination content.'
+# A transient Selected=true is not sufficient: the previous GREEN candidate observed it while the
+# content tree was still Home. Activation may succeed only after both the selected rail item and
+# the destination-owned anchor are visible in the same synchronized observation.
+foreach ($literal in @(
+    'awaitRouteReady',
+    'routeAnchor.isPresent()',
+    'U0 route activation',
+    'selected=',
+    'anchorPresent='
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe is missing durable route-readiness evidence: $literal"
+}
+
+# A title can remain a geometry anchor for immutable historical refs, but it must never again be
+# the sole evidence that navigation happened.
+Assert-ContainsLiteral $probe 'navIsSelected(navTag) && routeAnchor.isPresent()' 'Route readiness must couple selected-navigation state with destination content presence.'
 
 Write-Host 'TV UI route setup characterization contract passed.'
