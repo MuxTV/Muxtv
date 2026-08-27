@@ -70,6 +70,7 @@ try {
             $routeRetained = $profile.Id -ne 'compact-stress'
             $afterInteractionBounds = if ($routeRetained) { $bounds } else { $null }
 
+            $probePath = Join-Path $caseDirectory 'probe-result.json'
             [ordered]@{
                 schemaVersion = 2
                 sourceCommit = $comparison.Commit
@@ -117,7 +118,16 @@ try {
                         contentOriginRestoredAfterRight = $routeRetained
                     }
                 )
-            } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $caseDirectory 'probe-result.json') -Encoding utf8
+            } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $probePath -Encoding utf8
+
+            # Probe serialization legitimately omits a nullable focus owner when no tagged node owns
+            # focus after the measured Right event. The analyzer must preserve the measurement instead
+            # of treating the absent diagnostic property as a malformed characterization case.
+            if ($profile.Id -eq 'compact-stress') {
+                $probeFixture = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
+                $probeFixture.destinations[0].PSObject.Properties.Remove('focusAfterRight')
+                $probeFixture | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $probePath -Encoding utf8
+            }
         }
     }
 
