@@ -52,6 +52,19 @@ function Get-ProbeTitleAnchor {
     return $matches[0].Groups[1].Value
 }
 
+function Get-ProbeReadinessTag {
+    param([Parameter(Mandatory)][string]$Destination)
+
+    $escapedDestination = [regex]::Escape($Destination)
+    $pattern = '(?s)destination\s*=\s*"' + $escapedDestination + '".*?readinessAnchor\s*=\s*ReadinessAnchor\.Tag\("([^"]+)"\)'
+    $matches = [regex]::Matches($probe, $pattern)
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one tag readiness anchor for destination '$Destination', found $($matches.Count)."
+    }
+
+    return $matches[0].Groups[1].Value
+}
+
 function Get-GitFileText {
     param(
         [Parameter(Mandatory)][string]$Commit,
@@ -91,4 +104,43 @@ foreach ($contract in $contracts) {
     }
 }
 
-Write-Host 'TV UI probe title anchors match immutable A/B/C screen-title contracts.'
+$searchSourcePath = 'feature/search/src/main/kotlin/app/muxtv/feature/search/SearchRoute.kt'
+$searchInputTags = [System.Collections.Generic.List[string]]::new()
+foreach ($entry in $comparisons.GetEnumerator()) {
+    $source = Get-GitFileText -Commit $entry.Value -Path $searchSourcePath
+    $match = [regex]::Match(
+        $source,
+        'private\s+const\s+val\s+SEARCH_INPUT_TEST_TAG\s*=\s*"([^"]+)"'
+    )
+    if (-not $match.Success) {
+        throw "Unable to resolve SEARCH_INPUT_TEST_TAG for comparison $($entry.Key) at $($entry.Value)."
+    }
+    $searchInputTags.Add($match.Groups[1].Value)
+}
+
+$uniqueSearchInputTags = @($searchInputTags | Sort-Object -Unique)
+if ($uniqueSearchInputTags.Count -ne 1) {
+    throw "Immutable A/B/C Search input tags diverge: $($uniqueSearchInputTags -join ', ')."
+}
+
+$searchInputTag = $uniqueSearchInputTags[0]
+$probeSearchReadinessTag = Get-ProbeReadinessTag -Destination 'search'
+if ($probeSearchReadinessTag -cne $searchInputTag) {
+    throw "Probe Search readiness tag mismatch: probe='$probeSearchReadinessTag', immutable A/B/C='$searchInputTag'."
+}
+
+$knownFocusMatch = [regex]::Match(
+    $probe,
+    '(?s)private\s+val\s+knownFocusTags\s*=\s*listOf\((.*?)\)'
+)
+if (-not $knownFocusMatch.Success) {
+    throw 'Unable to resolve common probe knownFocusTags block.'
+}
+if ($knownFocusMatch.Groups[1].Value.IndexOf(('"{0}"' -f $searchInputTag), [System.StringComparison]::Ordinal) -lt 0) {
+    throw "Common probe must include immutable Search focus owner '$searchInputTag' in knownFocusTags."
+}
+if ($probe.IndexOf('ReadinessAnchor.Tag("search-field")', [System.StringComparison]::Ordinal) -ge 0) {
+    throw 'Common probe still contains stale Search readiness tag search-field.'
+}
+
+Write-Host 'TV UI probe anchors and Search readiness/focus tags match immutable A/B/C source contracts.'
