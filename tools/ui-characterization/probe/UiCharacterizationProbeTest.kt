@@ -39,6 +39,14 @@ class UiCharacterizationProbeTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val arguments: Bundle = InstrumentationRegistry.getArguments()
 
+    private val navigationTags = listOf(
+        "nav-home",
+        "nav-channels",
+        "nav-guide",
+        "nav-search",
+        "nav-settings",
+    )
+
     /**
      * Focus discovery deliberately uses only stable product test tags plus assertIsFocused().
      * This is the lowest-common-denominator API already exercised by the immutable A/B/C tests;
@@ -222,14 +230,46 @@ class UiCharacterizationProbeTest {
     }
 
     private fun openRailDestination(navTag: String) {
-        // Route selection is deterministic setup, not part of the D-pad behavior under
-        // characterization. The previous RequestFocus + framework ENTER setup is invalid on
-        // immutable A: the rail node acquires semantics focus but ENTER is not delivered as its
-        // OnClick action, leaving Home selected. Invoke the stable semantics click directly and
-        // reserve framework key injection for the measured Left/Back/Right traces below.
-        composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        check(navigationTags.contains(navTag)) {
+            "Unknown rail destination '$navTag'."
+        }
+
+        var focus = focusedNodeDescription()
+        if (focus == null || !navigationTags.contains(focus)) {
+            pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
+            composeRule.waitForIdle()
+            focus = focusedNodeDescription()
+        }
+
+        if (focus == null || !navigationTags.contains(focus)) {
+            failNavigationSetup(navTag, focus)
+        }
+
+        repeat(navigationTags.size) {
+            if (focus == navTag) {
+                pressKey(KeyEvent.KEYCODE_ENTER)
+                composeRule.waitForIdle()
+                return
+            }
+
+            pressKey(KeyEvent.KEYCODE_DPAD_DOWN)
+            composeRule.waitForIdle()
+            focus = focusedNodeDescription()
+
+            if (focus == null || !navigationTags.contains(focus)) {
+                failNavigationSetup(navTag, focus)
+            }
+        }
+
+        failNavigationSetup(navTag, focus)
+    }
+
+    private fun failNavigationSetup(navTag: String, focus: String?): Nothing {
+        val tree = composeRule.onRoot(useUnmergedTree = true).printToString(maxDepth = 100)
+        throw IllegalStateException(
+            "Unable to navigate to '$navTag' through the TV rail. Focus owner: '$focus'.\n" +
+                "Unmerged semantics:\n$tree",
+        )
     }
 
     private fun pressKey(keyCode: Int) {
