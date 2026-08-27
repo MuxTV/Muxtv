@@ -68,6 +68,7 @@ class UiCharacterizationProbeTest {
         "channels-filter-favorites",
         "channels-filter-recent",
         "channel-row-0",
+        "search-input",
         "settings-section-sources",
         "settings-section-doctor",
     )
@@ -126,7 +127,7 @@ class UiCharacterizationProbeTest {
             destination = "search",
             navTag = "nav-search",
             anchor = Anchor.Title("Поиск"),
-            readinessAnchor = ReadinessAnchor.Tag("search-field"),
+            readinessAnchor = ReadinessAnchor.Tag("search-input"),
             navigate = { routeReady -> openRailDestination("nav-search", routeReady) },
         )
         captureDestination(
