@@ -1,51 +1,49 @@
-name: Self-hosted validation
+name: Hosted validation
 
 on:
   workflow_dispatch:
     inputs:
       validation_mode:
-        description: Validation depth
+        description: Host validation depth
         required: true
-        default: Fast
+        default: Full
         type: choice
         options:
           - Fast
           - Full
-          - DeviceCurrent
-          - DeviceMatrix
-          - CatalogMeasurement
-          - PlayerMeasurement
   pull_request:
     branches:
       - main
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: self-hosted-validation-${{ github.ref }}
+  group: hosted-validation-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
-    # Keep this historical PR check name stable because branch-protection settings
-    # are not readable by the repository integration. The selected PR mode below
-    # is Fast; Full remains an explicit manual/integration action.
+    # Preserve this historical PR check name because branch-protection settings
+    # are not readable by the repository integration. Public-repository compute
+    # is now GitHub-hosted, so ordinary PRs run the actual Full host suite.
     name: ${{ github.event_name == 'pull_request' && 'Full validation' || 'Manual validation' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.validation_mode != 'Fast' && inputs.validation_mode != 'Full' && '["self-hosted","Windows","X64","muxtv-android","muxtv-device"]' || '["self-hosted","Windows","X64","muxtv-android"]') }}
-    timeout-minutes: 180
+    runs-on: windows-latest
+    timeout-minutes: 120
 
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Normalize workspace and enable Windows long paths
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -62,6 +60,9 @@ jobs:
           $evidenceDirectory = ".work\evidence\workspace-cleanup"
           New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
           @(
+            "runner_environment=github-hosted"
+            "runner_os=$env:RUNNER_OS"
+            "runner_arch=$env:RUNNER_ARCH"
             "git_version=$(git --version)"
             "core_longpaths=$(git config --local --get core.longpaths)"
             "workspace_clean=true"
@@ -74,40 +75,12 @@ jobs:
           $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
 
-      - name: Validate risk-based device lane contract
+      - name: Validate risk-based CI contract
         shell: pwsh
         run: |
           & .\tools\ci\Test-RiskBasedDeviceLaneContract.ps1
 
-      - name: Select validation mode
-        id: validation
-        shell: pwsh
-        run: |
-          # Ordinary PRs deliberately use Fast. The check name stays stable for
-          # branch-protection compatibility; Full/Device modes are manual or the
-          # dedicated integration gate.
-          $mode = "Fast"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $mode = "${{ inputs.validation_mode }}"
-          }
-          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "Validation mode: $mode"
-
-      - name: Preflight dedicated self-hosted runner
-        shell: pwsh
-        run: |
-          $parameters = @{
-            RequireNoConnectedDevice = $true
-            ExpectedRunnerLabels = @("muxtv-android")
-          }
-          $mode = "${{ steps.validation.outputs.mode }}"
-          if ($mode -notin @("Fast", "Full")) {
-            $parameters.ExpectedRunnerLabels += "muxtv-device"
-            $parameters.ExpectedSystemImageApis = if ($mode -ceq "DeviceMatrix") { @(26, 36) } else { @(36) }
-          }
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 @parameters
-
-      - name: Inspect runner environment
+      - name: Inspect hosted build environment
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -119,80 +92,44 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
           . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
           . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          Write-Host "Android SDK tools resolved by the repository harness."
-          Write-Host "adb=$([System.IO.Path]::GetFileName($tools.Adb))"
-          Write-Host "emulator=$([System.IO.Path]::GetFileName($tools.Emulator))"
+          $tools = Get-AndroidSdkTools -AllowMissingRuntime
+          Write-Host "Android SDK root: $($tools.Root)"
+          Write-Host "sdkmanager=$([System.IO.Path]::GetFileName($tools.SdkManager))"
+          Write-Host "avdmanager=$([System.IO.Path]::GetFileName($tools.AvdManager))"
 
-      - name: Validate Android TV harness syntax
+      - name: Select validation mode
+        id: validation
         shell: pwsh
         run: |
-          $diagnosticDirectory = ".work\evidence\harness-syntax"
-          $diagnosticPath = Join-Path $diagnosticDirectory "harness-syntax.log"
-          New-Item -ItemType Directory -Force -Path $diagnosticDirectory | Out-Null
-          try {
-            & .\tools\android\Test-TvHarnessSyntax.ps1
-          } catch {
-            $details = $_ | Out-String
-            if (-not (Test-Path $diagnosticPath -PathType Leaf)) {
-              Set-Content -Path $diagnosticPath -Value $details -Encoding utf8
-            }
-            Write-Host "Android TV harness validation failed:"
-            Get-Content $diagnosticPath
-            throw
+          $mode = "Full"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $mode = "${{ inputs.validation_mode }}"
           }
+          "mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Host validation mode: $mode"
 
-      - name: Run MuxTV validation
+      - name: Run MuxTV host validation
         shell: pwsh
         env:
           MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
           MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          $mode = "${{ steps.validation.outputs.mode }}"
-          $branch = $env:MUXTV_SOURCE_BRANCH
-          $commit = $env:MUXTV_SOURCE_COMMIT
-
-          if ($mode -eq "CatalogMeasurement") {
-            pwsh -NoProfile -File .\tools\android\Invoke-CatalogDatabaseDeviceValidation.ps1 `
-              -SourceBranch $branch `
-              -SourceCommit $commit `
-              -NoDaemon
-          } elseif ($mode -eq "PlayerMeasurement") {
-            pwsh -NoProfile -File .\tools\android\Invoke-PlayerProxyDeviceValidation.ps1 `
-              -SourceBranch $branch `
-              -SourceCommit $commit `
-              -NoDaemon
-          } elseif ($mode -in @("DeviceCurrent", "DeviceMatrix")) {
-            pwsh -NoProfile -File .\tools\android\Invoke-TvDeviceValidation.ps1 `
-              -Mode $mode `
-              -SourceBranch $branch `
-              -SourceCommit $commit `
-              -NoDaemon
-          } else {
-            pwsh -NoProfile -File .\tools\verify-local.ps1 `
-              -Mode $mode `
-              -SourceBranch $branch `
-              -SourceCommit $commit `
-              -NoDaemon
-          }
+          pwsh -NoProfile -File .\tools\verify-local.ps1 `
+            -Mode "${{ steps.validation.outputs.mode }}" `
+            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
+            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
+            -NoDaemon
 
       - name: Upload validation evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: self-hosted-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: hosted-validation-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
-            .work/evidence/**/*.png
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
+            app/tv/build/reports/lint-results-debug.*
+            player/media3/build/reports/lint-results-debug.*
           retention-days: 7
           github-token: ${{ github.token }}
-
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
-        run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

@@ -1,4 +1,4 @@
-name: Manual heavy M3U stress evidence
+name: Manual hosted M3U stress evidence
 
 on:
   workflow_dispatch:
@@ -8,96 +8,56 @@ permissions:
   actions: read
 
 concurrency:
-  group: focused-m3u-manual-stress
-  queue: max
+  group: focused-m3u-hosted-stress
   cancel-in-progress: false
 
 jobs:
   focused-m3u:
-    name: Manual 5x10k + 5x50k M3U stress evidence
-    runs-on: [self-hosted, Windows, X64, muxtv-android]
+    name: Manual 4x10k + 4x50k hosted M3U stress evidence
+    runs-on: windows-latest
     timeout-minutes: 180
 
     steps:
       - name: Checkout accepted source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
           persist-credentials: false
+          fetch-depth: 0
           ref: ${{ github.sha }}
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
       - name: Require accepted main ref
         shell: pwsh
         run: |
           if ("${{ github.ref }}" -cne "refs/heads/main") {
-            throw "Focused claim-eligible M3U evidence must run from refs/heads/main."
+            throw "Hosted M3U stress evidence must run from refs/heads/main."
           }
-
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to enable repository-local Git long-path support."
-          }
-
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to reset the checked-out workspace."
-          }
-
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to clean the checked-out workspace.`n$cleanOutput"
-          }
-
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) {
-            throw "Workspace is not clean after explicit reset/clean.`n$dirty"
-          }
-
-          $evidenceDirectory = ".work\evidence\workspace-cleanup"
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-          @(
-            "git_version=$(git --version)"
-            "core_longpaths=$(git config --local --get core.longpaths)"
-            "workspace_clean=true"
-            "clean_output=$cleanOutput"
-          ) | Set-Content -Path (Join-Path $evidenceDirectory "workspace-cleanup.log") -Encoding utf8
 
       - name: Verify evidence commit provenance
         shell: pwsh
         run: |
-          $expectedCommit = "${{ github.sha }}"
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.sha }}"
 
-      - name: Preflight dedicated self-hosted runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -SkipAndroidToolchain `
-            -ExpectedRunnerLabels muxtv-android
-
-      - name: Inspect runner environment
+      - name: Record ephemeral hosted environment
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $evidenceDirectory = ".work\evidence\focused-m3u-environment"
           New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
-
           $javaVersion = @(& java -version 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            throw "Java runtime inspection failed."
-          }
+          if ($LASTEXITCODE -ne 0) { throw "Java runtime inspection failed." }
           $processor = Get-CimInstance Win32_Processor | Select-Object -First 1
           @(
+            "runner_environment=github-hosted-ephemeral"
             "runner=$env:RUNNER_NAME"
             "os=$env:RUNNER_OS"
             "architecture=$env:RUNNER_ARCH"
             "processor=$($processor.Name)"
             "logical_processors=$($processor.NumberOfLogicalProcessors)"
             "java=$([string]::Join(' | ', $javaVersion))"
+            "longitudinal_absolute_performance_claims=false"
           ) | Set-Content -Path (Join-Path $evidenceDirectory "environment.log") -Encoding utf8
 
       - name: Validate focused measurement harness
@@ -105,7 +65,7 @@ jobs:
         run: |
           pwsh -NoProfile -File .\tools\measurements\Test-MeasurementHarnessSyntax.ps1
 
-      - name: Run medium 10k focused series
+      - name: Run medium 10k hosted exploratory series
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\measurements\Invoke-M3uCorpusSeries.ps1 `
@@ -113,11 +73,11 @@ jobs:
             -SourceCommit "${{ github.sha }}" `
             -M3uProfile medium-10k `
             -M3uSeed 20260728 `
-            -Repetitions 5 `
-            -RunnerLabel self-hosted-windows-x64-v1 `
+            -Repetitions 4 `
+            -RunnerLabel github-hosted-windows-x64-v1 `
             -NoDaemon
 
-      - name: Run large 50k focused series
+      - name: Run large 50k hosted exploratory series
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\measurements\Invoke-M3uCorpusSeries.ps1 `
@@ -125,8 +85,8 @@ jobs:
             -SourceCommit "${{ github.sha }}" `
             -M3uProfile large-50k `
             -M3uSeed 20260728 `
-            -Repetitions 5 `
-            -RunnerLabel self-hosted-windows-x64-v1 `
+            -Repetitions 4 `
+            -RunnerLabel github-hosted-windows-x64-v1 `
             -NoDaemon
 
       - name: Finalize interrupted focused evidence
@@ -136,21 +96,15 @@ jobs:
           pwsh -NoProfile -File .\tools\measurements\Finalize-MeasurementSeriesEvidence.ps1 `
             -EvidenceRoot .work\evidence
 
-      - name: Upload focused M3U evidence
+      - name: Upload hosted M3U evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: focused-m3u-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: focused-m3u-hosted-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
             core/testing/build/measurements/*.json
-          retention-days: 30
+          retention-days: 7
           github-token: ${{ github.token }}
-
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
-        run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1

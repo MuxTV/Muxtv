@@ -87,20 +87,45 @@ foreach ($benchmarkFile in @(
 
 $workflow = Read-RequiredFile ".github\workflows\benchmark-foundation.yml"
 foreach ($token in @(
-    'runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]',
-    'Invoke-BenchmarkDryRun.ps1',
-    'Reset-SelfHostedAndroidState.ps1',
-    'actions: read',
+    'name: Benchmark JMH dry run',
+    'runs-on: windows-latest',
+    ':benchmark:jvm:jmh',
+    '-PmuxtvJmhDryRun=true',
+    'name: Benchmark Macrobenchmark API36 dry run',
+    'runs-on: ubuntu-latest',
+    'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d',
+    'api-level: 36',
+    'target: android-tv',
+    'arch: x86_64',
+    'profile: tv_1080p',
+    'avd-name: MuxTV_TV_CURRENT_API36',
+    'connectedBenchmarkReleaseAndroidTest',
+    'androidx.benchmark.dryRunMode.enable=true',
+    'androidx.benchmark.enabledRules=Macrobenchmark',
+    'Assert-AndroidTestResults.ps1',
+    'name: Benchmark foundation dry run',
     'uses: ./.github/actions/upload-evidence-with-retry'
 )) {
     if ($workflow.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
-        throw "Benchmark workflow is missing contract token: $token"
+        throw "Benchmark workflow is missing hosted dry-run contract token: $token"
+    }
+}
+foreach ($forbiddenToken in @(
+    'self-hosted',
+    'Assert-SelfHostedRunnerPreflight.ps1',
+    'Reset-SelfHostedAndroidState.ps1',
+    'Invoke-BenchmarkDryRun.ps1'
+)) {
+    if ($workflow.IndexOf($forbiddenToken, [System.StringComparison]::Ordinal) -ge 0) {
+        throw "Hosted benchmark workflow still contains legacy runner ownership token: $forbiddenToken"
     }
 }
 if ($workflow -match '(?mi)^\s*uses:\s*actions/upload-artifact@') {
     throw "Benchmark workflow must publish through the shared bounded evidence action."
 }
 
+# Keep the Windows helper valid as an optional local developer seam. Hosted CI no
+# longer depends on it, but its dry-run semantics remain useful for local diagnosis.
 $benchmarkHarness = Read-RequiredFile "tools\android\Invoke-BenchmarkDryRun.ps1"
 foreach ($token in @(
     'connectedBenchmarkReleaseAndroidTest',
@@ -110,8 +135,8 @@ foreach ($token in @(
     '$totalTestCount - $skippedCount'
 )) {
     if ($benchmarkHarness.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
-        throw "Benchmark device harness is missing contract token: $token"
+        throw "Local benchmark device harness is missing contract token: $token"
     }
 }
 
-Write-Host "Benchmark foundation contract passed."
+Write-Host "Benchmark foundation contract passed for hosted dry-run CI."

@@ -1,0 +1,43 @@
+name: Set up MuxTV JDK toolchains
+description: Install the Gradle runtime JDK and the Java 17 build-logic toolchain on GitHub-hosted runners.
+
+runs:
+  using: composite
+  steps:
+    - name: Install Temurin JDK 17 toolchain
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      with:
+        distribution: temurin
+        java-version: '17'
+        set-default: false
+
+    - name: Install Temurin JDK 25 runtime
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      with:
+        distribution: temurin
+        java-version: '25'
+
+    - name: Expose installed JDKs to Gradle toolchain discovery
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        if ($env:RUNNER_ARCH -cne "X64") {
+          throw "MuxTV hosted JDK setup currently supports the standard X64 runner contract only; runner arch=$env:RUNNER_ARCH."
+        }
+        if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME_17_X64)) {
+          throw "setup-java did not expose JAVA_HOME_17_X64."
+        }
+        if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME_25_X64)) {
+          throw "setup-java did not expose JAVA_HOME_25_X64."
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME_17_X64 "bin") -PathType Container)) {
+          throw "Temurin JDK 17 installation is unavailable: $env:JAVA_HOME_17_X64"
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME_25_X64 "bin") -PathType Container)) {
+          throw "Temurin JDK 25 installation is unavailable: $env:JAVA_HOME_25_X64"
+        }
+
+        "GRADLE_OPTS=-Dorg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64,JAVA_HOME_25_X64" |
+          Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+        Write-Host "MuxTV hosted JDK contract: runtime=25, build-logic-toolchain=17, arch=X64."
