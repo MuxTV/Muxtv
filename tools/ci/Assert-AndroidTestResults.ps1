@@ -36,11 +36,11 @@ $totalSkipped = 0
 foreach ($modulePath in $ModulePaths) {
     $normalizedModule = $modulePath -replace '/', [System.IO.Path]::DirectorySeparatorChar
     $resultRoot = Join-Path $RepositoryRoot (Join-Path $normalizedModule "build/outputs/androidTest-results")
-    $resultFiles = if (Test-Path -LiteralPath $resultRoot -PathType Container) {
-        @(Get-ChildItem -LiteralPath $resultRoot -Recurse -File -Filter "TEST-*.xml")
-    } else {
-        @()
-    }
+    $resultFiles = @(
+        if (Test-Path -LiteralPath $resultRoot -PathType Container) {
+            Get-ChildItem -LiteralPath $resultRoot -Recurse -File -Filter "TEST-*.xml"
+        }
+    )
 
     if ($resultFiles.Count -eq 0) {
         throw "$modulePath produced no TEST-*.xml Android instrumentation results under $resultRoot."
