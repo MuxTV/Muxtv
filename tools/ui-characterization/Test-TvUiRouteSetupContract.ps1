@@ -53,14 +53,15 @@ foreach ($literal in @(
 
 # Content editors such as Search can consume DirectionLeft without transferring focus to the rail.
 # A non-null content focus owner is therefore not proof that setup reached navigation. After the
-# bounded Compose Left attempt, setup must explicitly recover the already-selected rail item before
-# walking Down to the next destination. Keep this as a local sequence so a later helper call cannot
-# accidentally satisfy the contract.
+# bounded Compose Left attempt, setup must explicitly accept only a navigation focus owner; any
+# remaining editor/content focus falls back to the already-selected rail item before walking Down.
 $editorSafeRailRecovery = @'
 pressSetupKey(focus, Key.DirectionLeft)
-            focus = focusedNodeDescription()
-            if (!navigationTags.contains(focus)) {
-                focus = recoverSelectedRailFocus(navTag)
+            val afterLeftFocus = focusedNodeDescription()
+            focus = if (afterLeftFocus != null && navigationTags.contains(afterLeftFocus)) {
+                afterLeftFocus
+            } else {
+                recoverSelectedRailFocus(navTag)
             }
 '@
 Assert-ContainsLiteral `
