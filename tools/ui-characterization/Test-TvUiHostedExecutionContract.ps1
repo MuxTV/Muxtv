@@ -37,6 +37,7 @@ foreach ($token in @(
     'cache-read-only: false',
     $cacheEncryptionKey,
     'cache-cleanup: on-success',
+    '-OutputPath "$env:MUXTV_UI_EVIDENCE/source-facts.json"',
     'run: bash ./tools/ci/Enable-HostedAndroidKvm.sh',
     'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d',
     'api-level: 36',
@@ -111,4 +112,4 @@ foreach ($token in @(
     Reject-Token -Text $entrypoint -Token $token -Owner 'Hosted U0 entrypoint'
 }
 
-Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, AndroidJUnitRunner success parsing, evidence-safe instrumentation lifecycle, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
+Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, durable source facts, AndroidJUnitRunner success parsing, evidence-safe instrumentation lifecycle, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
