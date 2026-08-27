@@ -91,12 +91,22 @@ foreach ($token in @(
     'git worktree add --detach',
     'wm size reset',
     'wm density reset',
-    'connectedDebugAndroidTest',
-    'adb -s "$ANDROID_SERIAL" pull'
+    ':app:tv:assembleDebug',
+    ':app:tv:assembleDebugAndroidTest',
+    'adb -s "$ANDROID_SERIAL" install -r -t',
+    'adb -s "$ANDROID_SERIAL" shell am instrument',
+    'adb -s "$ANDROID_SERIAL" pull',
+    'adb -s "$ANDROID_SERIAL" uninstall "$TEST_PACKAGE"',
+    'adb -s "$ANDROID_SERIAL" uninstall "$APP_PACKAGE"'
 )) { Require-Token -Text $entrypoint -Token $token -Owner 'Hosted U0 entrypoint' }
 
-foreach ($token in @('avdmanager create avd', 'emulator @', 'sdkmanager --install')) {
+foreach ($token in @(
+    'avdmanager create avd',
+    'emulator @',
+    'sdkmanager --install',
+    'connectedDebugAndroidTest'
+)) {
     Reject-Token -Text $entrypoint -Token $token -Owner 'Hosted U0 entrypoint'
 }
 
-Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
+Write-Host 'Hosted U0 execution contract passed: persistent Gradle cache, evidence-safe instrumentation lifecycle, clean API36 emulator ownership and immutable A/B/C characterization are explicit.'
