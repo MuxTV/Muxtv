@@ -23,11 +23,8 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Set up Temurin JDK 25
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '25'
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
       - name: Verify benchmark foundation contract
         shell: pwsh
@@ -68,11 +65,8 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Set up Temurin JDK 25
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '25'
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
       - name: Enable KVM for Android Emulator
         shell: bash
@@ -103,14 +97,15 @@ jobs:
           disable-animations: true
           enable-hw-keyboard: true
           emulator-boot-timeout: 600
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p "$MUXTV_BENCHMARK_EVIDENCE"
             avdmanager list avd -c | tee "$MUXTV_BENCHMARK_EVIDENCE/avd-inventory.txt"
-            mapfile -t avds < <(avdmanager list avd -c | sed '/^[[:space:]]*$/d')
-            if [[ "${#avds[@]}" -ne 1 || "${avds[0]}" != "$MUXTV_EXPECTED_AVD" ]]; then
-              echo "Expected exactly canonical AVD $MUXTV_EXPECTED_AVD; got: ${avds[*]-<none>}" >&2
+            avd_count="$(sed '/^[[:space:]]*$/d' "$MUXTV_BENCHMARK_EVIDENCE/avd-inventory.txt" | wc -l | tr -d '[:space:]')"
+            avd_name="$(sed '/^[[:space:]]*$/d' "$MUXTV_BENCHMARK_EVIDENCE/avd-inventory.txt" | head -n 1)"
+            if [ "$avd_count" -ne 1 ] || [ "$avd_name" != "$MUXTV_EXPECTED_AVD" ]; then
+              echo "Expected exactly canonical AVD $MUXTV_EXPECTED_AVD; count=$avd_count first=$avd_name" >&2
               exit 1
             fi
             chmod +x ./gradlew
@@ -122,7 +117,7 @@ jobs:
               --no-problems-report \
               -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.dryRunMode.enable=true \
               -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark
-            pwsh -NoProfile -Command "& './tools/ci/Assert-AndroidTestResults.ps1' -ModulePaths @('benchmark/macrobenchmark') -OutputPath '$env:MUXTV_BENCHMARK_EVIDENCE/android-test-results.json'"
+            pwsh -NoProfile -Command '& "./tools/ci/Assert-AndroidTestResults.ps1" -ModulePaths @("benchmark/macrobenchmark") -OutputPath (Join-Path $env:MUXTV_BENCHMARK_EVIDENCE "android-test-results.json")'
 
       - name: Upload Macrobenchmark dry-run evidence
         if: always()

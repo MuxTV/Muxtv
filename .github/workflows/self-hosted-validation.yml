@@ -40,11 +40,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Temurin JDK 25
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '25'
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
       - name: Normalize workspace and enable Windows long paths
         shell: pwsh
