@@ -39,14 +39,14 @@ $violations = [System.Collections.Generic.List[string]]::new()
 foreach ($workflow in $supportedWorkflows) {
     $path = Join-Path $workflowRoot $workflow
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        $violations.Add("$workflow: supported workflow file is missing")
+        $violations.Add("${workflow}: supported workflow file is missing")
         continue
     }
 
     $content = Get-Content -LiteralPath $path -Raw
     foreach ($entry in $forbiddenPatterns.GetEnumerator()) {
         if ($content -match $entry.Value) {
-            $violations.Add("$workflow: $($entry.Key)")
+            $violations.Add("${workflow}: $($entry.Key)")
         }
     }
 }
