@@ -118,7 +118,7 @@ run_targeted_profile() {
   echo "=== Representative TV profile $profile_id: ${size}@${density}dpi required=${required} ==="
 
   set +e
-  adb -s "$ANDROID_SERIAL" shell am instrument -w -r \
+  adb -s "$ANDROID_SERIAL" shell am instrument -w \
     -e class "$TARGETED_TEST_CLASS" \
     "$INSTRUMENTATION_COMPONENT" \
     2>&1 | tee "$log_path"
