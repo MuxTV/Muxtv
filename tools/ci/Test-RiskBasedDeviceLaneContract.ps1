@@ -40,34 +40,54 @@ function Assert-NotContainsOrdinal {
     }
 }
 
-$tvValidation = Get-RepositoryFileContent "tools\android\Invoke-TvDeviceValidation.ps1"
+function Assert-HostedWorkflowNoLegacyRunnerOwnership {
+    param(
+        [Parameter(Mandatory)][string]$Content,
+        [Parameter(Mandatory)][string]$WorkflowName
+    )
+
+    foreach ($forbiddenToken in @(
+        'self-hosted',
+        'Assert-SelfHostedRunnerPreflight.ps1',
+        'Reset-SelfHostedAndroidState.ps1',
+        'Invoke-TvDeviceValidation.ps1',
+        'Remove-LegacyMuxTvAvds.ps1'
+    )) {
+        Assert-NotContainsOrdinal `
+            -Content $Content `
+            -Token $forbiddenToken `
+            -Message "$WorkflowName still contains legacy runner ownership token: $forbiddenToken"
+    }
+}
+
 $focusedWorkflow = Get-RepositoryFileContent ".github\workflows\android-tv-focused-device.yml"
 $integrationWorkflow = Get-RepositoryFileContent ".github\workflows\integration-gate.yml"
 $standaloneMatrixWorkflow = Get-RepositoryFileContent ".github\workflows\android-tv-product-device-matrix.yml"
 
-# The legacy Windows orchestrator remains a local/manual implementation seam while
-# focused/integration workflows are being migrated. It must still expose explicit
-# host-validation ownership so duplicate host work cannot be hidden.
-Assert-ContainsOrdinal `
-    -Content $tvValidation `
-    -Token '[switch]$SkipHostValidation' `
-    -Message "TV device validation must expose an explicit SkipHostValidation switch."
-Assert-ContainsOrdinal `
-    -Content $tvValidation `
-    -Token 'if (-not $SkipHostValidation)' `
-    -Message "TV device validation must gate its internal Full host validation behind SkipHostValidation."
-Assert-ContainsOrdinal `
-    -Content $focusedWorkflow `
-    -Token '-SkipHostValidation' `
-    -Message "Focused Android TV evidence must not duplicate the ordinary PR Full host validation."
-Assert-ContainsOrdinal `
-    -Content $integrationWorkflow `
-    -Token '-SkipHostValidation' `
-    -Message "Integration DeviceMatrix must skip duplicate Full host validation because integration-gate runs Full explicitly first."
+# Ordinary product/UI changes receive a single current API36 hosted gate. Full host
+# validation is a separate Windows-hosted check; the focused device lane must not
+# duplicate host validation or recreate persistent-machine lifecycle assumptions.
+foreach ($requiredFocusedToken in @(
+    'name: Android TV focused device',
+    'runs-on: ubuntu-latest',
+    'api-level: 36',
+    'target: android-tv',
+    'arch: x86_64',
+    'profile: tv_1080p',
+    'avd-name: MuxTV_TV_CURRENT_API36',
+    'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d',
+    '/dev/kvm',
+    'Assert-AndroidTestResults.ps1'
+)) {
+    Assert-ContainsOrdinal `
+        -Content $focusedWorkflow `
+        -Token $requiredFocusedToken `
+        -Message "Focused Android TV workflow is missing hosted API36 contract token: $requiredFocusedToken"
+}
+Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $focusedWorkflow -WorkflowName 'Focused Android TV workflow'
 
-# Product device evidence for a public repository is owned by ephemeral GitHub-hosted
-# Linux VMs. API26 and API36 run independently so one emulator cannot contaminate the
-# other. A stable aggregate job retains the historical required-check name.
+# Product device evidence for toolchain/device-harness risk uses isolated hosted
+# API26 and API36 jobs. A stable aggregate job retains the historical required check.
 foreach ($requiredMatrixRoutingToken in @(
     'pull_request:',
     'tools/android/**',
@@ -111,19 +131,7 @@ foreach ($requiredHostedToken in @(
         -Token $requiredHostedToken `
         -Message "Android TV product matrix is missing hosted execution contract token: $requiredHostedToken"
 }
-
-foreach ($forbiddenToken in @(
-    'self-hosted',
-    'Assert-SelfHostedRunnerPreflight.ps1',
-    'Reset-SelfHostedAndroidState.ps1',
-    'Invoke-TvDeviceValidation.ps1',
-    'Remove-LegacyMuxTvAvds.ps1'
-)) {
-    Assert-NotContainsOrdinal `
-        -Content $standaloneMatrixWorkflow `
-        -Token $forbiddenToken `
-        -Message "Hosted Android TV product matrix still contains legacy runner ownership token: $forbiddenToken"
-}
+Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $standaloneMatrixWorkflow -WorkflowName 'Android TV product matrix'
 
 $avdMatches = [regex]::Matches($standaloneMatrixWorkflow, 'MuxTV_[A-Za-z0-9_]+') |
     ForEach-Object Value |
@@ -137,5 +145,27 @@ foreach ($expectedAvd in $expectedAvds) {
         throw "Hosted product matrix is missing canonical AVD identity: $expectedAvd"
     }
 }
+
+# Manual integration acceptance owns Full host and API26/API36 device evidence as
+# independent jobs, then combines their results. It must not route through private
+# runner labels or duplicate the old Windows emulator orchestrator.
+foreach ($requiredIntegrationToken in @(
+    'name: Integration host Full',
+    'runs-on: windows-latest',
+    'name: Integration Android TV API${{ matrix.api }}',
+    'api: 26',
+    'avd: MuxTV_TV_OLD_API26',
+    'api: 36',
+    'avd: MuxTV_TV_CURRENT_API36',
+    'name: Full + Android TV DeviceMatrix',
+    'HOST_RESULT:',
+    'DEVICE_RESULT:'
+)) {
+    Assert-ContainsOrdinal `
+        -Content $integrationWorkflow `
+        -Token $requiredIntegrationToken `
+        -Message "Integration workflow is missing hosted acceptance token: $requiredIntegrationToken"
+}
+Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $integrationWorkflow -WorkflowName 'Integration workflow'
 
 Write-Host "Risk-based Android TV device lane contract is valid for hosted public-repository CI."
