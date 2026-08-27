@@ -6,12 +6,6 @@ on:
       - main
     paths:
       - '.github/workflows/android-tv-product-device-matrix.yml'
-      - 'app/tv/**'
-      - 'catalog/importer/**'
-      - 'catalog/refresh/**'
-      - 'core/credentials/**'
-      - 'core/database/**'
-      - 'player/media3/**'
       - 'tools/android/**'
       - 'tools/measurements/**'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
