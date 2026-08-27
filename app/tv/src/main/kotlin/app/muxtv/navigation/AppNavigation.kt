@@ -113,7 +113,7 @@ fun AppNavigation(
                 .fillMaxSize()
                 .then(
                     if (railVisible) {
-                        Modifier.padding(start = TvTokens.Size.railExpanded)
+                        Modifier.padding(start = TvTokens.Size.railCollapsed)
                     } else {
                         Modifier
                     },
