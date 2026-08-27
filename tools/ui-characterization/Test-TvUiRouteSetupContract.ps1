@@ -35,7 +35,7 @@ function Assert-DoesNotContainLiteral {
     }
 }
 
-# Route setup is not measurement evidence. Immutable A already proves the TV rail with Compose
+# Route setup is not measurement evidence. Immutable A/B/C already prove the TV rail with Compose
 # performKeyInput, so setup must use one synchronized Compose input seam end-to-end rather than
 # mixing framework Left/Down/Enter with a late Compose fallback.
 foreach ($literal in @(
@@ -63,16 +63,34 @@ foreach ($literal in @(
     Assert-ContainsLiteral $probe $literal "Common U0 probe lost required framework measurement input: $literal"
 }
 
+# Route readiness and geometry are separate evidence. A route may share its visible title with a
+# rail label (Channels: "Эфир"), so a plain text-exists check can produce a false positive before
+# destination content is mounted. Readiness must use route-owned semantics while geometry keeps its
+# original measurement anchor.
+foreach ($literal in @(
+    'private sealed interface ReadinessAnchor',
+    'data class Tag(val tag: String) : ReadinessAnchor',
+    'data class ContentTitle(val text: String) : ReadinessAnchor',
+    'readinessAnchor: ReadinessAnchor',
+    'readinessAnchor.isPresent(navTag)',
+    'ReadinessAnchor.ContentTitle("Эфир")',
+    'ReadinessAnchor.Tag("guide-status")',
+    'ReadinessAnchor.Tag("search-field")',
+    'ReadinessAnchor.Tag("settings-section-sources")',
+    'anchor = Anchor.Title("Эфир")'
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe is missing route-owned readiness evidence: $literal"
+}
+
 # A transient Selected=true is not sufficient: activation may succeed only when the selected rail
-# item and destination-owned content anchor are visible in the same synchronized observation.
+# item and destination-owned readiness anchor are visible in the same synchronized observation.
 foreach ($literal in @(
     'awaitRouteReady',
-    'routeAnchor.isPresent()',
     'U0 route activation',
     'selected=',
-    'anchorPresent=',
+    'readinessPresent=',
     'assertIsSelected()',
-    'navIsSelected(navTag) && routeAnchor.isPresent()'
+    'navIsSelected(navTag) && readinessAnchor.isPresent(navTag)'
 )) {
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing durable route-readiness evidence: $literal"
 }
@@ -90,4 +108,4 @@ foreach ($literal in @(
 
 Assert-DoesNotContainLiteral $probe 'Thread.sleep' 'UI characterization probe must not use arbitrary Thread.sleep for route setup.'
 
-Write-Host 'TV UI route setup characterization contract passed: setup uses Compose input while measured Left/Back/Right remain framework-driven.'
+Write-Host 'TV UI route setup characterization contract passed: setup uses Compose input, readiness is route-owned, and measured Left/Back/Right remain framework-driven.'
