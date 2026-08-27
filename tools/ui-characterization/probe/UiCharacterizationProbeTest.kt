@@ -175,8 +175,8 @@ class UiCharacterizationProbeTest {
         }
         val focusBeforeLeft = focusedNodeDescription()
 
-        // Sequence 1: content -> rail -> Back. This characterizes AppNavigation's BackHandler
-        // contract independently from the ordinary Right movement path.
+        // Sequence 1: content -> rail -> Back. A route/anchor disappearing after the measured Back
+        // is itself characterization evidence; it must not abort the remaining corpus.
         pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
         composeRule.waitForIdle()
         val duringBackRailBounds = anchorInteraction.bounds()
@@ -186,12 +186,19 @@ class UiCharacterizationProbeTest {
 
         pressKey(KeyEvent.KEYCODE_BACK)
         composeRule.waitForIdle()
-        val afterBackBounds = anchorInteraction.bounds()
+        val afterBackBounds = anchorInteraction.boundsOrNull()
         val focusAfterBack = focusedNodeDescription()
+        val routeSelectedAfterBack = navIsSelected(navTag)
+        val anchorPresentAfterBack = afterBackBounds != null
         screenshot(outputDirectory, "$destination-after-back")
 
-        // Sequence 2: content -> rail -> Right. Re-seed the content anchor when it is explicitly
-        // focusable so the Right trace cannot inherit accidental state from the Back sequence.
+        // Sequence 2 must be independent from Back. If Back removed the route or its anchor,
+        // restore the destination through the same bounded setup path before measuring Left/Right.
+        val rightSequenceRouteActivation = reopenRouteForRightTrace(
+            navTag = navTag,
+            readinessAnchor = readinessAnchor,
+            navigate = navigate,
+        )
         runCatching {
             anchorInteraction.requestFocus()
             composeRule.waitForIdle()
@@ -205,24 +212,31 @@ class UiCharacterizationProbeTest {
 
         pressKey(KeyEvent.KEYCODE_DPAD_RIGHT)
         composeRule.waitForIdle()
-        val afterRightBounds = anchorInteraction.bounds()
+        val afterRightBounds = anchorInteraction.boundsOrNull()
         val focusAfterRight = focusedNodeDescription()
+        val routeSelectedAfterRight = navIsSelected(navTag)
+        val anchorPresentAfterRight = afterRightBounds != null
         screenshot(outputDirectory, "$destination-after-right")
 
         val entry = JSONObject()
             .put("destination", destination)
             .put("navTag", navTag)
             .put("routeActivation", routeActivation)
-            .put("routeSelected", navIsSelected(navTag))
+            .put("rightSequenceRouteActivation", rightSequenceRouteActivation)
+            .put("routeSelected", routeSelectedAfterRight)
+            .put("routeSelectedAfterBack", routeSelectedAfterBack)
+            .put("anchorPresentAfterBack", anchorPresentAfterBack)
+            .put("routeSelectedAfterRight", routeSelectedAfterRight)
+            .put("anchorPresentAfterRight", anchorPresentAfterRight)
             .put("anchor", anchor.description)
             .put("anchorHasExplicitFocusAction", anchorInteraction.hasFocusAction)
             .put("beforeBounds", beforeBounds.toJson())
             .put("duringRailBounds", duringRightRailBounds.toJson())
             .put("duringBackRailBounds", duringBackRailBounds.toJson())
             .put("duringRightRailBounds", duringRightRailBounds.toJson())
-            .put("afterBounds", afterRightBounds.toJson())
-            .put("afterBackBounds", afterBackBounds.toJson())
-            .put("afterRightBounds", afterRightBounds.toJson())
+            .put("afterBounds", afterRightBounds.toJsonOrNull())
+            .put("afterBackBounds", afterBackBounds.toJsonOrNull())
+            .put("afterRightBounds", afterRightBounds.toJsonOrNull())
             .put("railBounds", railBounds.toJson())
             .put("focusInitial", beforeFocus)
             .put("focusBeforeLeft", focusBeforeLeft)
@@ -238,11 +252,39 @@ class UiCharacterizationProbeTest {
             .put("rightMovedFocusAwayFromRail", focusOnRailBeforeRight == navTag && focusAfterRight != navTag)
             .put("contentOriginStableDuringRail", beforeBounds.left == duringRightRailBounds.left)
             .put("contentOriginStableDuringBackRail", beforeBounds.left == duringBackRailBounds.left)
-            .put("contentOriginRestored", beforeBounds.left == afterRightBounds.left)
-            .put("contentOriginRestoredAfterBack", beforeBounds.left == afterBackBounds.left)
-            .put("contentOriginRestoredAfterRight", beforeBounds.left == afterRightBounds.left)
+            .put(
+                "contentOriginRestored",
+                afterRightBounds?.let { beforeBounds.left == it.left } ?: false,
+            )
+            .put(
+                "contentOriginRestoredAfterBack",
+                afterBackBounds?.let { beforeBounds.left == it.left } ?: false,
+            )
+            .put(
+                "contentOriginRestoredAfterRight",
+                afterRightBounds?.let { beforeBounds.left == it.left } ?: false,
+            )
 
         root.getJSONArray("destinations").put(entry)
+    }
+
+    private fun reopenRouteForRightTrace(
+        navTag: String,
+        readinessAnchor: ReadinessAnchor,
+        navigate: ((ReadinessAnchor) -> String)?,
+    ): String {
+        if (navIsSelected(navTag) && readinessAnchor.isPresent(navTag)) {
+            return "retained-after-back"
+        }
+
+        val reopen = checkNotNull(navigate) {
+            "Destination '$navTag' lost readiness after Back and has no bounded setup path."
+        }
+        val activation = reopen(readinessAnchor)
+        check(awaitRouteReady(navTag, readinessAnchor, timeoutMillis = 1_500)) {
+            "Destination '$navTag' could not be restored for independent Right characterization."
+        }
+        return activation
     }
 
     private fun openRailDestination(
@@ -437,6 +479,8 @@ class UiCharacterizationProbeTest {
         )
     }
 
+    private fun NodeHandle.boundsOrNull(): Rect? = runCatching { bounds() }.getOrNull()
+
     private fun focusedNodeDescription(): String? = knownFocusTags.firstOrNull { tag ->
         if (!nodeExists(tag)) {
             false
@@ -500,6 +544,8 @@ class UiCharacterizationProbeTest {
         .put("bottom", bottom.toDouble())
         .put("width", width.toDouble())
         .put("height", height.toDouble())
+
+    private fun Rect?.toJsonOrNull(): Any = this?.toJson() ?: JSONObject.NULL
 }
 
 private fun SemanticsNodeInteraction.press(key: Key): SemanticsNodeInteraction = apply {
