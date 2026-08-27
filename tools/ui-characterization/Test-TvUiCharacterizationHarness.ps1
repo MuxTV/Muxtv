@@ -89,6 +89,23 @@ foreach ($literal in @(
 )) {
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing required characterization primitive: $literal"
 }
+
+# U0 is characterization, not an assertion suite for the behavior under investigation. If measured
+# Back/Right removes the destination or its anchor, that is evidence and must be serialized instead
+# of aborting the corpus. The independent Right trace must then re-open the destination through the
+# same bounded setup path rather than inheriting Back's terminal state.
+foreach ($literal in @(
+    'private fun NodeHandle.boundsOrNull(): Rect?',
+    'routeSelectedAfterBack',
+    'anchorPresentAfterBack',
+    'routeSelectedAfterRight',
+    'anchorPresentAfterRight',
+    'rightSequenceRouteActivation',
+    'reopenRouteForRightTrace'
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe still aborts instead of recording route/anchor loss: $literal"
+}
+
 foreach ($forbidden in @(
     'import androidx.compose.ui.test.fetchSemanticsNode',
     'import androidx.compose.ui.test.fetchSemanticsNodes',
