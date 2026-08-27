@@ -51,6 +51,15 @@ foreach ($literal in @(
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing unified Compose route-setup primitive: $literal"
 }
 
+# Content editors such as Search can consume DirectionLeft without transferring focus to the rail.
+# A non-null content focus owner is therefore not proof that setup reached navigation. After the
+# bounded Compose Left attempt, setup must explicitly recover the already-selected rail item before
+# walking Down to the next destination.
+$editorSafeRailRecoveryPattern = '(?s)pressSetupKey\(focus, Key\.DirectionLeft\).*?focus\s*=\s*focusedNodeDescription\(\).*?if\s*\(!navigationTags\.contains\(focus\)\).*?recoverSelectedRailFocus\(navTag\)'
+if (-not [regex]::IsMatch($probe, $editorSafeRailRecoveryPattern)) {
+    throw 'Common U0 route setup must recover selected rail focus when Compose Left remains inside a content editor.'
+}
+
 # The geometry/focus characterization itself intentionally stays on Android framework input.
 # This is the measured seam and must not be conflated with setup-only Compose input.
 foreach ($literal in @(
@@ -122,4 +131,4 @@ foreach ($literal in @(
 
 Assert-DoesNotContainLiteral $probe 'Thread.sleep' 'UI characterization probe must not use arbitrary Thread.sleep for route setup.'
 
-Write-Host 'TV UI route setup characterization contract passed: setup uses Compose input, readiness is route-owned, and measured Left/Back/Right remain framework-driven.'
+Write-Host 'TV UI route setup characterization contract passed: setup uses Compose input, editor-safe rail recovery, route-owned readiness, and framework-driven measured Left/Back/Right.'
