@@ -4,13 +4,16 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -142,10 +145,14 @@ class UiCharacterizationProbeTest {
         destination: String,
         navTag: String,
         anchor: Anchor,
-        navigate: (() -> Unit)?,
+        navigate: (() -> String)?,
     ) {
-        navigate?.invoke()
+        val routeActivation = navigate?.invoke() ?: "already-selected"
         composeRule.waitForIdle()
+
+        check(navIsSelected(navTag)) {
+            "Destination '$navTag' was not selected before geometry capture."
+        }
 
         val anchorInteraction = anchor.resolve()
         val beforeBounds = anchorInteraction.bounds()
@@ -198,6 +205,8 @@ class UiCharacterizationProbeTest {
         val entry = JSONObject()
             .put("destination", destination)
             .put("navTag", navTag)
+            .put("routeActivation", routeActivation)
+            .put("routeSelected", navIsSelected(navTag))
             .put("anchor", anchor.description)
             .put("anchorHasExplicitFocusAction", anchorInteraction.hasFocusAction)
             .put("beforeBounds", beforeBounds.toJson())
@@ -229,7 +238,7 @@ class UiCharacterizationProbeTest {
         root.getJSONArray("destinations").put(entry)
     }
 
-    private fun openRailDestination(navTag: String) {
+    private fun openRailDestination(navTag: String): String {
         check(navigationTags.contains(navTag)) {
             "Unknown rail destination '$navTag'."
         }
@@ -247,9 +256,7 @@ class UiCharacterizationProbeTest {
 
         repeat(navigationTags.size) {
             if (focus == navTag) {
-                pressKey(KeyEvent.KEYCODE_ENTER)
-                composeRule.waitForIdle()
-                return
+                return activateFocusedRailDestination(navTag)
             }
 
             pressKey(KeyEvent.KEYCODE_DPAD_DOWN)
@@ -264,11 +271,84 @@ class UiCharacterizationProbeTest {
         failNavigationSetup(navTag, focus)
     }
 
-    private fun failNavigationSetup(navTag: String, focus: String?): Nothing {
+    /**
+     * Route activation is deterministic setup, not the Left/Back/Right behavior being measured.
+     * First try the two Android-framework TV key paths. If neither publishes the selected route,
+     * fall back to the exact Compose Enter path already proven by immutable A's smoke test. The
+     * selected navigation semantics is the route oracle; localized title text is only resolved
+     * after that route transition has been independently observed.
+     */
+    private fun activateFocusedRailDestination(navTag: String): String {
+        val attempts = mutableListOf<String>()
+
+        fun attempt(label: String, action: () -> Unit): Boolean {
+            attempts += label
+            action()
+            composeRule.waitForIdle()
+            return awaitNavSelected(navTag)
+        }
+
+        if (attempt("framework-enter") { pressKey(KeyEvent.KEYCODE_ENTER) }) {
+            return "framework-enter"
+        }
+
+        requestNavFocus(navTag)
+        if (attempt("framework-dpad-center") { pressKey(KeyEvent.KEYCODE_DPAD_CENTER) }) {
+            return "framework-dpad-center"
+        }
+
+        requestNavFocus(navTag)
+        if (
+            attempt("compose-enter") {
+                composeRule.onNodeWithTag(navTag, useUnmergedTree = true).performKeyInput {
+                    keyDown(Key.Enter)
+                    keyUp(Key.Enter)
+                }
+            }
+        ) {
+            return "compose-enter"
+        }
+
+        failNavigationSetup(navTag, focusedNodeDescription(), attempts)
+    }
+
+    private fun requestNavFocus(navTag: String) {
+        composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.waitForIdle()
+    }
+
+    private fun awaitNavSelected(
+        navTag: String,
+        timeoutMillis: Long = 1_500,
+    ): Boolean = runCatching {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            navIsSelected(navTag)
+        }
+        true
+    }.getOrDefault(false)
+
+    private fun navIsSelected(tag: String): Boolean =
+        if (!nodeExists(tag)) {
+            false
+        } else {
+            runCatching {
+                composeRule.onNodeWithTag(tag, useUnmergedTree = true).assertIsSelected()
+                true
+            }.getOrDefault(false)
+        }
+
+    private fun failNavigationSetup(
+        navTag: String,
+        focus: String?,
+        attempts: List<String> = emptyList(),
+    ): Nothing {
+        val selected = navigationTags.filter(::navIsSelected)
         val tree = composeRule.onRoot(useUnmergedTree = true).printToString(maxDepth = 100)
         throw IllegalStateException(
-            "Unable to navigate to '$navTag' through the TV rail. Focus owner: '$focus'.\n" +
-                "Unmerged semantics:\n$tree",
+            "Unable to navigate to '$navTag' through the TV rail. " +
+                "Focus owner: '$focus'. Selected destinations: $selected. " +
+                "Activation attempts: $attempts.\nUnmerged semantics:\n$tree",
         )
     }
 
