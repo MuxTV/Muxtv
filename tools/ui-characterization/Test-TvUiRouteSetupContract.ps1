@@ -23,37 +23,71 @@ function Assert-ContainsLiteral {
     }
 }
 
-# Route setup is not geometry evidence. It must prove that the requested destination became
-# selected before the probe resolves a content anchor. The three activation paths deliberately
-# distinguish framework key dispatch from the immutable-A Compose key path that is already known
-# to open a rail destination successfully.
-foreach ($literal in @(
-    'assertIsSelected()',
-    'KEYCODE_DPAD_CENTER',
-    'performKeyInput',
-    'framework-enter',
-    'framework-dpad-center',
-    'compose-enter',
-    'routeActivation'
-)) {
-    Assert-ContainsLiteral $probe $literal "Common U0 probe is missing route-setup characterization primitive: $literal"
+function Assert-DoesNotContainLiteral {
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][string]$Literal,
+        [Parameter(Mandatory)][string]$Failure
+    )
+
+    if ($Text.IndexOf($Literal, [System.StringComparison]::Ordinal) -ge 0) {
+        throw $Failure
+    }
 }
 
-# A transient Selected=true is not sufficient: the previous GREEN candidate observed it while the
-# content tree was still Home. Activation may succeed only after both the selected rail item and
-# the destination-owned anchor are visible in the same synchronized observation.
+# Route setup is not measurement evidence. Immutable A already proves the TV rail with Compose
+# performKeyInput, so setup must use one synchronized Compose input seam end-to-end rather than
+# mixing framework Left/Down/Enter with a late Compose fallback.
+foreach ($literal in @(
+    'private fun openRailDestination(',
+    'private fun pressSetupKey(tag: String, key: Key)',
+    '.assertIsFocused()',
+    '.press(key)',
+    'pressSetupKey(focus, Key.DirectionLeft)',
+    'pressSetupKey(focus, Key.DirectionDown)',
+    'pressSetupKey(navTag, Key.Enter)',
+    'compose-enter'
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe is missing unified Compose route-setup primitive: $literal"
+}
+
+# The geometry/focus characterization itself intentionally stays on Android framework input.
+# This is the measured seam and must not be conflated with setup-only Compose input.
+foreach ($literal in @(
+    'private fun pressKey(keyCode: Int)',
+    'instrumentation.sendKeyDownUpSync(keyCode)',
+    'pressKey(KeyEvent.KEYCODE_DPAD_LEFT)',
+    'pressKey(KeyEvent.KEYCODE_BACK)',
+    'pressKey(KeyEvent.KEYCODE_DPAD_RIGHT)'
+)) {
+    Assert-ContainsLiteral $probe $literal "Common U0 probe lost required framework measurement input: $literal"
+}
+
+# A transient Selected=true is not sufficient: activation may succeed only when the selected rail
+# item and destination-owned content anchor are visible in the same synchronized observation.
 foreach ($literal in @(
     'awaitRouteReady',
     'routeAnchor.isPresent()',
     'U0 route activation',
     'selected=',
-    'anchorPresent='
+    'anchorPresent=',
+    'assertIsSelected()',
+    'navIsSelected(navTag) && routeAnchor.isPresent()'
 )) {
     Assert-ContainsLiteral $probe $literal "Common U0 probe is missing durable route-readiness evidence: $literal"
 }
 
-# A title can remain a geometry anchor for immutable historical refs, but it must never again be
-# the sole evidence that navigation happened.
-Assert-ContainsLiteral $probe 'navIsSelected(navTag) && routeAnchor.isPresent()' 'Route readiness must couple selected-navigation state with destination content presence.'
+# Framework Enter/Center are setup-only in the current probe. Keeping them would preserve the
+# mixed input path that the immutable-A smoke test and current U0 failure have isolated.
+foreach ($literal in @(
+    'KEYCODE_ENTER',
+    'KEYCODE_DPAD_CENTER',
+    'framework-enter',
+    'framework-dpad-center'
+)) {
+    Assert-DoesNotContainLiteral $probe $literal "Common U0 probe still mixes framework activation into route setup: $literal"
+}
 
-Write-Host 'TV UI route setup characterization contract passed.'
+Assert-DoesNotContainLiteral $probe 'Thread.sleep' 'UI characterization probe must not use arbitrary Thread.sleep for route setup.'
+
+Write-Host 'TV UI route setup characterization contract passed: setup uses Compose input while measured Left/Back/Right remain framework-driven.'
