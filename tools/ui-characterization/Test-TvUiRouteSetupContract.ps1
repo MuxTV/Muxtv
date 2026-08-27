@@ -75,7 +75,7 @@ foreach ($literal in @(
     'readinessAnchor.isPresent(navTag)',
     'ReadinessAnchor.ContentTitle("Эфир")',
     'ReadinessAnchor.Tag("guide-status")',
-    'ReadinessAnchor.Tag("search-field")',
+    'ReadinessAnchor.Tag("search-input")',
     'ReadinessAnchor.Tag("settings-section-sources")',
     'anchor = Anchor.Title("Эфир")'
 )) {
