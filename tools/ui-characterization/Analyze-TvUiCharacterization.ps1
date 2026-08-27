@@ -63,6 +63,16 @@ function Get-OptionalBoolean {
     return [bool]$property.Value
 }
 
+function Get-OptionalValue {
+    param(
+        [Parameter(Mandatory)][object]$Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
 $caseRecords = [System.Collections.Generic.List[object]]::new()
 $destinationRecords = [System.Collections.Generic.List[object]]::new()
 
@@ -153,7 +163,7 @@ foreach ($manifestFile in $manifestFiles) {
             focusAfterBack = $destination.focusAfterBack
             focusBeforeSecondLeft = $destination.focusBeforeSecondLeft
             focusOnRailBeforeRight = $destination.focusOnRailBeforeRight
-            focusAfterRight = $destination.focusAfterRight
+            focusAfterRight = Get-OptionalValue -Object $destination -Name 'focusAfterRight'
         })
     }
 }
