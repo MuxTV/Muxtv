@@ -54,11 +54,19 @@ foreach ($literal in @(
 # Content editors such as Search can consume DirectionLeft without transferring focus to the rail.
 # A non-null content focus owner is therefore not proof that setup reached navigation. After the
 # bounded Compose Left attempt, setup must explicitly recover the already-selected rail item before
-# walking Down to the next destination.
-$editorSafeRailRecoveryPattern = '(?s)pressSetupKey\(focus, Key\.DirectionLeft\).*?focus\s*=\s*focusedNodeDescription\(\).*?if\s*\(!navigationTags\.contains\(focus\)\).*?recoverSelectedRailFocus\(navTag\)'
-if (-not [regex]::IsMatch($probe, $editorSafeRailRecoveryPattern)) {
-    throw 'Common U0 route setup must recover selected rail focus when Compose Left remains inside a content editor.'
-}
+# walking Down to the next destination. Keep this as a local sequence so a later helper call cannot
+# accidentally satisfy the contract.
+$editorSafeRailRecovery = @'
+pressSetupKey(focus, Key.DirectionLeft)
+            focus = focusedNodeDescription()
+            if (!navigationTags.contains(focus)) {
+                focus = recoverSelectedRailFocus(navTag)
+            }
+'@
+Assert-ContainsLiteral `
+    $probe `
+    $editorSafeRailRecovery.Trim() `
+    'Common U0 route setup must recover selected rail focus when Compose Left remains inside a content editor.'
 
 # The geometry/focus characterization itself intentionally stays on Android framework input.
 # This is the measured seam and must not be conflated with setup-only Compose input.
