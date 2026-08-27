@@ -9,54 +9,28 @@ permissions:
 
 concurrency:
   group: integration-acceptance-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 jobs:
-  integration:
-    name: Full + Android TV DeviceMatrix
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 240
-
+  host:
+    name: Integration host Full
+    runs-on: windows-latest
+    timeout-minutes: 120
     steps:
       - name: Checkout selected integration SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
           ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
       - name: Verify exact integration commit
         shell: pwsh
         run: |
           & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit "${{ github.sha }}"
-
-      - name: Preflight integration runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 26,36
-
-      - name: Initialize Android SDK and validate harness
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          & .\tools\android\Test-TvHarnessSyntax.ps1
 
       - name: Run full host validation once
         shell: pwsh
@@ -70,36 +44,107 @@ jobs:
             -SourceCommit $env:MUXTV_SOURCE_COMMIT `
             -NoDaemon
 
-      - name: Run Android TV old-edge and current matrix once
-        shell: pwsh
-        env:
-          MUXTV_SOURCE_BRANCH: ${{ github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.sha }}
-        run: |
-          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceMatrix `
-            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
-            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -SkipHostValidation `
-            -NoDaemon
-
-      - name: Upload integration acceptance evidence
+      - name: Upload host integration evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: integration-acceptance-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: integration-host-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/**/*.json
             .work/evidence/**/*.log
             .work/evidence/**/*.txt
-            .work/evidence/**/*.png
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
-          retention-days: 14
+          retention-days: 7
           github-token: ${{ github.token }}
 
-      - name: Reset Android runner state
+  device:
+    name: Integration Android TV API${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            arch: x86
+            avd: MuxTV_TV_OLD_API26
+            ram: 1536M
+          - api: 36
+            arch: x86_64
+            avd: MuxTV_TV_CURRENT_API36
+            ram: 2048M
+
+    steps:
+      - name: Checkout selected integration SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/integration/api-${{ matrix.api }}
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run integration Android TV API${{ matrix.api }} matrix
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
+          MUXTV_DEVICE_EVIDENCE: .work/evidence/integration/api-${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: android-tv
+          arch: ${{ matrix.arch }}
+          profile: tv_1080p
+          avd-name: ${{ matrix.avd }}
+          force-avd-creation: true
+          cores: 2
+          ram-size: ${{ matrix.ram }}
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh
+
+      - name: Upload integration device evidence
         if: always()
-        shell: pwsh
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: integration-api${{ matrix.api }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/integration/api-${{ matrix.api }}/**
+            catalog/importer/build/outputs/androidTest-results/**
+            catalog/refresh/build/outputs/androidTest-results/**
+            core/credentials/build/outputs/androidTest-results/**
+            core/database/build/outputs/androidTest-results/**
+            player/media3/build/outputs/androidTest-results/**
+            app/tv/build/outputs/androidTest-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+  acceptance:
+    name: Full + Android TV DeviceMatrix
+    if: always()
+    needs:
+      - host
+      - device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require host and device acceptance
+        shell: bash
+        env:
+          HOST_RESULT: ${{ needs.host.result }}
+          DEVICE_RESULT: ${{ needs.device.result }}
         run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
+          set -euo pipefail
+          if [[ "$HOST_RESULT" != "success" || "$DEVICE_RESULT" != "success" ]]; then
+            echo "Integration acceptance failed: host=$HOST_RESULT device=$DEVICE_RESULT" >&2
+            exit 1
+          fi
+          echo "Integration acceptance passed: Full host + canonical API26/API36 Android TV matrix."

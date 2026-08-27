@@ -9,9 +9,13 @@ on:
       - 'tools/android/**'
       - 'tools/measurements/**'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
-      - 'tools/ci/Assert-EvidenceCommit.ps1'
-      - 'tools/ci/Assert-SelfHostedRunnerPreflight.ps1'
-      - 'tools/ci/Reset-SelfHostedAndroidState.ps1'
+      - 'tools/ci/Assert-AndroidTestResults.ps1'
+      - 'tools/ci/Run-HostedAndroidProductTests.sh'
+      - 'tools/ci/Enable-HostedAndroidKvm.sh'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
   workflow_dispatch:
 
 permissions:
@@ -23,102 +27,106 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  validate:
-    name: Android TV product device matrix
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 240
+  device:
+    name: Android TV device API${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            arch: x86
+            avd: MuxTV_TV_OLD_API26
+            ram: 1536M
+          - api: 36
+            arch: x86_64
+            avd: MuxTV_TV_CURRENT_API36
+            ram: 2048M
 
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Verify evidence commit provenance
-        shell: pwsh
-        run: |
-          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
-
-      - name: Preflight dedicated self-hosted runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 26,36
-
-      - name: Initialize Android SDK and validate harness
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          & .\tools\android\Test-TvHarnessSyntax.ps1
-
-      - name: Run exact API26 and API36 product matrix
-        shell: pwsh
+      - name: Verify exact source commit
+        shell: bash
         env:
-          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceMatrix `
-            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
-            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -NoDaemon
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$EXPECTED_SHA" ]]; then
+            echo "Expected exact source $EXPECTED_SHA, got $actual" >&2
+            exit 1
+          fi
 
-      - name: Record repository AVD inventory
-        if: always()
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $evidenceDirectory = ".work\evidence\avd-inventory"
-          New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/hosted-android/api-${{ matrix.api }}
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1
-          . .\tools\android\AndroidSdk.ps1
-          $tools = Get-AndroidSdkTools
-          $avdInventory = @(& $tools.AvdManager list avd -c 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            throw "Unable to enumerate Android Virtual Devices after the matrix run."
-          }
-          $avdInventory | Set-Content -Path (Join-Path $evidenceDirectory "avd-inventory.txt") -Encoding utf8
+      - name: Run Android TV API${{ matrix.api }} connected tests
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
+          MUXTV_DEVICE_EVIDENCE: .work/evidence/hosted-android/api-${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: android-tv
+          arch: ${{ matrix.arch }}
+          profile: tv_1080p
+          avd-name: ${{ matrix.avd }}
+          force-avd-creation: true
+          cores: 2
+          ram-size: ${{ matrix.ram }}
+          heap-size: 256M
+          disk-size: 4G
+          enable-hw-keyboard: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh
 
-          & .\tools\android\Remove-LegacyMuxTvAvds.ps1 *>&1 |
-            Tee-Object -FilePath (Join-Path $evidenceDirectory "legacy-muxtv-avds-dry-run.txt")
-
-      - name: Upload product matrix evidence
+      - name: Upload API${{ matrix.api }} product evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: android-tv-product-device-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: android-tv-api${{ matrix.api }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .work/evidence/**/*.json
-            .work/evidence/**/*.log
-            .work/evidence/**/*.txt
-            .work/evidence/**/*.png
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
-          retention-days: 14
+            .work/evidence/hosted-android/api-${{ matrix.api }}/**
+            catalog/importer/build/outputs/androidTest-results/**
+            catalog/refresh/build/outputs/androidTest-results/**
+            core/credentials/build/outputs/androidTest-results/**
+            core/database/build/outputs/androidTest-results/**
+            player/media3/build/outputs/androidTest-results/**
+            app/tv/build/outputs/androidTest-results/**
+          retention-days: 7
           github-token: ${{ github.token }}
 
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
+  gate:
+    name: Android TV product device matrix
+    if: always()
+    needs:
+      - device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require API26 and API36 matrix success
+        shell: bash
+        env:
+          DEVICE_RESULT: ${{ needs.device.result }}
         run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
+          set -euo pipefail
+          if [[ "$DEVICE_RESULT" != "success" ]]; then
+            echo "Android TV hosted device matrix result: $DEVICE_RESULT" >&2
+            exit 1
+          fi
+          echo "Android TV hosted device matrix passed for canonical API26 and API36 jobs."

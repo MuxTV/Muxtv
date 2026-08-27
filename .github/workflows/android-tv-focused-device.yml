@@ -18,12 +18,10 @@ on:
       - player/media3/**
       - core/designsystem/**
       - core/ui/**
-      - tools/android/Invoke-TvDeviceValidation.ps1
-      - tools/android/AndroidSdk.ps1
-      - tools/android/Initialize-AndroidSdkEnvironment.ps1
-      - tools/ci/Assert-EvidenceCommit.ps1
-      - tools/ci/Assert-SelfHostedRunnerPreflight.ps1
-      - tools/ci/Reset-SelfHostedAndroidState.ps1
+      - tools/ci/Assert-AndroidTestResults.ps1
+      - tools/ci/Run-HostedAndroidProductTests.sh
+      - tools/ci/Enable-HostedAndroidKvm.sh
+      - '.github/workflows/android-tv-focused-device.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,81 +35,72 @@ concurrency:
 jobs:
   validate:
     name: Android TV focused device
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Windows, X64, muxtv-android, muxtv-device]
-    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
-      - name: Checkout without pre-clean
+      - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          clean: false
-          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
-      - name: Clean workspace with Windows long paths
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          git config --local core.longpaths true
-          if ($LASTEXITCODE -ne 0) { throw "Failed to enable Git long paths." }
-          git reset --hard HEAD
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset workspace." }
-          $cleanOutput = (& git clean -ffdx 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) { throw "Failed to clean workspace.`n$cleanOutput" }
-          $dirty = (& git status --porcelain=v1 2>&1 | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $dirty) { throw "Workspace remains dirty after reset/clean.`n$dirty" }
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Verify evidence commit provenance
-        shell: pwsh
-        run: |
-          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
-
-      - name: Preflight focused device runner
-        shell: pwsh
-        run: |
-          & .\tools\ci\Assert-SelfHostedRunnerPreflight.ps1 `
-            -RequireNoConnectedDevice `
-            -ExpectedRunnerLabels muxtv-android,muxtv-device `
-            -ExpectedSystemImageApis 36
-
-      - name: Initialize Android SDK and validate harness
-        shell: pwsh
-        run: |
-          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
-          & .\tools\android\Test-TvHarnessSyntax.ps1
-
-      - name: Run current Android TV focused evidence
-        shell: pwsh
+      - name: Verify exact source commit
+        shell: bash
         env:
-          MUXTV_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
-          & .\tools\android\Invoke-TvDeviceValidation.ps1 `
-            -Mode DeviceCurrent `
-            -SourceBranch $env:MUXTV_SOURCE_BRANCH `
-            -SourceCommit $env:MUXTV_SOURCE_COMMIT `
-            -SkipHostValidation `
-            -NoDaemon
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$EXPECTED_SHA" ]]; then
+            echo "Expected exact source $EXPECTED_SHA, got $actual" >&2
+            exit 1
+          fi
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/hosted-android/focused-api36
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run focused Android TV API36 connected tests
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+          MUXTV_DEVICE_EVIDENCE: .work/evidence/hosted-android/focused-api36
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          enable-hw-keyboard: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh
 
       - name: Upload focused device evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: android-tv-focused-device-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: android-tv-focused-api36-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .work/evidence/**/*.json
-            .work/evidence/**/*.log
-            .work/evidence/**/*.txt
-            .work/evidence/**/*.png
-            **/build/reports/androidTests/**
-            **/build/outputs/androidTest-results/**
+            .work/evidence/hosted-android/focused-api36/**
+            catalog/importer/build/outputs/androidTest-results/**
+            catalog/refresh/build/outputs/androidTest-results/**
+            core/credentials/build/outputs/androidTest-results/**
+            core/database/build/outputs/androidTest-results/**
+            player/media3/build/outputs/androidTest-results/**
+            app/tv/build/outputs/androidTest-results/**
           retention-days: 7
           github-token: ${{ github.token }}
-
-      - name: Reset Android runner state
-        if: always()
-        shell: pwsh
-        run: |
-          & .\tools\ci\Reset-SelfHostedAndroidState.ps1
