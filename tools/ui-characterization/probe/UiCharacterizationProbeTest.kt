@@ -299,7 +299,12 @@ class UiCharacterizationProbeTest {
         var focus = focusedNodeDescription() ?: recoverSelectedRailFocus(navTag)
         if (!navigationTags.contains(focus)) {
             pressSetupKey(focus, Key.DirectionLeft)
-            focus = focusedNodeDescription() ?: recoverSelectedRailFocus(navTag)
+            val afterLeftFocus = focusedNodeDescription()
+            focus = if (afterLeftFocus != null && navigationTags.contains(afterLeftFocus)) {
+                afterLeftFocus
+            } else {
+                recoverSelectedRailFocus(navTag)
+            }
         }
 
         if (!navigationTags.contains(focus)) {
