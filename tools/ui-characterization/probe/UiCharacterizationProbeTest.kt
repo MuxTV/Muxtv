@@ -222,20 +222,13 @@ class UiCharacterizationProbeTest {
     }
 
     private fun openRailDestination(navTag: String) {
+        // Route selection is deterministic setup, not part of the D-pad behavior under
+        // characterization. The previous RequestFocus + framework ENTER setup is invalid on
+        // immutable A: the rail node acquires semantics focus but ENTER is not delivered as its
+        // OnClick action, leaving Home selected. Invoke the stable semantics click directly and
+        // reserve framework key injection for the measured Left/Back/Right traces below.
         composeRule.onNodeWithTag(navTag, useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.RequestFocus)
-        composeRule.waitForIdle()
-
-        val focusBeforeEnter = focusedNodeDescription()
-        if (focusBeforeEnter != navTag) {
-            val tree = composeRule.onRoot(useUnmergedTree = true).printToString(maxDepth = 100)
-            throw IllegalStateException(
-                "Navigation focus mismatch before Enter: expected '$navTag', actual '$focusBeforeEnter'.\n" +
-                    "Unmerged semantics:\n$tree",
-            )
-        }
-
-        pressKey(KeyEvent.KEYCODE_ENTER)
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
     }
 
