@@ -218,7 +218,7 @@ for item in "${COMPARISONS[@]}"; do
     if (( instrumentation_status != 0 )); then
       instrumentation_passed=false
     fi
-    if ! grep -Fq 'INSTRUMENTATION_CODE: -1' "$case_dir/instrumentation.log"; then
+    if ! grep -Fq 'OK (1 test)' "$case_dir/instrumentation.log"; then
       instrumentation_passed=false
     fi
     if grep -Eq 'FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_ABORTED|Process crashed' "$case_dir/instrumentation.log"; then
