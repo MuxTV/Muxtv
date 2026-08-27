@@ -6,6 +6,7 @@ import android.view.KeyEvent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -246,14 +247,13 @@ class UiCharacterizationProbeTest {
             "Unknown rail destination '$navTag'."
         }
 
-        var focus = focusedNodeDescription()
-        if (focus == null || !navigationTags.contains(focus)) {
-            pressKey(KeyEvent.KEYCODE_DPAD_LEFT)
-            composeRule.waitForIdle()
-            focus = focusedNodeDescription()
+        var focus = focusedNodeDescription() ?: recoverSelectedRailFocus(navTag)
+        if (!navigationTags.contains(focus)) {
+            pressSetupKey(focus, Key.DirectionLeft)
+            focus = focusedNodeDescription() ?: recoverSelectedRailFocus(navTag)
         }
 
-        if (focus == null || !navigationTags.contains(focus)) {
+        if (!navigationTags.contains(focus)) {
             failNavigationSetup(navTag, focus)
         }
 
@@ -262,11 +262,10 @@ class UiCharacterizationProbeTest {
                 return activateFocusedRailDestination(navTag, routeAnchor)
             }
 
-            pressKey(KeyEvent.KEYCODE_DPAD_DOWN)
-            composeRule.waitForIdle()
-            focus = focusedNodeDescription()
+            pressSetupKey(focus, Key.DirectionDown)
+            focus = focusedNodeDescription() ?: recoverSelectedRailFocus(navTag)
 
-            if (focus == null || !navigationTags.contains(focus)) {
+            if (!navigationTags.contains(focus)) {
                 failNavigationSetup(navTag, focus)
             }
         }
@@ -276,52 +275,49 @@ class UiCharacterizationProbeTest {
 
     /**
      * Route activation is deterministic setup, not the Left/Back/Right behavior being measured.
-     * First try the two Android-framework TV key paths. If neither publishes both the requested
-     * selected rail state and destination-owned content, fall back to the exact Compose Enter path
-     * already proven by immutable A's smoke test. This prevents a transient Selected=true state
-     * from being mistaken for a completed Navigation3 route transition.
+     * The immutable A/B/C smoke tests already exercise rail activation with Compose performKeyInput,
+     * so U0 uses that same synchronized input seam rather than mixing framework Enter/Center with a
+     * late Compose fallback. Success still requires selected route and destination content together.
      */
     private fun activateFocusedRailDestination(
         navTag: String,
         routeAnchor: Anchor,
     ): String {
-        val attempts = mutableListOf<String>()
-
-        fun attempt(label: String, action: () -> Unit): Boolean {
-            attempts += label
-            action()
-            composeRule.waitForIdle()
-            val ready = awaitRouteReady(navTag, routeAnchor)
-            println(
-                "U0 route activation: label=$label nav=$navTag ready=$ready " +
-                    "selected=${navIsSelected(navTag)} anchorPresent=${routeAnchor.isPresent()} " +
-                    "focus=${focusedNodeDescription()}",
-            )
-            return ready
+        val label = "compose-enter"
+        pressSetupKey(navTag, Key.Enter)
+        val ready = awaitRouteReady(navTag, routeAnchor)
+        println(
+            "U0 route activation: label=$label nav=$navTag ready=$ready " +
+                "selected=${navIsSelected(navTag)} anchorPresent=${routeAnchor.isPresent()} " +
+                "focus=${focusedNodeDescription()}",
+        )
+        if (ready) {
+            return label
         }
 
-        if (attempt("framework-enter") { pressKey(KeyEvent.KEYCODE_ENTER) }) {
-            return "framework-enter"
+        failNavigationSetup(navTag, focusedNodeDescription(), listOf(label))
+    }
+
+    private fun pressSetupKey(tag: String, key: Key) {
+        composeRule.onNodeWithTag(tag, useUnmergedTree = true)
+            .assertIsFocused()
+            .press(key)
+        composeRule.waitForIdle()
+    }
+
+    private fun recoverSelectedRailFocus(navTag: String): String {
+        val selected = navigationTags.filter(::navIsSelected)
+        if (selected.size != 1) {
+            failNavigationSetup(navTag, focusedNodeDescription())
         }
 
-        requestNavFocus(navTag)
-        if (attempt("framework-dpad-center") { pressKey(KeyEvent.KEYCODE_DPAD_CENTER) }) {
-            return "framework-dpad-center"
+        val selectedTag = selected.single()
+        requestNavFocus(selectedTag)
+        val focus = focusedNodeDescription()
+        if (focus != selectedTag) {
+            failNavigationSetup(navTag, focus)
         }
-
-        requestNavFocus(navTag)
-        if (
-            attempt("compose-enter") {
-                composeRule.onNodeWithTag(navTag, useUnmergedTree = true).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
-            }
-        ) {
-            return "compose-enter"
-        }
-
-        failNavigationSetup(navTag, focusedNodeDescription(), attempts)
+        return selectedTag
     }
 
     private fun requestNavFocus(navTag: String) {
@@ -489,4 +485,11 @@ class UiCharacterizationProbeTest {
         .put("bottom", bottom.toDouble())
         .put("width", width.toDouble())
         .put("height", height.toDouble())
+}
+
+private fun SemanticsNodeInteraction.press(key: Key): SemanticsNodeInteraction = apply {
+    performKeyInput {
+        keyDown(key)
+        keyUp(key)
+    }
 }
