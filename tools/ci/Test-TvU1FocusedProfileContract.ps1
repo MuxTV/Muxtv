@@ -29,6 +29,7 @@ $focusedWorkflow = Get-RepositoryFileContent ".github\workflows\android-tv-focus
 $productMatrix = Get-RepositoryFileContent ".github\workflows\android-tv-product-device-matrix.yml"
 $productEntrypoint = Get-RepositoryFileContent "tools\ci\Run-HostedAndroidProductTests.sh"
 $u1Entrypoint = Get-RepositoryFileContent "tools\ci\Run-HostedTvU1ShellTests.sh"
+$homeProbe = Get-RepositoryFileContent "app\tv\src\androidTest\kotlin\app\muxtv\U1HomeGeometryProbeTest.kt"
 
 foreach ($token in @(
     'tools/ci/Run-HostedTvU1ShellTests.sh',
@@ -42,12 +43,15 @@ foreach ($token in @(
 foreach ($token in @(
     'MuxTV_TV_CURRENT_API36',
     'app.muxtv.RailNavigationJourneyTest',
+    'app.muxtv.U1HomeGeometryProbeTest',
     '1920x1080',
     '1280x720',
     '213',
     '320',
     'wm size',
     'wm density',
+    'u1-home-geometry',
+    'probe-result.json',
     'OK \([0-9]+ tests?\)',
     'FAILURES!!!',
     'profile-result.json'
@@ -55,9 +59,27 @@ foreach ($token in @(
     Assert-ContainsOrdinal -Content $u1Entrypoint -Token $token -Message "U1 focused-profile entrypoint is missing fail-closed token: $token"
 }
 
+foreach ($token in @(
+    'getExternalFilesDir("u1-home-geometry")',
+    'KEYCODE_DPAD_LEFT',
+    'KEYCODE_BACK',
+    'KEYCODE_DPAD_RIGHT',
+    '"beforeBounds"',
+    '"duringBackRailBounds"',
+    '"duringRightRailBounds"',
+    '"afterBackBounds"',
+    '"afterRightBounds"',
+    '"railBounds"',
+    '"contentOriginStableDuringRail"',
+    '"contentOriginRestoredAfterBack"',
+    '"contentOriginRestoredAfterRight"'
+)) {
+    Assert-ContainsOrdinal -Content $homeProbe -Token $token -Message "U1 Home geometry probe is missing U0-compatible evidence token: $token"
+}
+
 foreach ($token in @('MUXTV_REPRESENTATIVE_TV_PROFILE_GATE', 'RailNavigationJourneyTest', '1280x720')) {
     Assert-NotContainsOrdinal -Content $productEntrypoint -Token $token -Message "Generic Android product entrypoint still owns U1-only profile behavior: $token"
 }
 Assert-NotContainsOrdinal -Content $productMatrix -Token 'Run-HostedTvU1ShellTests.sh' -Message 'Generic Android product matrix must not own the U1 focused-profile entrypoint.'
 
-Write-Host "U1 representative TV profile execution is isolated to the focused API36 lane."
+Write-Host "U1 representative TV profiles and post-shell Home geometry evidence are isolated to the focused API36 lane."
