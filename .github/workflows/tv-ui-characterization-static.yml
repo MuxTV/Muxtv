@@ -48,6 +48,10 @@ jobs:
         shell: pwsh
         run: .\tools\ui-characterization\Test-TvUiCharacterizationHarness.ps1
 
+      - name: Verify route setup input characterization contract
+        shell: pwsh
+        run: .\tools\ui-characterization\Test-TvUiRouteSetupContract.ps1
+
       - name: Verify immutable A B C probe source anchors
         shell: pwsh
         run: .\tools\ui-characterization\Test-TvUiProbeAnchorCompatibility.ps1
