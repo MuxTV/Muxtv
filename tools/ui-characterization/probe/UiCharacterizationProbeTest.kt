@@ -385,30 +385,22 @@ class UiCharacterizationProbeTest {
         composeRule.onAllNodesWithTag(tag, useUnmergedTree = true)
             .fetchSemanticsNodes().isNotEmpty()
 
+    private fun exactTextNodeCount(text: String): Int =
+        composeRule.onAllNodesWithText(
+            text = text,
+            substring = false,
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().size
+
     private fun boundsForUniqueTag(tag: String): Rect {
         val nodes = composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         check(nodes.size == 1) { "Expected one semantics node for tag '$tag', got ${nodes.size}." }
         return nodes.single().boundsInRoot
     }
 
-    private fun navigationRailRight(): Float = navigationTags
-        .flatMap { tag ->
-            composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
-        }
-        .maxOf { node -> node.boundsInRoot.right }
-
     private fun ReadinessAnchor.isPresent(navTag: String): Boolean = when (this) {
         is ReadinessAnchor.Tag -> nodeExists(tag)
-        is ReadinessAnchor.ContentTitle -> {
-            val railRight = runCatching { navigationRailRight() }.getOrElse { return false }
-            composeRule.onAllNodesWithText(
-                text = text,
-                substring = false,
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes().any { node ->
-                node.boundsInRoot.left >= railRight && node.boundsInRoot.width > 0f
-            }
-        }
+        is ReadinessAnchor.ContentTitle -> exactTextNodeCount(text) >= 2
     }
 
     private fun Anchor.resolve(): NodeHandle = when (this) {
