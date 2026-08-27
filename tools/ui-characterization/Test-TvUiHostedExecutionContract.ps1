@@ -58,7 +58,7 @@ foreach ($token in @(
     'wm size reset',
     'wm density reset',
     'connectedDebugAndroidTest',
-    'adb pull'
+    'adb -s "$ANDROID_SERIAL" pull'
 )) { Require-Token -Text $entrypoint -Token $token -Owner 'Hosted U0 entrypoint' }
 
 foreach ($token in @('avdmanager create avd', 'emulator @', 'sdkmanager --install')) {
