@@ -1,5 +1,7 @@
 package app.muxtv.navigation
 
+import androidx.compose.ui.unit.dp
+import app.muxtv.designsystem.TvTokens
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -26,5 +28,12 @@ class AppNavigationModelTest {
     @Test
     fun `add source route carries no locator or preparation token`() {
         assertThat(AppDestination.AddSource.toString()).isEqualTo("AddSource")
+    }
+
+    @Test
+    fun `u1 content reservation stays collapsed while rail is visible`() {
+        assertThat(railContentReservation(railVisible = true))
+            .isEqualTo(TvTokens.Size.railCollapsed)
+        assertThat(railContentReservation(railVisible = false)).isEqualTo(0.dp)
     }
 }
