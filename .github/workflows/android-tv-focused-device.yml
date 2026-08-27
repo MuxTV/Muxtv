@@ -72,6 +72,7 @@ jobs:
         env:
           MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
           MUXTV_DEVICE_EVIDENCE: .work/evidence/hosted-android/focused-api36
+          MUXTV_REPRESENTATIVE_TV_PROFILE_GATE: "true"
         with:
           api-level: 36
           target: android-tv
