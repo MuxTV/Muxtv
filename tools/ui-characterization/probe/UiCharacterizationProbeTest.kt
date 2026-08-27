@@ -99,6 +99,7 @@ class UiCharacterizationProbeTest {
             destination = "home",
             navTag = "nav-home",
             anchor = Anchor.Tag(homePrimary),
+            readinessAnchor = ReadinessAnchor.Tag(homePrimary),
             navigate = null,
         )
         captureDestination(
@@ -107,7 +108,8 @@ class UiCharacterizationProbeTest {
             destination = "channels",
             navTag = "nav-channels",
             anchor = Anchor.Title("Эфир"),
-            navigate = { routeAnchor -> openRailDestination("nav-channels", routeAnchor) },
+            readinessAnchor = ReadinessAnchor.ContentTitle("Эфир"),
+            navigate = { routeReady -> openRailDestination("nav-channels", routeReady) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -115,7 +117,8 @@ class UiCharacterizationProbeTest {
             destination = "guide",
             navTag = "nav-guide",
             anchor = Anchor.Title("Телепрограмма"),
-            navigate = { routeAnchor -> openRailDestination("nav-guide", routeAnchor) },
+            readinessAnchor = ReadinessAnchor.Tag("guide-status"),
+            navigate = { routeReady -> openRailDestination("nav-guide", routeReady) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -123,7 +126,8 @@ class UiCharacterizationProbeTest {
             destination = "search",
             navTag = "nav-search",
             anchor = Anchor.Title("Поиск"),
-            navigate = { routeAnchor -> openRailDestination("nav-search", routeAnchor) },
+            readinessAnchor = ReadinessAnchor.Tag("search-field"),
+            navigate = { routeReady -> openRailDestination("nav-search", routeReady) },
         )
         captureDestination(
             outputDirectory = outputDirectory,
@@ -131,7 +135,8 @@ class UiCharacterizationProbeTest {
             destination = "settings",
             navTag = "nav-settings",
             anchor = Anchor.Tag("settings-section-sources"),
-            navigate = { routeAnchor -> openRailDestination("nav-settings", routeAnchor) },
+            readinessAnchor = ReadinessAnchor.Tag("settings-section-sources"),
+            navigate = { routeReady -> openRailDestination("nav-settings", routeReady) },
         )
 
         File(outputDirectory, "semantics-tree.txt").writeText(
@@ -146,12 +151,13 @@ class UiCharacterizationProbeTest {
         destination: String,
         navTag: String,
         anchor: Anchor,
-        navigate: ((Anchor) -> String)?,
+        readinessAnchor: ReadinessAnchor,
+        navigate: ((ReadinessAnchor) -> String)?,
     ) {
-        val routeActivation = navigate?.invoke(anchor) ?: "already-selected"
+        val routeActivation = navigate?.invoke(readinessAnchor) ?: "already-selected"
         composeRule.waitForIdle()
 
-        check(awaitRouteReady(navTag, anchor, timeoutMillis = 1_500)) {
+        check(awaitRouteReady(navTag, readinessAnchor, timeoutMillis = 1_500)) {
             "Destination '$navTag' was not ready before geometry capture."
         }
 
@@ -241,7 +247,7 @@ class UiCharacterizationProbeTest {
 
     private fun openRailDestination(
         navTag: String,
-        routeAnchor: Anchor,
+        readinessAnchor: ReadinessAnchor,
     ): String {
         check(navigationTags.contains(navTag)) {
             "Unknown rail destination '$navTag'."
@@ -259,7 +265,7 @@ class UiCharacterizationProbeTest {
 
         repeat(navigationTags.size) {
             if (focus == navTag) {
-                return activateFocusedRailDestination(navTag, routeAnchor)
+                return activateFocusedRailDestination(navTag, readinessAnchor)
             }
 
             pressSetupKey(focus, Key.DirectionDown)
@@ -281,14 +287,15 @@ class UiCharacterizationProbeTest {
      */
     private fun activateFocusedRailDestination(
         navTag: String,
-        routeAnchor: Anchor,
+        readinessAnchor: ReadinessAnchor,
     ): String {
         val label = "compose-enter"
         pressSetupKey(navTag, Key.Enter)
-        val ready = awaitRouteReady(navTag, routeAnchor)
+        val ready = awaitRouteReady(navTag, readinessAnchor)
+        val readinessPresent = readinessAnchor.isPresent(navTag)
         println(
             "U0 route activation: label=$label nav=$navTag ready=$ready " +
-                "selected=${navIsSelected(navTag)} anchorPresent=${routeAnchor.isPresent()} " +
+                "selected=${navIsSelected(navTag)} readinessPresent=$readinessPresent " +
                 "focus=${focusedNodeDescription()}",
         )
         if (ready) {
@@ -328,14 +335,14 @@ class UiCharacterizationProbeTest {
 
     private fun awaitRouteReady(
         navTag: String,
-        routeAnchor: Anchor,
+        readinessAnchor: ReadinessAnchor,
         timeoutMillis: Long = 5_000,
     ): Boolean = runCatching {
         composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            navIsSelected(navTag) && routeAnchor.isPresent()
+            navIsSelected(navTag) && readinessAnchor.isPresent(navTag)
         }
         composeRule.waitForIdle()
-        navIsSelected(navTag) && routeAnchor.isPresent()
+        navIsSelected(navTag) && readinessAnchor.isPresent(navTag)
     }.getOrDefault(false)
 
     private fun navIsSelected(tag: String): Boolean =
@@ -384,13 +391,24 @@ class UiCharacterizationProbeTest {
         return nodes.single().boundsInRoot
     }
 
-    private fun Anchor.isPresent(): Boolean = when (this) {
-        is Anchor.Tag -> nodeExists(tag)
-        is Anchor.Title -> composeRule.onAllNodesWithText(
-            text = text,
-            substring = false,
-            useUnmergedTree = true,
-        ).fetchSemanticsNodes().isNotEmpty()
+    private fun navigationRailRight(): Float = navigationTags
+        .flatMap { tag ->
+            composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+        }
+        .maxOf { node -> node.boundsInRoot.right }
+
+    private fun ReadinessAnchor.isPresent(navTag: String): Boolean = when (this) {
+        is ReadinessAnchor.Tag -> nodeExists(tag)
+        is ReadinessAnchor.ContentTitle -> {
+            val railRight = runCatching { navigationRailRight() }.getOrElse { return false }
+            composeRule.onAllNodesWithText(
+                text = text,
+                substring = false,
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().any { node ->
+                node.boundsInRoot.left >= railRight && node.boundsInRoot.width > 0f
+            }
+        }
     }
 
     private fun Anchor.resolve(): NodeHandle = when (this) {
@@ -452,6 +470,11 @@ class UiCharacterizationProbeTest {
         } finally {
             bitmap.recycle()
         }
+    }
+
+    private sealed interface ReadinessAnchor {
+        data class Tag(val tag: String) : ReadinessAnchor
+        data class ContentTitle(val text: String) : ReadinessAnchor
     }
 
     private sealed interface Anchor {
