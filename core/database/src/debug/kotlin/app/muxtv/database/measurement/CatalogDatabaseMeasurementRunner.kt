@@ -330,7 +330,11 @@ internal class CatalogDatabaseMeasurementRunner(
             snapshot.results.map { it.currentProgrammeTitle } ==
                 scenario.expectedIds.map { id -> "Programme CrossSignal${id.removePrefix("canonical-")}" },
         )
-        check(snapshot.nextBoundaryEpochMillis == FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS)
+        val expectedNextBoundary = expectedCatalogSearchBoundaryEpochMillis(
+            canonicalChannelIds = scenario.expectedIds,
+            firstBoundaryEpochMillis = FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS,
+        )
+        check(snapshot.nextBoundaryEpochMillis == expectedNextBoundary)
         return SearchScenarioResult(
             candidate = handle.sample(iteration, dataSource.candidateNanos, dataSource.candidateRows),
             summary = handle.sample(
