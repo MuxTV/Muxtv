@@ -111,7 +111,9 @@ internal class Media3PlaybackControlSession(
     override fun stop() = controller.runOnPlaybackApplicationThread { controller.stop() }
 
     override suspend fun currentTimeline(): PlaybackTimelineState =
-        onPlaybackApplicationThread { controller.toStableTimeline() }
+        onPlaybackApplicationThread {
+            controller.toStableTimeline().also(::publishTimeline)
+        }
 
     override suspend fun seekRelative(
         direction: PlaybackSeekDirection,
@@ -169,6 +171,18 @@ internal class Media3PlaybackControlSession(
                 controller.removeListener(listener)
             }
         }
+    }
+
+    private fun publishTimeline(timeline: PlaybackTimelineState) {
+        if (closed) return
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            capabilities = current.capabilities.copy(
+                hasKnownDuration = timeline.hasKnownDuration,
+                isLive = timeline.isLive,
+            ),
+            timeline = timeline,
+        )
     }
 
     private fun publishSnapshot(player: Player) {
