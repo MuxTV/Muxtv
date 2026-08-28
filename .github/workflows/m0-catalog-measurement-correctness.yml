@@ -6,13 +6,16 @@ on:
       - main
     paths:
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/**'
+      - 'core/database/src/androidTest/kotlin/app/muxtv/database/CatalogDatabaseMeasurementCorrectnessTest.kt'
       - 'core/database/src/androidTest/kotlin/app/muxtv/database/CatalogDatabaseMeasurementTest.kt'
       - 'core/database/src/test/kotlin/app/muxtv/database/measurement/**'
       - 'tools/ci/Test-M0MeasurementCorrectnessContract.ps1'
       - 'tools/ci/Run-HostedCatalogMeasurementCorrectness.sh'
+      - 'tools/ci/Run-HostedCatalogMeasurementStress.sh'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - '.github/workflows/m0-catalog-measurement-correctness.yml'
+      - '.github/workflows/m0-catalog-measurement-stress.yml'
       - '.github/workflows/hosted-ci-contract.yml'
   workflow_dispatch:
 
@@ -21,14 +24,14 @@ permissions:
   actions: read
 
 concurrency:
-  group: m0-catalog-measurement-${{ github.event.pull_request.number || github.ref }}
+  group: m0-catalog-correctness-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   correctness:
     name: M0 catalog measurement correctness
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
 
     steps:
       - name: Checkout exact source
@@ -56,15 +59,15 @@ jobs:
       - name: Enable KVM for Android Emulator
         shell: bash
         env:
-          MUXTV_KVM_EVIDENCE: .work/evidence/m0-catalog-measurement
+          MUXTV_KVM_EVIDENCE: .work/evidence/m0-catalog-correctness
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Run M0 catalog measurement correctness on canonical API36
+      - name: Run bounded M0 catalog correctness on canonical API36
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         env:
           MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
           MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          MUXTV_MEASUREMENT_EVIDENCE: .work/evidence/m0-catalog-measurement
+          MUXTV_MEASUREMENT_EVIDENCE: .work/evidence/m0-catalog-correctness
         with:
           api-level: 36
           target: android-tv
@@ -82,14 +85,14 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
           script: bash ./tools/ci/Run-HostedCatalogMeasurementCorrectness.sh
 
-      # Correctness-only evidence: thresholdApplied=false; hosted emulator timing is not claim-eligible.
+      # Correctness-only evidence. This lane has no performance threshold or performance claim.
       - name: Upload M0 correctness evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: m0-catalog-measurement-api36-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: m0-catalog-correctness-api36-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .work/evidence/m0-catalog-measurement/**
+            .work/evidence/m0-catalog-correctness/**
             core/database/build/outputs/androidTest-results/**
           retention-days: 7
           github-token: ${{ github.token }}
