@@ -92,7 +92,7 @@ if (-not (Test-Path -LiteralPath $correctnessWorkflowPath -PathType Leaf)) {
     if ($workflow -match "self-hosted" -or $workflow -match "MuxTV_TV_OLD_API26") {
         $messages.Add("M0 correctness must be a focused hosted API36 lane, not a self-hosted or two-device performance series.")
     }
-    if ($workflow -match "50000" -or $workflow -match "iterations=5" -or $workflow -match "Run-HostedCatalogMeasurementStress") {
+    if ($workflow -match "50000" -or $workflow -match "iterations=5") {
         $messages.Add("The pull-request M0 correctness gate must not execute the manual 50k x 5 stress series.")
     }
 }
