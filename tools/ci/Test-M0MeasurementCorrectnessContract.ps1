@@ -46,7 +46,7 @@ if (-not (Test-Path -LiteralPath $correctnessTestPath -PathType Leaf)) {
         "CORRECTNESS_ENTRY_COUNT = 10_000",
         "RoomChannelSearchRepository(",
         "text = CORRECTNESS_ENTRY_COUNT.toString()",
-        "text = \"Synthetic\"",
+        'text = "Synthetic"',
         "FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS + finalIndex",
         "FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS"
     )) {
