@@ -7,15 +7,12 @@ on:
     paths:
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/**'
       - 'core/database/src/androidTest/kotlin/app/muxtv/database/CatalogDatabaseMeasurementCorrectnessTest.kt'
-      - 'core/database/src/androidTest/kotlin/app/muxtv/database/CatalogDatabaseMeasurementTest.kt'
       - 'core/database/src/test/kotlin/app/muxtv/database/measurement/**'
       - 'tools/ci/Test-M0MeasurementCorrectnessContract.ps1'
       - 'tools/ci/Run-HostedCatalogMeasurementCorrectness.sh'
-      - 'tools/ci/Run-HostedCatalogMeasurementStress.sh'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - '.github/workflows/m0-catalog-measurement-correctness.yml'
-      - '.github/workflows/m0-catalog-measurement-stress.yml'
       - '.github/workflows/hosted-ci-contract.yml'
   workflow_dispatch:
 

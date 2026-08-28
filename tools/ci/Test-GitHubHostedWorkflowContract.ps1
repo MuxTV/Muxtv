@@ -24,7 +24,6 @@ $supportedWorkflows = @(
     "focused-m3u-evidence.yml",
     "integration-gate.yml",
     "m0-catalog-measurement-correctness.yml",
-    "m0-catalog-measurement-stress.yml",
     "measurement-variance-smoke.yml",
     "media3-lint.yml",
     "phase00-red.yml",
@@ -40,7 +39,6 @@ $dualJdkWorkflows = @(
     "focused-m3u-evidence.yml",
     "integration-gate.yml",
     "m0-catalog-measurement-correctness.yml",
-    "m0-catalog-measurement-stress.yml",
     "measurement-variance-smoke.yml",
     "media3-lint.yml",
     "self-hosted-validation.yml"
