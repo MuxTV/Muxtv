@@ -1,5 +1,9 @@
 package app.muxtv.designsystem.component
 
+import android.animation.ValueAnimator
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -99,19 +103,24 @@ internal fun navigationRailMetrics(
         COMPACT_RAIL_METRICS
     }
 
+internal fun navigationRailWidth(railFocused: Boolean): Dp =
+    if (railFocused) TvTokens.Size.railExpanded else TvTokens.Size.railCollapsed
+
 /**
  * Lounge Light left navigation rail.
  *
- * The rail is permanently expanded so labels remain readable while content owns
- * focus. Selected destination remains a persistent state independent from the
- * currently focused rail item.
+ * Destination content keeps a fixed collapsed-rail reservation in the application shell.
+ * The rail itself expands only while one of its descendants owns focus, so labels can be
+ * revealed without changing destination constraints or causing a horizontal content jump.
+ * Selected destination remains a persistent state independent from the focused rail item.
  *
- * Normal Lounge geometry is preserved whenever it fits. Low-height TV viewports
- * switch to a compact vertical profile derived from the actual item count so every
- * top-level destination is laid out before the focus graph is evaluated.
+ * Normal Lounge geometry is preserved whenever it fits. Low-height TV viewports switch to
+ * a compact vertical profile derived from the actual item count so every top-level destination
+ * is laid out before the focus graph is evaluated.
  *
- * Descendant focus is still reported to the application shell for Back and
- * focus-restoration behavior.
+ * System reduced-motion is authoritative: when platform animators are disabled, the transient
+ * reveal snaps between collapsed and expanded widths while focus/selection tone and outline
+ * continue to provide immediate non-motion feedback.
  */
 @Composable
 fun MuxTvNavigationRail(
@@ -122,10 +131,23 @@ fun MuxTvNavigationRail(
     onRailFocusChanged: (Boolean) -> Unit = {},
 ) {
     var railFocused by remember { mutableStateOf(false) }
+    val motionEnabled = ValueAnimator.areAnimatorsEnabled()
+    val width by animateDpAsState(
+        targetValue = navigationRailWidth(railFocused),
+        animationSpec = if (motionEnabled) {
+            tween(
+                durationMillis = TvTokens.Motion.screenDurationMillis,
+                easing = TvTokens.Motion.easeInOut,
+            )
+        } else {
+            snap()
+        },
+        label = "navigationRailWidth",
+    )
 
     BoxWithConstraints(
         modifier = modifier
-            .width(TvTokens.Size.railExpanded)
+            .width(width)
             .fillMaxHeight(),
     ) {
         val metrics = navigationRailMetrics(
@@ -151,7 +173,7 @@ fun MuxTvNavigationRail(
                 ),
         ) {
             RailBrandMark(
-                expanded = true,
+                expanded = railFocused,
                 height = metrics.brandHeight,
             )
             Spacer(Modifier.height(metrics.brandToItemsGap))
@@ -162,7 +184,7 @@ fun MuxTvNavigationRail(
                     }
                     MuxTvNavigationRailItemView(
                         item = item,
-                        expanded = true,
+                        expanded = railFocused,
                         itemHeight = metrics.itemHeight,
                         onClick = { onSelect(item.key) },
                         modifier = Modifier

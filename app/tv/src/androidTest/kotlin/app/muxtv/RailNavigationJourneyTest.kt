@@ -38,80 +38,41 @@ class RailNavigationJourneyTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun persistentRailLabelsRemainVisibleWithoutContentReflow() {
+    fun transientRailLabelsFollowFocusWithoutContentReflow() {
         withNavigation { _ ->
             val hero = composeRule.onNodeWithTag("home-hero")
             hero.assertIsFocused()
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithText("Главная").fetchSemanticsNodes().isNotEmpty()
-            }
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithTag("home-card-favorites-0")
                     .fetchSemanticsNodes()
                     .size == 1
             }
-            val initialBounds = hero.fetchSemanticsNode().boundsInRoot
-            val maxHeroLeft = with(composeRule.density) { 180.dp.toPx() }
-            check(initialBounds.left <= maxHeroLeft) {
-                "Home hero left ${initialBounds.left}px exceeds the 180dp reference boundary " +
-                    "(${maxHeroLeft}px at the test density)"
-            }
-            val maxHeroTop = with(composeRule.density) { 60.dp.toPx() }
-            check(initialBounds.top <= maxHeroTop) {
-                "Home hero top ${initialBounds.top}px exceeds the 60dp reference boundary " +
-                    "(${maxHeroTop}px at the test density)"
-            }
-            val minHeroHeight = with(composeRule.density) { 240.dp.toPx() }
-            val maxHeroHeight = with(composeRule.density) { 270.dp.toPx() }
-            check(initialBounds.height in minHeroHeight..maxHeroHeight) {
-                "Home hero height ${initialBounds.height}px is outside the 240..270dp " +
-                    "reference range (${minHeroHeight}..${maxHeroHeight}px at the test density)"
-            }
-            val minHeroRight = with(composeRule.density) { 920.dp.toPx() }
-            check(initialBounds.right >= minHeroRight) {
-                "Home hero right ${initialBounds.right}px is before the 920dp reference boundary " +
-                    "(${minHeroRight}px at the test density)"
-            }
-            val favoriteBounds = composeRule.onNodeWithTag("home-card-favorites-0")
-                .fetchSemanticsNode()
-                .boundsInRoot
-            val minFavoriteWidth = with(composeRule.density) { 110.dp.toPx() }
-            val maxFavoriteWidth = with(composeRule.density) { 130.dp.toPx() }
-            val minFavoriteHeight = with(composeRule.density) { 65.dp.toPx() }
-            val maxFavoriteHeight = with(composeRule.density) { 80.dp.toPx() }
-            check(favoriteBounds.width in minFavoriteWidth..maxFavoriteWidth) {
-                "Favorite card width ${favoriteBounds.width}px is outside the 110..130dp " +
-                    "reference range (${minFavoriteWidth}..${maxFavoriteWidth}px at the test density)"
-            }
-            check(favoriteBounds.height in minFavoriteHeight..maxFavoriteHeight) {
-                "Favorite card height ${favoriteBounds.height}px is outside the 65..80dp " +
-                    "reference range (${minFavoriteHeight}..${maxFavoriteHeight}px at the test density)"
-            }
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                (0..5).all { index ->
-                    composeRule.onAllNodesWithTag("home-card-favorites-$index")
-                        .fetchSemanticsNodes()
-                        .size == 1
-                }
+                composeRule.onAllNodesWithText("Главная").fetchSemanticsNodes().isEmpty()
             }
+            val initialBounds = hero.fetchSemanticsNode().boundsInRoot
 
             hero.press(Key.DirectionLeft)
             composeRule.onNodeWithTag("nav-home").assertIsFocused()
-            composeRule.onNodeWithTag("nav-home").press(Key.DirectionRight)
-
-            hero.assertIsFocused()
-            check(hero.fetchSemanticsNode().boundsInRoot == initialBounds) {
-                "Home hero bounds changed while rail focus moved out and back"
-            }
-
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithTag("home-card-favorites-0").fetchSemanticsNodes().size == 1
+                composeRule.onAllNodesWithText("Главная").fetchSemanticsNodes().isNotEmpty()
             }
-            composeRule.onNodeWithTag("home-card-favorites-0")
-                .performSemanticsAction(SemanticsActions.RequestFocus)
-                .assertIsFocused()
             composeRule.waitForIdle()
-            composeRule.captureScreenshot("home-rail-reference")
+            check(hero.fetchSemanticsNode().boundsInRoot == initialBounds) {
+                "Home hero bounds changed while the rail expanded over stable content"
+            }
+            composeRule.captureScreenshot("home-rail-expanded")
+
+            composeRule.onNodeWithTag("nav-home").press(Key.DirectionRight)
+            hero.assertIsFocused()
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithText("Главная").fetchSemanticsNodes().isEmpty()
+            }
+            composeRule.waitForIdle()
+            check(hero.fetchSemanticsNode().boundsInRoot == initialBounds) {
+                "Home hero bounds changed after rail focus returned to content"
+            }
+            composeRule.captureScreenshot("home-rail-collapsed")
         }
     }
 

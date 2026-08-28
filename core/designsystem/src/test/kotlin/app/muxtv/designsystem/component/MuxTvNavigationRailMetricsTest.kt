@@ -1,6 +1,7 @@
 package app.muxtv.designsystem.component
 
 import androidx.compose.ui.unit.dp
+import app.muxtv.designsystem.TvTokens
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -49,5 +50,13 @@ class MuxTvNavigationRailMetricsTest {
         assertThat(exactFit.itemHeight).isEqualTo(36.dp)
         assertThat(oneDpShort.itemHeight).isEqualTo(32.dp)
         assertThat(oneDpShort.requiredHeight(itemCount = 5)).isAtMost(307.dp)
+    }
+
+    @Test
+    fun `u1 rail expands only while navigation owns focus`() {
+        assertThat(navigationRailWidth(railFocused = false))
+            .isEqualTo(TvTokens.Size.railCollapsed)
+        assertThat(navigationRailWidth(railFocused = true))
+            .isEqualTo(TvTokens.Size.railExpanded)
     }
 }

@@ -9,10 +9,12 @@ on:
       - '.github/actions/setup-muxtv-jdks/**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
+      - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
+      - 'tools/ci/Run-HostedTvU1ShellTests.sh'
       - 'tools/ci/Run-HostedDatabaseMigrationTests.sh'
       - 'tools/ci/Run-HostedMacrobenchmarkDryRun.sh'
   workflow_dispatch:
@@ -46,6 +48,11 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-RiskBasedDeviceLaneContract.ps1
+
+      - name: Verify U1 focused profile isolation contract
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\ci\Test-TvU1FocusedProfileContract.ps1
 
       - name: Verify GitHub-hosted workflow contract
         shell: pwsh

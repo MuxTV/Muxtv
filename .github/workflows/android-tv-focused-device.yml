@@ -20,6 +20,8 @@ on:
       - core/ui/**
       - tools/ci/Assert-AndroidTestResults.ps1
       - tools/ci/Run-HostedAndroidProductTests.sh
+      - tools/ci/Run-HostedTvU1ShellTests.sh
+      - tools/ci/Test-TvU1FocusedProfileContract.ps1
       - tools/ci/Enable-HostedAndroidKvm.sh
       - '.github/workflows/android-tv-focused-device.yml'
   workflow_dispatch:
@@ -87,7 +89,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh
+          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh && bash ./tools/ci/Run-HostedTvU1ShellTests.sh
 
       - name: Upload focused device evidence
         if: always()
