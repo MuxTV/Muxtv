@@ -4,10 +4,11 @@ import android.content.Context
 import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.EpgGuideRepository
-import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackCandidateResolver
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.importer.EpgRevisionImporter
@@ -18,15 +19,11 @@ import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
 import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceActivator
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
 import app.muxtv.database.EpgMatchingStore
@@ -37,16 +34,15 @@ import app.muxtv.database.MuxTvDatabaseFactory
 import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
-import app.muxtv.feature.sources.SourceEntryOnboarding
-import app.muxtv.feature.sources.SourcePlaybackApprovalActions
-import app.muxtv.feature.sources.SourcePlaybackApprovalResetResult
-import app.muxtv.network.MuxTvHttpClients
-import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.external.ExternalPlaybackOriginGrantStore
 import app.muxtv.external.SharedPreferencesExternalPlaybackOriginGrantStore
+import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.ExternalPlaybackLeaseRegistry
 import app.muxtv.player.InMemoryExternalPlaybackLeaseRegistry
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import app.muxtv.sources.AppSourceManagement
+import app.muxtv.sources.AppSourceOnboarding
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -136,23 +132,15 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSourcePlaybackApprovalActions(
+    fun provideSourceManagement(
         sourceRefreshStore: SourceRefreshStore,
+        sourceRefreshScheduler: SourceRefreshScheduler,
         playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
-    ): SourcePlaybackApprovalActions = SourcePlaybackApprovalActions { sourceId ->
-        val credentialRef = sourceRefreshStore.getTarget(sourceId)?.credentialRef
-            ?: return@SourcePlaybackApprovalActions SourcePlaybackApprovalResetResult.SourceNotFound
-        when (playbackAccessPolicyResolver.revokeAll(credentialRef)) {
-            PlaybackAccessMutationResult.Applied -> SourcePlaybackApprovalResetResult.Reset
-            PlaybackAccessMutationResult.Unchanged -> SourcePlaybackApprovalResetResult.Unchanged
-            PlaybackAccessMutationResult.NotFound -> SourcePlaybackApprovalResetResult.SourceNotFound
-            PlaybackAccessMutationResult.Corrupted,
-            PlaybackAccessMutationResult.Unavailable,
-            PlaybackAccessMutationResult.InvalidLocator,
-            PlaybackAccessMutationResult.CapacityExceeded,
-            -> SourcePlaybackApprovalResetResult.AccessUnavailable
-        }
-    }
+    ): SourceManagement = AppSourceManagement(
+        refreshStore = sourceRefreshStore,
+        refreshScheduler = sourceRefreshScheduler,
+        playbackAccessPolicyResolver = playbackAccessPolicyResolver,
+    )
 
     @Provides
     @Singleton
@@ -238,25 +226,9 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSourceEntryOnboarding(
+    fun provideSourceOnboarding(
         durable: DurableRemoteSourceOnboarding,
-    ): SourceEntryOnboarding = object : SourceEntryOnboarding {
-        override suspend fun prepare(
-            input: RemoteSourceOnboardingInput,
-        ): RemoteSourcePreparationResult = durable.prepare(input)
-
-        override suspend fun activate(
-            token: RemoteSourcePreparationToken,
-            sourceName: String,
-        ): RemoteSourceActivationResult = durable.activate(token, sourceName)
-
-        override suspend fun cancel(
-            token: RemoteSourcePreparationToken,
-        ): RemoteSourceCancellationResult = durable.cancel(token)
-
-        override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? =
-            durable.restoreLatestPrepared()
-    }
+    ): SourceOnboarding = AppSourceOnboarding(durable)
 
     @Provides
     @Singleton

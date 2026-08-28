@@ -9,10 +9,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":catalog:refresh"))
-    implementation(project(":catalog:sync"))
-    implementation(project(":core:credentials"))
-    implementation(project(":core:database"))
+    implementation(project(":catalog:api"))
     implementation(project(":core:designsystem"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

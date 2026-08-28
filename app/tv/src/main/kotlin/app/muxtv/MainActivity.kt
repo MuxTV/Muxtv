@@ -13,11 +13,9 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.RecentChannelsRepository
-import app.muxtv.catalog.sync.SourceRefreshScheduler
-import app.muxtv.database.SourceRefreshStore
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.sources.SourceEntryOnboarding
-import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -60,16 +58,10 @@ class MainActivity : ComponentActivity() {
     lateinit var controllerConnector: MuxTvMediaControllerConnector
 
     @Inject
-    lateinit var sourceRefreshStore: SourceRefreshStore
+    lateinit var sourceManagement: SourceManagement
 
     @Inject
-    lateinit var sourceRefreshScheduler: SourceRefreshScheduler
-
-    @Inject
-    lateinit var sourceEntryOnboarding: SourceEntryOnboarding
-
-    @Inject
-    lateinit var sourcePlaybackApprovalActions: SourcePlaybackApprovalActions
+    lateinit var sourceOnboarding: SourceOnboarding
 
     @Inject
     lateinit var playbackObservationReader: PlaybackObservationReader
@@ -91,10 +83,8 @@ class MainActivity : ComponentActivity() {
                     recentChannelsRepository = recentChannelsRepository,
                     epgGuideRepository = epgGuideRepository,
                     controllerConnector = controllerConnector,
-                    sourceRefreshStore = sourceRefreshStore,
-                    sourceRefreshScheduler = sourceRefreshScheduler,
-                    sourceEntryOnboarding = sourceEntryOnboarding,
-                    sourcePlaybackApprovalActions = sourcePlaybackApprovalActions,
+                    sourceManagement = sourceManagement,
+                    sourceOnboarding = sourceOnboarding,
                     playbackObservationReader = playbackObservationReader,
                     doctorExportStatus = doctorExportState.status,
                     onExportDoctorReport = ::beginDoctorExport,

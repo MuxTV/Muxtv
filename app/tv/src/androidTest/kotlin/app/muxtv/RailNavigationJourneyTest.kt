@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
@@ -23,9 +22,17 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.RecentChannel
 import app.muxtv.catalog.RecentChannelsQuery
 import app.muxtv.catalog.RecentChannelsRepository
-import app.muxtv.catalog.sync.SourceRefreshScheduler
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePlaybackApprovalResetResult
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
+import app.muxtv.catalog.SourceRefreshOverview
+import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
@@ -169,9 +176,8 @@ class RailNavigationJourneyTest {
                         recentChannelsRepository = RailRecentChannelsFixture,
                         epgGuideRepository = RailEpgGuideFixture,
                         controllerConnector = controllerConnector,
-                        sourceRefreshStore = RailSourceStoreFixture,
-                        sourceRefreshScheduler = SourceRefreshScheduler(context, RailSourceStoreFixture),
-                        sourceEntryOnboarding = RailOnboardingFixture,
+                        sourceManagement = RailSourceManagementFixture,
+                        sourceOnboarding = RailOnboardingFixture,
                     )
                 }
             }
@@ -326,74 +332,47 @@ private object RailEpgGuideFixture : EpgGuideRepository {
     override fun observeDataChanges(): Flow<Unit> = flowOf(Unit)
 }
 
-private object RailSourceStoreFixture : app.muxtv.database.SourceRefreshStore {
-    override suspend fun getTarget(sourceId: String): app.muxtv.database.SourceRefreshTarget? = null
-
-    override fun observeOverviews():
-        kotlinx.coroutines.flow.Flow<List<app.muxtv.database.SourceRefreshOverview>> =
-        kotlinx.coroutines.flow.flowOf(
-            listOf(
-                app.muxtv.database.SourceRefreshOverview(
-                    sourceId = "source-rail",
-                    sourceName = "Домашний IPTV",
-                    hasCredentialReference = true,
-                    activeRevision = 1,
-                    policy = null,
-                    status = null,
-                ),
+private object RailSourceManagementFixture : SourceManagement {
+    override fun observeOverviews(): Flow<List<SourceRefreshOverview>> = flowOf(
+        listOf(
+            SourceRefreshOverview(
+                sourceId = "source-rail",
+                sourceName = "Домашний IPTV",
+                hasStoredAccess = true,
+                activeRevision = 1,
+                policy = null,
+                status = null,
             ),
-        )
+        ),
+    )
 
-    override suspend fun getPolicies(): List<app.muxtv.database.SourceRefreshPolicy> = emptyList()
-
-    override suspend fun upsertPolicy(policy: app.muxtv.database.SourceRefreshPolicy) = Unit
-
+    override fun refreshNow(sourceId: String) = Unit
+    override suspend fun updatePolicy(policy: SourceRefreshPolicy) = Unit
     override suspend fun removePolicy(sourceId: String) = Unit
-
-    override fun observeStatus(sourceId: String):
-        kotlinx.coroutines.flow.Flow<app.muxtv.database.SourceRefreshStatus?> =
-        kotlinx.coroutines.flow.flowOf(null)
-
-    override suspend fun getRecentAttempts(
+    override suspend fun revokePlaybackApprovals(
         sourceId: String,
-        limit: Int,
-    ): List<app.muxtv.database.SourceRefreshAttempt> = emptyList()
-
-    override suspend fun tryAcquire(
-        sourceId: String,
-        runToken: String,
-        startedAtEpochMillis: Long,
-        staleBeforeEpochMillis: Long,
-    ): Boolean = false
-
-    override suspend fun complete(
-        sourceId: String,
-        runToken: String,
-        trigger: app.muxtv.database.SourceRefreshTrigger,
-        completion: app.muxtv.database.SourceRefreshCompletion,
-        expectedCredentialRef: String?,
-    ) = Unit
+    ): SourcePlaybackApprovalResetResult = SourcePlaybackApprovalResetResult.SourceNotFound
 }
 
-private object RailOnboardingFixture : SourceEntryOnboarding {
+private object RailOnboardingFixture : SourceOnboarding {
     override suspend fun prepare(
-        input: app.muxtv.catalog.refresh.RemoteSourceOnboardingInput,
-    ): app.muxtv.catalog.refresh.RemoteSourcePreparationResult =
-        error("Source entry is not part of this journey")
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult = error("Source entry is not part of this journey")
 
     override suspend fun activate(
-        token: app.muxtv.catalog.refresh.RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): app.muxtv.catalog.refresh.RemoteSourceActivationResult =
-        error("Source entry is not part of this journey")
+    ): SourceActivationResult = SourceActivationResult.Failed(
+        SourceActivationFailure.Unexpected,
+        cleanupPending = false,
+    )
 
     override suspend fun cancel(
-        token: app.muxtv.catalog.refresh.RemoteSourcePreparationToken,
-    ): app.muxtv.catalog.refresh.RemoteSourceCancellationResult =
-        error("Source entry is not part of this journey")
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): app.muxtv.catalog.refresh.RemoteSourcePreparationResult.Prepared? =
-        null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
 
 private fun SemanticsNodeInteraction.press(

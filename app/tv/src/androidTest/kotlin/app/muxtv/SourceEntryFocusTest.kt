@@ -10,25 +10,18 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.AnnotatedString
-import androidx.test.core.app.ApplicationProvider
-import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
-import app.muxtv.catalog.sync.SourceRefreshScheduler
-import app.muxtv.database.SourceRefreshAttempt
-import app.muxtv.database.SourceRefreshCompletion
-import app.muxtv.database.SourceRefreshOverview
-import app.muxtv.database.SourceRefreshPolicy
-import app.muxtv.database.SourceRefreshStatus
-import app.muxtv.database.SourceRefreshStore
-import app.muxtv.database.SourceRefreshTarget
-import app.muxtv.database.SourceRefreshTrigger
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePlaybackApprovalResetResult
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
+import app.muxtv.catalog.SourceRefreshOverview
+import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.sources.AddSourceRoute
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.feature.sources.SourcesRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -41,15 +34,10 @@ class SourceEntryFocusTest {
 
     @Test
     fun emptySourcesStartsOnAddSource() {
-        val scheduler = SourceRefreshScheduler(
-            context = ApplicationProvider.getApplicationContext(),
-            refreshStore = EmptySourceRefreshStore,
-        )
         composeRule.setContent {
             MuxTvTheme {
                 SourcesRoute(
-                    refreshStore = EmptySourceRefreshStore,
-                    refreshScheduler = scheduler,
+                    sourceManagement = EmptySourceManagement,
                     onAddSource = {},
                 )
             }
@@ -110,58 +98,37 @@ class SourceEntryFocusTest {
     }
 }
 
-private object HttpApprovalOnboarding : SourceEntryOnboarding {
+private object HttpApprovalOnboarding : SourceOnboarding {
     override suspend fun prepare(
-        input: RemoteSourceOnboardingInput,
-    ): RemoteSourcePreparationResult =
-        RemoteSourcePreparationResult.InsecureTransportApprovalRequired
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult = SourcePreparationResult.InsecureTransportApprovalRequired
 
     override suspend fun activate(
-        token: RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): RemoteSourceActivationResult = RemoteSourceActivationResult.Failed(
-        failure = RemoteSourceActivationFailure.Unexpected,
-        credentialCleanupFailure = null,
-        sourceCleanupFailure = null,
+    ): SourceActivationResult = SourceActivationResult.Failed(
+        reason = SourceActivationFailure.Unexpected,
+        cleanupPending = false,
     )
 
     override suspend fun cancel(
-        token: RemoteSourcePreparationToken,
-    ): RemoteSourceCancellationResult = RemoteSourceCancellationResult.NotFound
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
 
-private object EmptySourceRefreshStore : SourceRefreshStore {
-    override suspend fun getTarget(sourceId: String): SourceRefreshTarget? = null
-
+private object EmptySourceManagement : SourceManagement {
     override fun observeOverviews(): Flow<List<SourceRefreshOverview>> = flowOf(emptyList())
 
-    override suspend fun getPolicies(): List<SourceRefreshPolicy> = emptyList()
+    override fun refreshNow(sourceId: String) = Unit
 
-    override suspend fun upsertPolicy(policy: SourceRefreshPolicy) = Unit
+    override suspend fun updatePolicy(policy: SourceRefreshPolicy) = Unit
 
     override suspend fun removePolicy(sourceId: String) = Unit
 
-    override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> = flowOf(null)
-
-    override suspend fun getRecentAttempts(
+    override suspend fun revokePlaybackApprovals(
         sourceId: String,
-        limit: Int,
-    ): List<SourceRefreshAttempt> = emptyList()
-
-    override suspend fun tryAcquire(
-        sourceId: String,
-        runToken: String,
-        startedAtEpochMillis: Long,
-        staleBeforeEpochMillis: Long,
-    ): Boolean = false
-
-    override suspend fun complete(
-        sourceId: String,
-        runToken: String,
-        trigger: SourceRefreshTrigger,
-        completion: SourceRefreshCompletion,
-        expectedCredentialRef: String?,
-    ) = Unit
+    ): SourcePlaybackApprovalResetResult = SourcePlaybackApprovalResetResult.SourceNotFound
 }

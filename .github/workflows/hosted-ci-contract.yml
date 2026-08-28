@@ -7,18 +7,19 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/setup-muxtv-jdks/**'
+      - 'feature/sources/**'
+      - 'catalog/api/**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
       - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
-      - 'tools/ci/Test-M0MeasurementCorrectnessContract.ps1'
+      - 'tools/ci/Test-SourcesStablePortContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
       - 'tools/ci/Run-HostedTvU1ShellTests.sh'
       - 'tools/ci/Run-HostedDatabaseMigrationTests.sh'
       - 'tools/ci/Run-HostedMacrobenchmarkDryRun.sh'
-      - 'tools/ci/Run-HostedCatalogMeasurementCorrectness.sh'
   workflow_dispatch:
 
 permissions:
@@ -56,10 +57,10 @@ jobs:
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-TvU1FocusedProfileContract.ps1
 
-      - name: Verify M0 catalog measurement correctness contract
+      - name: Verify Sources stable-port architecture contract
         shell: pwsh
         run: |
-          pwsh -NoProfile -File .\tools\ci\Test-M0MeasurementCorrectnessContract.ps1
+          pwsh -NoProfile -File .\tools\ci\Test-SourcesStablePortContract.ps1
 
       - name: Verify GitHub-hosted workflow contract
         shell: pwsh

@@ -1,16 +1,19 @@
 package app.muxtv.feature.sources
 
-import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePreparationFailure
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
+
+typealias SourceEntryOnboarding = SourceOnboarding
 
 sealed interface SourceEntryUiState {
     data object Editing : SourceEntryUiState
@@ -41,33 +44,20 @@ enum class SourceEntryFailure {
     Unexpected,
 }
 
-interface SourceEntryOnboarding {
-    suspend fun prepare(input: RemoteSourceOnboardingInput): RemoteSourcePreparationResult
-
-    suspend fun activate(
-        token: RemoteSourcePreparationToken,
-        sourceName: String,
-    ): RemoteSourceActivationResult
-
-    suspend fun cancel(token: RemoteSourcePreparationToken): RemoteSourceCancellationResult
-
-    suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared?
-}
-
 class SourceEntrySession(
-    private val onboarding: SourceEntryOnboarding,
+    private val onboarding: SourceOnboarding,
 ) {
     private val operationMutex = Mutex()
     private val mutableState = MutableStateFlow<SourceEntryUiState>(SourceEntryUiState.Editing)
 
     val state: StateFlow<SourceEntryUiState> = mutableState.asStateFlow()
 
-    private var preparedToken: RemoteSourcePreparationToken? = null
+    private var preparedHandle: SourcePreparationHandle? = null
     private var preparedEndpoint: String? = null
     private var pendingHttpLocator: String? = null
 
     suspend fun restore() = runExclusive {
-        if (preparedToken != null || mutableState.value !is SourceEntryUiState.Editing) return@runExclusive
+        if (preparedHandle != null || mutableState.value !is SourceEntryUiState.Editing) return@runExclusive
         mutableState.value = SourceEntryUiState.Restoring
         val restored = try {
             onboarding.restoreLatestPrepared()
@@ -85,7 +75,7 @@ class SourceEntrySession(
     }
 
     suspend fun prepare(locator: String) = runExclusive {
-        if (preparedToken != null) return@runExclusive
+        if (preparedHandle != null) return@runExclusive
         prepareLocked(locator = locator, insecureHttpApproved = false)
     }
 
@@ -95,8 +85,8 @@ class SourceEntrySession(
     }
 
     suspend fun activate(sourceName: String) = runExclusive {
-        val token = preparedToken
-        if (token == null) {
+        val handle = preparedHandle
+        if (handle == null) {
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
             return@runExclusive
         }
@@ -109,7 +99,7 @@ class SourceEntrySession(
 
         mutableState.value = SourceEntryUiState.Activating
         val result = try {
-            onboarding.activate(token, sourceName)
+            onboarding.activate(handle, sourceName)
         } catch (cancelled: CancellationException) {
             mutableState.value = SourceEntryUiState.Confirming(endpoint = endpoint)
             throw cancelled
@@ -122,22 +112,20 @@ class SourceEntrySession(
         }
 
         when (result) {
-            is RemoteSourceActivationResult.Activated -> {
-                preparedToken = null
+            SourceActivationResult.Activated -> {
+                preparedHandle = null
                 preparedEndpoint = null
                 mutableState.value = SourceEntryUiState.Completed
             }
 
-            is RemoteSourceActivationResult.Failed -> {
-                val cleanupPending =
-                    result.credentialCleanupFailure != null || result.sourceCleanupFailure != null
-                if (!cleanupPending) {
-                    preparedToken = null
+            is SourceActivationResult.Failed -> {
+                if (!result.cleanupPending) {
+                    preparedHandle = null
                     preparedEndpoint = null
                 }
                 mutableState.value = SourceEntryUiState.Failed(
-                    reason = result.failure.toEntryFailure(),
-                    cleanupPending = cleanupPending,
+                    reason = result.reason.toEntryFailure(),
+                    cleanupPending = result.cleanupPending,
                 )
             }
         }
@@ -147,25 +135,22 @@ class SourceEntrySession(
         if (!operationMutex.tryLock()) return false
         return try {
             pendingHttpLocator = null
-            val token = preparedToken
-            if (token == null) {
+            val handle = preparedHandle
+            if (handle == null) {
                 mutableState.value = SourceEntryUiState.Editing
                 true
             } else {
-                when (onboarding.cancel(token)) {
-                    RemoteSourceCancellationResult.Removed,
-                    RemoteSourceCancellationResult.NotFound,
+                when (onboarding.cancel(handle)) {
+                    SourceCancellationResult.Removed,
+                    SourceCancellationResult.NotFound,
                     -> {
-                        preparedToken = null
+                        preparedHandle = null
                         preparedEndpoint = null
                         mutableState.value = SourceEntryUiState.Editing
                         true
                     }
 
-                    RemoteSourceCancellationResult.MetadataRetained,
-                    RemoteSourceCancellationResult.SourceCleanupFailed,
-                    is RemoteSourceCancellationResult.Unavailable,
-                    -> {
+                    SourceCancellationResult.CleanupPending -> {
                         mutableState.value = SourceEntryUiState.Failed(
                             reason = SourceEntryFailure.CleanupPending,
                             cleanupPending = true,
@@ -188,7 +173,7 @@ class SourceEntrySession(
     }
 
     fun editAgain() {
-        if (preparedToken == null && !operationMutex.isLocked) {
+        if (preparedHandle == null && !operationMutex.isLocked) {
             pendingHttpLocator = null
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
@@ -213,10 +198,8 @@ class SourceEntrySession(
         mutableState.value = SourceEntryUiState.Preparing
         val result = try {
             onboarding.prepare(
-                RemoteSourceOnboardingInput(
-                    locator = locator,
-                    insecureHttpApproved = insecureHttpApproved,
-                ),
+                locator = locator,
+                insecureHttpApproved = insecureHttpApproved,
             )
         } catch (cancelled: CancellationException) {
             pendingHttpLocator = null
@@ -230,35 +213,23 @@ class SourceEntrySession(
         }
 
         when (result) {
-            is RemoteSourcePreparationResult.Prepared -> acceptPrepared(result)
-            RemoteSourcePreparationResult.InsecureTransportApprovalRequired ->
+            is SourcePreparationResult.Prepared -> acceptPrepared(result)
+            SourcePreparationResult.InsecureTransportApprovalRequired ->
                 mutableState.value = SourceEntryUiState.HttpApprovalRequired
 
-            is RemoteSourcePreparationResult.UrlRejected,
-            RemoteSourcePreparationResult.InvalidAccess,
-            -> {
+            is SourcePreparationResult.Failed -> {
                 pendingHttpLocator = null
-                mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.InvalidLocator)
-            }
-
-            is RemoteSourcePreparationResult.CredentialTooLarge -> {
-                pendingHttpLocator = null
-                mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.CredentialTooLarge)
-            }
-
-            is RemoteSourcePreparationResult.CredentialUnavailable -> {
-                pendingHttpLocator = null
-                mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.StorageUnavailable)
+                mutableState.value = SourceEntryUiState.Failed(result.reason.toEntryFailure())
             }
         }
     }
 
-    private fun acceptPrepared(result: RemoteSourcePreparationResult.Prepared) {
-        preparedToken = result.token
-        preparedEndpoint = "${result.scheme}://${result.host}"
+    private fun acceptPrepared(result: SourcePreparationResult.Prepared) {
+        preparedHandle = result.handle
+        preparedEndpoint = result.displayEndpoint
         pendingHttpLocator = null
         mutableState.value = SourceEntryUiState.Confirming(
-            endpoint = requireNotNull(preparedEndpoint),
+            endpoint = result.displayEndpoint,
         )
     }
 
@@ -272,24 +243,19 @@ class SourceEntrySession(
     }
 }
 
-private fun RemoteSourceActivationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
-    RemoteSourceActivationFailure.InvalidSourceName -> SourceEntryFailure.InvalidSourceName
-    RemoteSourceActivationFailure.AccessCredentialNotFound,
-    is RemoteSourceActivationFailure.AccessCredentialUnavailable,
-    RemoteSourceActivationFailure.AccessCredentialCorrupted,
-    -> SourceEntryFailure.AccessUnavailable
+private fun SourcePreparationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
+    SourcePreparationFailure.InvalidLocator -> SourceEntryFailure.InvalidLocator
+    SourcePreparationFailure.CredentialTooLarge -> SourceEntryFailure.CredentialTooLarge
+    SourcePreparationFailure.StorageUnavailable -> SourceEntryFailure.StorageUnavailable
+}
 
-    is RemoteSourceActivationFailure.UrlRejected,
-    RemoteSourceActivationFailure.InsecureTransportApprovalRequired,
-    -> SourceEntryFailure.InvalidLocator
-
-    is RemoteSourceActivationFailure.Http -> SourceEntryFailure.Http
-    is RemoteSourceActivationFailure.Network,
-    is RemoteSourceActivationFailure.RedirectRejected,
-    is RemoteSourceActivationFailure.ResponseTooLarge,
-    -> SourceEntryFailure.Network
-
-    RemoteSourceActivationFailure.EmptyRevisionRejected -> SourceEntryFailure.EmptyPlaylist
-    is RemoteSourceActivationFailure.ImportFailed -> SourceEntryFailure.Import
-    RemoteSourceActivationFailure.Unexpected -> SourceEntryFailure.Unexpected
+private fun SourceActivationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
+    SourceActivationFailure.InvalidSourceName -> SourceEntryFailure.InvalidSourceName
+    SourceActivationFailure.AccessUnavailable -> SourceEntryFailure.AccessUnavailable
+    SourceActivationFailure.InvalidLocator -> SourceEntryFailure.InvalidLocator
+    SourceActivationFailure.Network -> SourceEntryFailure.Network
+    SourceActivationFailure.Http -> SourceEntryFailure.Http
+    SourceActivationFailure.EmptyPlaylist -> SourceEntryFailure.EmptyPlaylist
+    SourceActivationFailure.Import -> SourceEntryFailure.Import
+    SourceActivationFailure.Unexpected -> SourceEntryFailure.Unexpected
 }

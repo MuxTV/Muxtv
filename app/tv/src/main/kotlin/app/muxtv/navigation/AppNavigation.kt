@@ -29,9 +29,9 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.RecentChannelsRepository
-import app.muxtv.catalog.sync.SourceRefreshScheduler
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.database.DatabaseDefaults
-import app.muxtv.database.SourceRefreshStore
 import app.muxtv.designsystem.component.MuxTvNavigationRail
 import app.muxtv.designsystem.component.MuxTvNavigationRailItem
 import app.muxtv.designsystem.icon.MuxTvIcons
@@ -44,8 +44,6 @@ import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
-import app.muxtv.feature.sources.SourceEntryOnboarding
-import app.muxtv.feature.sources.SourcePlaybackApprovalActions
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -62,11 +60,8 @@ fun AppNavigation(
     recentChannelsRepository: RecentChannelsRepository,
     epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
-    sourceRefreshStore: SourceRefreshStore,
-    sourceRefreshScheduler: SourceRefreshScheduler,
-    sourceEntryOnboarding: SourceEntryOnboarding,
-    sourcePlaybackApprovalActions: SourcePlaybackApprovalActions =
-        SourcePlaybackApprovalActions.Unavailable,
+    sourceManagement: SourceManagement,
+    sourceOnboarding: SourceOnboarding,
     playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
     doctorExportStatus: DoctorExportStatus = DoctorExportStatus.IDLE,
     onExportDoctorReport: (String) -> Unit = {},
@@ -127,7 +122,7 @@ fun AppNavigation(
                             recentChannelsRepository = recentChannelsRepository,
                             epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
-                            hasSources = rememberHasSources(sourceRefreshStore),
+                            hasSources = rememberHasSources(sourceManagement),
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
@@ -174,9 +169,7 @@ fun AppNavigation(
                         )
 
                         AppDestination.Sources -> SourcesRoute(
-                            refreshStore = sourceRefreshStore,
-                            refreshScheduler = sourceRefreshScheduler,
-                            playbackApprovalActions = sourcePlaybackApprovalActions,
+                            sourceManagement = sourceManagement,
                             topNavigationFocusRequester = null,
                             onAddSource = { open(AppDestination.AddSource) },
                             railFocusRequester = railFocusRequester,
@@ -190,7 +183,7 @@ fun AppNavigation(
                         )
 
                         AppDestination.AddSource -> AddSourceRoute(
-                            onboarding = sourceEntryOnboarding,
+                            onboarding = sourceOnboarding,
                             onCompleted = ::goBack,
                             onBack = ::goBack,
                         )
@@ -223,9 +216,9 @@ fun AppNavigation(
 }
 
 @Composable
-private fun rememberHasSources(sourceRefreshStore: SourceRefreshStore): Flow<Boolean> =
-    remember(sourceRefreshStore) {
-        sourceRefreshStore.observeOverviews().map { overviews -> overviews.isNotEmpty() }
+private fun rememberHasSources(sourceManagement: SourceManagement): Flow<Boolean> =
+    remember(sourceManagement) {
+        sourceManagement.observeOverviews().map { overviews -> overviews.isNotEmpty() }
     }
 
 @Composable

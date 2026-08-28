@@ -28,23 +28,18 @@ import app.muxtv.catalog.RecentChannel
 import app.muxtv.catalog.RecentChannelWriteResult
 import app.muxtv.catalog.RecentChannelsQuery
 import app.muxtv.catalog.RecentChannelsRepository
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
-import app.muxtv.catalog.sync.SourceRefreshScheduler
-import app.muxtv.database.SourceRefreshAttempt
-import app.muxtv.database.SourceRefreshCompletion
-import app.muxtv.database.SourceRefreshOverview
-import app.muxtv.database.SourceRefreshPolicy
-import app.muxtv.database.SourceRefreshStatus
-import app.muxtv.database.SourceRefreshStore
-import app.muxtv.database.SourceRefreshTarget
-import app.muxtv.database.SourceRefreshTrigger
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePlaybackApprovalResetResult
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
+import app.muxtv.catalog.SourceRefreshOverview
+import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.player.PlaybackStartGateway
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
@@ -66,15 +61,14 @@ class AppNavigationSourceJourneyTest {
     @Test
     fun httpsSourceCanBeAddedAndAppearsInSourcesAndChannelsWithoutTouch() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = JourneySourceRefreshStore()
+        val sourceManagement = JourneySourceManagement()
         val playbackCatalog = JourneyPlaybackCatalog()
         val secretLocator = "https://provider.example/list.m3u?token=journey-secret"
         val onboarding = JourneySourceEntryOnboarding(
-            sourceStore = sourceStore,
+            sourceManagement = sourceManagement,
             playbackCatalog = playbackCatalog,
             expectedLocator = secretLocator,
         )
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
@@ -93,9 +87,8 @@ class AppNavigationSourceJourneyTest {
                         recentChannelsRepository = NoRecentChannelsRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
-                        sourceRefreshStore = sourceStore,
-                        sourceRefreshScheduler = scheduler,
-                        sourceEntryOnboarding = onboarding,
+                        sourceManagement = sourceManagement,
+                        sourceOnboarding = onboarding,
                     )
                 }
             }
@@ -192,9 +185,8 @@ class AppNavigationSourceJourneyTest {
     @Test
     fun doctorBackAfterPlaybackRejectionReturnsToChannelsWithoutRetry() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = JourneySourceRefreshStore().apply { publish("Домашний IPTV") }
+        val sourceManagement = JourneySourceManagement().apply { publish("Домашний IPTV") }
         val playbackCatalog = JourneyPlaybackCatalog().apply { publish("Домашний IPTV") }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
         var playbackStartCount = 0
 
@@ -214,9 +206,8 @@ class AppNavigationSourceJourneyTest {
                         recentChannelsRepository = NoRecentChannelsRepository,
                         epgGuideRepository = NoGuideEpgGuideRepository,
                         controllerConnector = controllerConnector,
-                        sourceRefreshStore = sourceStore,
-                        sourceRefreshScheduler = scheduler,
-                        sourceEntryOnboarding = UnusedSourceEntryOnboarding,
+                        sourceManagement = sourceManagement,
+                        sourceOnboarding = UnusedSourceEntryOnboarding,
                         playbackObservationReader = PlaybackObservationReader {
                             listOf(
                                 PlaybackObservation(
@@ -275,20 +266,25 @@ class AppNavigationSourceJourneyTest {
     }
 }
 
-private object UnusedSourceEntryOnboarding : SourceEntryOnboarding {
-    override suspend fun prepare(input: RemoteSourceOnboardingInput): RemoteSourcePreparationResult =
-        error("Source entry is not part of this journey")
+private object UnusedSourceEntryOnboarding : SourceOnboarding {
+    override suspend fun prepare(
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult = error("Source entry is not part of this journey")
 
     override suspend fun activate(
-        token: RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): RemoteSourceActivationResult = error("Source entry is not part of this journey")
+    ): SourceActivationResult = SourceActivationResult.Failed(
+        reason = SourceActivationFailure.Unexpected,
+        cleanupPending = false,
+    )
 
     override suspend fun cancel(
-        token: RemoteSourcePreparationToken,
-    ): RemoteSourceCancellationResult = error("Source entry is not part of this journey")
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
 
 private fun SemanticsNodeInteraction.press(
@@ -314,51 +310,44 @@ internal object NoRecentChannelsRepository : RecentChannelsRepository {
 }
 
 private class JourneySourceEntryOnboarding(
-    private val sourceStore: JourneySourceRefreshStore,
+    private val sourceManagement: JourneySourceManagement,
     private val playbackCatalog: JourneyPlaybackCatalog,
     private val expectedLocator: String,
-) : SourceEntryOnboarding {
-    private val token = RemoteSourcePreparationToken.parse(
-        "00000000-0000-4000-8000-000000000101",
-    )
+) : SourceOnboarding {
+    private val handle = JourneyPreparationHandle()
 
     override suspend fun prepare(
-        input: RemoteSourceOnboardingInput,
-    ): RemoteSourcePreparationResult {
-        check(input.locator == expectedLocator)
-        check(!input.insecureHttpApproved)
-        return RemoteSourcePreparationResult.Prepared(
-            token = token,
-            scheme = "https",
-            host = "provider.example",
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult {
+        check(locator == expectedLocator)
+        check(!insecureHttpApproved)
+        return SourcePreparationResult.Prepared(
+            handle = handle,
+            displayEndpoint = "https://provider.example",
         )
     }
 
     override suspend fun activate(
-        token: RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): RemoteSourceActivationResult {
-        check(token == this.token)
-        sourceStore.publish(sourceName)
+    ): SourceActivationResult {
+        check(handle === this.handle)
+        sourceManagement.publish(sourceName)
         playbackCatalog.publish(sourceName)
-        return RemoteSourceActivationResult.Activated(
-            sourceId = JOURNEY_SOURCE_ID,
-            revisionNumber = 1,
-            previousRevisionNumber = 0,
-            entryCount = 1,
-            skippedEntries = 0,
-            warningCount = 0,
-        )
+        return SourceActivationResult.Activated
     }
 
     override suspend fun cancel(
-        token: RemoteSourcePreparationToken,
-    ): RemoteSourceCancellationResult = RemoteSourceCancellationResult.NotFound
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
 
-private class JourneySourceRefreshStore : SourceRefreshStore {
+private class JourneyPreparationHandle : SourcePreparationHandle()
+
+private class JourneySourceManagement : SourceManagement {
     private val overviews = MutableStateFlow<List<SourceRefreshOverview>>(emptyList())
 
     fun publish(sourceName: String) {
@@ -366,7 +355,7 @@ private class JourneySourceRefreshStore : SourceRefreshStore {
             SourceRefreshOverview(
                 sourceId = JOURNEY_SOURCE_ID,
                 sourceName = sourceName,
-                hasCredentialReference = true,
+                hasStoredAccess = true,
                 activeRevision = 1,
                 policy = null,
                 status = null,
@@ -374,37 +363,13 @@ private class JourneySourceRefreshStore : SourceRefreshStore {
         )
     }
 
-    override suspend fun getTarget(sourceId: String): SourceRefreshTarget? = null
-
     override fun observeOverviews(): Flow<List<SourceRefreshOverview>> = overviews
-
-    override suspend fun getPolicies(): List<SourceRefreshPolicy> = emptyList()
-
-    override suspend fun upsertPolicy(policy: SourceRefreshPolicy) = Unit
-
+    override fun refreshNow(sourceId: String) = Unit
+    override suspend fun updatePolicy(policy: SourceRefreshPolicy) = Unit
     override suspend fun removePolicy(sourceId: String) = Unit
-
-    override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> = flowOf(null)
-
-    override suspend fun getRecentAttempts(
+    override suspend fun revokePlaybackApprovals(
         sourceId: String,
-        limit: Int,
-    ): List<SourceRefreshAttempt> = emptyList()
-
-    override suspend fun tryAcquire(
-        sourceId: String,
-        runToken: String,
-        startedAtEpochMillis: Long,
-        staleBeforeEpochMillis: Long,
-    ): Boolean = false
-
-    override suspend fun complete(
-        sourceId: String,
-        runToken: String,
-        trigger: SourceRefreshTrigger,
-        completion: SourceRefreshCompletion,
-        expectedCredentialRef: String?,
-    ) = Unit
+    ): SourcePlaybackApprovalResetResult = SourcePlaybackApprovalResetResult.SourceNotFound
 }
 
 private class JourneyPlaybackCatalog : PlaybackCatalog {

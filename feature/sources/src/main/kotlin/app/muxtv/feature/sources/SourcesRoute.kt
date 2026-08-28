@@ -40,11 +40,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import app.muxtv.catalog.sync.SourceRefreshScheduler
-import app.muxtv.database.SourceRefreshOverview
-import app.muxtv.database.SourceRefreshPolicy
-import app.muxtv.database.SourceRefreshRunState
-import app.muxtv.database.SourceRefreshStore
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourcePlaybackApprovalResetResult
+import app.muxtv.catalog.SourceRefreshOverview
+import app.muxtv.catalog.SourceRefreshPolicy
+import app.muxtv.catalog.SourceRefreshRunState
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.designsystem.component.MuxTvEmptyState
@@ -71,12 +71,9 @@ private enum class SourcesFocusState {
 
 @Composable
 fun SourcesRoute(
-    refreshStore: SourceRefreshStore,
-    refreshScheduler: SourceRefreshScheduler,
+    sourceManagement: SourceManagement,
     onAddSource: () -> Unit,
     topNavigationFocusRequester: FocusRequester? = null,
-    playbackApprovalActions: SourcePlaybackApprovalActions =
-        SourcePlaybackApprovalActions.Unavailable,
     modifier: Modifier = Modifier,
     railFocusRequester: FocusRequester? = null,
 ) {
@@ -88,9 +85,9 @@ fun SourcesRoute(
     var detailsSourceId by rememberSaveable { mutableStateOf<String?>(null) }
     val state by produceState<SourcesUiState>(
         initialValue = SourcesUiState.Loading,
-        refreshStore,
+        sourceManagement,
     ) {
-        refreshStore.observeOverviews()
+        sourceManagement.observeOverviews()
             .catch { value = SourcesUiState.Failed }
             .collect { overviews ->
                 value = if (overviews.isEmpty()) {
@@ -172,7 +169,7 @@ fun SourcesRoute(
                 configureFocusRequesters = configureFocusRequesters,
                 onAddSource = onAddSource,
                 onOpenDetails = { sourceId -> detailsSourceId = sourceId },
-                onRefreshNow = refreshScheduler::refreshNow,
+                onRefreshNow = sourceManagement::refreshNow,
             )
         }
 
@@ -183,14 +180,14 @@ fun SourcesRoute(
                 source = detailsSource,
                 mutationInFlight = busySources[detailsSource.sourceId] == true,
                 onUpdatePolicy = { policy ->
-                    mutate(policy.sourceId) { refreshScheduler.updatePolicy(policy) }
+                    mutate(policy.sourceId) { sourceManagement.updatePolicy(policy) }
                 },
                 onRemovePolicy = { sourceId ->
-                    mutate(sourceId) { refreshScheduler.removePolicy(sourceId) }
+                    mutate(sourceId) { sourceManagement.removePolicy(sourceId) }
                 },
                 onResetPlaybackApprovals = { sourceId ->
                     mutate(sourceId) {
-                        when (playbackApprovalActions.revokeAll(sourceId)) {
+                        when (sourceManagement.revokePlaybackApprovals(sourceId)) {
                             SourcePlaybackApprovalResetResult.Reset,
                             SourcePlaybackApprovalResetResult.Unchanged,
                             -> Unit
@@ -308,7 +305,7 @@ private fun SourceCard(
 ) {
     val running = source.status?.state == SourceRefreshRunState.RUNNING
     val operationalControlsEnabled =
-        !mutationInFlight && !running && source.hasCredentialReference
+        !mutationInFlight && !running && source.hasStoredAccess
     val shape = RoundedCornerShape(TvTokens.Shape.rowCorner)
 
     Column(
@@ -367,7 +364,7 @@ private fun SourceDetailsSheet(
     val policy = source.policy ?: defaultPolicy(source.sourceId)
     val running = source.status?.state == SourceRefreshRunState.RUNNING
     val operationalControlsEnabled =
-        !mutationInFlight && !running && source.hasCredentialReference
+        !mutationInFlight && !running && source.hasStoredAccess
     val resetScheduleEnabled = !mutationInFlight && source.policy != null
     val firstActionFocusRequester = remember { FocusRequester() }
     val closeFocusRequester = remember { FocusRequester() }
@@ -567,7 +564,7 @@ private fun sourceConfigureTestTag(sourceId: String): String =
 
 private fun SourceRefreshOverview.summaryLine(): String = buildString {
     append(
-        if (hasCredentialReference) {
+        if (hasStoredAccess) {
             "Защищённая ссылка сохранена"
         } else {
             "Защищённая ссылка отсутствует"
