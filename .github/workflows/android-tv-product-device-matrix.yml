@@ -10,6 +10,8 @@ on:
       - 'catalog/api/src/main/kotlin/app/muxtv/catalog/SourceManagement.kt'
       - 'catalog/api/src/main/kotlin/app/muxtv/catalog/SourceOnboarding.kt'
       - 'app/tv/src/main/kotlin/app/muxtv/sources/**'
+      - 'player/api/**'
+      - 'player/media3/**'
       - 'tools/android/**'
       - 'tools/measurements/**'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
