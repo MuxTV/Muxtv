@@ -128,7 +128,6 @@ if (-not (Test-Path -LiteralPath $stressWorkflowPath -PathType Leaf)) {
         "Run-HostedCatalogMeasurementStress.sh",
         "timeout-minutes: 180",
         "retention-days: 3",
-        "thresholdApplied=false",
         "claimEligible=false"
     )) {
         if ($stressWorkflow -notmatch [regex]::Escape($token)) {
