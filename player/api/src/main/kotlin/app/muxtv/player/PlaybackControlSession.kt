@@ -17,14 +17,6 @@ class PlaybackSessionOperationException(
     val failure: PlaybackSessionOperationFailure,
 ) : Exception("Playback session operation failed: $failure")
 
-/** Engine-neutral lifecycle phase exposed to presentation. */
-enum class PlaybackSessionPhase {
-    IDLE,
-    BUFFERING,
-    READY,
-    ENDED,
-}
-
 enum class PlaybackSeekDirection(val sign: Int) {
     BACKWARD(-1),
     FORWARD(1),
