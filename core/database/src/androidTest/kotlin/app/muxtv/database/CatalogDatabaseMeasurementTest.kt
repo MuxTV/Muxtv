@@ -2,12 +2,13 @@ package app.muxtv.database
 
 import android.os.Bundle
 import android.util.Base64
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementArguments
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementJsonWriter
 import app.muxtv.database.measurement.CatalogDatabaseMeasurementReportPublisher
-import app.muxtv.database.measurement.CatalogDatabaseMeasurementRunner
+import app.muxtv.database.measurement.CatalogDatabaseMeasurementRunnerV4
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
@@ -21,8 +22,9 @@ class CatalogDatabaseMeasurementTest {
     fun producesThresholdFreeRoomStageActivateAndQueryEvidence() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val arguments = CatalogDatabaseMeasurementArguments.parse(InstrumentationRegistry.getArguments())
-        val report = CatalogDatabaseMeasurementRunner(
+        val report = CatalogDatabaseMeasurementRunnerV4(
             context = instrumentation.targetContext,
+            progress = { message -> Log.i(PROGRESS_TAG, message) },
         ).run(arguments.spec)
 
         assertThat(report.thresholdApplied).isFalse()
@@ -58,6 +60,7 @@ class CatalogDatabaseMeasurementTest {
     }
 
     private companion object {
+        const val PROGRESS_TAG = "MuxTvM0Measurement"
         const val RESULT_REPORT_BASE64 = "catalogDatabaseMeasurementReportBase64"
         val EXPECTED_RESULT_COUNTS = buildMap {
             put("stage-batch-250", 250)

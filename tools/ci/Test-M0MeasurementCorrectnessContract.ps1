@@ -5,20 +5,47 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$runnerPath = Join-Path $repositoryRoot "core\database\src\debug\kotlin\app\muxtv\database\measurement\CatalogDatabaseMeasurementRunner.kt"
+$runnerPath = Join-Path $repositoryRoot "core\database\src\debug\kotlin\app\muxtv\database\measurement\CatalogDatabaseMeasurementRunnerV4.kt"
+$testPath = Join-Path $repositoryRoot "core\database\src\androidTest\kotlin\app\muxtv\database\CatalogDatabaseMeasurementTest.kt"
 $workflowPath = Join-Path $repositoryRoot ".github\workflows\m0-catalog-measurement-correctness.yml"
 $hostedRunnerPath = Join-Path $repositoryRoot "tools\ci\Run-HostedCatalogMeasurementCorrectness.sh"
 $messages = [System.Collections.Generic.List[string]]::new()
 
 if (-not (Test-Path -LiteralPath $runnerPath -PathType Leaf)) {
-    $messages.Add("Catalog database measurement runner is missing.")
+    $messages.Add("Catalog database M0 v4 measurement runner is missing.")
 } else {
     $runner = Get-Content -LiteralPath $runnerPath -Raw -Encoding utf8
-    if ($runner -notmatch [regex]::Escape("expectedCatalogSearchBoundaryEpochMillis(")) {
-        $messages.Add("Catalog measurement runner does not derive nextBoundary from the published result set.")
+    foreach ($token in @(
+        "CatalogDatabaseMeasurementRunnerV4",
+        "METHOD_VERSION = 4",
+        "fresh-file-per-repetition-shared-scenarios",
+        "measureLifecycleRepetition(",
+        "fixture.batches.forEach",
+        "handle.prepareActiveEpg(fixture)",
+        "captureQueryTrace = false",
+        "expectedCatalogSearchBoundaryEpochMillis("
+    )) {
+        if ($runner -notmatch [regex]::Escape($token)) {
+            $messages.Add("Catalog M0 v4 runner is missing required methodology token: $token")
+        }
     }
     if ($runner -match [regex]::Escape("check(snapshot.nextBoundaryEpochMillis == FIRST_PROGRAMME_BOUNDARY_EPOCH_MILLIS)")) {
         $messages.Add("Catalog measurement runner still requires the global first-channel programme boundary.")
+    }
+}
+
+if (-not (Test-Path -LiteralPath $testPath -PathType Leaf)) {
+    $messages.Add("Catalog database measurement instrumentation test is missing.")
+} else {
+    $test = Get-Content -LiteralPath $testPath -Raw -Encoding utf8
+    foreach ($token in @(
+        "CatalogDatabaseMeasurementRunnerV4",
+        "MuxTvM0Measurement",
+        "Log.i(PROGRESS_TAG, message)"
+    )) {
+        if ($test -notmatch [regex]::Escape($token)) {
+            $messages.Add("Catalog M0 instrumentation test is missing required progress/methodology token: $token")
+        }
     }
 }
 
@@ -54,6 +81,8 @@ if (-not (Test-Path -LiteralPath $hostedRunnerPath -PathType Leaf)) {
         "measurementWarmups=0",
         "measurementIterations=5",
         "measurementEntryCount=50000",
+        "methodVersion",
+        "github-hosted-linux-api36-m0-v2",
         "Assert-AndroidTestResults.ps1",
         "catalogDatabaseMeasurementReportBase64",
         "thresholdApplied"
@@ -61,6 +90,9 @@ if (-not (Test-Path -LiteralPath $hostedRunnerPath -PathType Leaf)) {
         if ($hostedRunner -notmatch [regex]::Escape($token)) {
             $messages.Add("Hosted M0 catalog measurement runner is missing required contract token: $token")
         }
+    }
+    if ($hostedRunner -notmatch 'report\.get\("methodVersion"\) != 4') {
+        $messages.Add("Hosted M0 catalog measurement runner does not require methodVersion=4.")
     }
 }
 
@@ -71,4 +103,4 @@ if ($messages.Count -gt 0) {
     throw "M0 catalog measurement correctness contract failed."
 }
 
-Write-Host "M0 catalog measurement correctness routing and oracle contracts are valid."
+Write-Host "M0 catalog measurement v4 routing, lifecycle reuse, progress and oracle contracts are valid."
