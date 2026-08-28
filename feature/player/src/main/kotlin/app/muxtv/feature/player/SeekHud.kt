@@ -42,7 +42,7 @@ internal sealed interface SeekPresentationState {
  * presentation-only until the stable playback session reports the applied timeline.
  */
 @Composable
-fun SeekHud(
+internal fun SeekHud(
     state: SeekPresentationState,
     modifier: Modifier = Modifier,
     testTag: String = "player-seek-hud",
