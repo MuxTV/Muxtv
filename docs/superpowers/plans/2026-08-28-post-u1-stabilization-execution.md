@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Converge repository truth after accepted U1, complete M0 measurement correctness before any performance claim, then prepare clean architecture boundaries for the first provider/catch-up product slice.
+**Goal:** Converge repository truth after accepted U1 and accepted M0 measurement correctness, then complete clean architecture boundaries before the first provider/catch-up product slice.
 
-**Architecture:** Keep each concern independently reviewable. U0 remains unmerged characterization provenance, U1 is accepted product behavior, M0 changes measurement authority only, and later architecture/provider work must not be stacked into M0. Git/GitHub remain live-state authorities; durable documents record only accepted checkpoints.
+**Architecture:** Keep each concern independently reviewable. U0 remains unmerged characterization provenance, U1 is accepted product behavior, M0 changes measurement authority only, and architecture/provider work stays in independent PRs. Git/GitHub remain live-state authorities; durable documents record only accepted checkpoints.
 
 **Tech Stack:** Kotlin, Room 3, Compose for TV, Navigation 3, Media3, PowerShell/Bash CI harnesses, GitHub-hosted Actions, canonical Android TV API26/API36 emulators.
 
@@ -14,11 +14,11 @@
 
 - Repository-owned Android TV identities remain exactly `MuxTV_TV_OLD_API26` and `MuxTV_TV_CURRENT_API36`.
 - 1080p/720p/density/stress profiles reuse the canonical AVDs; no third persistent MuxTV AVD.
-- No performance/DB/buffer/cache conclusion is accepted before M0 measurement correctness.
+- M0/#178 is accepted; later performance/DB/buffer/cache conclusions still require owner scope and reproducible before/after evidence.
 - `MuxTvPlaybackService` remains the single ExoPlayer/MediaSession/semantic-seek mutation owner.
 - No raw URL, header, credential, token or exception payload enters durable diagnostics/evidence.
 - PR #190 remains compatibility evidence only, never a dependency mega-merge.
-- Provider expansion after M0 starts with a minimal capability seam, one Xtream Live vertical slice, then provider catch-up; DVR/local timeshift/Stalker remain later independent decisions.
+- Provider expansion starts only after #202 and #201, with a minimal capability seam, one Xtream Live vertical slice, then provider catch-up; DVR/local timeshift/Stalker remain later independent decisions.
 
 ---
 
@@ -44,46 +44,47 @@
 - Modify: `.work/ROADMAP.md`
 - Create: `docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md`
 
-**Produces:** reviewed snapshot at accepted U1 main with GitHub-hosted CI truth and M0 as current stabilization owner.
+**Produces:** reviewed snapshot at accepted M0 main with GitHub-hosted CI truth and #202/#201 as current stabilization owners.
 
-- [ ] Replace obsolete self-hosted README wording with GitHub-hosted Windows/Linux + KVM execution while preserving local verification commands.
-- [ ] Advance reviewed snapshot to `main@4a6634f51cb03f90708b7d1f02ff97632515d150` / PR #213.
-- [ ] Record accepted #211 hosted-CI migration and accepted U0→U1 result.
-- [ ] Remove U0/U1 from `known_gaps`; retain M0/#178 and release/lifecycle residuals.
-- [ ] Keep #118 implementation closed while explicitly assigning remaining reboot/unlock/package-replace operational evidence to open release owner #31.
-- [ ] Change current critical path to `M0 -> architecture boundary remediation -> provider capability/Xtream/catch-up -> isolated dependency/release closure` without moving DVR/local timeshift/Stalker forward.
-- [ ] Run repository documentation/truth validation through the normal hosted validation PR gate.
+- [x] Replace obsolete self-hosted README wording with GitHub-hosted Windows/Linux + KVM execution while preserving local verification commands.
+- [x] Advance reviewed snapshot through accepted U1/#213 and accepted M0 `main@76816014180b30872cd0517b1d2f692d1850ae0f` / PR #178.
+- [x] Record accepted #211 hosted-CI migration, accepted U0→U1 result and accepted M0 published-result Search-boundary correctness.
+- [x] Remove U0/U1/M0 from `known_gaps`; retain architecture/provider/release/lifecycle residuals.
+- [x] Keep #118 implementation closed while explicitly assigning remaining reboot/unlock/package-replace operational evidence to open release owner #31.
+- [x] Change current critical path to `#202 -> #201 -> provider capability/Xtream/catch-up -> isolated dependency/release closure` without moving DVR/local timeshift/Stalker forward.
+- [ ] Run repository documentation/truth validation through the normal hosted validation PR gate and merge #214.
 
 ### Task 3: Complete M0 measurement correctness in PR #178
 
-**Files:** exact paths are resolved from the current #178 diff before editing; product Search/Room runtime files are out of scope unless root-cause evidence contradicts the existing issue diagnosis.
+**Files:** measurement/debug/test/CI only; production Search/Room query/ranking/schema files remain out of scope.
 
-**Consumes:** accepted post-U1 `main`; #27 measurement authority; #178 proven root-cause statement.
+**Consumes:** accepted U1 `main`; #27 measurement authority; #178 proven root-cause statement.
 
-**Produces:** measurement harness where expected Search boundary is derived from the published result set rather than a global first-channel sentinel, with CI paths that actually trigger the measurement correctness gate.
+**Produces:** measurement harness where expected Search boundary is derived from the published result set rather than a global first-channel sentinel, with bounded production-path admission evidence.
 
-- [ ] Restack/rebuild #178 onto accepted current `main` so its review diff contains measurement-only changes.
-- [ ] Inspect the existing fixture helper/test and the measurement runner assertion; trace the expected-boundary value from fixture generation through published Search result IDs to assertion.
-- [ ] Write/retain the failing regression contract for selective `canonical-49999`: expected boundary must be that published channel's programme boundary.
-- [ ] Verify RED against the unfixed runner assertion, not a compile/setup failure.
-- [ ] Apply the minimal runner change to call the pure fixture helper; do not change production Search semantics.
-- [ ] Add a static workflow trigger-path RED requiring `measurement-variance-smoke.yml` to react to the measurement runner/tests it validates.
-- [ ] Verify RED before workflow-path correction.
-- [ ] Add only the missing trigger ownership and matching static harness assertion.
-- [ ] Run focused unit/measurement correctness tests, then hosted validation and measurement variance smoke on the exact final head.
-- [ ] Review artifacts/logs and require non-zero selected tests with no performance claim.
-- [ ] Squash-merge #178 only after exact-head evidence is green.
+- [x] Restack/rebuild #178 onto accepted U1 main so its review diff contains measurement-only changes.
+- [x] Trace the expected-boundary value from fixture generation through published Search result IDs to assertion.
+- [x] Retain the regression contract for selective `canonical-49999`: expected boundary is the published channel's programme boundary.
+- [x] Verify hosted RED against the unfixed routing/oracle contract.
+- [x] Apply the minimal runner change to call the pure published-result-set fixture helper; do not change production Search semantics.
+- [x] Reject the first over-broad 50k×5 automatic PR-gate design and restore #27 ownership: timed 50k remains manual stress evidence.
+- [x] Add bounded `CatalogDatabaseMeasurementCorrectnessTest` over real Room/Search/EPG at 10k scale on canonical API36.
+- [x] Prove both selective-last-channel and broad-top-100 published-boundary cases.
+- [x] Run exact-head Hosted CI contract, Hosted validation, bounded API36 M0 correctness and API26/API36 database matrix.
+- [x] Review the M0 artifact: exact source SHA, non-zero test count, zero failure/error/skip, `thresholdApplied=false`, `claimEligible=false`.
+- [x] Squash-merge #178 with expected-head protection as `76816014180b30872cd0517b1d2f692d1850ae0f`.
 
 ### Task 4: Establish the post-M0 architecture gate
 
-**Files:** implementation starts in separate PR(s) only after M0 merge.
+**Files:** implementation remains in separate PRs.
 
-**Produces:** executable dependency-direction contract before provider expansion.
+**Produces:** executable dependency-direction contracts before provider expansion.
 
-- [ ] Add a static RED that captures the confirmed feature→adapter leaks from #202 and #201.
-- [ ] Fix Sources inversion first: `feature:sources` consumes stable catalog/source-management ports while WorkManager/Room run-token ownership remains unchanged.
-- [ ] Fix Player inversion second: `feature:player` consumes `player:api`; Media3 surface/controller types remain adapter-owned while the service stays the only player/seek owner.
-- [ ] Validate each inversion as an independent host/device PR; do not combine them with provider implementation.
+- [x] Add static RED contracts capturing the confirmed feature→adapter leaks in #202 and #201.
+- [ ] Accept Sources inversion first (#202 / PR #215): `feature:sources` consumes stable catalog/source-management/onboarding ports while WorkManager/Room run-token ownership remains unchanged.
+- [ ] Accept Player inversion second (#201 / PR #216): `feature:player` consumes `player:api`; Media3 surface/controller types remain adapter-owned while the service stays the only player/seek owner.
+- [ ] Preserve applied-vs-accepted semantic seek evidence and opaque/stable track identity during Player cutover.
+- [ ] Validate each inversion as an independent exact-head host/device PR; do not combine them with provider implementation.
 
 ### Task 5: Start the first product-breadth train
 
@@ -99,6 +100,6 @@
 
 ## Acceptance order
 
-`#213 accepted -> U0 tracking retired -> truth sync accepted -> #178/M0 accepted -> architecture boundary PRs -> ProviderCapability -> Xtream Live -> provider catch-up -> dependency/release closure`.
+`#213 accepted -> U0 tracking retired -> #178/M0 accepted -> truth sync #214 accepted -> #202/#215 -> #201/#216 -> ProviderCapability -> Xtream Live -> provider catch-up -> dependency/release closure`.
 
 No later item authorizes skipping an earlier evidence gate.

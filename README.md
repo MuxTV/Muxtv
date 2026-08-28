@@ -16,9 +16,10 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - redacted Doctor Lite;
 - Lounge Light TV shell с evidence-proven transient rail geometry и deterministic D-pad/focus restoration;
 - GitHub-hosted Windows/Linux CI, включая canonical Android TV API26/API36 emulator gates;
+- принятый M0 measurement-correctness boundary для published Search result sets; 50k timing остаётся manual stress evidence;
 - measurement, JMH и Macrobenchmark/Baseline Profile foundation.
 
-Текущий stabilization execution описан в [Post-U1 Stabilization and M0 plan](docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md). Точная принятая ревизия хранится в [.work/CURRENT-STATE.md](.work/CURRENT-STATE.md) и [.work/meta/status.yaml](.work/meta/status.yaml); live `HEAD`, PR и Issue всегда сверяются с Git/GitHub во время выполнения.
+Текущий reviewed baseline — `main@76816014180b30872cd0517b1d2f692d1850ae0f` после принятого M0/#178. Stabilization execution описан в [Post-U1 Stabilization and M0 plan](docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md). Точная принятая ревизия хранится в [.work/CURRENT-STATE.md](.work/CURRENT-STATE.md) и [.work/meta/status.yaml](.work/meta/status.yaml); live `HEAD`, PR и Issue всегда сверяются с Git/GitHub во время выполнения.
 
 ## Архитектурные принципы
 
@@ -28,7 +29,7 @@ MuxTV — local-first приложение для Android TV, Google TV и Fire 
 - Один MediaSessionService владеет ExoPlayer, recovery generation, semantic seek mutation и playback lifecycle.
 - Features зависят от стабильных repository/player contracts, а не от DAO, raw network clients или Media3 implementation; подтверждённые boundary leaks исправляются отдельными архитектурными PR до provider expansion.
 - Search остаётся bounded top-N; Paging применяется к просматриваемому каталогу Channels, но не заменяет Search ranking/truncation contract.
-- Performance-изменения принимаются только после воспроизводимого before/after evidence; текущий M0/#178 должен быть принят до новых performance/DB conclusions.
+- M0/#178 принят как correctness gate. Performance/DB/buffer/cache изменения по-прежнему принимаются только по owner issue и воспроизводимому before/after evidence; hosted emulator correctness не является absolute performance claim.
 - Kotlin/Room/Media3 остаются основным путём; Rust, bundled SQLite, libmpv и второй player требуют отдельного evidence-backed ADR.
 
 ## Сборка и проверка
@@ -59,7 +60,7 @@ PR/release device-проверки выполняются GitHub-hosted workflow
 - [.work/ROADMAP.md](.work/ROADMAP.md) — продуктовые фазы и текущий checkpoint.
 - [.work/CURRENT-STATE.md](.work/CURRENT-STATE.md) — durable reviewed implementation snapshot.
 - [.work/meta](.work/meta) — машинно-читаемые contracts и индексы.
-- [Post-U1 Stabilization and M0 plan](docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md) — текущая последовательность исполнения после принятого U1.
+- [Post-U1 Stabilization and M0 plan](docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md) — исполненная U1/M0 последовательность и текущий architecture/provider train.
 - [Historical MVP alpha execution journal](docs/superpowers/plans/2026-08-08-mvp-alpha-1-execution.md) — предыдущий execution journal; сохраняется как историческое evidence и не заменяет live Git/GitHub state.
 
 ## Лицензия

@@ -7,14 +7,14 @@ last_reviewed: 2026-08-28
 
 ## Current alpha checkpoint
 
-MuxTV находится в **functional pre-alpha / stabilization before MVP 0.1 alpha**. Durable accepted baseline — `main@4a6634f51cb03f90708b7d1f02ff97632515d150`: Source/Catalog/EPG/Search/Guide, service-owned Media3 playback/recovery, Doctor Lite, single service-owned seek authority, exact two-AVD Android TV contract, GitHub-hosted CI и U0-characterized/U1-corrected Lounge Light TV shell уже приняты.
+MuxTV находится в **functional pre-alpha / stabilization before MVP 0.1 alpha**. Durable accepted baseline — `main@76816014180b30872cd0517b1d2f692d1850ae0f`: Source/Catalog/EPG/Search/Guide, service-owned Media3 playback/recovery, Doctor Lite, single service-owned seek authority, exact two-AVD Android TV contract, GitHub-hosted CI, U0-characterized/U1-corrected Lounge Light TV shell и M0 published-result Search-boundary correctness уже приняты.
 
-U0/#188/#189 и U1/#212/#213 завершены. Текущий critical path:
+U0/#188/#189, U1/#212/#213 и M0/#178 завершены. Текущий critical path:
 
-1. **M0 — measurement correctness (#178 under #27).** Measurement authority/correctness должна быть принята до DB/performance conclusions.
-2. **Architecture boundary gate (#202 -> #201).** Sources сначала переводится за stable catalog/source-management ports; затем `feature:player` освобождается от Media3 implementation leakage. Существующие WorkManager/Room run-token и service-owned player/seek owners не меняются.
-3. **Minimum provider core promoted by #205/#184.** После boundary gate принять минимальный `ProviderCapability` seam, один реальный Xtream Live vertical slice и first-class provider catch-up playback intent/resolution. Это закрывает более крупный user-visible IPTV gap, чем дальнейшее наращивание control-plane sophistication.
-4. **Measured optimization only after M0.** Buffer/cache/Room/parser/Compose tuning допускается только при owner issue и before/after evidence.
+1. **Architecture Sources boundary (#202).** `feature:sources` переводится за stable catalog/source-management/onboarding ports при неизменных WorkManager scheduling/retry, Room run-token lease authority, durable onboarding cleanup и exact-origin HTTP approval semantics.
+2. **Architecture Player boundary (#201).** После Sources `feature:player` освобождается от Media3 implementation leakage. Единственный service-owned ExoPlayer/MediaSession/semantic-seek owner сохраняется; accepted-vs-applied seek semantics и stable track identity не теряются.
+3. **Minimum provider core promoted by #205/#184.** После обоих boundary gates принять минимальный `ProviderCapability` seam, один реальный Xtream Live vertical slice и first-class provider catch-up playback intent/resolution. Это закрывает более крупный user-visible IPTV gap, чем дальнейшее наращивание control-plane sophistication.
+4. **Measured optimization remains evidence-gated.** M0 принят и больше не блокирует owner work, но buffer/cache/Room/parser/Compose tuning допускается только при owner issue и воспроизводимом before/after evidence; hosted emulator correctness не является absolute performance claim.
 5. **Dependency modernization после stabilization baseline.** PR #190 — только combined compatibility probe; финальные dependency changes должны быть изолированными owner PR.
 6. **Release closure (#31).** Baseline Profile/CUJ, API37 private-LAN smoke, signing/SBOM и physical-device evidence для weak ARM/vendor codec/HDR/passthrough/absolute performance claims. Остаточные #118 locked-boot/reboot/package-replace случаи являются release qualification, а не уже доказанной runtime capability.
 
@@ -26,7 +26,7 @@ Timed/repeated 50k Search/M3U execution является manual stress evidence,
 
 Подробная последовательность текущей работы: `docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md`.
 
-## Pre-alpha provider bridge after M0
+## Pre-alpha provider bridge after architecture gates
 
 Эта небольшая последовательность намеренно вытащена из старой поздней Phase 05 после конкурентного/product audit #205 и architecture umbrella #184. Она **не** означает перенос всего provider/storage roadmap до alpha.
 

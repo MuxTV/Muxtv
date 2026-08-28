@@ -3,8 +3,8 @@ status: reviewed_snapshot
 last_reviewed: 2026-08-28
 architecture_version: 2
 # Compatibility alias: reviewed snapshot, not dynamic HEAD.
-implementation_source_commit: 4a6634f51cb03f90708b7d1f02ff97632515d150
-reviewed_main_commit: 4a6634f51cb03f90708b7d1f02ff97632515d150
+implementation_source_commit: 76816014180b30872cd0517b1d2f692d1850ae0f
+reviewed_main_commit: 76816014180b30872cd0517b1d2f692d1850ae0f
 live_state_authority: git
 ---
 
@@ -12,7 +12,7 @@ live_state_authority: git
 
 ## Что означает этот документ
 
-Этот файл — **durable reviewed snapshot**, а не динамический снимок GitHub. Он проверен против принятого `main@4a6634f51cb03f90708b7d1f02ff97632515d150` после GitHub-hosted CI migration (#211) и принятого U1 TV shell/scale correction (#213).
+Этот файл — **durable reviewed snapshot**, а не динамический снимок GitHub. Он проверен против принятого `main@76816014180b30872cd0517b1d2f692d1850ae0f` после GitHub-hosted CI migration (#211), U1 TV shell/scale correction (#213) и принятого M0 measurement-correctness PR #178.
 
 Точный `HEAD`, текущая ветка и dirty-state берутся из Git во время выполнения. Состояние PR/Issues берётся из GitHub во время выполнения и намеренно не фиксируется здесь как «текущее»: оно может измениться без единого commit и поэтому не является versioned repository truth.
 
@@ -22,14 +22,14 @@ live_state_authority: git
 
 MuxTV находится в стадии **functional pre-alpha / stabilization before MVP 0.1 alpha**.
 
-Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Guide контур, service-owned Media3 playback/recovery и semantic seek authority, Doctor Lite, внешний HTTP/HTTPS playback, EP-08 progressive resilience evidence, U0-characterized и U1-corrected Lounge Light TV shell/focus behavior, dependency-aware architecture guards, GitHub-hosted exact-head CI и **exact two-AVD repository/runtime contract**.
+Reviewed snapshot включает закрытый Source/Catalog/EPG/Search/Guide контур, service-owned Media3 playback/recovery и semantic seek authority, Doctor Lite, внешний HTTP/HTTPS playback, EP-08 progressive resilience evidence, U0-characterized и U1-corrected Lounge Light TV shell/focus behavior, dependency-aware architecture guards, GitHub-hosted exact-head CI, **exact two-AVD repository/runtime contract** и принятый M0 Search-boundary correctness gate.
 
-U0/#188/#189 и U1/#212/#213 больше не являются текущим critical path. Следующий обязательный stabilization owner — **M0 measurement correctness (#178 under #27)**. Новые DB/performance/buffer/cache conclusions и tuning не должны опережать M0.
+U0/#188/#189, U1/#212/#213 и M0/#178 больше не являются текущим critical path. Следующий обязательный stabilization owner — **architecture Sources boundary #202**, затем **Player boundary #201**. ProviderCapability/Xtream/catch-up не должны опережать эти два boundary gates.
 
 ## Принятая база snapshot
 
 - Repository: `MuxTV/Muxtv`, default branch `main`, **public**, BSD 3-Clause.
-- Reviewed main: `4a6634f51cb03f90708b7d1f02ff97632515d150` — PR #213, принятый U1 correction поверх GitHub-hosted CI baseline #211.
+- Reviewed main: `76816014180b30872cd0517b1d2f692d1850ae0f` — PR #178, принятый M0 measurement correctness поверх U1/#213 и GitHub-hosted CI baseline #211.
 - Android application: `app.muxtv.tv`, versionCode=1001, versionName=`0.1.0-alpha.1`, minSdk=26.
 - Architecture: нормативная v2; implementation progress не повышает architecture version.
 - Stack: Kotlin, Coroutines/Flow, Compose for TV, Navigation 3, Hilt, Room 3, WorkManager, OkHttp, Media3.
@@ -85,6 +85,9 @@ PR #213 принят как минимальный U1 correction:
 
 - Doctor Lite presentation/export без secrets;
 - deterministic 1k/10k/50k M3U corpus и repeated-series tooling;
+- accepted M0 measurement oracle derives expected Search boundary from the actually published result set;
+- bounded M0 correctness on canonical API36 uses real Room/Search/EPG path at 10k scale; hosted timing is threshold-free and claim-ineligible;
+- 50k timed/repeated execution remains manual stress evidence rather than an automatic PR/release gate;
 - JMH и Macrobenchmark/Baseline Profile foundation;
 - release identity, R8/resource optimization и signing/evidence contracts;
 - GitHub-hosted exact-source-head provenance and fail-closed Android test-result validation;
@@ -103,19 +106,21 @@ PR #213 принят как минимальный U1 correction:
 - PR #206 / `a8c579cf...` — accepted stabilization truth sync;
 - PR #211 / `c038ef5d...` — public-repository migration to GitHub-hosted CI;
 - U0 / #188 / PR #189 head `7a332bbd...` — completed characterization provenance, intentionally closed unmerged after evidence consumption;
-- PR #213 / `4a6634f5...` — accepted U1 transient rail geometry + Lounge Light scale correction.
+- PR #213 / `4a6634f5...` — accepted U1 transient rail geometry + Lounge Light scale correction;
+- PR #178 / `76816014...` — accepted M0 published-result Search-boundary correctness gate with bounded canonical API36 production-path evidence.
 
 Порядок списка отражает причинную стабилизационную цепочку, а не числовую сортировку PR.
 
 ## Следующая последовательность перед MVP 0.1 alpha
 
-1. **M0 — measurement correctness (#178 under #27).** Restack/rebuild measurement-only delta onto accepted main; prove selective Search result boundaries are asserted from the actually published result set; close measurement workflow trigger ownership; obtain exact-head hosted validation + measurement correctness evidence.
-2. **Architecture boundary gate before provider expansion (#202 then #201).** First move Sources behind stable catalog/source-management ports; then remove Media3 implementation leakage from `feature:player`, while preserving current WorkManager/Room run-token and service-owned player/seek ownership.
-3. **Product breadth promoted by #205/#184.** After the architecture gate, implement the minimum provider-capability seam, exactly one Xtream Live vertical slice, then first-class provider catch-up intent/resolution. This is promoted ahead of the old late provider-only sequencing because the user-visible IPTV loop is now a larger maturity gap than additional control-plane sophistication.
+1. **Architecture Sources boundary (#202).** Move `feature:sources` behind stable catalog/source-management and onboarding ports while preserving WorkManager scheduling/retry, Room run-token lease authority, durable onboarding cleanup and exact-origin approval behavior.
+2. **Architecture Player boundary (#201).** Remove Media3 implementation leakage from `feature:player`; preserve one service-owned ExoPlayer, semantic seek mutation/coalescing authority, applied-vs-accepted seek semantics and stable track identity.
+3. **Product breadth promoted by #205/#184.** After both architecture gates, implement the minimum provider-capability seam, exactly one Xtream Live vertical slice, then first-class provider catch-up intent/resolution.
 4. **Keep expensive provider/storage scope late.** Stalker/Ministra, local timeshift, DVR, multiview, executable extensions and alternate player engines remain separate later decisions and are not pulled into the first provider train.
-5. **Observability preparation (#191/#192/#193) may proceed in parallel host-first** only while it does not change product/performance semantics or block M0/product breadth.
-6. **Dependency modernization after stabilization.** PR #190 remains combined compatibility evidence only; final dependency changes must be isolated owner PRs.
-7. **Alpha release evidence (#31).** API37 private-LAN smoke, canonical API26/API36 release matrix, Baseline Profile/CUJ, signing/SBOM and physical current/weak TV evidence for hardware-specific claims.
+5. **Measured optimization is evidence-gated.** M0 no longer blocks owner work, but DB/parser/Compose/buffer/cache/performance changes still require explicit owner scope and reproducible before/after evidence; hosted emulator correctness does not establish absolute performance.
+6. **Observability preparation (#191/#192/#193) may proceed in parallel host-first** only while it does not change product/performance semantics or block the architecture/product train.
+7. **Dependency modernization after stabilization.** PR #190 remains combined compatibility evidence only; final dependency changes must be isolated owner PRs.
+8. **Alpha release evidence (#31).** API37 private-LAN smoke, canonical API26/API36 release matrix, Baseline Profile/CUJ, signing/SBOM and physical current/weak TV evidence for hardware-specific claims.
 
 Detailed execution order: `docs/superpowers/plans/2026-08-28-post-u1-stabilization-execution.md`.
 
@@ -129,7 +134,6 @@ Timed/repeated 50k Search/M3U execution не является обязатель
 
 ## Известные gaps reviewed snapshot
 
-- M0 measurement correctness (#178) ещё не принят;
 - confirmed architecture boundary leaks in Sources (#202) and Player (#201) remain before provider expansion;
 - source-refresh Doctor diagnostics residual (#30);
 - WorkManager/Tracing/OkHttp observability owners #191/#192/#193 не являются полностью accepted implementation;

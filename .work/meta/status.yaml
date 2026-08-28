@@ -6,13 +6,13 @@ architecture_version: 2
 
 # Compatibility alias for older repository tooling. This is a reviewed snapshot commit,
 # never the dynamic branch HEAD. Live HEAD is resolved from Git at execution time.
-implementation_source_commit: 4a6634f51cb03f90708b7d1f02ff97632515d150
+implementation_source_commit: 76816014180b30872cd0517b1d2f692d1850ae0f
 
 truth_snapshot:
-  reviewed_main_commit: 4a6634f51cb03f90708b7d1f02ff97632515d150
-  reviewed_main_short: 4a6634f5
-  reviewed_through_pr: 213
-  latest_integration_pr: 213
+  reviewed_main_commit: 76816014180b30872cd0517b1d2f692d1850ae0f
+  reviewed_main_short: 76816014
+  reviewed_through_pr: 178
+  latest_integration_pr: 178
   reviewed_at: 2026-08-28
   live_git_authority: git
   live_github_authority: github_api
@@ -24,7 +24,7 @@ repository_state:
   ci: present_github_hosted_windows_linux_kvm_exact_source_head_and_api26_api36_device_gates
   tests: present_unit_android_instrumentation_migration_search_guide_playback_doctor_ui_and_measurement
   release_pipeline: alpha_identity_present_signing_and_physical_release_gate_pending
-  documentation: reviewed_through_u1_main_4a6634f5
+  documentation: reviewed_through_m0_main_76816014
   room_schema: 10
   android_tv_avd_policy: exact_two_canonical_identities_api26_api36
 
@@ -48,6 +48,8 @@ implemented:
   - guide_presentation_projection_outside_compose
   - bounded_unicode_search_top_n
   - search_debounce_cancellation_retry_truncation_and_focus
+  - m0_published_result_search_boundary_correctness
+  - bounded_api36_real_room_search_epg_m0_correctness_evidence
   - media3_single_process_owned_session_and_player
   - single_service_owned_seek_mutation_and_coalescing_authority
   - service_owned_first_rendered_frame_success
@@ -100,6 +102,7 @@ verified_evidence:
   hosted_ci_migration_merge: c038ef5d5c6760eec194209eeb6b41978ddee745
   u0_characterization_head: 7a332bbd772f8491bb5213cc91c1b0e78211a447
   u1_tv_shell_scale_merge: 4a6634f51cb03f90708b7d1f02ff97632515d150
+  m0_measurement_correctness_merge: 76816014180b30872cd0517b1d2f692d1850ae0f
 
 active_work:
   semantics: reviewed_work_records_not_live_github_state
@@ -125,13 +128,14 @@ active_work:
     completed:
       - u0_runtime_ui_characterization_issue_188_pr_189
       - u1_evidence_driven_ui_correction_issue_212_pr_213
+      - m0_measurement_correctness_pr_178
     critical_path:
-      - m0_measurement_correctness_issue_178
       - architecture_sources_boundary_issue_202
       - architecture_player_boundary_issue_201
       - provider_capability_xtream_live_and_provider_catchup_issue_184_205
     rules:
-      - no_performance_or_db_conclusion_before_m0
+      - measured_performance_changes_require_owner_and_before_after_evidence
+      - hosted_emulator_correctness_is_not_absolute_performance_evidence
       - no_third_muxtv_avd
       - no_provider_mega_pr
   observability_preparation:
@@ -140,7 +144,7 @@ active_work:
       - issue_191_workmanager_failure_observation
       - issue_192_secret_safe_androidx_tracing_2_0
       - issue_193_secret_safe_okhttp_phase_timings
-    rule: must_not_block_m0_or_authorize_performance_changes
+    rule: must_not_block_architecture_or_product_breadth_train
   combined_stack_probe:
     status: compatibility_probe_only_not_merge_unit
     source_pr: 190
@@ -148,7 +152,6 @@ active_work:
 next_milestone:
   id: stabilization_before_mvp_0_1_alpha
   sequence:
-    - m0_measurement_correctness
     - sources_then_player_dependency_inversion
     - minimal_provider_capability_seam
     - one_xtream_live_vertical_slice
@@ -157,7 +160,6 @@ next_milestone:
     - api37_and_physical_tv_release_evidence
 
 known_gaps:
-  - m0_measurement_correctness_issue_178
   - sources_feature_adapter_boundary_issue_202
   - player_feature_media3_boundary_issue_201
   - source_refresh_doctor_diagnostics_residual
