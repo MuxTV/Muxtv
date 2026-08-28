@@ -63,7 +63,10 @@ class PlayerSeekHudStablePortJourneyTest {
         composeRule.onNodeWithTag("player-seek-hud")
             .assertTextContains("→")
             .assertTextContains("2:05")
-        composeRule.onNodeWithTag("player-seek-input-submitted").assertExists()
+        composeRule.onNodeWithTag(
+            testTag = "player-seek-input-submitted",
+            useUnmergedTree = true,
+        ).assertExists()
     }
 
     @Test
@@ -96,7 +99,10 @@ class PlayerSeekHudStablePortJourneyTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("player-seek-hud").assertDoesNotExist()
-        composeRule.onNodeWithTag("player-seek-input-command-unavailable").assertExists()
+        composeRule.onNodeWithTag(
+            testTag = "player-seek-input-command-unavailable",
+            useUnmergedTree = true,
+        ).assertExists()
     }
 
     private class SeekableTestSession(
