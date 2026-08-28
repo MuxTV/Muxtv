@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,8 @@ import app.muxtv.player.ExternalPlaybackStartResult
 import app.muxtv.player.PlaybackObservation
 import app.muxtv.player.PlaybackObservationKind
 import app.muxtv.player.PlaybackObservationRecorder
+import app.muxtv.player.media3.Media3PlaybackSessionGateway
+import app.muxtv.player.media3.Media3PlaybackSurface
 import app.muxtv.player.media3.MediaControllerOperationException
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.player.media3.PlaybackSetupId
@@ -66,6 +69,9 @@ class ExternalPlaybackActivity : ComponentActivity() {
 
     @Inject
     lateinit var controllerConnector: MuxTvMediaControllerConnector
+
+    @Inject
+    lateinit var playbackSessionGateway: Media3PlaybackSessionGateway
 
     @Inject
     lateinit var observationRecorder: PlaybackObservationRecorder
@@ -93,6 +99,7 @@ class ExternalPlaybackActivity : ComponentActivity() {
                 ExternalPlaybackScreen(
                     state = uiState,
                     remoteInputHost = remoteInputHost,
+                    playbackSessionGateway = playbackSessionGateway,
                     onApproveLan = { requestLanPermission() },
                     onRetryGate = ::retryGates,
                     onApproveHttp = ::approveHttpOrigin,
@@ -391,6 +398,7 @@ private sealed interface ExternalUiState {
 private fun ExternalPlaybackScreen(
     state: ExternalUiState,
     remoteInputHost: PlayerRemoteInputHost,
+    playbackSessionGateway: Media3PlaybackSessionGateway,
     onApproveLan: () -> Unit,
     onRetryGate: () -> Unit,
     onApproveHttp: () -> Unit,
@@ -504,34 +512,48 @@ private fun ExternalPlaybackScreen(
             modifier = modifier,
         )
 
-        is ExternalUiState.Surface -> Box(
-            modifier = modifier
-                .fillMaxSize()
-                .then(
-                    if (state is ExternalUiState.Playing) {
-                        Modifier.testTag(EXTERNAL_FIRST_FRAME_CONFIRMED_TEST_TAG)
-                    } else {
-                        Modifier
+        is ExternalUiState.Surface -> {
+            val playbackSession = remember(state.controller, playbackSessionGateway) {
+                playbackSessionGateway.sessionFor(state.controller)
+            }
+            DisposableEffect(playbackSession) {
+                onDispose { playbackSession.close() }
+            }
+            Box(
+                modifier = modifier
+                    .fillMaxSize()
+                    .then(
+                        if (state is ExternalUiState.Playing) {
+                            Modifier.testTag(EXTERNAL_FIRST_FRAME_CONFIRMED_TEST_TAG)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
+                PlayerSurfaceContent(
+                    session = playbackSession,
+                    playbackSurface = { session, surfaceModifier ->
+                        Media3PlaybackSurface(
+                            session = session,
+                            modifier = surfaceModifier,
+                        )
                     },
-                ),
-        ) {
-            PlayerSurfaceContent(
-                controller = state.controller,
-                title = state.title,
-                favoriteSupported = false,
-                contentIdentity = state.sessionId,
-                remoteInputHost = remoteInputHost,
-                stopAction = PlayerSurfaceAction(
-                    label = "Остановить",
-                    onClick = onStop,
-                ),
-                backAction = PlayerSurfaceAction(
-                    label = "Назад",
-                    onClick = onBack,
-                ),
-                testTagPrefix = "external",
-                modifier = Modifier.fillMaxSize(),
-            )
+                    title = state.title,
+                    favoriteSupported = false,
+                    contentIdentity = state.sessionId,
+                    remoteInputHost = remoteInputHost,
+                    stopAction = PlayerSurfaceAction(
+                        label = "Остановить",
+                        onClick = onStop,
+                    ),
+                    backAction = PlayerSurfaceAction(
+                        label = "Назад",
+                        onClick = onBack,
+                    ),
+                    testTagPrefix = "external",
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

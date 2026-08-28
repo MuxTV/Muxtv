@@ -2,6 +2,7 @@ import org.gradle.api.GradleException
 
 plugins {
     id("muxtv.android.library")
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
@@ -18,6 +19,7 @@ val playerProxyMeasurementsEnabled = providers.gradleProperty("playerProxyMeasur
 
 android {
     namespace = "app.muxtv.player.media3"
+    buildFeatures { compose = true }
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         if (!playerProxyMeasurementsEnabled.get()) {
@@ -38,6 +40,8 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":player:api"))
     implementation(libs.coroutines.android)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
 
     // Keep ExoPlayer, session and UI artifacts on the single catalog Media3 version. The external
     // surface path depends on the SessionResult.INFO_CANCELLED handling fixed upstream in 1.11.0.
@@ -45,6 +49,7 @@ dependencies {
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.datasource.okhttp)
+    implementation(libs.media3.ui.compose)
     api(libs.media3.session)
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)

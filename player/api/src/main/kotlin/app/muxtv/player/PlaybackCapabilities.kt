@@ -3,10 +3,9 @@ package app.muxtv.player
 /**
  * Capability projection of the current playback session for presentation decisions.
  *
- * Derived exclusively from controller/player state (available commands, prepared tracks,
- * timeline, media configuration). The UI never derives capabilities from the word
- * "TorrServer", the route kind or a persisted flag: capability means what Media3 currently
- * supports for the installed media item.
+ * Derived exclusively from the active playback implementation state: available commands,
+ * prepared tracks and timeline/media state. Presentation must not infer capability from source
+ * names, route kinds or persisted flags.
  */
 data class PlayerCapabilities(
     val canSeek: Boolean,

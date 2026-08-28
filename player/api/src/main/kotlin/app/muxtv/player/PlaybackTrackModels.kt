@@ -1,9 +1,9 @@
 package app.muxtv.player
 
 /**
- * Session-local key of an individual track inside the current [androidx.media3.common.Tracks]
- * snapshot. The key is derived from the TrackGroup identity (or a positional fallback) plus the
- * track index; the human-readable label is never identity.
+ * Session-local key of an individual track inside the current playback snapshot. The key is
+ * derived by the playback implementation from stable group identity (or a positional fallback)
+ * plus the track index; the human-readable label is never identity.
  */
 data class TrackKey(
     val groupId: String,
@@ -15,9 +15,7 @@ data class TrackKey(
     }
 }
 
-/**
- * Immutable presentation projection of one audio track. No Media3 objects cross into Compose.
- */
+/** Immutable presentation projection of one audio track. No engine objects cross this boundary. */
 data class AudioTrackUiModel(
     val key: TrackKey,
     val selected: Boolean,
@@ -35,9 +33,7 @@ data class AudioTrackUiModel(
     }
 }
 
-/**
- * Immutable presentation projection of one embedded text track.
- */
+/** Immutable presentation projection of one embedded text track. */
 data class SubtitleTrackUiModel(
     val key: TrackKey,
     val selected: Boolean,

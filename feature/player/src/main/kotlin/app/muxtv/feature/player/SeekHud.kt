@@ -11,41 +11,59 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
-import app.muxtv.player.media3.PlaybackSeekController
-import app.muxtv.player.media3.SeekControllerState
+import app.muxtv.player.PlaybackSeekDirection
+
+/** Presentation-only seek state. Actual player mutation remains owned by the playback service. */
+internal sealed interface SeekPresentationState {
+    data object Idle : SeekPresentationState
+
+    data class Pending(
+        val targetMs: Long,
+        val direction: PlaybackSeekDirection,
+    ) : SeekPresentationState
+
+    data class Applying(
+        val targetMs: Long,
+        val direction: PlaybackSeekDirection,
+    ) : SeekPresentationState
+
+    data class Completed(
+        val targetMs: Long,
+        val direction: PlaybackSeekDirection,
+    ) : SeekPresentationState
+}
 
 /**
  * Transient seek HUD shown while the overlay is hidden: immediate virtual target with a
- * direction arrow. Hidden entirely in [SeekControllerState.Idle]; the target is independent
- * from the actual player position until Media3 confirms the applied seek.
+ * direction arrow. Hidden entirely in [SeekPresentationState.Idle]; the target remains
+ * presentation-only until the stable playback session reports the applied timeline.
  */
 @Composable
 fun SeekHud(
-    state: SeekControllerState,
+    state: SeekPresentationState,
     modifier: Modifier = Modifier,
     testTag: String = "player-seek-hud",
 ) {
     when (state) {
-        SeekControllerState.Idle -> Unit
-        is SeekControllerState.Pending,
-        is SeekControllerState.Applying,
-        is SeekControllerState.Completed,
+        SeekPresentationState.Idle -> Unit
+        is SeekPresentationState.Pending,
+        is SeekPresentationState.Applying,
+        is SeekPresentationState.Completed,
         -> {
             val targetMs = when (state) {
-                is SeekControllerState.Pending -> state.targetMs
-                is SeekControllerState.Applying -> state.targetMs
-                is SeekControllerState.Completed -> state.targetMs
-                SeekControllerState.Idle -> 0L
+                is SeekPresentationState.Pending -> state.targetMs
+                is SeekPresentationState.Applying -> state.targetMs
+                is SeekPresentationState.Completed -> state.targetMs
+                SeekPresentationState.Idle -> 0L
             }
             val direction = when (state) {
-                is SeekControllerState.Pending -> state.direction
-                is SeekControllerState.Applying -> state.direction
-                is SeekControllerState.Completed -> state.direction
-                SeekControllerState.Idle -> PlaybackSeekController.DIRECTION_NONE
+                is SeekPresentationState.Pending -> state.direction
+                is SeekPresentationState.Applying -> state.direction
+                is SeekPresentationState.Completed -> state.direction
+                SeekPresentationState.Idle -> null
             }
             Row(
                 modifier = modifier
@@ -74,8 +92,8 @@ fun SeekHud(
     }
 }
 
-private fun seekDirectionArrow(direction: Int): String = when {
-    direction < 0 -> "←"
-    direction > 0 -> "→"
-    else -> ""
+private fun seekDirectionArrow(direction: PlaybackSeekDirection?): String = when (direction) {
+    PlaybackSeekDirection.BACKWARD -> "←"
+    PlaybackSeekDirection.FORWARD -> "→"
+    null -> ""
 }
