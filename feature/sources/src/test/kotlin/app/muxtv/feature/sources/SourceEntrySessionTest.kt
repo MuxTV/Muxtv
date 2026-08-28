@@ -1,10 +1,11 @@
 package app.muxtv.feature.sources
 
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePreparationFailure
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -12,12 +13,11 @@ import org.junit.Test
 class SourceEntrySessionTest {
     @Test
     fun prepareExposesOnlySanitizedEndpoint() = runTest {
-        val token = token(1)
+        val handle = TestPreparationHandle(1)
         val onboarding = FakeSourceEntryOnboarding(
-            prepareResult = RemoteSourcePreparationResult.Prepared(
-                token = token,
-                scheme = "https",
-                host = "example.com",
+            prepareResult = SourcePreparationResult.Prepared(
+                handle = handle,
+                displayEndpoint = "https://example.com",
             ),
         )
         val session = SourceEntrySession(onboarding)
@@ -27,8 +27,8 @@ class SourceEntrySessionTest {
         assertThat(session.state.value).isEqualTo(
             SourceEntryUiState.Confirming("https://example.com"),
         )
-        assertThat(session.state.value.toString()).doesNotContain(token.value)
         assertThat(session.state.value.toString()).doesNotContain("secret")
+        assertThat(handle.toString()).doesNotContain("1")
     }
 
     @Test
@@ -36,11 +36,10 @@ class SourceEntrySessionTest {
         val onboarding = FakeSourceEntryOnboarding(
             prepareResults = ArrayDeque(
                 listOf(
-                    RemoteSourcePreparationResult.InsecureTransportApprovalRequired,
-                    RemoteSourcePreparationResult.Prepared(
-                        token = token(2),
-                        scheme = "http",
-                        host = "192.168.1.10",
+                    SourcePreparationResult.InsecureTransportApprovalRequired,
+                    SourcePreparationResult.Prepared(
+                        handle = TestPreparationHandle(2),
+                        displayEndpoint = "http://192.168.1.10",
                     ),
                 ),
             ),
@@ -63,10 +62,9 @@ class SourceEntrySessionTest {
     @Test
     fun restoreRecoversPreparedEndpointWithoutRouteArguments() = runTest {
         val onboarding = FakeSourceEntryOnboarding(
-            restored = RemoteSourcePreparationResult.Prepared(
-                token = token(3),
-                scheme = "https",
-                host = "provider.example",
+            restored = SourcePreparationResult.Prepared(
+                handle = TestPreparationHandle(3),
+                displayEndpoint = "https://provider.example",
             ),
         )
         val session = SourceEntrySession(onboarding)
@@ -81,19 +79,11 @@ class SourceEntrySessionTest {
     @Test
     fun successfulActivationCompletesAndClearsPreparedSession() = runTest {
         val onboarding = FakeSourceEntryOnboarding(
-            prepareResult = RemoteSourcePreparationResult.Prepared(
-                token = token(4),
-                scheme = "https",
-                host = "example.com",
+            prepareResult = SourcePreparationResult.Prepared(
+                handle = TestPreparationHandle(4),
+                displayEndpoint = "https://example.com",
             ),
-            activationResult = RemoteSourceActivationResult.Activated(
-                sourceId = "source-opaque",
-                revisionNumber = 1,
-                previousRevisionNumber = 0,
-                entryCount = 10,
-                skippedEntries = 0,
-                warningCount = 0,
-            ),
+            activationResult = SourceActivationResult.Activated,
         )
         val session = SourceEntrySession(onboarding)
         session.prepare("https://example.com/list.m3u")
@@ -107,14 +97,13 @@ class SourceEntrySessionTest {
 
     @Test
     fun failedCleanupKeepsPreparedSessionForRetry() = runTest {
-        val token = token(5)
+        val handle = TestPreparationHandle(5)
         val onboarding = FakeSourceEntryOnboarding(
-            restored = RemoteSourcePreparationResult.Prepared(
-                token = token,
-                scheme = "https",
-                host = "example.com",
+            restored = SourcePreparationResult.Prepared(
+                handle = handle,
+                displayEndpoint = "https://example.com",
             ),
-            cancellationResult = RemoteSourceCancellationResult.MetadataRetained,
+            cancellationResult = SourceCancellationResult.CleanupPending,
         )
         val session = SourceEntrySession(onboarding)
         session.restore()
@@ -128,49 +117,68 @@ class SourceEntrySessionTest {
                 cleanupPending = true,
             ),
         )
-        assertThat(onboarding.cancelledTokens).containsExactly(token)
+        assertThat(onboarding.cancelledHandles).containsExactly(handle)
     }
 
-    private fun token(index: Int): RemoteSourcePreparationToken =
-        RemoteSourcePreparationToken.parse(
-            "00000000-0000-4000-8000-${index.toString().padStart(12, '0')}",
+    @Test
+    fun preparationFailureMapsWithoutImplementationExceptions() = runTest {
+        val onboarding = FakeSourceEntryOnboarding(
+            prepareResult = SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable),
         )
+        val session = SourceEntrySession(onboarding)
+
+        session.prepare("https://example.com/list.m3u")
+
+        assertThat(session.state.value).isEqualTo(
+            SourceEntryUiState.Failed(SourceEntryFailure.StorageUnavailable),
+        )
+    }
 }
 
-private class FakeSourceEntryOnboarding(
-    private val prepareResult: RemoteSourcePreparationResult =
-        RemoteSourcePreparationResult.InvalidAccess,
-    private val prepareResults: ArrayDeque<RemoteSourcePreparationResult> = ArrayDeque(),
-    private val restored: RemoteSourcePreparationResult.Prepared? = null,
-    private val activationResult: RemoteSourceActivationResult = RemoteSourceActivationResult.Failed(
-        failure = app.muxtv.catalog.refresh.RemoteSourceActivationFailure.Unexpected,
-        credentialCleanupFailure = null,
-        sourceCleanupFailure = null,
-    ),
-    private val cancellationResult: RemoteSourceCancellationResult =
-        RemoteSourceCancellationResult.Removed,
-) : SourceEntryOnboarding {
-    val prepareInputs = mutableListOf<RemoteSourceOnboardingInput>()
-    val activatedSourceNames = mutableListOf<String>()
-    val cancelledTokens = mutableListOf<RemoteSourcePreparationToken>()
+private data class PrepareInput(
+    val locator: String,
+    val insecureHttpApproved: Boolean,
+)
 
-    override suspend fun prepare(input: RemoteSourceOnboardingInput): RemoteSourcePreparationResult {
-        prepareInputs += input
+private class TestPreparationHandle(
+    val index: Int,
+) : SourcePreparationHandle()
+
+private class FakeSourceEntryOnboarding(
+    private val prepareResult: SourcePreparationResult =
+        SourcePreparationResult.Failed(SourcePreparationFailure.InvalidLocator),
+    private val prepareResults: ArrayDeque<SourcePreparationResult> = ArrayDeque(),
+    private val restored: SourcePreparationResult.Prepared? = null,
+    private val activationResult: SourceActivationResult = SourceActivationResult.Failed(
+        reason = app.muxtv.catalog.SourceActivationFailure.Unexpected,
+        cleanupPending = false,
+    ),
+    private val cancellationResult: SourceCancellationResult = SourceCancellationResult.Removed,
+) : SourceOnboarding {
+    val prepareInputs = mutableListOf<PrepareInput>()
+    val activatedSourceNames = mutableListOf<String>()
+    val cancelledHandles = mutableListOf<SourcePreparationHandle>()
+
+    override suspend fun prepare(
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult {
+        prepareInputs += PrepareInput(locator, insecureHttpApproved)
         return if (prepareResults.isEmpty()) prepareResult else prepareResults.removeFirst()
     }
 
     override suspend fun activate(
-        token: RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): RemoteSourceActivationResult {
+    ): SourceActivationResult {
         activatedSourceNames += sourceName
         return activationResult
     }
 
-    override suspend fun cancel(token: RemoteSourcePreparationToken): RemoteSourceCancellationResult {
-        cancelledTokens += token
+    override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult {
+        cancelledHandles += handle
         return cancellationResult
     }
 
-    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = restored
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = restored
 }

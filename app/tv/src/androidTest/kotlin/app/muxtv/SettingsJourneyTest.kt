@@ -19,22 +19,21 @@ import androidx.test.core.app.ApplicationProvider
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
-import app.muxtv.catalog.PlayableVariant
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackVariantResolution
-import app.muxtv.catalog.sync.SourceRefreshScheduler
-import app.muxtv.database.SourceRefreshAttempt
-import app.muxtv.database.SourceRefreshCompletion
-import app.muxtv.database.SourceRefreshOverview
-import app.muxtv.database.SourceRefreshPolicy
-import app.muxtv.database.SourceRefreshStatus
-import app.muxtv.database.SourceRefreshStore
-import app.muxtv.database.SourceRefreshTarget
-import app.muxtv.database.SourceRefreshTrigger
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceManagement
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePlaybackApprovalResetResult
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
+import app.muxtv.catalog.SourceRefreshOverview
+import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.settings.SETTINGS_SOURCES_TEST_TAG
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -51,12 +50,11 @@ class SettingsJourneyTest {
     @Test
     fun settingsSectionsOpenSourcesAndBackRestoresSectionFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val sourceManagement = StaticSourceManagement().apply { publish("Домашний IPTV") }
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            setNavigationContent(sourceManagement, controllerConnector)
             navigateHomeToSettings()
             composeRule.captureScreenshot("settings-sections")
             composeRule.onNodeWithTag(SETTINGS_SOURCES_TEST_TAG).assertIsFocused().press(Key.Enter)
@@ -82,12 +80,11 @@ class SettingsJourneyTest {
     @Test
     fun sourceDetailsCloseRestoresConfigureFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val sourceManagement = StaticSourceManagement().apply { publish("Домашний IPTV") }
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            setNavigationContent(sourceManagement, controllerConnector)
             navigateHomeToSettings()
             openSourcesAndFocusConfigure(hasOperationalControls = true)
             composeRule.onNodeWithTag("source-configure-source-settings")
@@ -115,14 +112,13 @@ class SettingsJourneyTest {
     @Test
     fun sourceDetailsWithoutOperationalActionsFocusesClose() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply {
-            publish("Источник без сохранённой ссылки", hasCredentialReference = false)
+        val sourceManagement = StaticSourceManagement().apply {
+            publish("Источник без сохранённой ссылки", hasStoredAccess = false)
         }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            setNavigationContent(sourceManagement, controllerConnector)
             navigateHomeToSettings()
             openSourcesAndFocusConfigure(hasOperationalControls = false)
             composeRule.onNodeWithTag("source-configure-source-settings")
@@ -146,12 +142,11 @@ class SettingsJourneyTest {
     @Test
     fun doctorBackRestoresDoctorSectionFocus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val sourceManagement = StaticSourceManagement().apply { publish("Домашний IPTV") }
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            setNavigationContent(sourceManagement, controllerConnector)
             navigateHomeToSettings()
             focusDoctorSectionAndOpen()
 
@@ -173,10 +168,9 @@ class SettingsJourneyTest {
     @Test
     fun sourceDetailsAt720pKeepsFirstAndLastActionsReachableByDpad() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply {
+        val sourceManagement = StaticSourceManagement().apply {
             publish("Очень длинное название домашнего IPTV источника для телевизора")
         }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
@@ -185,9 +179,7 @@ class SettingsJourneyTest {
             // `wm size`: the latter asynchronously replaces the Activity and makes the test
             // exercise ActivityScenario timing rather than the Lounge layout/focus contract.
             setNavigationContent(
-                context = context,
-                sourceStore = sourceStore,
-                scheduler = scheduler,
+                sourceManagement = sourceManagement,
                 controllerConnector = controllerConnector,
                 viewportWidth = 640.dp,
                 viewportHeight = 360.dp,
@@ -234,12 +226,11 @@ class SettingsJourneyTest {
     @Test
     fun doctorSectionOpensDiagnostics() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val sourceStore = StaticSourceRefreshStore().apply { publish("Домашний IPTV") }
-        val scheduler = SourceRefreshScheduler(context, sourceStore)
+        val sourceManagement = StaticSourceManagement().apply { publish("Домашний IPTV") }
         val controllerConnector = MuxTvMediaControllerConnector(context)
 
         try {
-            setNavigationContent(context, sourceStore, scheduler, controllerConnector)
+            setNavigationContent(sourceManagement, controllerConnector)
             navigateHomeToSettings()
             focusDoctorSectionAndOpen()
             composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -252,9 +243,7 @@ class SettingsJourneyTest {
     }
 
     private fun setNavigationContent(
-        context: Context,
-        sourceStore: StaticSourceRefreshStore,
-        scheduler: SourceRefreshScheduler,
+        sourceManagement: StaticSourceManagement,
         controllerConnector: MuxTvMediaControllerConnector,
         viewportWidth: Dp? = null,
         viewportHeight: Dp? = null,
@@ -282,9 +271,8 @@ class SettingsJourneyTest {
                     recentChannelsRepository = NoRecentChannelsRepository,
                     epgGuideRepository = NoGuideEpgGuideRepository,
                     controllerConnector = controllerConnector,
-                    sourceRefreshStore = sourceStore,
-                    sourceRefreshScheduler = scheduler,
-                    sourceEntryOnboarding = UnusedSourceEntryOnboardingFixture,
+                    sourceManagement = sourceManagement,
+                    sourceOnboarding = UnusedSourceEntryOnboardingFixture,
                     playbackObservationReader = PlaybackObservationReader { emptyList() },
                     modifier = navigationModifier,
                 )
@@ -332,18 +320,18 @@ class SettingsJourneyTest {
     }
 }
 
-private class StaticSourceRefreshStore : SourceRefreshStore {
+private class StaticSourceManagement : SourceManagement {
     private val overviews = MutableStateFlow<List<SourceRefreshOverview>>(emptyList())
 
     fun publish(
         sourceName: String,
-        hasCredentialReference: Boolean = true,
+        hasStoredAccess: Boolean = true,
     ) {
         overviews.value = listOf(
             SourceRefreshOverview(
                 sourceId = "source-settings",
                 sourceName = sourceName,
-                hasCredentialReference = hasCredentialReference,
+                hasStoredAccess = hasStoredAccess,
                 activeRevision = 2,
                 policy = null,
                 status = null,
@@ -351,27 +339,13 @@ private class StaticSourceRefreshStore : SourceRefreshStore {
         )
     }
 
-    override suspend fun getTarget(sourceId: String): SourceRefreshTarget? = null
     override fun observeOverviews(): Flow<List<SourceRefreshOverview>> = overviews
-    override suspend fun getPolicies(): List<SourceRefreshPolicy> = emptyList()
-    override suspend fun upsertPolicy(policy: SourceRefreshPolicy) = Unit
+    override fun refreshNow(sourceId: String) = Unit
+    override suspend fun updatePolicy(policy: SourceRefreshPolicy) = Unit
     override suspend fun removePolicy(sourceId: String) = Unit
-    override fun observeStatus(sourceId: String): Flow<SourceRefreshStatus?> = flowOf(null)
-    override suspend fun getRecentAttempts(sourceId: String, limit: Int): List<SourceRefreshAttempt> = emptyList()
-    override suspend fun tryAcquire(
+    override suspend fun revokePlaybackApprovals(
         sourceId: String,
-        runToken: String,
-        startedAtEpochMillis: Long,
-        staleBeforeEpochMillis: Long,
-    ): Boolean = false
-
-    override suspend fun complete(
-        sourceId: String,
-        runToken: String,
-        trigger: SourceRefreshTrigger,
-        completion: SourceRefreshCompletion,
-        expectedCredentialRef: String?,
-    ) = Unit
+    ): SourcePlaybackApprovalResetResult = SourcePlaybackApprovalResetResult.Unchanged
 }
 
 private object StaticPlaybackCatalogFixture : PlaybackCatalog {
@@ -410,24 +384,25 @@ private object StaticPlaybackCatalogFixture : PlaybackCatalog {
     ): PlaybackAccessMutationResult = PlaybackAccessMutationResult.NotFound
 }
 
-private object UnusedSourceEntryOnboardingFixture : SourceEntryOnboarding {
+private object UnusedSourceEntryOnboardingFixture : SourceOnboarding {
     override suspend fun prepare(
-        input: app.muxtv.catalog.refresh.RemoteSourceOnboardingInput,
-    ): app.muxtv.catalog.refresh.RemoteSourcePreparationResult =
-        error("Source entry is not part of this journey")
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult = error("Source entry is not part of this journey")
 
     override suspend fun activate(
-        token: app.muxtv.catalog.refresh.RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): app.muxtv.catalog.refresh.RemoteSourceActivationResult =
-        error("Source entry is not part of this journey")
+    ): SourceActivationResult = SourceActivationResult.Failed(
+        reason = SourceActivationFailure.Unexpected,
+        cleanupPending = false,
+    )
 
     override suspend fun cancel(
-        token: app.muxtv.catalog.refresh.RemoteSourcePreparationToken,
-    ): app.muxtv.catalog.refresh.RemoteSourceCancellationResult =
-        error("Source entry is not part of this journey")
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): app.muxtv.catalog.refresh.RemoteSourcePreparationResult.Prepared? = null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
 
 private fun SemanticsNodeInteraction.press(

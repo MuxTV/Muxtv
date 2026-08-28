@@ -6,6 +6,10 @@ on:
       - main
     paths:
       - '.github/workflows/android-tv-product-device-matrix.yml'
+      - 'feature/sources/**'
+      - 'catalog/api/src/main/kotlin/app/muxtv/catalog/SourceManagement.kt'
+      - 'catalog/api/src/main/kotlin/app/muxtv/catalog/SourceOnboarding.kt'
+      - 'app/tv/src/main/kotlin/app/muxtv/sources/**'
       - 'tools/android/**'
       - 'tools/measurements/**'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'

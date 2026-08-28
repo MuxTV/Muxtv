@@ -8,15 +8,15 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.AnnotatedString
-import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
-import app.muxtv.catalog.refresh.RemoteSourceActivationResult
-import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
-import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
-import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
-import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.SourceActivationFailure
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePreparationFailure
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.sources.AddSourceRoute
-import app.muxtv.feature.sources.SourceEntryOnboarding
 import org.junit.Rule
 import org.junit.Test
 
@@ -56,23 +56,25 @@ class SourceEntrySecurityTest {
     }
 }
 
-private object NoOpSourceEntryOnboarding : SourceEntryOnboarding {
+private object NoOpSourceEntryOnboarding : SourceOnboarding {
     override suspend fun prepare(
-        input: RemoteSourceOnboardingInput,
-    ): RemoteSourcePreparationResult = RemoteSourcePreparationResult.InvalidAccess
+        locator: String,
+        insecureHttpApproved: Boolean,
+    ): SourcePreparationResult = SourcePreparationResult.Failed(
+        SourcePreparationFailure.InvalidLocator,
+    )
 
     override suspend fun activate(
-        token: RemoteSourcePreparationToken,
+        handle: SourcePreparationHandle,
         sourceName: String,
-    ): RemoteSourceActivationResult = RemoteSourceActivationResult.Failed(
-        failure = RemoteSourceActivationFailure.Unexpected,
-        credentialCleanupFailure = null,
-        sourceCleanupFailure = null,
+    ): SourceActivationResult = SourceActivationResult.Failed(
+        reason = SourceActivationFailure.Unexpected,
+        cleanupPending = false,
     )
 
     override suspend fun cancel(
-        token: RemoteSourcePreparationToken,
-    ): RemoteSourceCancellationResult = RemoteSourceCancellationResult.NotFound
+        handle: SourcePreparationHandle,
+    ): SourceCancellationResult = SourceCancellationResult.NotFound
 
-    override suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? = null
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
 }
