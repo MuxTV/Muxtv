@@ -106,7 +106,7 @@ class XtreamLiveRefresherContractTest {
             server.enqueue(MockResponse.Builder().body("{\"not\":\"a-live-array\"}").build())
             val fixture = fixture(server, insecureHttpApproved = true)
 
-            val result = fixture.refresher.refresh(request())
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
 
             assertThat(result).isInstanceOf(XtreamLiveRefreshResult.ProtocolFailure::class.java)
             assertThat(fixture.revisionStore.begunRevisions).containsExactly(1L)
@@ -128,7 +128,7 @@ class XtreamLiveRefresherContractTest {
             )
 
             val cancelled = try {
-                fixture.refresher.refresh(request())
+                fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
                 null
             } catch (error: CancellationException) {
                 error
