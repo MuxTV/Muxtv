@@ -147,6 +147,7 @@ class StreamingM3uParser {
         var warningCount = 0
         var hadExtendedHeader = false
         var pending: PendingEntry? = null
+        var inheritedGroupTitle: String? = null
 
         suspend fun warn(kind: M3uWarningKind, line: Long) {
             warningCount += 1
@@ -189,7 +190,13 @@ class StreamingM3uParser {
                         skippedEntries += 1
                         warn(M3uWarningKind.ExtInfReplacedBeforeLocator, lineNumber)
                     }
-                    pending = parseExtInf(trimmed, limits, lineNumber)
+                    pending = parseExtInf(trimmed, limits, lineNumber)?.also { current ->
+                        if ("group-title" in current.attributes) {
+                            inheritedGroupTitle = current.attributes["group-title"].nullIfBlank()
+                        } else {
+                            current.groupOverride = inheritedGroupTitle
+                        }
+                    }
                     if (pending == null) {
                         skippedEntries += 1
                         warn(M3uWarningKind.MalformedExtInf, lineNumber)
@@ -197,11 +204,12 @@ class StreamingM3uParser {
                 }
 
                 trimmed.startsWith(EXTGRP_PREFIX, ignoreCase = true) -> {
+                    val groupTitle = trimmed.substringAfter(':', "").nullIfBlank()
                     val current = pending
                     if (current == null) {
-                        warn(M3uWarningKind.DirectiveWithoutExtInf, lineNumber)
+                        inheritedGroupTitle = groupTitle
                     } else {
-                        current.groupOverride = trimmed.substringAfter(':', "").trim().ifEmpty { null }
+                        current.groupOverride = groupTitle
                     }
                 }
 
