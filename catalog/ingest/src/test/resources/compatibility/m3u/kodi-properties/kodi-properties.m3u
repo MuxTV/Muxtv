@@ -1,0 +1,5 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="synthetic.kodi",Synthetic Kodi
+#KODIPROP:http-user-agent=MuxTV TEST_KODI_SECRET Agent
+#KODIPROP:http-referrer=https://referrer.invalid/TEST_KODI_SECRET/
+https://streams.invalid/live/kodi.ts?token=TEST_KODI_SECRET

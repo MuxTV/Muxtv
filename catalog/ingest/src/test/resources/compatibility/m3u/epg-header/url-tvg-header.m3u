@@ -1,0 +1,3 @@
+#EXTM3U url-tvg="https://epg.invalid/guide.xml?token=TEST_EPG_SECRET,https://backup.invalid/guide.xml" x-tvg-url="https://third.invalid/guide.xml"
+#EXTINF:-1 tvg-id="synthetic.epg",Synthetic EPG
+https://streams.invalid/live/epg.m3u8
