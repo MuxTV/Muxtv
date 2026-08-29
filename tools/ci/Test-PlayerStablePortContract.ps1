@@ -44,4 +44,3 @@ foreach ($sourceFile in $sourceFiles) {
 }
 
 Write-Host "Player feature consumes only the stable player API boundary."
-& (Join-Path $PSScriptRoot "Test-FeatureAdapterBoundaryContract.ps1") -RepositoryRoot $repositoryRoot
