@@ -18,6 +18,7 @@ import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.navigation.AppNavigation
 import app.muxtv.player.PlaybackObservationReader
+import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -58,6 +59,9 @@ class MainActivity : ComponentActivity() {
     lateinit var controllerConnector: MuxTvMediaControllerConnector
 
     @Inject
+    lateinit var playbackSessionGateway: PlaybackSessionGateway
+
+    @Inject
     lateinit var sourceManagement: SourceManagement
 
     @Inject
@@ -83,6 +87,7 @@ class MainActivity : ComponentActivity() {
                     recentChannelsRepository = recentChannelsRepository,
                     epgGuideRepository = epgGuideRepository,
                     controllerConnector = controllerConnector,
+                    playbackSessionGateway = playbackSessionGateway,
                     sourceManagement = sourceManagement,
                     sourceOnboarding = sourceOnboarding,
                     playbackObservationReader = playbackObservationReader,

@@ -46,6 +46,8 @@ import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.PlaybackObservationReader
+import app.muxtv.player.PlaybackSessionGateway
+import app.muxtv.player.media3.Media3PlaybackSurface
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -60,6 +62,7 @@ fun AppNavigation(
     recentChannelsRepository: RecentChannelsRepository,
     epgGuideRepository: EpgGuideRepository,
     controllerConnector: MuxTvMediaControllerConnector,
+    playbackSessionGateway: PlaybackSessionGateway,
     sourceManagement: SourceManagement,
     sourceOnboarding: SourceOnboarding,
     playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
@@ -191,7 +194,13 @@ fun AppNavigation(
                         is AppDestination.Player -> PlayerFavoriteRoute(
                             playbackCatalog = playbackCatalog,
                             channelPreferencesRepository = channelPreferencesRepository,
-                            controllerConnector = controllerConnector,
+                            playbackSessionGateway = playbackSessionGateway,
+                            playbackSurface = { session, surfaceModifier ->
+                                Media3PlaybackSurface(
+                                    session = session,
+                                    modifier = surfaceModifier,
+                                )
+                            },
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             channelId = destination.channelId,
                             onBack = ::goBack,

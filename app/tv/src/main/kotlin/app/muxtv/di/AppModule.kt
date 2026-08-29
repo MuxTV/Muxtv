@@ -40,6 +40,8 @@ import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
 import app.muxtv.player.ExternalPlaybackLeaseRegistry
 import app.muxtv.player.InMemoryExternalPlaybackLeaseRegistry
+import app.muxtv.player.PlaybackSessionGateway
+import app.muxtv.player.media3.Media3PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import app.muxtv.sources.AppSourceManagement
 import app.muxtv.sources.AppSourceOnboarding
@@ -235,6 +237,17 @@ object AppModule {
     fun provideMediaControllerConnector(
         @ApplicationContext context: Context,
     ): MuxTvMediaControllerConnector = MuxTvMediaControllerConnector(context)
+
+    @Provides
+    @Singleton
+    fun provideMedia3PlaybackSessionGateway(
+        connector: MuxTvMediaControllerConnector,
+    ): Media3PlaybackSessionGateway = Media3PlaybackSessionGateway(connector)
+
+    @Provides
+    fun providePlaybackSessionGateway(
+        gateway: Media3PlaybackSessionGateway,
+    ): PlaybackSessionGateway = gateway
 
     @Provides
     @Singleton

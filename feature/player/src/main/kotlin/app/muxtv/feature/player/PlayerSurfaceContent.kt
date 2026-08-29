@@ -1,6 +1,5 @@
 package app.muxtv.feature.player
 
-import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -20,8 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,29 +43,22 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.C
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.MediaController
-import androidx.media3.ui.compose.PlayerSurface
-import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
-import app.muxtv.player.media3.Media3TrackController
-import app.muxtv.player.media3.PlaybackSeekPolicy
-import app.muxtv.player.media3.PlaybackSeekRejectReason
-import app.muxtv.player.media3.PlaybackSeekRequest
-import app.muxtv.player.media3.PlaybackSeekResult
-import app.muxtv.player.media3.SeekControllerState
-import app.muxtv.player.media3.awaitPlaybackSeek
-import app.muxtv.player.media3.currentPlaybackSeekToken
+import app.muxtv.player.PlaybackControlSession
+import app.muxtv.player.PlaybackSeekDirection
+import app.muxtv.player.PlaybackSeekRejectReason
+import app.muxtv.player.PlaybackSeekResult
+import app.muxtv.player.PlaybackSessionPhase
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+typealias PlaybackSurfaceRenderer = @Composable (PlaybackControlSession, Modifier) -> Unit
 
 data class PlayerSurfaceAction(
     val label: String,
@@ -118,16 +110,16 @@ private fun PlaybackSeekRejectReason.toInputOutcome(): SeekInputOutcome = when (
  * Shared by the catalog PlayerRoute and the external playback route. Hidden by default,
  * Center/OK reveals the overlay, inactivity auto-hides after 6 s, Back closes the overlay
  * first and only then falls through to the route/activity. Audio/subtitle actions and the
- * timeline appear only when the current Media3 state supports them.
+ * timeline appear only when the stable playback-session state supports them.
  *
  * Seek ownership is intentionally presentation-only here: this surface computes immediate
- * provisional HUD state and submits typed requests, while MuxTvPlaybackService owns the single
+ * provisional HUD state and submits semantic requests, while the playback service owns the
  * coalescing scheduler and the only production player seek mutation.
  */
-@AndroidXOptIn(UnstableApi::class)
 @Composable
 fun PlayerSurfaceContent(
-    controller: MediaController,
+    session: PlaybackControlSession,
+    playbackSurface: PlaybackSurfaceRenderer,
     title: String,
     favoriteSupported: Boolean,
     modifier: Modifier = Modifier,
@@ -138,29 +130,24 @@ fun PlayerSurfaceContent(
     backAction: PlayerSurfaceAction? = null,
     testTagPrefix: String = "player",
 ) {
-    val capabilities = rememberPlayerCapabilities(
-        controller = controller,
-        favoriteSupported = favoriteSupported,
-    )
-    val audioModels = rememberAudioTrackModels(controller)
-    val subtitleModels = rememberSubtitleTrackModels(controller)
+    val snapshot by session.state.collectAsState()
+    val capabilities = snapshot.capabilities.copy(supportsFavorite = favoriteSupported)
+    val audioModels = snapshot.audioTracks
+    val subtitleModels = snapshot.subtitleTracks
     val surfaceScope = rememberCoroutineScope()
 
     var seekState by remember(contentIdentity) {
-        mutableStateOf<SeekControllerState>(SeekControllerState.Idle)
+        mutableStateOf<SeekPresentationState>(SeekPresentationState.Idle)
     }
     var provisionalSeekTargetMs by remember(contentIdentity) { mutableStateOf<Long?>(null) }
     var seekRequestSequence by remember(contentIdentity) { mutableLongStateOf(0L) }
-    var isPlaying by remember(controller) { mutableStateOf(controller.isPlaying) }
-    var playbackState by remember(controller) { mutableIntStateOf(controller.playbackState) }
-    var hasError by remember(controller) { mutableStateOf(controller.playerError != null) }
     var controlsVisible by remember(contentIdentity) { mutableStateOf(false) }
     var lastInteractionNanos by remember(contentIdentity) { mutableLongStateOf(System.nanoTime()) }
     var openSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
     var previouslyOpenSheet by remember(contentIdentity) { mutableStateOf<PlayerSheetKind?>(null) }
-    var positionMs by remember(contentIdentity) { mutableLongStateOf(0L) }
+    var positionMs by remember(contentIdentity) { mutableLongStateOf(snapshot.timeline.positionMs) }
     var lastSeekInputOutcome by remember(contentIdentity) { mutableStateOf<SeekInputOutcome?>(null) }
-    val primaryActionFocusRequester = remember(controller) { FocusRequester() }
+    val primaryActionFocusRequester = remember(session) { FocusRequester() }
     val surfaceFocusRequester = remember { FocusRequester() }
     val audioActionFocusRequester = remember(contentIdentity) { FocusRequester() }
     val subtitleActionFocusRequester = remember(contentIdentity) { FocusRequester() }
@@ -182,41 +169,32 @@ fun PlayerSurfaceContent(
         return outcome.handlesDispatch
     }
 
-    fun requestSeek(direction: Int): SeekInputOutcome {
+    fun requestSeek(direction: PlaybackSeekDirection): SeekInputOutcome {
         if (!capabilities.canSeek) return SeekInputOutcome.COMMAND_UNAVAILABLE
         if (capabilities.isLive) return SeekInputOutcome.LIVE_CONTENT
 
-        val durationMs = controller.duration
-        if (!capabilities.hasKnownDuration || durationMs == C.TIME_UNSET || durationMs <= 0L) {
+        val durationMs = snapshot.timeline.durationMs
+            ?: return SeekInputOutcome.UNKNOWN_DURATION
+        if (!capabilities.hasKnownDuration || durationMs <= 0L) {
             return SeekInputOutcome.UNKNOWN_DURATION
         }
 
-        val currentPositionMs = controller.currentPosition
+        val currentPositionMs = positionMs.coerceAtLeast(snapshot.timeline.positionMs)
         if (currentPositionMs < 0L) return SeekInputOutcome.INVALID_POSITION
-        val token = controller.currentPlaybackSeekToken()
-            ?: return SeekInputOutcome.COMMAND_UNAVAILABLE
 
         val startMs = provisionalSeekTargetMs ?: currentPositionMs
         val targetMs = (
-            startMs + direction * PlaybackSeekPolicy.STEP_MILLIS
+            startMs + direction.sign * SEEK_STEP_MILLIS
         ).coerceIn(0L, durationMs)
-        val previewDirection = when {
-            targetMs > startMs -> PlaybackSeekPolicy.DIRECTION_FORWARD
-            targetMs < startMs -> PlaybackSeekPolicy.DIRECTION_BACKWARD
-            else -> PlaybackSeekPolicy.DIRECTION_NONE
-        }
         provisionalSeekTargetMs = targetMs
-        seekState = SeekControllerState.Pending(targetMs, previewDirection)
+        seekState = SeekPresentationState.Pending(targetMs, direction)
         seekRequestSequence += 1L
         val requestSequence = seekRequestSequence
 
         surfaceScope.launch {
             val result = try {
-                controller.awaitPlaybackSeek(
-                    request = PlaybackSeekRequest.Relative(
-                        token = token,
-                        direction = direction,
-                    ),
+                session.seekRelative(
+                    direction = direction,
                     timeoutMillis = SEEK_REQUEST_TIMEOUT_MILLIS,
                 )
             } catch (cancelled: CancellationException) {
@@ -228,7 +206,7 @@ fun PlayerSurfaceContent(
             when (result) {
                 is PlaybackSeekResult.Accepted -> {
                     provisionalSeekTargetMs = result.targetMs
-                    seekState = SeekControllerState.Applying(
+                    seekState = SeekPresentationState.Applying(
                         targetMs = result.targetMs,
                         direction = result.direction,
                     )
@@ -236,12 +214,12 @@ fun PlayerSurfaceContent(
                 }
                 is PlaybackSeekResult.Rejected -> {
                     provisionalSeekTargetMs = null
-                    seekState = SeekControllerState.Idle
+                    seekState = SeekPresentationState.Idle
                     recordSeekInputOutcome(result.reason.toInputOutcome())
                 }
                 null -> {
                     provisionalSeekTargetMs = null
-                    seekState = SeekControllerState.Idle
+                    seekState = SeekPresentationState.Idle
                     recordSeekInputOutcome(SeekInputOutcome.CONTROLLER_REJECTED)
                 }
             }
@@ -249,9 +227,11 @@ fun PlayerSurfaceContent(
         return SeekInputOutcome.SUBMITTED
     }
 
-    fun handleSeekInput(direction: Int): Boolean = recordSeekInputOutcome(requestSeek(direction))
+    fun handleSeekInput(direction: PlaybackSeekDirection): Boolean =
+        recordSeekInputOutcome(requestSeek(direction))
 
-    val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive
+    val durationMs = snapshot.timeline.durationMs
+    val showTimeline = capabilities.hasKnownDuration && !capabilities.isLive && durationMs != null
     val showAudioAction = capabilities.hasAudioTracks && capabilities.canSetTrackSelection
     val showSubtitleAction = capabilities.hasTextTracks && capabilities.canSetTrackSelection
     val currentRemoteInputHandler by rememberUpdatedState(
@@ -261,11 +241,10 @@ fun PlayerSurfaceContent(
                 openSheet != null -> recordSeekInputOutcome(SeekInputOutcome.SHEET_OPEN)
                 else -> when (command) {
                     PlayerRemoteCommand.SEEK_BACKWARD -> handleSeekInput(
-                        PlaybackSeekPolicy.DIRECTION_BACKWARD,
+                        PlaybackSeekDirection.BACKWARD,
                     )
-
                     PlayerRemoteCommand.SEEK_FORWARD -> handleSeekInput(
-                        PlaybackSeekPolicy.DIRECTION_FORWARD,
+                        PlaybackSeekDirection.FORWARD,
                     )
                 }
             }
@@ -279,48 +258,16 @@ fun PlayerSurfaceContent(
         onDispose { registration?.close() }
     }
 
-    DisposableEffect(controller) {
-        val listener = object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) {
-                isPlaying = player.isPlaying
-                playbackState = player.playbackState
-                hasError = player.playerError != null
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                hasError = true
-            }
-
-            override fun onPositionDiscontinuity(
-                oldPosition: Player.PositionInfo,
-                newPosition: Player.PositionInfo,
-                reason: Int,
-            ) {
-                if (reason != Player.DISCONTINUITY_REASON_SEEK) return
-                val current = seekState
-                val direction = when (current) {
-                    is SeekControllerState.Pending -> current.direction
-                    is SeekControllerState.Applying -> current.direction
-                    is SeekControllerState.Completed -> current.direction
-                    SeekControllerState.Idle -> return
-                }
-                // Invalidate an older custom-command completion and show Media3's applied position.
-                seekRequestSequence += 1L
-                provisionalSeekTargetMs = null
-                seekState = SeekControllerState.Completed(
-                    targetMs = newPosition.positionMs.coerceAtLeast(0L),
-                    direction = direction,
-                )
-            }
+    LaunchedEffect(snapshot.timeline.positionMs, contentIdentity) {
+        if (seekState is SeekPresentationState.Idle) {
+            positionMs = snapshot.timeline.positionMs
         }
-        controller.runOnApplicationThread { controller.addListener(listener) }
-        onDispose { controller.runOnApplicationThread { controller.removeListener(listener) } }
     }
 
     LaunchedEffect(seekState) {
-        val completed = seekState as? SeekControllerState.Completed ?: return@LaunchedEffect
-        delay(PlaybackSeekPolicy.HUD_LINGER_MILLIS)
-        if (seekState == completed) seekState = SeekControllerState.Idle
+        val completed = seekState as? SeekPresentationState.Completed ?: return@LaunchedEffect
+        delay(SEEK_HUD_LINGER_MILLIS)
+        if (seekState == completed) seekState = SeekPresentationState.Idle
     }
 
     LaunchedEffect(controlsVisible) {
@@ -363,10 +310,31 @@ fun PlayerSurfaceContent(
         }
     }
 
-    LaunchedEffect(controlsVisible, showTimeline, contentIdentity) {
-        if (!controlsVisible || !showTimeline) return@LaunchedEffect
+    LaunchedEffect(controlsVisible, showTimeline, seekState, contentIdentity, session) {
+        val seekNeedsSampling = seekState is SeekPresentationState.Pending ||
+            seekState is SeekPresentationState.Applying
+        if ((!controlsVisible || !showTimeline) && !seekNeedsSampling) return@LaunchedEffect
         while (isActive) {
-            positionMs = controller.currentPosition
+            val sampled = try {
+                session.currentTimeline()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (sampled != null) {
+                positionMs = sampled.positionMs
+                val applying = seekState as? SeekPresentationState.Applying
+                if (applying != null &&
+                    abs(sampled.positionMs - applying.targetMs) <= SEEK_APPLIED_TOLERANCE_MILLIS
+                ) {
+                    provisionalSeekTargetMs = null
+                    seekState = SeekPresentationState.Completed(
+                        targetMs = sampled.positionMs,
+                        direction = applying.direction,
+                    )
+                }
+            }
             delay(POSITION_SAMPLE_MILLIS)
         }
     }
@@ -376,9 +344,6 @@ fun PlayerSurfaceContent(
         controlsVisible = false
     }
 
-    // Reveal fade only: the overlay still composes exactly under the existing
-    // visibility gate, so focus never lingers on hidden controls. Exit stays
-    // immediate (dense TV contract); re-reveal interrupts from current value.
     val overlayAlpha by animateFloatAsState(
         targetValue = if (controlsVisible) 1f else 0f,
         animationSpec = tween(
@@ -396,14 +361,8 @@ fun PlayerSurfaceContent(
             .onPreviewKeyEvent { event ->
                 if (!controlsVisible && event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        Key.DirectionLeft -> handleSeekInput(
-                            PlaybackSeekPolicy.DIRECTION_BACKWARD,
-                        )
-
-                        Key.DirectionRight -> handleSeekInput(
-                            PlaybackSeekPolicy.DIRECTION_FORWARD,
-                        )
-
+                        Key.DirectionLeft -> handleSeekInput(PlaybackSeekDirection.BACKWARD)
+                        Key.DirectionRight -> handleSeekInput(PlaybackSeekDirection.FORWARD)
                         else -> false
                     }
                 } else {
@@ -423,11 +382,7 @@ fun PlayerSurfaceContent(
                 },
             ),
     ) {
-        PlayerSurface(
-            player = controller,
-            modifier = Modifier.fillMaxSize(),
-            surfaceType = SURFACE_TYPE_SURFACE_VIEW,
-        )
+        playbackSurface(session, Modifier.fillMaxSize())
 
         lastSeekInputOutcome?.let { outcome ->
             Box(
@@ -456,15 +411,18 @@ fun PlayerSurfaceContent(
             ) {
                 Text(title, style = MaterialTheme.typography.headlineMedium)
                 Text(
-                    text = playbackStatus(playbackState = playbackState, hasError = hasError),
+                    text = playbackStatus(
+                        phase = snapshot.phase,
+                        hasError = snapshot.hasError,
+                    ),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (showTimeline) {
+                if (showTimeline && durationMs != null) {
                     var timelineFocused by remember(contentIdentity) { mutableStateOf(false) }
                     PlaybackTimeline(
                         positionMs = positionMs,
-                        durationMs = controller.duration,
+                        durationMs = durationMs,
                         previewState = seekState,
                         testTagPrefix = testTagPrefix,
                         modifier = Modifier
@@ -474,13 +432,11 @@ fun PlayerSurfaceContent(
                                 if (event.type == KeyEventType.KeyDown && timelineFocused) {
                                     when (event.key) {
                                         Key.DirectionLeft -> handleSeekInput(
-                                            PlaybackSeekPolicy.DIRECTION_BACKWARD,
+                                            PlaybackSeekDirection.BACKWARD,
                                         )
-
                                         Key.DirectionRight -> handleSeekInput(
-                                            PlaybackSeekPolicy.DIRECTION_FORWARD,
+                                            PlaybackSeekDirection.FORWARD,
                                         )
-
                                         else -> false
                                     }
                                 } else {
@@ -502,10 +458,10 @@ fun PlayerSurfaceContent(
                         )
                     }
                     MuxTvActionButton(
-                        text = if (isPlaying) "Пауза" else "Продолжить",
+                        text = if (snapshot.isPlaying) "Пауза" else "Продолжить",
                         onClick = {
                             registerInteraction()
-                            if (isPlaying) controller.pause() else controller.play()
+                            if (snapshot.isPlaying) session.pause() else session.play()
                         },
                         modifier = Modifier
                             .testTag("$testTagPrefix-primary-action")
@@ -526,8 +482,8 @@ fun PlayerSurfaceContent(
                     if (showSubtitleAction) {
                         MuxTvActionButton(
                             text = TrackLabelFormatter.subtitleActionLabel(
-                                models = subtitleModels.tracks,
-                                textDisabled = subtitleModels.textDisabled,
+                                models = subtitleModels,
+                                textDisabled = snapshot.subtitlesDisabled,
                             ),
                             onClick = {
                                 registerInteraction()
@@ -571,7 +527,7 @@ fun PlayerSurfaceContent(
             }
         }
 
-        if (!controlsVisible && seekState !is SeekControllerState.Idle) {
+        if (!controlsVisible && seekState !is SeekPresentationState.Idle) {
             SeekHud(
                 state = seekState,
                 modifier = Modifier.align(Alignment.Center),
@@ -582,13 +538,7 @@ fun PlayerSurfaceContent(
         when (openSheet) {
             PlayerSheetKind.AUDIO -> AudioTrackSheet(
                 models = audioModels,
-                onSelect = { model ->
-                    Media3TrackController.selectAudioTrack(
-                        controller = controller,
-                        groupId = model.key.groupId,
-                        trackIndex = model.key.trackIndex,
-                    )
-                },
+                onSelect = { model -> session.selectAudioTrack(model.key) },
                 onDismiss = {
                     registerInteraction()
                     openSheet = null
@@ -598,16 +548,10 @@ fun PlayerSurfaceContent(
             )
 
             PlayerSheetKind.SUBTITLE -> SubtitleTrackSheet(
-                models = subtitleModels.tracks,
-                textDisabled = subtitleModels.textDisabled,
-                onSelect = { model ->
-                    Media3TrackController.selectTextTrack(
-                        controller = controller,
-                        groupId = model.key.groupId,
-                        trackIndex = model.key.trackIndex,
-                    )
-                },
-                onSelectOff = { Media3TrackController.disableTextTracks(controller) },
+                models = subtitleModels,
+                textDisabled = snapshot.subtitlesDisabled,
+                onSelect = { model -> session.selectSubtitleTrack(model.key) },
+                onSelectOff = session::disableSubtitles,
                 onDismiss = {
                     registerInteraction()
                     openSheet = null
@@ -625,29 +569,29 @@ fun PlayerSurfaceContent(
 private fun PlaybackTimeline(
     positionMs: Long,
     durationMs: Long,
-    previewState: SeekControllerState,
+    previewState: SeekPresentationState,
     testTagPrefix: String,
     modifier: Modifier = Modifier,
 ) {
     val displayMs = when (previewState) {
-        is SeekControllerState.Pending -> previewState.targetMs
-        is SeekControllerState.Applying -> previewState.targetMs
-        is SeekControllerState.Completed -> previewState.targetMs
-        SeekControllerState.Idle -> positionMs
+        is SeekPresentationState.Pending -> previewState.targetMs
+        is SeekPresentationState.Applying -> previewState.targetMs
+        is SeekPresentationState.Completed -> previewState.targetMs
+        SeekPresentationState.Idle -> positionMs
     }
     val direction = when (previewState) {
-        is SeekControllerState.Pending -> previewState.direction
-        is SeekControllerState.Applying -> previewState.direction
-        is SeekControllerState.Completed -> previewState.direction
-        SeekControllerState.Idle -> PlaybackSeekPolicy.DIRECTION_NONE
+        is SeekPresentationState.Pending -> previewState.direction
+        is SeekPresentationState.Applying -> previewState.direction
+        is SeekPresentationState.Completed -> previewState.direction
+        SeekPresentationState.Idle -> null
     }
-    val timePrefix = if (previewState is SeekControllerState.Idle) {
+    val timePrefix = if (previewState is SeekPresentationState.Idle) {
         ""
     } else {
-        when {
-            direction < 0 -> "← "
-            direction > 0 -> "→ "
-            else -> ""
+        when (direction) {
+            PlaybackSeekDirection.BACKWARD -> "← "
+            PlaybackSeekDirection.FORWARD -> "→ "
+            null -> ""
         }
     }
     val progress = if (durationMs > 0L) {
@@ -686,16 +630,19 @@ private fun PlaybackTimeline(
 }
 
 private fun playbackStatus(
-    playbackState: Int,
+    phase: PlaybackSessionPhase,
     hasError: Boolean,
 ): String = when {
     hasError -> "Ошибка воспроизведения"
-    playbackState == Player.STATE_BUFFERING -> "Буферизация"
-    playbackState == Player.STATE_READY -> "Готово"
-    playbackState == Player.STATE_ENDED -> "Поток завершён"
+    phase == PlaybackSessionPhase.BUFFERING -> "Буферизация"
+    phase == PlaybackSessionPhase.READY -> "Готово"
+    phase == PlaybackSessionPhase.ENDED -> "Поток завершён"
     else -> "Подготовка"
 }
 
 private const val OVERLAY_HIDE_NANOS = 6_000_000_000L
 private const val POSITION_SAMPLE_MILLIS = 500L
 private const val SEEK_REQUEST_TIMEOUT_MILLIS = 2_000L
+private const val SEEK_STEP_MILLIS = 10_000L
+private const val SEEK_HUD_LINGER_MILLIS = 1_500L
+private const val SEEK_APPLIED_TOLERANCE_MILLIS = 2_000L

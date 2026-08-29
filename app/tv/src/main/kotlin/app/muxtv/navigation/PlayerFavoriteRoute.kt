@@ -11,10 +11,11 @@ import androidx.compose.ui.Modifier
 import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.feature.player.PlaybackStartGateway
+import app.muxtv.feature.player.PlaybackSurfaceRenderer
 import app.muxtv.feature.player.PlayerFavoriteAction
 import app.muxtv.feature.player.PlayerRoute
-import app.muxtv.feature.player.PlaybackStartGateway
-import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import app.muxtv.player.PlaybackSessionGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -22,7 +23,8 @@ import kotlinx.coroutines.launch
 internal fun PlayerFavoriteRoute(
     playbackCatalog: PlaybackCatalog,
     channelPreferencesRepository: ChannelPreferencesRepository,
-    controllerConnector: MuxTvMediaControllerConnector,
+    playbackSessionGateway: PlaybackSessionGateway,
+    playbackSurface: PlaybackSurfaceRenderer,
     profileId: String,
     channelId: String,
     onBack: () -> Unit,
@@ -54,7 +56,8 @@ internal fun PlayerFavoriteRoute(
 
     PlayerRoute(
         playbackCatalog = playbackCatalog,
-        controllerConnector = controllerConnector,
+        playbackSessionGateway = playbackSessionGateway,
+        playbackSurface = playbackSurface,
         profileId = profileId,
         channelId = channelId,
         onBack = onBack,

@@ -9,11 +9,15 @@ on:
       - '.github/actions/setup-muxtv-jdks/**'
       - 'feature/sources/**'
       - 'catalog/api/**'
+      - 'feature/player/**'
+      - 'player/api/**'
+      - 'player/media3/**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
       - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
       - 'tools/ci/Test-SourcesStablePortContract.ps1'
+      - 'tools/ci/Test-PlayerStablePortContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
@@ -61,6 +65,11 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-SourcesStablePortContract.ps1
+
+      - name: Verify Player stable-port architecture contract
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\ci\Test-PlayerStablePortContract.ps1
 
       - name: Verify GitHub-hosted workflow contract
         shell: pwsh

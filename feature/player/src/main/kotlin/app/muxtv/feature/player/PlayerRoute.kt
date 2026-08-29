@@ -1,6 +1,5 @@
 package app.muxtv.feature.player
 
-import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,21 +21,21 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.MediaController
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
-import app.muxtv.player.media3.MediaControllerOperationException
-import app.muxtv.player.media3.MediaControllerOperationFailure
-import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import app.muxtv.player.PlaybackControlSession
+import app.muxtv.player.PlaybackSessionGateway
+import app.muxtv.player.PlaybackSessionOperationException
+import app.muxtv.player.PlaybackSessionOperationFailure
 import app.muxtv.player.PlaybackStartFailure
 import app.muxtv.player.PlaybackStartRequest
 import app.muxtv.player.PlaybackStartResult
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -62,7 +61,7 @@ private sealed interface PlayerRouteState {
     ) : PlayerRouteState
 
     data class Ready(
-        val controller: MediaController,
+        val session: PlaybackControlSession,
         val title: String,
     ) : PlayerRouteState
 
@@ -72,19 +71,20 @@ private sealed interface PlayerRouteState {
     ) : PlayerRouteState
 }
 
+/** Test seam for starting playback without exposing an engine-specific controller to presentation. */
 fun interface PlaybackStartGateway {
     suspend fun start(
-        controller: MediaController,
+        session: PlaybackControlSession,
         request: PlaybackStartRequest,
         timeoutMillis: Long,
     ): PlaybackStartResult
 }
 
-@AndroidXOptIn(UnstableApi::class)
 @Composable
 fun PlayerRoute(
     playbackCatalog: PlaybackCatalog,
-    controllerConnector: MuxTvMediaControllerConnector,
+    playbackSessionGateway: PlaybackSessionGateway,
+    playbackSurface: PlaybackSurfaceRenderer,
     profileId: String,
     channelId: String,
     onBack: () -> Unit,
@@ -93,14 +93,10 @@ fun PlayerRoute(
     playbackStartGateway: PlaybackStartGateway? = null,
     favoriteAction: PlayerFavoriteAction? = null,
 ) {
-    val connectionEpoch by controllerConnector.connectionEpoch.collectAsState()
-    val startGateway = playbackStartGateway ?: remember(controllerConnector) {
-        PlaybackStartGateway { controller, request, timeoutMillis ->
-            controllerConnector.awaitPlaybackStart(
-                controller = controller,
-                request = request,
-                timeoutMillis = timeoutMillis,
-            )
+    val connectionEpoch by playbackSessionGateway.connectionEpoch.collectAsState()
+    val startGateway = playbackStartGateway ?: remember {
+        PlaybackStartGateway { session, request, timeoutMillis ->
+            session.start(request = request, timeoutMillis = timeoutMillis)
         }
     }
     val approvalScope = rememberCoroutineScope()
@@ -110,7 +106,7 @@ fun PlayerRoute(
     val routeState by produceState<PlayerRouteState>(
         initialValue = PlayerRouteState.Connecting,
         playbackCatalog,
-        controllerConnector,
+        playbackSessionGateway,
         startGateway,
         connectionEpoch,
         approvalGeneration,
@@ -118,11 +114,11 @@ fun PlayerRoute(
         channelId,
     ) {
         value = PlayerRouteState.Connecting
-        val controller = try {
-            controllerConnector.awaitController(CONTROLLER_TIMEOUT_MILLIS)
+        val session = try {
+            playbackSessionGateway.awaitSession(SESSION_TIMEOUT_MILLIS)
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (error: MediaControllerOperationException) {
+        } catch (error: PlaybackSessionOperationException) {
             value = PlayerRouteState.Failed(connectionFailureMessage(error.failure))
             return@produceState
         } catch (_: Exception) {
@@ -130,60 +126,66 @@ fun PlayerRoute(
             return@produceState
         }
 
-        value = PlayerRouteState.Resolving
-        val channel = try {
-            playbackCatalog.getChannel(profileId = profileId, channelId = channelId)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-        if (channel == null) {
-            value = PlayerRouteState.Failed("Канал больше не доступен в активном каталоге.")
-            return@produceState
-        }
-
-        currentCoroutineContext().ensureActive()
-        val startResult = try {
-            startGateway.start(
-                controller = controller,
-                request = PlaybackStartRequest(profileId, channelId),
-                timeoutMillis = COMMAND_TIMEOUT_MILLIS,
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: MediaControllerOperationException) {
-            value = PlayerRouteState.Failed(commandFailureMessage(error.failure))
-            return@produceState
-        } catch (_: Exception) {
-            value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
-            return@produceState
-        }
-
-        when (startResult) {
-            is PlaybackStartResult.InsecureHttpApprovalRequired -> {
-                value = PlayerRouteState.HttpApprovalRequired(
-                    displayOrigin = startResult.displayOrigin,
-                    variantId = startResult.variantId,
-                )
+        try {
+            value = PlayerRouteState.Resolving
+            val channel = try {
+                playbackCatalog.getChannel(profileId = profileId, channelId = channelId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (channel == null) {
+                value = PlayerRouteState.Failed("Канал больше не доступен в активном каталоге.")
                 return@produceState
             }
 
-            is PlaybackStartResult.Rejected -> {
-                value = PlayerRouteState.Failed(
-                    message = startFailureMessage(startResult.reason),
-                    doctorAvailable = startResult.observationAvailable,
+            currentCoroutineContext().ensureActive()
+            val startResult = try {
+                startGateway.start(
+                    session = session,
+                    request = PlaybackStartRequest(profileId, channelId),
+                    timeoutMillis = COMMAND_TIMEOUT_MILLIS,
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: PlaybackSessionOperationException) {
+                value = PlayerRouteState.Failed(commandFailureMessage(error.failure))
+                return@produceState
+            } catch (_: Exception) {
+                value = PlayerRouteState.Failed(COMMAND_FAILED_MESSAGE)
                 return@produceState
             }
 
-            PlaybackStartResult.Started -> {
-                currentCoroutineContext().ensureActive()
-                value = PlayerRouteState.Ready(
-                    controller = controller,
-                    title = channel.summary.displayName,
-                )
+            when (startResult) {
+                is PlaybackStartResult.InsecureHttpApprovalRequired -> {
+                    value = PlayerRouteState.HttpApprovalRequired(
+                        displayOrigin = startResult.displayOrigin,
+                        variantId = startResult.variantId,
+                    )
+                }
+
+                is PlaybackStartResult.Rejected -> {
+                    value = PlayerRouteState.Failed(
+                        message = startFailureMessage(startResult.reason),
+                        doctorAvailable = startResult.observationAvailable,
+                    )
+                }
+
+                PlaybackStartResult.Started -> {
+                    currentCoroutineContext().ensureActive()
+                    value = PlayerRouteState.Ready(
+                        session = session,
+                        title = channel.summary.displayName,
+                    )
+                    // Keep adapter observation resources alive for exactly this route-state
+                    // generation. Cancellation on navigation/reconnect closes only the session
+                    // adapter, never the process-owned playback service/player.
+                    awaitCancellation()
+                }
             }
+        } finally {
+            session.close()
         }
     }
 
@@ -258,14 +260,15 @@ fun PlayerRoute(
         )
 
         is PlayerRouteState.Ready -> PlayerSurfaceContent(
-            controller = current.controller,
+            session = current.session,
+            playbackSurface = playbackSurface,
             title = current.title,
             favoriteSupported = favoriteAction != null,
             contentIdentity = channelId,
             favoriteAction = favoriteAction,
             stopAction = PlayerSurfaceAction(
                 label = "Остановить",
-                onClick = { current.controller.stop() },
+                onClick = { current.session.stop() },
             ),
             backAction = PlayerSurfaceAction(
                 label = "Назад к каналам",
@@ -384,21 +387,21 @@ private fun startFailureMessage(reason: PlaybackStartFailure): String = when (re
     PlaybackStartFailure.CommandFailed -> COMMAND_FAILED_MESSAGE
 }
 
-private fun connectionFailureMessage(failure: MediaControllerOperationFailure): String = when (failure) {
-    MediaControllerOperationFailure.ConnectionTimedOut ->
+private fun connectionFailureMessage(failure: PlaybackSessionOperationFailure): String = when (failure) {
+    PlaybackSessionOperationFailure.ConnectionTimedOut ->
         "Служба воспроизведения не ответила вовремя."
 
-    MediaControllerOperationFailure.ConnectionCancelled ->
+    PlaybackSessionOperationFailure.ConnectionCancelled ->
         "Подключение к службе воспроизведения было прервано."
 
     else -> CONNECTION_FAILED_MESSAGE
 }
 
-private fun commandFailureMessage(failure: MediaControllerOperationFailure): String = when (failure) {
-    MediaControllerOperationFailure.CommandTimedOut ->
+private fun commandFailureMessage(failure: PlaybackSessionOperationFailure): String = when (failure) {
+    PlaybackSessionOperationFailure.CommandTimedOut ->
         "Служба воспроизведения не успела подготовить поток."
 
-    MediaControllerOperationFailure.CommandCancelled ->
+    PlaybackSessionOperationFailure.CommandCancelled ->
         "Подготовка потока была прервана."
 
     else -> COMMAND_FAILED_MESSAGE
@@ -411,5 +414,5 @@ private const val HTTP_APPROVAL_FAILED_MESSAGE = "Не удалось сохра
 private const val PLAYER_HTTP_APPROVE_TEST_TAG = "player-http-approve"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val PLAYER_DOCTOR_TEST_TAG = "player-doctor"
-private const val CONTROLLER_TIMEOUT_MILLIS = 20_000L
+private const val SESSION_TIMEOUT_MILLIS = 20_000L
 private const val COMMAND_TIMEOUT_MILLIS = 25_000L
