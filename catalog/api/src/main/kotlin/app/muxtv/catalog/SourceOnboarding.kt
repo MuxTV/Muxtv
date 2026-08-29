@@ -10,10 +10,34 @@ abstract class SourcePreparationHandle protected constructor() {
     final override fun toString(): String = "SourcePreparationHandle(<redacted>)"
 }
 
+/** Provider-neutral source input accepted by the stable onboarding port. */
+sealed interface SourcePreparationRequest {
+    class M3u(
+        val locator: String,
+        val insecureHttpApproved: Boolean = false,
+    ) : SourcePreparationRequest {
+        override fun toString(): String =
+            "SourcePreparationRequest.M3u(locator=<redacted>, " +
+                "insecureHttpApproved=$insecureHttpApproved)"
+    }
+
+    class Xtream(
+        val endpoint: String,
+        val username: String,
+        val password: String,
+        val insecureHttpApproved: Boolean = false,
+    ) : SourcePreparationRequest {
+        override fun toString(): String =
+            "SourcePreparationRequest.Xtream(endpoint=<redacted>, username=<redacted>, " +
+                "password=<redacted>, insecureHttpApproved=$insecureHttpApproved)"
+    }
+}
+
 enum class SourcePreparationFailure {
     InvalidLocator,
     CredentialTooLarge,
     StorageUnavailable,
+    UnsupportedProvider,
 }
 
 sealed interface SourcePreparationResult {
@@ -68,6 +92,22 @@ interface SourceOnboarding {
         locator: String,
         insecureHttpApproved: Boolean = false,
     ): SourcePreparationResult
+
+    /**
+     * Provider-neutral entry point. The default keeps existing M3U-only implementations source
+     * compatible while making unsupported provider kinds explicit and typed.
+     */
+    suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult =
+        when (request) {
+            is SourcePreparationRequest.M3u -> prepare(
+                locator = request.locator,
+                insecureHttpApproved = request.insecureHttpApproved,
+            )
+
+            is SourcePreparationRequest.Xtream -> SourcePreparationResult.Failed(
+                SourcePreparationFailure.UnsupportedProvider,
+            )
+        }
 
     suspend fun activate(
         handle: SourcePreparationHandle,
