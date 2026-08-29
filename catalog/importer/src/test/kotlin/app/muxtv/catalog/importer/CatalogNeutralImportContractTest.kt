@@ -171,13 +171,14 @@ class CatalogNeutralImportContractTest {
         nowEpochMillis = { 1_000L },
     )
 
-    private fun remoteRequest(sourceId: String = "source-xtream") = CatalogImportRequest(
-        sourceId = sourceId,
-        sourceName = "Synthetic Xtream",
-        credentialRef = "credential-ref",
-        refreshRunToken = "run-token",
-        sourceOwnership = CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING,
-    )
+    private fun remoteRequest(sourceId: String = "source-xtream"): CatalogRevisionImportRequest =
+        CatalogRevisionImportRequest(
+            sourceId = sourceId,
+            sourceName = "Synthetic Xtream",
+            credentialRef = "credential-ref",
+            refreshRunToken = "run-token",
+            sourceOwnership = CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING,
+        )
 
     private fun xtreamEntry(
         providerStableId: String,
