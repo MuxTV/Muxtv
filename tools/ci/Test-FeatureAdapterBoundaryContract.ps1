@@ -85,13 +85,14 @@ dependencies {
     )) {
         Write-TextFile -Path $featureBuild -Content @"
 dependencies {
-    implementation(project(\":$target\"))
+    implementation(project(":$target"))
 }
 "@
         Invoke-ExpectedFailure -Target $target -Description "feature:test -> $target"
     }
 
-    Write-Host "Feature adapter boundary contract synthetic RED/GREEN fixtures passed."
+    & $checker -RepositoryRoot $RepositoryRoot
+    Write-Host "Feature adapter boundary contract synthetic fixtures and repository graph passed."
 }
 finally {
     Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
