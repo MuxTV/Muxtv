@@ -247,6 +247,7 @@ private fun SourcePreparationFailure.toEntryFailure(): SourceEntryFailure = when
     SourcePreparationFailure.InvalidLocator -> SourceEntryFailure.InvalidLocator
     SourcePreparationFailure.CredentialTooLarge -> SourceEntryFailure.CredentialTooLarge
     SourcePreparationFailure.StorageUnavailable -> SourceEntryFailure.StorageUnavailable
+    SourcePreparationFailure.UnsupportedProvider -> SourceEntryFailure.Unexpected
 }
 
 private fun SourceActivationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
