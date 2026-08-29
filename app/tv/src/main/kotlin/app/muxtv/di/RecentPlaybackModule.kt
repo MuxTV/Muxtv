@@ -1,5 +1,6 @@
 package app.muxtv.di
 
+import app.muxtv.ApplicationIoScope
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.database.MuxTvDatabaseComponents
 import app.muxtv.player.media3.PlaybackFirstFrameObserver
@@ -10,8 +11,6 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -25,9 +24,10 @@ object RecentPlaybackModule {
     @Singleton
     fun provideRecentPlaybackObserver(
         repository: RecentChannelsRepository,
+        @ApplicationIoScope scope: CoroutineScope,
     ): RecentPlaybackObserver = RecentPlaybackObserver(
         repository = repository,
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        scope = scope,
         nowEpochMillis = System::currentTimeMillis,
     )
 
