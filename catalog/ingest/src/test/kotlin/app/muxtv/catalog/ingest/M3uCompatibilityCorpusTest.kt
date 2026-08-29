@@ -11,10 +11,10 @@ import org.junit.Test
 
 class M3uCompatibilityCorpusTest {
     @Test
-    fun `manifest v1 declares complete sanitized A1 compatibility corpus`() = runTest {
+    fun `manifest v1 declares complete sanitized compatibility corpus`() = runTest {
         val manifest = loadManifestV1()
 
-        assertThat(manifest.map { it.id }).containsExactlyElementsIn(EXPECTED_A1_IDS)
+        assertThat(manifest.map { it.id }).containsExactlyElementsIn(EXPECTED_IDS)
         assertThat(manifest.map { it.id }).containsNoDuplicates()
         assertThat(manifest.map { it.path }).containsNoDuplicates()
         assertThat(discoverFixturePaths()).containsExactlyElementsIn(manifest.map { it.path })
@@ -178,6 +178,20 @@ class M3uCompatibilityCorpusTest {
                 assertThat(sink.headers).hasSize(1)
             }
 
+            "extgrp-begin-directive-scope" -> {
+                val entries = sink.entries
+                assertThat(entries).hasSize(4)
+                assertThat(entries[0].tvgId).isEqualTo("news.one")
+                assertThat(entries[0].groupTitle).isEqualTo("News")
+                assertThat(entries[1].tvgId).isEqualTo("news.two")
+                assertThat(entries[1].groupTitle).isEqualTo("News")
+                assertThat(entries[2].tvgId).isEqualTo("sports.one")
+                assertThat(entries[2].groupTitle).isEqualTo("Sports")
+                assertThat(entries[3].tvgId).isEqualTo("plain.one")
+                assertThat(entries[3].groupTitle).isNull()
+                assertThat(sink.warnings).isEmpty()
+            }
+
             else -> error("Manifest fixture has no semantic contract: $id")
         }
     }
@@ -233,7 +247,7 @@ class M3uCompatibilityCorpusTest {
         const val MANIFEST_HEADER =
             "id\tpath\tcategory\tdisposition\texpected_entries\texpected_skipped\texpected_warnings\tsafe_expectation\tredaction_probe"
         const val MANIFEST_COLUMN_COUNT = 9
-        val EXPECTED_A1_IDS = setOf(
+        val EXPECTED_IDS = setOf(
             "basic-tvg-and-group",
             "vlc-user-agent-referrer",
             "kodi-properties",
@@ -241,6 +255,7 @@ class M3uCompatibilityCorpusTest {
             "url-tvg-header",
             "malformed-entry-preserves-following-valid-entry",
             "secret-redaction",
+            "extgrp-begin-directive-scope",
         )
         val HTTP_URL = Regex("https?://[^\\s\\\",]+")
     }
