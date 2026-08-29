@@ -58,6 +58,20 @@ function Invoke-ExpectedFailure {
     throw "$Description should fail with '$expected', but the checker passed."
 }
 
+function Invoke-ExpectedMissingGraphFailure {
+    try {
+        & $checker -RepositoryRoot $fixtureRoot
+    }
+    catch {
+        if (-not $_.Exception.Message.Contains("No feature build.gradle.kts files were found", [System.StringComparison]::Ordinal)) {
+            throw "Missing feature graph failed with the wrong diagnostic: $($_.Exception.Message)"
+        }
+        return
+    }
+
+    throw "Missing feature graph should fail closed, but the checker passed."
+}
+
 try {
     Write-TextFile -Path $featureBuild -Content @'
 plugins {
@@ -88,8 +102,29 @@ dependencies {
     implementation(project(":$target"))
 }
 "@
-        Invoke-ExpectedFailure -Target $target -Description "feature:test -> $target"
+        Invoke-ExpectedFailure -Target $target -Description "feature:test -> $target direct project syntax"
+
+        Write-TextFile -Path $featureBuild -Content @"
+dependencies {
+    implementation(project(path = ":$target"))
+}
+"@
+        Invoke-ExpectedFailure -Target $target -Description "feature:test -> $target named path syntax"
     }
+
+    Write-TextFile -Path $featureBuild -Content @'
+dependencies {
+    // implementation(project(":player:media3"))
+    /*
+    implementation(project(path = ":core:database"))
+    */
+    implementation(project(":catalog:api"))
+}
+'@
+    Invoke-ExpectedPass -Description "commented forbidden edges"
+
+    Remove-Item -LiteralPath $featureBuild -Force
+    Invoke-ExpectedMissingGraphFailure
 
     & $checker -RepositoryRoot $RepositoryRoot
     Write-Host "Feature adapter boundary contract synthetic fixtures and repository graph passed."
