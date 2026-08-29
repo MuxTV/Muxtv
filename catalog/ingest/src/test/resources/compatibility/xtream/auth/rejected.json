@@ -1,0 +1,12 @@
+{
+  "user_info": {
+    "username": "TEST_XTREAM_REJECTED_SECRET_USER",
+    "password": "TEST_XTREAM_REJECTED_SECRET_PASSWORD",
+    "auth": 0,
+    "status": "Disabled",
+    "message": "TEST_XTREAM_REJECTED_SECRET provider message"
+  },
+  "server_info": {
+    "url": "provider.invalid"
+  }
+}

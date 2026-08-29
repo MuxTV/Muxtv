@@ -1,0 +1,13 @@
+[
+  {
+    "num": "7",
+    "name": "Synthetic Variance",
+    "stream_type": "live",
+    "stream_id": "707",
+    "stream_icon": "https://images.invalid/variance.png",
+    "epg_channel_id": 707,
+    "category_id": 12,
+    "tv_archive": "1",
+    "tv_archive_duration": "7"
+  }
+]

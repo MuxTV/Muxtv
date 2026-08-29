@@ -1,0 +1,24 @@
+[
+  {
+    "num": 1,
+    "name": "Synthetic News",
+    "stream_type": "live",
+    "stream_id": 101,
+    "stream_icon": "https://images.invalid/news.png",
+    "epg_channel_id": "synthetic.news",
+    "category_id": "10",
+    "tv_archive": 0,
+    "tv_archive_duration": 0
+  },
+  {
+    "num": 2,
+    "name": "Synthetic Sports",
+    "stream_type": "live",
+    "stream_id": 102,
+    "stream_icon": "https://images.invalid/sports.png",
+    "epg_channel_id": "synthetic.sports",
+    "category_id": "20",
+    "tv_archive": 0,
+    "tv_archive_duration": 0
+  }
+]
