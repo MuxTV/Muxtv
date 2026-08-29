@@ -192,7 +192,7 @@ class StreamingM3uParser {
                     }
                     pending = parseExtInf(trimmed, limits, lineNumber)?.also { current ->
                         if ("group-title" in current.attributes) {
-                            inheritedGroupTitle = current.attributes["group-title"].nullIfBlank()
+                            inheritedGroupTitle = null
                         } else {
                             current.groupOverride = inheritedGroupTitle
                         }
