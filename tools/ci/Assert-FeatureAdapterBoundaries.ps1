@@ -53,7 +53,7 @@ foreach ($buildFile in $buildFiles) {
 
     $dependencies = [regex]::Matches(
         $activeContent,
-        'project\s*\(\s*["''](:[^"'']+)["'']\s*\)'
+        'project\s*\(\s*(?:path\s*=\s*)?["''](:[^"'']+)["'']\s*\)'
     )
     foreach ($dependency in $dependencies) {
         $target = $dependency.Groups[1].Value.TrimStart(':')
