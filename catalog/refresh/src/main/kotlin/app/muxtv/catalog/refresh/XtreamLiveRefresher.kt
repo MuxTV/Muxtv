@@ -170,6 +170,8 @@ class XtreamLiveRefresher(
             )
         } catch (error: RedirectRejectedException) {
             XtreamLiveRefreshResult.RedirectRejected(error.reason)
+        } catch (error: XtreamHttpStatusException) {
+            XtreamLiveRefreshResult.HttpFailure(error.statusCode)
         } catch (_: SocketTimeoutException) {
             XtreamLiveRefreshResult.NetworkFailure(RemoteSourceNetworkFailureReason.Timeout)
         } catch (_: UnknownHostException) {
