@@ -22,7 +22,7 @@ $forbiddenPatterns = @(
 
 foreach ($entry in $forbiddenPatterns) {
     if ([regex]::IsMatch($content, $entry.Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
-        throw "Duplicate process async ownership remains in $relativePath: $($entry.Description)."
+        throw "Duplicate process async ownership remains in ${relativePath}: $($entry.Description)."
     }
 }
 
@@ -34,7 +34,7 @@ $requiredPatterns = @(
 
 foreach ($entry in $requiredPatterns) {
     if (-not [regex]::IsMatch($content, $entry.Pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
-        throw "Process async ownership contract missing in $relativePath: $($entry.Description)."
+        throw "Process async ownership contract missing in ${relativePath}: $($entry.Description)."
     }
 }
 
