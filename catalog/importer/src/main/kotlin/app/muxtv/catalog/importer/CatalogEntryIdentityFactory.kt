@@ -1,6 +1,5 @@
 package app.muxtv.catalog.importer
 
-import app.muxtv.catalog.ingest.M3uEntry
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
@@ -13,7 +12,7 @@ internal data class CatalogEntryIdentity(
 )
 
 /**
- * Generates the existing stable catalog identifiers while reusing one digest inside one import.
+ * Generates stable catalog identifiers while reusing one digest inside one import.
  *
  * Instances are deliberately scoped to a single import. [MessageDigest] is mutable and must not be
  * shared between concurrent imports.
@@ -22,16 +21,16 @@ internal class CatalogEntryIdentityFactory(
     private val messageDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
 ) {
     fun create(
-        entry: M3uEntry,
+        entry: CatalogImportEntry,
         sourceId: String,
         revisionNumber: Long,
         ordinal: Long,
     ): CatalogEntryIdentity {
         val providerKey = entry.providerKey()
-        val canonicalScope = if (!entry.tvgId.isNullOrBlank()) {
-            "global|$providerKey"
-        } else {
-            "source|$sourceId|$providerKey"
+        val canonicalScope = when {
+            entry.providerStableId != null -> "source|$sourceId|$providerKey"
+            !entry.tvgId.isNullOrBlank() -> "global|$providerKey"
+            else -> "source|$sourceId|$providerKey"
         }
 
         return CatalogEntryIdentity(
@@ -63,7 +62,10 @@ internal class CatalogEntryIdentityFactory(
     }
 }
 
-private fun M3uEntry.providerKey(): String {
+private fun CatalogImportEntry.providerKey(): String {
+    val stableProviderId = providerStableId?.trim()
+    if (stableProviderId != null) return "provider:$stableProviderId"
+
     val stableTvgId = tvgId?.normalizeIdentityPart()
     if (!stableTvgId.isNullOrEmpty()) return "tvg:$stableTvgId"
 

@@ -83,7 +83,7 @@ class CatalogEntryIdentityFactoryTest {
         tvgName: String? = null,
         groupTitle: String? = null,
         channelNumber: String? = null,
-    ): M3uEntry = M3uEntry(
+    ): CatalogImportEntry = M3uEntry(
         displayName = displayName,
         locator = "https://stream.example/live",
         durationSeconds = null,
@@ -99,5 +99,5 @@ class CatalogEntryIdentityFactoryTest {
         userAgent = null,
         referrer = null,
         attributes = emptyMap(),
-    )
+    ).toCatalogImportEntry()
 }

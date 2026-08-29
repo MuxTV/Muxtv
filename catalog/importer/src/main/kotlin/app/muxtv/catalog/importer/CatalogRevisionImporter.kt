@@ -76,8 +76,9 @@ enum class CatalogImportFailureReason {
 }
 
 /**
- * Streams an M3U source into a staging revision and atomically activates it only after parsing and
- * all database batches complete successfully. The caller retains ownership of [InputStream].
+ * Owns catalog revision staging and atomic activation for both the legacy M3U parser path and
+ * provider-neutral streaming feeds. Callers retain ownership of any transport resources used by a
+ * feed.
  */
 class CatalogRevisionImporter(
     private val parser: StreamingM3uParser,
@@ -87,6 +88,29 @@ class CatalogRevisionImporter(
     suspend fun import(
         request: CatalogImportRequest,
         input: InputStream,
+    ): CatalogImportResult = try {
+        importEntries(
+            request = request.toRevisionImportRequest(),
+            feed = M3uCatalogImportFeed(
+                parser = parser,
+                input = input,
+                limits = request.parseLimits,
+                options = request.parseOptions,
+            ),
+        )
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: M3uEncodingException) {
+        CatalogImportResult.Failed(CatalogImportFailureReason.InvalidEncoding)
+    } catch (_: M3uLimitExceededException) {
+        CatalogImportResult.Failed(CatalogImportFailureReason.ParserLimitExceeded)
+    } catch (_: Exception) {
+        CatalogImportResult.Failed(CatalogImportFailureReason.StorageFailure)
+    }
+
+    suspend fun importEntries(
+        request: CatalogRevisionImportRequest,
+        feed: CatalogImportFeed,
     ): CatalogImportResult {
         var revisionNumber: Long? = null
 
@@ -115,12 +139,7 @@ class CatalogRevisionImporter(
                 identityFactory = CatalogEntryIdentityFactory(),
             )
             val report = traceAsyncSection(TRACE_PARSE) {
-                parser.parse(
-                    input = input,
-                    sink = sink,
-                    limits = request.parseLimits,
-                    options = request.parseOptions,
-                )
+                feed.streamTo(sink)
             }
             sink.flush()
 
@@ -189,15 +208,9 @@ class CatalogRevisionImporter(
                 revisionNumber = revisionNumber,
             )
             throw cancelled
-        } catch (_: M3uEncodingException) {
+        } catch (failure: Exception) {
             discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.InvalidEncoding)
-        } catch (_: M3uLimitExceededException) {
-            discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.ParserLimitExceeded)
-        } catch (_: Exception) {
-            discardSafely(request.sourceId, revisionNumber)
-            CatalogImportResult.Failed(CatalogImportFailureReason.StorageFailure)
+            throw failure
         }
     }
 
@@ -225,8 +238,37 @@ class CatalogRevisionImporter(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            // Preserve the original typed import failure when best-effort discard also fails.
+            // Preserve the original import failure when best-effort discard also fails.
         }
+    }
+}
+
+private class M3uCatalogImportFeed(
+    private val parser: StreamingM3uParser,
+    private val input: InputStream,
+    private val limits: M3uParseLimits,
+    private val options: M3uParseOptions,
+) : CatalogImportFeed {
+    override suspend fun streamTo(sink: CatalogImportEntrySink): CatalogImportFeedReport {
+        val report = parser.parse(
+            input = input,
+            sink = object : M3uParseSink {
+                override suspend fun onHeader(header: M3uPlaylistHeader) = Unit
+
+                override suspend fun onWarning(warning: M3uWarning) = Unit
+
+                override suspend fun onEntry(entry: M3uEntry) {
+                    sink.onEntry(entry.toCatalogImportEntry())
+                }
+            },
+            limits = limits,
+            options = options,
+        )
+        return CatalogImportFeedReport(
+            parsedEntries = report.parsedEntries,
+            skippedEntries = report.skippedEntries,
+            warningCount = report.warningCount,
+        )
     }
 }
 
@@ -235,15 +277,11 @@ private class RevisionStagingSink(
     private val revisionNumber: Long,
     private val revisionStore: SourceRevisionStore,
     private val identityFactory: CatalogEntryIdentityFactory,
-) : M3uParseSink {
+) : CatalogImportEntrySink {
     private val batch = ArrayList<StagedCatalogEntry>(BATCH_SIZE)
     private var entryOrdinal = 0L
 
-    override suspend fun onHeader(header: M3uPlaylistHeader) = Unit
-
-    override suspend fun onWarning(warning: M3uWarning) = Unit
-
-    override suspend fun onEntry(entry: M3uEntry) {
+    override suspend fun onEntry(entry: CatalogImportEntry) {
         entryOrdinal += 1
         batch += entry.toStagedEntry(
             sourceId = sourceId,
@@ -269,7 +307,7 @@ private class RevisionStagingSink(
     }
 }
 
-private fun M3uEntry.toStagedEntry(
+private fun CatalogImportEntry.toStagedEntry(
     sourceId: String,
     revisionNumber: Long,
     ordinal: Long,
@@ -289,10 +327,10 @@ private fun M3uEntry.toStagedEntry(
         canonicalChannelId = identity.canonicalChannelId,
         canonicalDisplayName = tvgName?.takeIf(String::isNotBlank) ?: displayName,
         streamVariantId = identity.streamVariantId,
-        locator = locator,
+        locator = playbackReference,
         tvgId = tvgId,
         tvgName = tvgName,
-        logoUrl = tvgLogo,
+        logoUrl = logoUrl,
         groupTitle = groupTitle,
         channelNumber = channelNumber,
         catchupMode = catchupMode,
@@ -303,6 +341,15 @@ private fun M3uEntry.toStagedEntry(
         referrer = referrer,
     )
 }
+
+private fun CatalogImportRequest.toRevisionImportRequest(): CatalogRevisionImportRequest =
+    CatalogRevisionImportRequest(
+        sourceId = sourceId,
+        sourceName = sourceName,
+        credentialRef = credentialRef,
+        refreshRunToken = refreshRunToken,
+        sourceOwnership = sourceOwnership,
+    )
 
 private suspend inline fun <T> traceAsyncSection(
     sectionName: String,
