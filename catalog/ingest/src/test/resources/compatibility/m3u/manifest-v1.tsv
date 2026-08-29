@@ -7,4 +7,4 @@ catchup-metadata	catchup/catchup-metadata.m3u	catchup	SUPPORTED	1	0	0	catchup,ca
 url-tvg-header	epg-header/url-tvg-header.m3u	epg-header	SUPPORTED	1	0	0	url-tvg,x-tvg-url distinct EPG references	TEST_EPG_SECRET
 malformed-entry-preserves-following-valid-entry	malformed/malformed-entry-preserves-following-valid-entry.m3u	malformed	SUPPORTED	2	1	2	MalformedExtInf does not prevent following valid entry	-
 secret-redaction	security/secret-redaction.m3u	security	SUPPORTED	1	0	0	entry remains parseable while toString diagnostics redact content	TEST_SECRET_SHOULD_NOT_APPEAR
-extgrp-begin-directive-scope	directives/extgrp-begin-directive-scope.m3u	directives	SUPPORTED	4	0	0	begin EXTGRP inheritance, explicit group-title override, empty EXTGRP reset	-
+extgrp-begin-directive-scope	directives/extgrp-begin-directive-scope.m3u	directives	SUPPORTED	6	0	0	begin EXTGRP inheritance, group-title scope reset, empty EXTGRP reset	-
