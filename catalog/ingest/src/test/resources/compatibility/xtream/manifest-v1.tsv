@@ -1,0 +1,14 @@
+# schema_version=1
+id	path	category	surface	disposition	expected_outcome	expected_entries	expected_skipped	expected_warnings	safe_expectation	redaction_probe
+auth-active	auth/active.json	auth	AUTH	SUPPORTED	AUTHENTICATED	0	0	0	active auth exposes only normalized output formats	TEST_XTREAM_SECRET
+auth-rejected	auth/rejected.json	auth	AUTH	SUPPORTED	AUTH_REJECTED	0	0	0	invalid auth is a typed rejection without raw provider text	TEST_XTREAM_REJECTED_SECRET
+live-basic	live/basic.json	live	LIVE	SUPPORTED	LIVE	2	0	0	basic Live fields normalize deterministically	-
+live-type-variance	live/type-variance.json	live	LIVE	SUPPORTED	LIVE	1	0	0	numeric string and number variance normalizes to one model	-
+live-null-missing-optional	live/null-missing-optional.json	live	LIVE	SUPPORTED	LIVE	1	0	0	null and missing optional fields remain absent	-
+live-malformed-item-preserves-valid	malformed/malformed-item-preserves-valid.json	malformed	LIVE	SUPPORTED	LIVE	1	1	1	one invalid identity does not invalidate following Live items	-
+live-unknown-extra-fields	live/unknown-extra-fields.json	live	LIVE	IGNORED_SAFE	LIVE	1	0	0	unknown provider fields do not affect normalized Live semantics	-
+live-archive-characterization	archive/archive-characterization.json	archive	LIVE	NOT_IMPLEMENTED	LIVE	1	0	0	archive metadata is characterized without catch-up product support	-
+live-secret-redaction	security/secret-redaction.json	security	LIVE	SUPPORTED	LIVE	1	0	0	normalized diagnostics never expose raw provider values	TEST_XTREAM_SECRET
+live-non-live-item-is-ignored	malformed/non-live-item-is-ignored.json	malformed	LIVE	IGNORED_SAFE	LIVE	1	1	1	non-live structural items cannot enter the Live catalog	-
+live-invalid-optional-fields	malformed/invalid-optional-fields.json	malformed	LIVE	SUPPORTED	LIVE	1	0	1	invalid optional metadata degrades the item once without losing identity	-
+live-structural-rejected	malformed/top-level-not-array.json	malformed	LIVE	REJECTED	FORMAT_REJECTED	0	0	0	wrong top-level Live shape fails with a fixed secret-safe format error	TEST_XTREAM_STRUCTURAL_SECRET

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Synthetic Movie Pseudo Item",
+    "stream_type": "movie",
+    "stream_id": 1301
+  },
+  {
+    "name": "Synthetic Live After Pseudo Item",
+    "stream_type": "live",
+    "stream_id": 1302
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "num": 10,
+    "name": "Synthetic Future Fields",
+    "stream_type": "live",
+    "stream_id": 1001,
+    "category_id": "30",
+    "future_scalar": "ignored",
+    "future_object": {"nested": [1, 2, 3]},
+    "future_array": ["a", "b"]
+  }
+]

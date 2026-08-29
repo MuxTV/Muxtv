@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Broken identity",
+    "stream_type": "live",
+    "stream_id": "not-a-number"
+  },
+  {
+    "name": "Synthetic Valid After Broken",
+    "stream_type": "live",
+    "stream_id": 909,
+    "category_id": "90"
+  }
+]
