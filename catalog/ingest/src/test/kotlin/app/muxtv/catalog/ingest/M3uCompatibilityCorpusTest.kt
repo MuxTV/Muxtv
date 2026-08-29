@@ -180,15 +180,19 @@ class M3uCompatibilityCorpusTest {
 
             "extgrp-begin-directive-scope" -> {
                 val entries = sink.entries
-                assertThat(entries).hasSize(4)
+                assertThat(entries).hasSize(6)
                 assertThat(entries[0].tvgId).isEqualTo("news.one")
                 assertThat(entries[0].groupTitle).isEqualTo("News")
                 assertThat(entries[1].tvgId).isEqualTo("news.two")
                 assertThat(entries[1].groupTitle).isEqualTo("News")
                 assertThat(entries[2].tvgId).isEqualTo("sports.one")
                 assertThat(entries[2].groupTitle).isEqualTo("Sports")
-                assertThat(entries[3].tvgId).isEqualTo("plain.one")
+                assertThat(entries[3].tvgId).isEqualTo("plain.after.sports")
                 assertThat(entries[3].groupTitle).isNull()
+                assertThat(entries[4].tvgId).isEqualTo("movies.one")
+                assertThat(entries[4].groupTitle).isEqualTo("Movies")
+                assertThat(entries[5].tvgId).isEqualTo("plain.after.empty")
+                assertThat(entries[5].groupTitle).isNull()
                 assertThat(sink.warnings).isEmpty()
             }
 
