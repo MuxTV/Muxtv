@@ -1,0 +1,11 @@
+[
+  {
+    "num": 11,
+    "name": "Synthetic Archive Metadata",
+    "stream_type": "live",
+    "stream_id": 1101,
+    "category_id": "40",
+    "tv_archive": 1,
+    "tv_archive_duration": 14
+  }
+]

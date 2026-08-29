@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Synthetic Optional Degradation",
+    "stream_type": "live",
+    "stream_id": 1401,
+    "num": "not-a-number",
+    "stream_icon": 12345,
+    "category_id": {"unexpected": true},
+    "tv_archive": "maybe",
+    "tv_archive_duration": "not-a-duration"
+  }
+]
