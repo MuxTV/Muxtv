@@ -1,0 +1,16 @@
+#EXTM3U
+#EXTGRP:News
+#EXTINF:-1 tvg-id="news.one",News One
+https://stream-a.invalid/live.m3u8
+#EXTINF:-1 tvg-id="news.two",News Two
+https://stream-b.invalid/live.m3u8
+#EXTINF:-1 tvg-id="sports.one" group-title="Sports",Sports One
+https://stream-c.invalid/live.m3u8
+#EXTINF:-1 tvg-id="plain.after.sports",Plain After Sports
+https://stream-d.invalid/live.m3u8
+#EXTGRP:Movies
+#EXTINF:-1 tvg-id="movies.one",Movies One
+https://stream-e.invalid/live.m3u8
+#EXTGRP:
+#EXTINF:-1 tvg-id="plain.after.empty",Plain After Empty
+https://stream-f.invalid/live.m3u8

@@ -38,6 +38,36 @@ class CatalogRevisionImporterBatchingTest {
         assertThat(store.batches[1].single().rawName).isEqualTo("Channel 251")
     }
 
+    @Test
+    fun preservesCatchupMetadataInStagedEntry() = runTest {
+        val store = RecordingSourceRevisionStore()
+        val importer = CatalogRevisionImporter(
+            parser = StreamingM3uParser(),
+            revisionStore = store,
+            nowEpochMillis = { 1_000 },
+        )
+        val input = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="archive.one" catchup="append" catchup-source="?utc={utc}&token=TEST_CATCHUP_METADATA" catchup-days="7" catchup-correction="+2.0",Archive One
+            https://streams.invalid/archive-one.m3u8
+        """.trimIndent()
+
+        val result = importer.import(
+            request = CatalogImportRequest(
+                sourceId = "source-catchup",
+                sourceName = "Catch-up",
+            ),
+            input = ByteArrayInputStream(input.toByteArray()),
+        )
+
+        assertThat(result).isInstanceOf(CatalogImportResult.Imported::class.java)
+        val staged = store.batches.single().single()
+        assertThat(staged.catchupMode).isEqualTo("append")
+        assertThat(staged.catchupSource).isEqualTo("?utc={utc}&token=TEST_CATCHUP_METADATA")
+        assertThat(staged.catchupDays).isEqualTo(7)
+        assertThat(staged.catchupCorrection).isEqualTo("+2.0")
+    }
+
     private fun playlist(entryCount: Int): String = buildString {
         appendLine("#EXTM3U")
         for (index in 1..entryCount) {

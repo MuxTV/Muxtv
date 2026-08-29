@@ -1,0 +1,10 @@
+# schema_version=1
+id	path	category	disposition	expected_entries	expected_skipped	expected_warnings	safe_expectation	redaction_probe
+basic-tvg-and-group	basic/basic-tvg-and-group.m3u	basic	SUPPORTED	1	0	0	tvg-id,tvg-name,tvg-logo,group-title,tvg-chno	-
+vlc-user-agent-referrer	vlc-options/vlc-user-agent-referrer.m3u	vlc-options	SUPPORTED	1	0	0	user-agent,referrer	TEST_VLC_SECRET
+kodi-properties	kodi-properties/kodi-properties.m3u	kodi-properties	SUPPORTED	1	0	0	user-agent,referrer	TEST_KODI_SECRET
+catchup-metadata	catchup/catchup-metadata.m3u	catchup	SUPPORTED	1	0	0	catchup,catchup-source,catchup-days,catchup-correction	TEST_CATCHUP_SECRET
+url-tvg-header	epg-header/url-tvg-header.m3u	epg-header	SUPPORTED	1	0	0	url-tvg,x-tvg-url distinct EPG references	TEST_EPG_SECRET
+malformed-entry-preserves-following-valid-entry	malformed/malformed-entry-preserves-following-valid-entry.m3u	malformed	SUPPORTED	2	1	2	MalformedExtInf does not prevent following valid entry	-
+secret-redaction	security/secret-redaction.m3u	security	SUPPORTED	1	0	0	entry remains parseable while toString diagnostics redact content	TEST_SECRET_SHOULD_NOT_APPEAR
+extgrp-begin-directive-scope	directives/extgrp-begin-directive-scope.m3u	directives	SUPPORTED	6	0	0	begin EXTGRP inheritance, group-title scope reset, empty EXTGRP reset	-

@@ -1,0 +1,3 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="synthetic.news" tvg-name="Synthetic News" tvg-logo="https://images.invalid/news.png" group-title="News" tvg-chno="101",Synthetic News
+https://streams.invalid/live/news.m3u8

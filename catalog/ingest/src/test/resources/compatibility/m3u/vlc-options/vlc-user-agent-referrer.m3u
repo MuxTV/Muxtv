@@ -1,0 +1,5 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="synthetic.vlc",Synthetic VLC
+#EXTVLCOPT:http-user-agent=MuxTV TEST_VLC_SECRET Agent
+#EXTVLCOPT:http-referrer=https://referrer.invalid/TEST_VLC_SECRET/
+https://streams.invalid/live/vlc.m3u8?token=TEST_VLC_SECRET
