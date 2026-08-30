@@ -82,6 +82,16 @@ class DurableRemoteSourceOnboarding(
         return DurablePreparationRegistrationResult.Registered
     }
 
+    suspend fun completeRegisteredSideEffect(preparationId: String) {
+        withContext(NonCancellable) {
+            try {
+                registry.remove(preparationId)
+            } catch (_: Exception) {
+                // Keep the durable row for the next bounded startup cleanup.
+            }
+        }
+    }
+
     override suspend fun activate(
         token: RemoteSourcePreparationToken,
         sourceName: String,
@@ -221,13 +231,7 @@ class DurableRemoteSourceOnboarding(
     }
 
     private suspend fun removeRegistryAfterCompletedSideEffect(token: RemoteSourcePreparationToken) {
-        withContext(NonCancellable) {
-            try {
-                registry.remove(token.value)
-            } catch (_: Exception) {
-                // Keep the durable row for the next bounded startup cleanup.
-            }
-        }
+        completeRegisteredSideEffect(token.value)
     }
 
     private suspend fun removeRegistryByIdBestEffort(preparationId: String): Boolean = try {

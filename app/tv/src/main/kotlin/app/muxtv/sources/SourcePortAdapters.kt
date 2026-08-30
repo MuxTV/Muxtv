@@ -31,6 +31,7 @@ import app.muxtv.catalog.refresh.XtreamSourcePreparationInput
 import app.muxtv.catalog.refresh.XtreamSourcePreparationResult
 import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.catalog.sync.SourceRefreshScheduler
+import app.muxtv.credentials.CredentialRemoveResult
 import app.muxtv.database.SourceRefreshOverview as DatabaseSourceRefreshOverview
 import app.muxtv.database.SourceRefreshPolicy as DatabaseSourceRefreshPolicy
 import app.muxtv.database.SourceRefreshRunState as DatabaseSourceRefreshRunState
@@ -112,11 +113,12 @@ class AppSourceOnboarding(
         return delegate.activate(remoteHandle.token, sourceName).toApi()
     }
 
-    override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult {
-        val remoteHandle = handle as? RemotePreparationHandle
-            ?: return SourceCancellationResult.NotFound
-        return delegate.cancel(remoteHandle.token).toApi()
-    }
+    override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult =
+        when (handle) {
+            is RemotePreparationHandle -> delegate.cancel(handle.token).toApi()
+            is XtreamPreparationHandle -> cancelXtream(handle)
+            else -> SourceCancellationResult.NotFound
+        }
 
     override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? =
         delegate.restoreLatestRegistered()?.toApiPrepared()
@@ -142,10 +144,7 @@ class AppSourceOnboarding(
                         preparationId = result.accessReference.value,
                         scheme = result.scheme,
                         host = result.host,
-                        rollbackPrepared = {
-                            preparer.rollback(result.accessReference)
-                            Unit
-                        },
+                        rollbackPrepared = { preparer.rollback(result.accessReference) },
                     )
                 ) {
                     DurablePreparationRegistrationResult.Registered ->
@@ -168,6 +167,23 @@ class AppSourceOnboarding(
                 SourcePreparationResult.Failed(SourcePreparationFailure.CredentialTooLarge)
             is XtreamSourcePreparationResult.CredentialUnavailable ->
                 SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
+        }
+    }
+
+    private suspend fun cancelXtream(handle: XtreamPreparationHandle): SourceCancellationResult {
+        val preparer = xtreamPreparer ?: return SourceCancellationResult.CleanupPending
+        return when (preparer.rollback(handle.accessReference)) {
+            CredentialRemoveResult.Removed -> {
+                delegate.completeRegisteredSideEffect(handle.accessReference.value)
+                SourceCancellationResult.Removed
+            }
+
+            CredentialRemoveResult.NotFound -> {
+                delegate.completeRegisteredSideEffect(handle.accessReference.value)
+                SourceCancellationResult.NotFound
+            }
+
+            is CredentialRemoveResult.Unavailable -> SourceCancellationResult.CleanupPending
         }
     }
 
