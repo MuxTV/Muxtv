@@ -51,7 +51,7 @@ class XtreamLiveOwnershipBindingContractTest {
                 importer = CatalogRevisionImporter(
                     parser = StreamingM3uParser(),
                     revisionStore = revisionStore,
-                    nowEpochMillis = sequenceClock(10, 20, 30, 40),
+                    nowEpochMillis = ownershipSequenceClock(10, 20, 30, 40),
                 ),
                 sourceClient = MuxTvHttpClients().source,
                 parser = StreamingXtreamParser(),
@@ -89,6 +89,11 @@ class XtreamLiveOwnershipBindingContractTest {
         const val LIVE_BASIC =
             "[{\"name\":\"Owned Live\",\"stream_type\":\"live\",\"stream_id\":808}]"
     }
+}
+
+private fun ownershipSequenceClock(vararg values: Long): () -> Long {
+    val iterator = values.iterator()
+    return { iterator.nextLong() }
 }
 
 private class OwnershipCredentialStore : CredentialStore {
