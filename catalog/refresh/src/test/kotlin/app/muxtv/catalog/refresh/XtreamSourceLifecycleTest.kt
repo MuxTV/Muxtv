@@ -41,7 +41,7 @@ class XtreamSourceLifecycleTest {
             sourceName = "  News  ",
         )
 
-        assertThat(result).isInstanceOf(RemoteSourceActivationResult.Activated::class.java)
+        assertThat(result is RemoteSourceActivationResult.Activated).isTrue()
         val activated = result as RemoteSourceActivationResult.Activated
         assertThat(activated.sourceId).startsWith("source-")
         assertThat(activated.revisionNumber).isEqualTo(2)
