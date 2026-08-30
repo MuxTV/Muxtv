@@ -1,5 +1,6 @@
 package app.muxtv.sources
 
+import app.muxtv.catalog.SourceCancellationResult
 import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
@@ -84,6 +85,37 @@ class AppSourceOnboardingXtreamPreparationTest {
         assertThat(restored.handle.toString()).isEqualTo("SourcePreparationHandle(<redacted>)")
         assertThat(pendingStore.upserted.single().preparationId).isEqualTo(accessReference.value)
     }
+
+    @Test
+    fun `cancel removes xtream credential and durable preparation`() = runBlocking {
+        val pendingStore = RecordingPendingSourcePreparationStore()
+        val credentials = RecordingCredentialStore()
+        val onboarding = AppSourceOnboarding(
+            delegate = DurableRemoteSourceOnboarding(
+                delegate = LegacyOnboardingMustNotBeUsed,
+                registry = pendingStore,
+            ),
+            xtreamPreparer = XtreamSourcePreparer(
+                XtreamSourceAccessManager(credentials),
+            ),
+        )
+        val prepared = onboarding.prepare(
+            SourcePreparationRequest.Xtream(
+                endpoint = "https://provider.example",
+                username = "alice",
+                password = "secret",
+            ),
+        ) as SourcePreparationResult.Prepared
+        val accessReference = SourceAccessReference.parse(
+            pendingStore.upserted.single().preparationId,
+        )
+
+        val result = onboarding.cancel(prepared.handle)
+
+        assertThat(result).isEqualTo(SourceCancellationResult.Removed)
+        assertThat(credentials.removedIds).containsExactly(accessReference.credentialId)
+        assertThat(pendingStore.upserted).isEmpty()
+    }
 }
 
 private object AcceptingCredentialStore : CredentialStore {
@@ -97,6 +129,35 @@ private object AcceptingCredentialStore : CredentialStore {
     override suspend fun remove(id: CredentialId): CredentialRemoveResult = CredentialRemoveResult.Removed
 
     override suspend fun reset(): CredentialResetResult = CredentialResetResult.Reset
+}
+
+private class RecordingCredentialStore : CredentialStore {
+    private val storedIds = linkedSetOf<CredentialId>()
+    val removedIds = mutableListOf<CredentialId>()
+
+    override suspend fun put(
+        id: CredentialId,
+        secret: SecretBytes,
+    ): CredentialWriteResult {
+        storedIds += id
+        return CredentialWriteResult.Stored
+    }
+
+    override suspend fun read(id: CredentialId): CredentialReadResult = CredentialReadResult.NotFound
+
+    override suspend fun remove(id: CredentialId): CredentialRemoveResult {
+        removedIds += id
+        return if (storedIds.remove(id)) {
+            CredentialRemoveResult.Removed
+        } else {
+            CredentialRemoveResult.NotFound
+        }
+    }
+
+    override suspend fun reset(): CredentialResetResult {
+        storedIds.clear()
+        return CredentialResetResult.Reset
+    }
 }
 
 private object LegacyOnboardingMustNotBeUsed : RemoteSourceOnboarding {
@@ -119,7 +180,12 @@ private class RecordingPendingSourcePreparationStore : PendingSourcePreparationS
         upserted += preparation
     }
 
-    override suspend fun remove(preparationId: String): Boolean = false
+    override suspend fun remove(preparationId: String): Boolean {
+        val index = upserted.indexOfLast { it.preparationId == preparationId }
+        if (index < 0) return false
+        upserted.removeAt(index)
+        return true
+    }
 
     override suspend fun get(preparationId: String): PendingSourcePreparation? =
         upserted.lastOrNull { it.preparationId == preparationId }
