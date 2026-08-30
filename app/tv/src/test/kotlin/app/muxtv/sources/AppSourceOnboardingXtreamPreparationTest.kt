@@ -1,17 +1,23 @@
 package app.muxtv.sources
 
+import app.muxtv.catalog.SourceActivationResult
 import app.muxtv.catalog.SourceCancellationResult
 import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
+import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
 import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
+import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
 import app.muxtv.catalog.refresh.SourceAccessReference
+import app.muxtv.catalog.refresh.XtreamLiveRefreshResult
 import app.muxtv.catalog.refresh.XtreamSourceAccessManager
+import app.muxtv.catalog.refresh.XtreamSourceActivator
+import app.muxtv.catalog.refresh.XtreamSourceLifecycle
 import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.credentials.CredentialId
 import app.muxtv.credentials.CredentialReadResult
@@ -54,6 +60,55 @@ class AppSourceOnboardingXtreamPreparationTest {
         assertThat(prepared.handle.toString()).isEqualTo("SourcePreparationHandle(<redacted>)")
         assertThat(pendingStore.upserted).hasSize(1)
         assertThat(pendingStore.upserted.single().preparationId).startsWith("muxtv-access:v1:xtream:")
+    }
+
+    @Test
+    fun `xtream prepared handle activates through xtream lifecycle`() = runBlocking {
+        val pendingStore = RecordingPendingSourcePreparationStore()
+        val credentials = RecordingCredentialStore()
+        val accessManager = XtreamSourceAccessManager(credentials)
+        val activationRequests = mutableListOf<app.muxtv.catalog.refresh.XtreamLiveRefreshRequest>()
+        val onboarding = AppSourceOnboarding(
+            delegate = DurableRemoteSourceOnboarding(
+                delegate = LegacyOnboardingMustNotBeUsed,
+                registry = pendingStore,
+            ),
+            xtreamPreparer = XtreamSourcePreparer(accessManager),
+            xtreamLifecycle = XtreamSourceLifecycle(
+                accessManager = accessManager,
+                activator = XtreamSourceActivator { request ->
+                    activationRequests += request
+                    XtreamLiveRefreshResult.Refreshed(
+                        revisionNumber = 1L,
+                        previousRevisionNumber = 0L,
+                        entryCount = 1,
+                        skippedEntries = 0,
+                        warningCount = 0,
+                    )
+                },
+                activationCleanup = RemoteSourceActivationCleanup { _, _ ->
+                    RemoteSourceMetadataCleanupResult.NotFound
+                },
+            ),
+        )
+        val prepared = onboarding.prepare(
+            SourcePreparationRequest.Xtream(
+                endpoint = "https://provider.example",
+                username = "alice",
+                password = "secret",
+            ),
+        ) as SourcePreparationResult.Prepared
+
+        val result = onboarding.activate(prepared.handle, "My IPTV")
+
+        assertThat(result).isEqualTo(SourceActivationResult.Activated)
+        assertThat(activationRequests).hasSize(1)
+        val activationRequest = activationRequests.single()
+        assertThat(activationRequest.sourceName).isEqualTo("My IPTV")
+        assertThat(activationRequest.accessReference.value)
+            .isEqualTo(pendingStore.upserted.single().preparationId)
+        assertThat(activationRequest.toString()).doesNotContain("alice")
+        assertThat(activationRequest.toString()).doesNotContain("secret")
     }
 
     @Test
