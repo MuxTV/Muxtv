@@ -45,6 +45,13 @@ class EncryptedPlaybackAccessPolicyResolver(
         }
     }
 
+    override suspend fun resolvePreapproved(playbackLocator: String): PlaybackAccessDecision =
+        when (parseTarget(playbackLocator)) {
+            PlaybackTarget.Secure -> PlaybackAccessDecision.SecureTransport
+            PlaybackTarget.Invalid -> PlaybackAccessDecision.InvalidLocator
+            is PlaybackTarget.Insecure -> PlaybackAccessDecision.Approved
+        }
+
     override suspend fun approve(
         credentialRef: String,
         playbackLocator: String,
