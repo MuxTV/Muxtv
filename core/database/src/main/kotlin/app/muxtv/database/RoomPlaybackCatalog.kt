@@ -5,13 +5,12 @@ import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.catalog.PlayableChannel
 import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlayableVariant
-import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
-import app.muxtv.catalog.PlaybackAccessUnavailableReason
 import app.muxtv.catalog.PlaybackCandidateIdentity
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.ResolvedPlaybackRequest
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +19,13 @@ import kotlinx.coroutines.flow.map
 internal class RoomPlaybackCatalog(
     private val dao: PlaybackCatalogDao,
     private val accessPolicyResolver: PlaybackAccessPolicyResolver,
+    playbackReferenceResolver: PlaybackReferenceResolver,
 ) : PlaybackCatalog, PlaybackCandidateResolver {
+    private val accessCoordinator = PlaybackAccessCoordinator(
+        referenceResolver = playbackReferenceResolver,
+        accessPolicyResolver = accessPolicyResolver,
+    )
+
     override fun observeChannels(query: ChannelQuery): Flow<List<PlayableChannelSummary>> =
         dao.observeActiveChannels(
             profileId = query.profileId,
@@ -98,42 +103,28 @@ internal class RoomPlaybackCatalog(
     private suspend fun resolveAccess(
         variant: ActiveVariantAccessRow,
     ): PlaybackVariantResolution = when (
-        val decision = accessPolicyResolver.resolve(
+        val access = accessCoordinator.resolve(
             credentialRef = variant.credentialRef.orEmpty(),
-            playbackLocator = variant.locator,
+            playbackReference = variant.locator,
         )
     ) {
-            PlaybackAccessDecision.SecureTransport -> PlaybackVariantResolution.Ready(
-                variant.toRequest(insecureHttpApproved = false),
+        is CoordinatedPlaybackAccess.Ready -> PlaybackVariantResolution.Ready(
+            variant.toRequest(
+                locator = access.locator,
+                insecureHttpApproved = access.insecureHttpApproved,
+            ),
+        )
+
+        is CoordinatedPlaybackAccess.ApprovalRequired ->
+            PlaybackVariantResolution.InsecureTransportApprovalRequired(
+                channelId = variant.channelId,
+                variantId = variant.variantId,
+                displayOrigin = access.displayOrigin,
             )
 
-            PlaybackAccessDecision.Approved -> PlaybackVariantResolution.Ready(
-                variant.toRequest(insecureHttpApproved = true),
-            )
-
-            is PlaybackAccessDecision.ApprovalRequired ->
-                PlaybackVariantResolution.InsecureTransportApprovalRequired(
-                    channelId = variant.channelId,
-                    variantId = variant.variantId,
-                    displayOrigin = decision.displayOrigin,
-                )
-
-            PlaybackAccessDecision.InvalidLocator -> PlaybackVariantResolution.AccessUnavailable(
-                PlaybackAccessUnavailableReason.InvalidLocator,
-            )
-
-            PlaybackAccessDecision.CredentialNotFound -> PlaybackVariantResolution.AccessUnavailable(
-                PlaybackAccessUnavailableReason.CredentialNotFound,
-            )
-
-            PlaybackAccessDecision.CredentialCorrupted -> PlaybackVariantResolution.AccessUnavailable(
-                PlaybackAccessUnavailableReason.CredentialCorrupted,
-            )
-
-            PlaybackAccessDecision.CredentialUnavailable -> PlaybackVariantResolution.AccessUnavailable(
-                PlaybackAccessUnavailableReason.CredentialUnavailable,
-            )
-        }
+        is CoordinatedPlaybackAccess.Unavailable ->
+            PlaybackVariantResolution.AccessUnavailable(access.reason)
+    }
 
     override suspend fun approveInsecurePlayback(
         profileId: String,
@@ -160,8 +151,8 @@ internal class RoomPlaybackCatalog(
     }
 }
 
-
 private fun ActiveVariantAccessRow.toRequest(
+    locator: String,
     insecureHttpApproved: Boolean,
 ): ResolvedPlaybackRequest = ResolvedPlaybackRequest(
     channelId = channelId,
