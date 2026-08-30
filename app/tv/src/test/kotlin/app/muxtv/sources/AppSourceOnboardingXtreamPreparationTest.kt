@@ -9,6 +9,7 @@ import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessReference
 import app.muxtv.catalog.refresh.XtreamSourceAccessManager
 import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.credentials.CredentialId
@@ -52,6 +53,36 @@ class AppSourceOnboardingXtreamPreparationTest {
         assertThat(prepared.handle.toString()).isEqualTo("SourcePreparationHandle(<redacted>)")
         assertThat(pendingStore.upserted).hasSize(1)
         assertThat(pendingStore.upserted.single().preparationId).startsWith("muxtv-access:v1:xtream:")
+    }
+
+    @Test
+    fun `durable xtream preparation restores as an opaque handle`() = runBlocking {
+        val pendingStore = RecordingPendingSourcePreparationStore()
+        val accessReference = SourceAccessReference.xtream(
+            CredentialId.parse("00000000-0000-4000-8000-000000000224"),
+        )
+        pendingStore.upsert(
+            PendingSourcePreparation(
+                preparationId = accessReference.value,
+                scheme = "https",
+                host = "provider.example",
+                createdAtEpochMillis = 1L,
+                expiresAtEpochMillis = Long.MAX_VALUE,
+            ),
+        )
+        val onboarding = AppSourceOnboarding(
+            delegate = DurableRemoteSourceOnboarding(
+                delegate = LegacyOnboardingMustNotBeUsed,
+                registry = pendingStore,
+            ),
+        )
+
+        val restored = onboarding.restoreLatestPrepared()
+
+        assertThat(restored).isNotNull()
+        assertThat(restored!!.displayEndpoint).isEqualTo("https://provider.example")
+        assertThat(restored.handle.toString()).isEqualTo("SourcePreparationHandle(<redacted>)")
+        assertThat(pendingStore.upserted.single().preparationId).isEqualTo(accessReference.value)
     }
 }
 
