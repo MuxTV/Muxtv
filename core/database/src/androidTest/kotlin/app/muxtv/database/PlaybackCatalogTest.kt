@@ -8,6 +8,7 @@ import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackVariantResolution
+import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -34,6 +35,7 @@ class PlaybackCatalogTest {
         playbackCatalog = RoomPlaybackCatalog(
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = accessResolver,
+            playbackReferenceResolver = UnhandledPlaybackReferenceResolver,
         )
     }
 
