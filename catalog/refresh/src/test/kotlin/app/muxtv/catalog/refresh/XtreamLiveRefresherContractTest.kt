@@ -38,7 +38,9 @@ class XtreamLiveRefresherContractTest {
             assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
             val refreshed = result as XtreamLiveRefreshResult.Refreshed
             assertThat(refreshed.entryCount).isEqualTo(1)
-            assertThat(fixture.revisionStore.guardedCredentialRefs).containsExactly(CREDENTIAL_ID.value)
+            assertThat(fixture.revisionStore.guardedCredentialRefs).containsExactly(
+                SourceAccessReference.xtream(CREDENTIAL_ID).value,
+            )
             assertThat(fixture.revisionStore.guardedRunTokens).containsExactly(RUN_TOKEN)
 
             val staged = fixture.revisionStore.batches.single().single()
