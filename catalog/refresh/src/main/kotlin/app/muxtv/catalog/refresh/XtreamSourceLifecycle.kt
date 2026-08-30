@@ -107,7 +107,7 @@ class XtreamSourceLifecycle(
             XtreamLiveRefreshResult.AuthenticationRejected -> cleanupFailure(
                 accessReference,
                 sourceId,
-                RemoteSourceActivationFailure.AuthenticationRejected,
+                RemoteSourceActivationFailure.AccessCredentialCorrupted,
             )
 
             is XtreamLiveRefreshResult.HttpFailure -> cleanupFailure(
@@ -140,7 +140,7 @@ class XtreamSourceLifecycle(
             XtreamLiveRefreshResult.ProtocolFailure -> cleanupFailure(
                 accessReference,
                 sourceId,
-                RemoteSourceActivationFailure.ProtocolFailure,
+                RemoteSourceActivationFailure.Unexpected,
             )
 
             XtreamLiveRefreshResult.EmptyRevisionRejected -> cleanupFailure(
