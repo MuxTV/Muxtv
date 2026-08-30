@@ -32,7 +32,16 @@ sealed interface PlaybackReferenceResolution {
     data object CredentialUnavailable : PlaybackReferenceResolution
 
     /** Cleartext provider access exists but has not been explicitly approved. */
-    data object ApprovalRequired : PlaybackReferenceResolution
+    class ApprovalRequired(
+        val displayOrigin: String,
+    ) : PlaybackReferenceResolution {
+        init {
+            require(displayOrigin.isNotBlank())
+        }
+
+        override fun toString(): String =
+            "PlaybackReferenceResolution.ApprovalRequired(displayOrigin=<redacted>)"
+    }
 
     /**
      * Ephemeral transport output. The locator can contain credentials and therefore must never be logged,
@@ -49,4 +58,10 @@ sealed interface PlaybackReferenceResolution {
 
 fun interface PlaybackReferenceResolver {
     suspend fun resolve(request: PlaybackReferenceRequest): PlaybackReferenceResolution
+}
+
+/** Safe default for existing direct M3U playback and database-only construction. */
+object UnhandledPlaybackReferenceResolver : PlaybackReferenceResolver {
+    override suspend fun resolve(request: PlaybackReferenceRequest): PlaybackReferenceResolution =
+        PlaybackReferenceResolution.Unhandled
 }
