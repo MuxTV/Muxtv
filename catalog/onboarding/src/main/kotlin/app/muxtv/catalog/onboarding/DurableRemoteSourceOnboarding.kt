@@ -13,6 +13,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
+enum class DurablePreparationRegistrationResult {
+    Registered,
+    StorageUnavailable,
+}
+
 class DurableRemoteSourceOnboarding(
     private val delegate: RemoteSourceOnboarding,
     private val registry: PendingSourcePreparationStore,
@@ -22,26 +27,46 @@ class DurableRemoteSourceOnboarding(
         val result = delegate.prepare(input)
         if (result !is RemoteSourcePreparationResult.Prepared) return result
 
+        return when (
+            registerPrepared(
+                preparationId = result.token.value,
+                scheme = result.scheme,
+                host = result.host,
+                rollbackPrepared = { delegate.cancel(result.token) },
+            )
+        ) {
+            DurablePreparationRegistrationResult.Registered -> result
+            DurablePreparationRegistrationResult.StorageUnavailable ->
+                RemoteSourcePreparationResult.CredentialUnavailable(
+                    CredentialUnavailableReason.IoFailure,
+                )
+        }
+    }
+
+    suspend fun registerPrepared(
+        preparationId: String,
+        scheme: String,
+        host: String,
+        rollbackPrepared: suspend () -> Unit,
+    ): DurablePreparationRegistrationResult {
         val createdAt = currentTimeMillis()
         val preparation = PendingSourcePreparation(
-            preparationId = result.token.value,
-            scheme = result.scheme,
-            host = result.host,
+            preparationId = preparationId,
+            scheme = scheme,
+            host = host,
             createdAtEpochMillis = createdAt,
             expiresAtEpochMillis = createdAt + PREPARATION_TTL_MILLIS,
         )
         try {
             registry.upsert(preparation)
         } catch (cancelled: CancellationException) {
-            rollbackPreparedBestEffort(result.token)
+            rollbackPreparedBestEffort(rollbackPrepared)
             throw cancelled
         } catch (_: Exception) {
-            rollbackPreparedBestEffort(result.token)
-            return RemoteSourcePreparationResult.CredentialUnavailable(
-                CredentialUnavailableReason.IoFailure,
-            )
+            rollbackPreparedBestEffort(rollbackPrepared)
+            return DurablePreparationRegistrationResult.StorageUnavailable
         }
-        return result
+        return DurablePreparationRegistrationResult.Registered
     }
 
     override suspend fun activate(
@@ -162,10 +187,10 @@ class DurableRemoteSourceOnboarding(
         )
     }
 
-    private suspend fun rollbackPreparedBestEffort(token: RemoteSourcePreparationToken) {
+    private suspend fun rollbackPreparedBestEffort(rollbackPrepared: suspend () -> Unit) {
         withContext(NonCancellable) {
             try {
-                delegate.cancel(token)
+                rollbackPrepared()
             } catch (_: Exception) {
                 // The pending credential remains recoverable by domain-specific cleanup/reconciliation.
             }

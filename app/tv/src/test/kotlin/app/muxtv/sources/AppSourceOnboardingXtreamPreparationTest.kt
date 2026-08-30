@@ -9,6 +9,15 @@ import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.XtreamSourceAccessManager
+import app.muxtv.catalog.refresh.XtreamSourcePreparer
+import app.muxtv.credentials.CredentialId
+import app.muxtv.credentials.CredentialReadResult
+import app.muxtv.credentials.CredentialRemoveResult
+import app.muxtv.credentials.CredentialResetResult
+import app.muxtv.credentials.CredentialStore
+import app.muxtv.credentials.CredentialWriteResult
+import app.muxtv.credentials.SecretBytes
 import app.muxtv.database.PendingSourcePreparation
 import app.muxtv.database.PendingSourcePreparationStore
 import com.google.common.truth.Truth.assertThat
@@ -23,6 +32,9 @@ class AppSourceOnboardingXtreamPreparationTest {
             delegate = DurableRemoteSourceOnboarding(
                 delegate = LegacyOnboardingMustNotBeUsed,
                 registry = pendingStore,
+            ),
+            xtreamPreparer = XtreamSourcePreparer(
+                XtreamSourceAccessManager(AcceptingCredentialStore),
             ),
         )
 
@@ -41,6 +53,19 @@ class AppSourceOnboardingXtreamPreparationTest {
         assertThat(pendingStore.upserted).hasSize(1)
         assertThat(pendingStore.upserted.single().preparationId).startsWith("muxtv-access:v1:xtream:")
     }
+}
+
+private object AcceptingCredentialStore : CredentialStore {
+    override suspend fun put(
+        id: CredentialId,
+        secret: SecretBytes,
+    ): CredentialWriteResult = CredentialWriteResult.Stored
+
+    override suspend fun read(id: CredentialId): CredentialReadResult = CredentialReadResult.NotFound
+
+    override suspend fun remove(id: CredentialId): CredentialRemoveResult = CredentialRemoveResult.Removed
+
+    override suspend fun reset(): CredentialResetResult = CredentialResetResult.Reset
 }
 
 private object LegacyOnboardingMustNotBeUsed : RemoteSourceOnboarding {

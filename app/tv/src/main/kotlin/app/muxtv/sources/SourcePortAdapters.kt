@@ -10,11 +10,13 @@ import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.SourcePlaybackApprovalResetResult
 import app.muxtv.catalog.SourcePreparationFailure
 import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.catalog.SourceRefreshOverview
 import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.catalog.SourceRefreshRunState
 import app.muxtv.catalog.SourceRefreshStatus
+import app.muxtv.catalog.onboarding.DurablePreparationRegistrationResult
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -22,6 +24,10 @@ import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessReference
+import app.muxtv.catalog.refresh.XtreamSourcePreparationInput
+import app.muxtv.catalog.refresh.XtreamSourcePreparationResult
+import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.database.SourceRefreshOverview as DatabaseSourceRefreshOverview
 import app.muxtv.database.SourceRefreshPolicy as DatabaseSourceRefreshPolicy
@@ -70,6 +76,7 @@ class AppSourceManagement(
 
 class AppSourceOnboarding(
     private val delegate: DurableRemoteSourceOnboarding,
+    private val xtreamPreparer: XtreamSourcePreparer? = null,
 ) : SourceOnboarding {
     override suspend fun prepare(
         locator: String,
@@ -80,6 +87,16 @@ class AppSourceOnboarding(
             insecureHttpApproved = insecureHttpApproved,
         ),
     ).toApi()
+
+    override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult =
+        when (request) {
+            is SourcePreparationRequest.M3u -> prepare(
+                locator = request.locator,
+                insecureHttpApproved = request.insecureHttpApproved,
+            )
+
+            is SourcePreparationRequest.Xtream -> prepareXtream(request)
+        }
 
     override suspend fun activate(
         handle: SourcePreparationHandle,
@@ -102,8 +119,62 @@ class AppSourceOnboarding(
     override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? =
         delegate.restoreLatestPrepared()?.toApiPrepared()
 
+    private suspend fun prepareXtream(
+        request: SourcePreparationRequest.Xtream,
+    ): SourcePreparationResult {
+        val preparer = xtreamPreparer
+            ?: return SourcePreparationResult.Failed(SourcePreparationFailure.UnsupportedProvider)
+        return when (
+            val result = preparer.prepare(
+                XtreamSourcePreparationInput(
+                    endpoint = request.endpoint,
+                    username = request.username,
+                    password = request.password,
+                    insecureHttpApproved = request.insecureHttpApproved,
+                ),
+            )
+        ) {
+            is XtreamSourcePreparationResult.Prepared -> {
+                when (
+                    delegate.registerPrepared(
+                        preparationId = result.accessReference.value,
+                        scheme = result.scheme,
+                        host = result.host,
+                        rollbackPrepared = {
+                            preparer.rollback(result.accessReference)
+                            Unit
+                        },
+                    )
+                ) {
+                    DurablePreparationRegistrationResult.Registered ->
+                        SourcePreparationResult.Prepared(
+                            handle = XtreamPreparationHandle(result.accessReference),
+                            displayEndpoint = "${result.scheme}://${result.host}",
+                        )
+
+                    DurablePreparationRegistrationResult.StorageUnavailable ->
+                        SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
+                }
+            }
+
+            XtreamSourcePreparationResult.InsecureTransportApprovalRequired ->
+                SourcePreparationResult.InsecureTransportApprovalRequired
+            is XtreamSourcePreparationResult.UrlRejected,
+            XtreamSourcePreparationResult.InvalidAccess,
+            -> SourcePreparationResult.Failed(SourcePreparationFailure.InvalidLocator)
+            is XtreamSourcePreparationResult.CredentialTooLarge ->
+                SourcePreparationResult.Failed(SourcePreparationFailure.CredentialTooLarge)
+            is XtreamSourcePreparationResult.CredentialUnavailable ->
+                SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
+        }
+    }
+
     private class RemotePreparationHandle(
         val token: RemoteSourcePreparationToken,
+    ) : SourcePreparationHandle()
+
+    private class XtreamPreparationHandle(
+        val accessReference: SourceAccessReference,
     ) : SourcePreparationHandle()
 
     private fun RemoteSourcePreparationResult.toApi(): SourcePreparationResult = when (this) {

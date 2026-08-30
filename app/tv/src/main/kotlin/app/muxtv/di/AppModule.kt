@@ -23,6 +23,8 @@ import app.muxtv.catalog.refresh.RemoteSourceActivator
 import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.catalog.refresh.XtreamSourceAccessManager
+import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
@@ -60,6 +62,18 @@ object AppModule {
     fun provideRemoteSourceAccessManager(
         credentialStore: CredentialStore,
     ): RemoteSourceAccessManager = RemoteSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun provideXtreamSourceAccessManager(
+        credentialStore: CredentialStore,
+    ): XtreamSourceAccessManager = XtreamSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
+    fun provideXtreamSourcePreparer(
+        accessManager: XtreamSourceAccessManager,
+    ): XtreamSourcePreparer = XtreamSourcePreparer(accessManager)
 
     @Provides
     @Singleton
@@ -230,7 +244,11 @@ object AppModule {
     @Singleton
     fun provideSourceOnboarding(
         durable: DurableRemoteSourceOnboarding,
-    ): SourceOnboarding = AppSourceOnboarding(durable)
+        xtreamPreparer: XtreamSourcePreparer,
+    ): SourceOnboarding = AppSourceOnboarding(
+        delegate = durable,
+        xtreamPreparer = xtreamPreparer,
+    )
 
     @Provides
     @Singleton
