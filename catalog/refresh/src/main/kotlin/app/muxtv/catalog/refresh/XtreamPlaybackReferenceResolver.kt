@@ -4,6 +4,7 @@ import app.muxtv.catalog.PlaybackReferenceRequest
 import app.muxtv.catalog.PlaybackReferenceResolution
 import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.credentials.CredentialId
+import app.muxtv.network.ExactHttpOrigin
 import app.muxtv.network.SourceUrlDecision
 import app.muxtv.network.SourceUrlPolicy
 import okhttp3.HttpUrl
@@ -37,7 +38,9 @@ class XtreamPlaybackReferenceResolver(
             is SourceUrlDecision.Allowed -> decision.normalizedUrl
             is SourceUrlDecision.RequiresInsecureTransportApproval -> {
                 if (!access.insecureHttpApproved) {
-                    return PlaybackReferenceResolution.ApprovalRequired
+                    val displayOrigin = ExactHttpOrigin.fromUrl(decision.normalizedUrl)?.displayValue()
+                        ?: return PlaybackReferenceResolution.InvalidReference
+                    return PlaybackReferenceResolution.ApprovalRequired(displayOrigin)
                 }
                 decision.normalizedUrl
             }
