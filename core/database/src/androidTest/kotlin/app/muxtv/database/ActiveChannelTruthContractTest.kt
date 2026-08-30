@@ -13,6 +13,7 @@ import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.RecentChannelWriteResult
 import app.muxtv.catalog.RecentChannelsQuery
+import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -49,6 +50,7 @@ class ActiveChannelTruthContractTest {
         playback = RoomPlaybackCatalog(
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = SecurePlaybackAccessPolicyResolver,
+            playbackReferenceResolver = UnhandledPlaybackReferenceResolver,
         )
         guide = RoomEpgGuideRepository(database.epgGuideDao())
         search = RoomChannelSearchRepository(
