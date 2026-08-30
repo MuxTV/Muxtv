@@ -41,6 +41,7 @@ data class XtreamLiveRefreshRequest(
     val sourceId: String,
     val sourceName: String,
     val accessCredentialId: CredentialId,
+    val accessReference: SourceAccessReference = SourceAccessReference.xtream(accessCredentialId),
     val refreshRunToken: String? = null,
     val responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
     val parseLimits: XtreamParseLimits = XtreamParseLimits(),
@@ -48,6 +49,12 @@ data class XtreamLiveRefreshRequest(
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(accessReference.kind == SourceAccessKind.XTREAM) {
+            "Xtream refresh requires an Xtream source access reference."
+        }
+        require(accessReference.credentialId.value == accessCredentialId.value) {
+            "Xtream source access reference must match its credential id."
+        }
         require(refreshRunToken == null || refreshRunToken.isNotBlank())
     }
 
@@ -229,7 +236,7 @@ class XtreamLiveRefresher(
                     request = CatalogRevisionImportRequest(
                         sourceId = request.sourceId,
                         sourceName = request.sourceName,
-                        credentialRef = request.accessCredentialId.value,
+                        credentialRef = request.accessReference.value,
                         refreshRunToken = request.refreshRunToken,
                         sourceOwnership = if (durableRefresh) {
                             CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING
