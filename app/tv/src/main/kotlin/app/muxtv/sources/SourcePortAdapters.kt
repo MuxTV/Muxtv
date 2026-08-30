@@ -16,6 +16,7 @@ import app.muxtv.catalog.SourceRefreshOverview
 import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.catalog.SourceRefreshRunState
 import app.muxtv.catalog.SourceRefreshStatus
+import app.muxtv.catalog.onboarding.DurablePreparedSource
 import app.muxtv.catalog.onboarding.DurablePreparationRegistrationResult
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
@@ -24,6 +25,7 @@ import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessKind
 import app.muxtv.catalog.refresh.SourceAccessReference
 import app.muxtv.catalog.refresh.XtreamSourcePreparationInput
 import app.muxtv.catalog.refresh.XtreamSourcePreparationResult
@@ -117,7 +119,7 @@ class AppSourceOnboarding(
     }
 
     override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? =
-        delegate.restoreLatestPrepared()?.toApiPrepared()
+        delegate.restoreLatestRegistered()?.toApiPrepared()
 
     private suspend fun prepareXtream(
         request: SourcePreparationRequest.Xtream,
@@ -193,6 +195,18 @@ class AppSourceOnboarding(
     private fun RemoteSourcePreparationResult.Prepared.toApiPrepared(): SourcePreparationResult.Prepared =
         SourcePreparationResult.Prepared(
             handle = RemotePreparationHandle(token),
+            displayEndpoint = "$scheme://$host",
+        )
+
+    private fun DurablePreparedSource.toApiPrepared(): SourcePreparationResult.Prepared =
+        SourcePreparationResult.Prepared(
+            handle = when (accessReference.kind) {
+                SourceAccessKind.M3U -> RemotePreparationHandle(
+                    RemoteSourcePreparationToken.parse(accessReference.credentialId.value),
+                )
+
+                SourceAccessKind.XTREAM -> XtreamPreparationHandle(accessReference)
+            },
             displayEndpoint = "$scheme://$host",
         )
 

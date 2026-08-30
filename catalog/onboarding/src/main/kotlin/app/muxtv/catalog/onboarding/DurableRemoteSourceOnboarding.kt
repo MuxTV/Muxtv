@@ -6,6 +6,8 @@ import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessKind
+import app.muxtv.catalog.refresh.SourceAccessReference
 import app.muxtv.credentials.CredentialUnavailableReason
 import app.muxtv.database.PendingSourcePreparation
 import app.muxtv.database.PendingSourcePreparationStore
@@ -16,6 +18,17 @@ import kotlinx.coroutines.withContext
 enum class DurablePreparationRegistrationResult {
     Registered,
     StorageUnavailable,
+}
+
+data class DurablePreparedSource(
+    val accessReference: SourceAccessReference,
+    val scheme: String,
+    val host: String,
+) {
+    init {
+        require(scheme == "http" || scheme == "https")
+        require(host.isNotBlank())
+    }
 }
 
 class DurableRemoteSourceOnboarding(
@@ -96,7 +109,7 @@ class DurableRemoteSourceOnboarding(
         return result
     }
 
-    suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? {
+    suspend fun restoreLatestRegistered(): DurablePreparedSource? {
         val now = currentTimeMillis()
         repeat(MAX_RESTORE_ATTEMPTS) {
             val preparation = try {
@@ -107,20 +120,30 @@ class DurableRemoteSourceOnboarding(
                 return null
             } ?: return null
 
-            val token = try {
-                RemoteSourcePreparationToken.parse(preparation.preparationId)
+            val accessReference = try {
+                SourceAccessReference.parse(preparation.preparationId)
             } catch (_: IllegalArgumentException) {
                 if (!removeRegistryByIdBestEffort(preparation.preparationId)) return null
                 return@repeat
             }
 
-            return RemoteSourcePreparationResult.Prepared(
-                token = token,
+            return DurablePreparedSource(
+                accessReference = accessReference,
                 scheme = preparation.scheme,
                 host = preparation.host,
             )
         }
         return null
+    }
+
+    suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? {
+        val restored = restoreLatestRegistered() ?: return null
+        if (restored.accessReference.kind != SourceAccessKind.M3U) return null
+        return RemoteSourcePreparationResult.Prepared(
+            token = RemoteSourcePreparationToken.parse(restored.accessReference.credentialId.value),
+            scheme = restored.scheme,
+            host = restored.host,
+        )
     }
 
     suspend fun cleanupExpired(): PendingPreparationCleanupSummary {
