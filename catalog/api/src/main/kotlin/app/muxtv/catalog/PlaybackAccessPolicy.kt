@@ -36,6 +36,14 @@ interface PlaybackAccessPolicyResolver {
         playbackLocator: String,
     ): PlaybackAccessDecision
 
+    /**
+     * Validates an ephemeral transport locator whose cleartext approval was already proven by
+     * the provider-specific access owner. Implementations must still reject malformed/unsupported
+     * locators; this is not a bypass around transport policy.
+     */
+    suspend fun resolvePreapproved(playbackLocator: String): PlaybackAccessDecision =
+        resolve(credentialRef = "", playbackLocator = playbackLocator)
+
     suspend fun approve(
         credentialRef: String,
         playbackLocator: String,
