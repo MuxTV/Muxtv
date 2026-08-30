@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
+import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -31,6 +32,7 @@ class ChannelPreferencesRepositoryTest {
         playbackCatalog = RoomPlaybackCatalog(
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = RejectAllPlaybackAccessPolicyResolver,
+            playbackReferenceResolver = UnhandledPlaybackReferenceResolver,
         )
         channelPreferences = RoomChannelPreferencesRepository(database.channelPreferencesDao())
         insertProfile()
