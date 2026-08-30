@@ -49,6 +49,12 @@ data class XtreamLiveRefreshRequest(
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(accessReference.kind == SourceAccessKind.XTREAM) {
+            "Xtream refresh requires an Xtream source access reference."
+        }
+        require(accessReference.credentialId == accessCredentialId) {
+            "Xtream source access reference must match its credential id."
+        }
         require(refreshRunToken == null || refreshRunToken.isNotBlank())
     }
 
