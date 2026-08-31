@@ -50,17 +50,16 @@ class AddSourceLocalNetworkPermissionJourneyTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("source-name")
-            .assertIsFocused()
-            .performTextInput("Локальный IPTV")
-            .press(Key.DirectionDown)
+        composeRule.onNodeWithTag("source-name").assertIsFocused()
+        composeRule.onNodeWithTag("source-name").performTextInput("Локальный IPTV")
+        composeRule.onNodeWithTag("source-name").press(Key.DirectionDown)
 
+        composeRule.onNodeWithTag("source-locator").assertIsFocused()
         composeRule.onNodeWithTag("source-locator")
-            .assertIsFocused()
             .performSemanticsAction(SemanticsActions.SetText) { action ->
                 action(AnnotatedString(locator))
             }
-            .press(Key.DirectionDown)
+        composeRule.onNodeWithTag("source-locator").press(Key.DirectionDown)
 
         composeRule.onNodeWithText("Показать временно")
             .assertIsFocused()
