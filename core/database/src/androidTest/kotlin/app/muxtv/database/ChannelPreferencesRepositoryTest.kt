@@ -4,6 +4,7 @@ import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelFavoriteMutationResult
+import app.muxtv.catalog.ChannelPreferenceMutationResult
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
 import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
@@ -99,10 +100,129 @@ class ChannelPreferencesRepositoryTest {
     }
 
     @Test
+    fun hiddenMutationCreatesOverlayAndSupportsUnhide() = runTest {
+        assertThat(
+            channelPreferences.setHidden(PROFILE_ID, CHANNEL_ID, true),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+        assertThat(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).isNull()
+
+        assertThat(
+            channelPreferences.setHidden(PROFILE_ID, CHANNEL_ID, true),
+        ).isEqualTo(ChannelPreferenceMutationResult.Unchanged)
+
+        assertThat(
+            channelPreferences.setHidden(PROFILE_ID, CHANNEL_ID, false),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+        assertThat(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).isNotNull()
+    }
+
+    @Test
+    fun customNameMutationTrimsAndPreservesOtherOverlayFields() = runTest {
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = CHANNEL_ID,
+                isFavorite = true,
+                channelNumber = 7,
+            ),
+        )
+
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "  My News  "),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+
+        val channel = requireNotNull(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID))
+        assertThat(channel.summary.displayName).isEqualTo("My News")
+        assertThat(channel.summary.channelNumber).isEqualTo("7")
+        assertThat(channel.summary.isFavorite).isTrue()
+
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "My News"),
+        ).isEqualTo(ChannelPreferenceMutationResult.Unchanged)
+    }
+
+    @Test
+    fun customNameMutationRejectsInvalidInputWithoutCreatingOverlay() = runTest {
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "   "),
+        ).isEqualTo(ChannelPreferenceMutationResult.InvalidInput)
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "News\u0000HD"),
+        ).isEqualTo(ChannelPreferenceMutationResult.InvalidInput)
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "N".repeat(129)),
+        ).isEqualTo(ChannelPreferenceMutationResult.InvalidInput)
+        assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
+    }
+
+    @Test
+    fun channelNumberMutationPersistsValidNumberAndSupportsReset() = runTest {
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, CHANNEL_ID, 7),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+        assertThat(
+            requireNotNull(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).summary.channelNumber,
+        ).isEqualTo("7")
+
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, CHANNEL_ID, 0),
+        ).isEqualTo(ChannelPreferenceMutationResult.InvalidInput)
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, CHANNEL_ID, 10_000),
+        ).isEqualTo(ChannelPreferenceMutationResult.InvalidInput)
+
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, CHANNEL_ID, null),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+        assertThat(
+            requireNotNull(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID)).summary.channelNumber,
+        ).isEqualTo("10")
+    }
+
+    @Test
+    fun resetCustomizationRestoresProviderPresentationAndPreservesFavorite() = runTest {
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = CHANNEL_ID,
+                isFavorite = true,
+                isHidden = true,
+                customName = "Hidden News",
+                channelNumber = 77,
+            ),
+        )
+
+        assertThat(
+            channelPreferences.resetCustomization(PROFILE_ID, CHANNEL_ID),
+        ).isEqualTo(ChannelPreferenceMutationResult.Applied)
+
+        val channel = requireNotNull(playbackCatalog.getChannel(PROFILE_ID, CHANNEL_ID))
+        assertThat(channel.summary.displayName).isEqualTo("News")
+        assertThat(channel.summary.channelNumber).isEqualTo("10")
+        assertThat(channel.summary.isFavorite).isTrue()
+
+        assertThat(
+            channelPreferences.resetCustomization(PROFILE_ID, CHANNEL_ID),
+        ).isEqualTo(ChannelPreferenceMutationResult.Unchanged)
+    }
+
+    @Test
     fun missingChannelReturnsNotFoundWithoutCreatingOverlay() = runTest {
         assertThat(
             channelPreferences.setFavorite(PROFILE_ID, "missing-channel", true),
         ).isEqualTo(ChannelFavoriteMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setHidden(PROFILE_ID, "missing-channel", true),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, "missing-channel", "Missing"),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, "missing-channel", 1),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.resetCustomization(PROFILE_ID, "missing-channel"),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
         assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
     }
 
@@ -134,6 +254,18 @@ class ChannelPreferencesRepositoryTest {
         assertThat(
             channelPreferences.setFavorite(PROFILE_ID, CHANNEL_ID, true),
         ).isEqualTo(ChannelFavoriteMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setHidden(PROFILE_ID, CHANNEL_ID, true),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setCustomName(PROFILE_ID, CHANNEL_ID, "Old News"),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.setChannelNumber(PROFILE_ID, CHANNEL_ID, 7),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
+        assertThat(
+            channelPreferences.resetCustomization(PROFILE_ID, CHANNEL_ID),
+        ).isEqualTo(ChannelPreferenceMutationResult.NotFound)
         assertThat(database.catalogDao().countOverlays(PROFILE_ID)).isEqualTo(0)
     }
 
@@ -186,6 +318,7 @@ class ChannelPreferencesRepositoryTest {
         revisionStore.stageBatch(
             sourceId = SOURCE_ID,
             revisionNumber = 2,
+            startedAtEpochMillis = 3_000,
             entries = listOf(
                 stagedEntry(
                     providerChannelId = "provider-replacement",
