@@ -48,6 +48,52 @@ class ChannelSearchMultiSourceFairnessTest {
         assertThat(firstIds).isEqualTo(secondIds)
     }
 
+    @Test
+    fun restrictedRequeryNeverAddsCandidatesOutsideRestriction() = runTest {
+        val restricted = listOf("a-0900", "b-0000")
+        val ids = dao.searchCandidates(
+            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+            ftsExpression = "common*",
+            nowEpochMillis = 0,
+            fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
+            restrictToCanonicalIds = restricted,
+        ).map(ChannelSearchCandidateRow::canonicalChannelId)
+
+        assertThat(ids).containsExactlyElementsIn(restricted)
+    }
+
+    @Test
+    fun hiddenSourceCandidatesCannotConsumeDiversityReserve() = runTest {
+        repeat(SOURCE_B_COUNT) { index ->
+            database.catalogDao().insertOverlay(
+                UserChannelOverlayEntity(
+                    profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                    canonicalChannelId = canonicalId(SOURCE_B, index),
+                    isHidden = true,
+                ),
+            )
+        }
+
+        val ids = searchCandidates().map(ChannelSearchCandidateRow::canonicalChannelId)
+
+        assertThat(ids).contains("c-0000")
+        assertThat(ids.none { it.startsWith("b-") }).isTrue()
+        assertThat(ids).hasSize(ChannelSearchLimits.CANDIDATE_FETCH_LIMIT)
+    }
+
+    @Test
+    fun canonicalRepresentedByMultipleSourcesStillAppearsOnce() = runTest {
+        publishSharedCanonicalSource(
+            sourceId = SOURCE_D,
+            canonicalChannelId = "a-0000",
+        )
+
+        val ids = searchCandidates().map(ChannelSearchCandidateRow::canonicalChannelId)
+
+        assertThat(ids.count { it == "a-0000" }).isEqualTo(1)
+        assertThat(ids).hasSize(ChannelSearchLimits.CANDIDATE_FETCH_LIMIT)
+    }
+
     private suspend fun searchCandidates(): List<ChannelSearchCandidateRow> = dao.searchCandidates(
         profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
         ftsExpression = "common*",
@@ -70,6 +116,35 @@ class ChannelSearchMultiSourceFairnessTest {
                 )
             }
 
+        activateSource(sourceId = sourceId, channelCount = channelCount)
+    }
+
+    private suspend fun publishSharedCanonicalSource(
+        sourceId: String,
+        canonicalChannelId: String,
+    ) {
+        sourceStore.upsertSource(SourceDefinition(sourceId, "Source $sourceId", credentialRef = null))
+        sourceStore.beginRevision(sourceId, REVISION, startedAtEpochMillis = 10)
+        sourceStore.stageBatch(
+            sourceId = sourceId,
+            revisionNumber = REVISION,
+            entries = listOf(
+                StagedCatalogEntry(
+                    providerChannelId = "provider-$sourceId-shared",
+                    providerKey = "provider-key-$sourceId-shared",
+                    rawName = "Common Match $sourceId shared",
+                    canonicalChannelId = canonicalChannelId,
+                    canonicalDisplayName = "Common Match shared",
+                    streamVariantId = "variant-$sourceId-shared",
+                    locator = "https://example.invalid/$sourceId/shared",
+                    tvgName = "Common Match shared",
+                ),
+            ),
+        )
+        activateSource(sourceId = sourceId, channelCount = 1)
+    }
+
+    private suspend fun activateSource(sourceId: String, channelCount: Int) {
         assertThat(
             sourceStore.activate(
                 sourceId = sourceId,
@@ -100,10 +175,14 @@ class ChannelSearchMultiSourceFairnessTest {
         )
     }
 
+    private fun canonicalId(sourceId: String, index: Int): String =
+        "$sourceId-${index.toString().padStart(4, '0')}"
+
     private companion object {
         const val SOURCE_A = "a"
         const val SOURCE_B = "b"
         const val SOURCE_C = "c"
+        const val SOURCE_D = "d"
         const val SOURCE_A_COUNT = 1_000
         const val SOURCE_B_COUNT = 20
         const val SOURCE_C_COUNT = 5
