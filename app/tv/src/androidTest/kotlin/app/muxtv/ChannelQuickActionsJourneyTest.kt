@@ -2,7 +2,6 @@ package app.muxtv
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.ComposeUiTestConfig
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -43,9 +42,7 @@ class ChannelQuickActionsJourneyTest {
 
     @get:Rule
     val composeRule = createComposeRule(
-        config = ComposeUiTestConfig(
-            effectContext = StandardTestDispatcher(effectScheduler),
-        ),
+        effectContext = StandardTestDispatcher(effectScheduler),
     )
 
     @Test
