@@ -37,12 +37,15 @@ interface PlaybackAccessPolicyResolver {
     ): PlaybackAccessDecision
 
     /**
-     * Validates an ephemeral transport locator whose cleartext approval was already proven by
-     * the provider-specific access owner. Implementations must still reject malformed/unsupported
-     * locators; this is not a bypass around transport policy.
+     * Validates an ephemeral provider-materialized transport locator without routing it through
+     * the credential-bound direct-source policy. [insecureHttpPreapproved] is provenance from the
+     * provider-specific resolver; implementations must still reject malformed/unsupported locators
+     * and fail closed when that provenance is insufficient.
      */
-    suspend fun resolvePreapproved(playbackLocator: String): PlaybackAccessDecision =
-        resolve(credentialRef = "", playbackLocator = playbackLocator)
+    suspend fun validateMaterializedTransport(
+        playbackLocator: String,
+        insecureHttpPreapproved: Boolean,
+    ): PlaybackAccessDecision = PlaybackAccessDecision.CredentialUnavailable
 
     suspend fun approve(
         credentialRef: String,
