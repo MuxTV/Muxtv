@@ -135,6 +135,74 @@ class SourceEntrySessionTest {
     }
 
     @Test
+    fun `local network grant replays the exact xtream request before HTTP approval`() = runTest {
+        val onboarding = FakeSourceEntryOnboarding(
+            prepareResults = ArrayDeque(
+                listOf(
+                    SourcePreparationResult.LocalNetworkAccessRequired,
+                    SourcePreparationResult.InsecureTransportApprovalRequired,
+                    SourcePreparationResult.Prepared(
+                        handle = TestPreparationHandle(8),
+                        displayEndpoint = "http://192.168.1.20:8080",
+                    ),
+                ),
+            ),
+        )
+        val session = SourceEntrySession(onboarding)
+
+        session.prepareXtream(
+            endpoint = "http://192.168.1.20:8080/player_api.php?ignored=true",
+            username = "alice",
+            password = "secret",
+        )
+
+        assertThat(session.state.value).isEqualTo(SourceEntryUiState.LocalNetworkPermissionRequired)
+        assertThat(onboarding.preparationRequests).hasSize(1)
+        val initial = onboarding.preparationRequests.single() as SourcePreparationRequest.Xtream
+        assertThat(initial.insecureHttpApproved).isFalse()
+
+        session.resumeAfterLocalNetworkPermissionGranted()
+
+        assertThat(session.state.value).isEqualTo(SourceEntryUiState.HttpApprovalRequired)
+        assertThat(onboarding.preparationRequests).hasSize(2)
+        val replayed = onboarding.preparationRequests[1] as SourcePreparationRequest.Xtream
+        assertThat(replayed.endpoint).isEqualTo(initial.endpoint)
+        assertThat(replayed.username).isEqualTo(initial.username)
+        assertThat(replayed.password).isEqualTo(initial.password)
+        assertThat(replayed.insecureHttpApproved).isFalse()
+
+        session.approveInsecureHttp()
+
+        assertThat(onboarding.preparationRequests).hasSize(3)
+        val httpApproved = onboarding.preparationRequests[2] as SourcePreparationRequest.Xtream
+        assertThat(httpApproved.endpoint).isEqualTo(initial.endpoint)
+        assertThat(httpApproved.username).isEqualTo(initial.username)
+        assertThat(httpApproved.password).isEqualTo(initial.password)
+        assertThat(httpApproved.insecureHttpApproved).isTrue()
+        assertThat(session.state.value).isEqualTo(
+            SourceEntryUiState.Confirming("http://192.168.1.20:8080"),
+        )
+    }
+
+    @Test
+    fun `local network denial is typed and never retries preparation`() = runTest {
+        val onboarding = FakeSourceEntryOnboarding(
+            prepareResult = SourcePreparationResult.LocalNetworkAccessRequired,
+        )
+        val session = SourceEntrySession(onboarding)
+
+        session.prepare("https://192.168.1.30/list.m3u")
+        assertThat(session.state.value).isEqualTo(SourceEntryUiState.LocalNetworkPermissionRequired)
+
+        session.recordLocalNetworkPermissionDenied(permanently = true)
+
+        assertThat(session.state.value).isEqualTo(
+            SourceEntryUiState.LocalNetworkPermissionDenied(permanently = true),
+        )
+        assertThat(onboarding.prepareInputs).hasSize(1)
+    }
+
+    @Test
     fun restoreRecoversPreparedEndpointWithoutRouteArguments() = runTest {
         val onboarding = FakeSourceEntryOnboarding(
             restored = SourcePreparationResult.Prepared(
