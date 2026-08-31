@@ -6,6 +6,7 @@ import app.muxtv.catalog.SourceCancellationResult
 import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.SourcePreparationFailure
 import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,7 +55,7 @@ class SourceEntrySession(
 
     private var preparedHandle: SourcePreparationHandle? = null
     private var preparedEndpoint: String? = null
-    private var pendingHttpLocator: String? = null
+    private var pendingHttpRequest: SourcePreparationRequest? = null
 
     suspend fun restore() = runExclusive {
         if (preparedHandle != null || mutableState.value !is SourceEntryUiState.Editing) return@runExclusive
@@ -76,12 +77,33 @@ class SourceEntrySession(
 
     suspend fun prepare(locator: String) = runExclusive {
         if (preparedHandle != null) return@runExclusive
-        prepareLocked(locator = locator, insecureHttpApproved = false)
+        prepareLocked(
+            SourcePreparationRequest.M3u(
+                locator = locator,
+                insecureHttpApproved = false,
+            ),
+        )
+    }
+
+    suspend fun prepareXtream(
+        endpoint: String,
+        username: String,
+        password: String,
+    ) = runExclusive {
+        if (preparedHandle != null) return@runExclusive
+        prepareLocked(
+            SourcePreparationRequest.Xtream(
+                endpoint = endpoint,
+                username = username,
+                password = password,
+                insecureHttpApproved = false,
+            ),
+        )
     }
 
     suspend fun approveInsecureHttp() = runExclusive {
-        val locator = pendingHttpLocator ?: return@runExclusive
-        prepareLocked(locator = locator, insecureHttpApproved = true)
+        val request = pendingHttpRequest ?: return@runExclusive
+        prepareLocked(request.withInsecureHttpApproval())
     }
 
     suspend fun activate(sourceName: String) = runExclusive {
@@ -134,7 +156,7 @@ class SourceEntrySession(
     suspend fun cancel(): Boolean {
         if (!operationMutex.tryLock()) return false
         return try {
-            pendingHttpLocator = null
+            pendingHttpRequest = null
             val handle = preparedHandle
             if (handle == null) {
                 mutableState.value = SourceEntryUiState.Editing
@@ -174,40 +196,41 @@ class SourceEntrySession(
 
     fun editAgain() {
         if (preparedHandle == null && !operationMutex.isLocked) {
-            pendingHttpLocator = null
+            pendingHttpRequest = null
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
         }
     }
 
     fun clearTransientLocator() {
-        pendingHttpLocator = null
+        pendingHttpRequest = null
     }
 
-    private suspend fun prepareLocked(
-        locator: String,
-        insecureHttpApproved: Boolean,
-    ) {
-        if (locator.isBlank()) {
-            pendingHttpLocator = null
+    private suspend fun prepareLocked(request: SourcePreparationRequest) {
+        if (!request.hasRequiredInput()) {
+            pendingHttpRequest = null
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.InvalidLocator)
             return
         }
 
-        pendingHttpLocator = locator
+        pendingHttpRequest = request
         mutableState.value = SourceEntryUiState.Preparing
         val result = try {
-            onboarding.prepare(
-                locator = locator,
-                insecureHttpApproved = insecureHttpApproved,
-            )
+            when (request) {
+                is SourcePreparationRequest.M3u -> onboarding.prepare(
+                    locator = request.locator,
+                    insecureHttpApproved = request.insecureHttpApproved,
+                )
+
+                is SourcePreparationRequest.Xtream -> onboarding.prepare(request)
+            }
         } catch (cancelled: CancellationException) {
-            pendingHttpLocator = null
+            pendingHttpRequest = null
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
             throw cancelled
         } catch (_: Exception) {
-            pendingHttpLocator = null
+            pendingHttpRequest = null
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.Unexpected)
             return
         }
@@ -218,7 +241,7 @@ class SourceEntrySession(
                 mutableState.value = SourceEntryUiState.HttpApprovalRequired
 
             is SourcePreparationResult.Failed -> {
-                pendingHttpLocator = null
+                pendingHttpRequest = null
                 mutableState.value = SourceEntryUiState.Failed(result.reason.toEntryFailure())
             }
         }
@@ -227,7 +250,7 @@ class SourceEntrySession(
     private fun acceptPrepared(result: SourcePreparationResult.Prepared) {
         preparedHandle = result.handle
         preparedEndpoint = result.displayEndpoint
-        pendingHttpLocator = null
+        pendingHttpRequest = null
         mutableState.value = SourceEntryUiState.Confirming(
             endpoint = result.displayEndpoint,
         )
@@ -241,6 +264,26 @@ class SourceEntrySession(
             operationMutex.unlock()
         }
     }
+}
+
+private fun SourcePreparationRequest.hasRequiredInput(): Boolean = when (this) {
+    is SourcePreparationRequest.M3u -> locator.isNotBlank()
+    is SourcePreparationRequest.Xtream ->
+        endpoint.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+}
+
+private fun SourcePreparationRequest.withInsecureHttpApproval(): SourcePreparationRequest = when (this) {
+    is SourcePreparationRequest.M3u -> SourcePreparationRequest.M3u(
+        locator = locator,
+        insecureHttpApproved = true,
+    )
+
+    is SourcePreparationRequest.Xtream -> SourcePreparationRequest.Xtream(
+        endpoint = endpoint,
+        username = username,
+        password = password,
+        insecureHttpApproved = true,
+    )
 }
 
 private fun SourcePreparationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
