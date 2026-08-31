@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.map
 import app.muxtv.catalog.ChannelBrowseRepository
-import app.muxtv.catalog.ChannelManagementItem
 import app.muxtv.catalog.ChannelManagementQuery
 import app.muxtv.catalog.ChannelManagementVisibility
 import app.muxtv.catalog.ChannelPreferenceMutationResult
@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,21 +37,23 @@ internal class ManageChannelsViewModel(
     val lastMutationResult: StateFlow<ChannelPreferenceMutationResult?> =
         mutableLastMutationResult.asStateFlow()
 
-    private val rowsByFilter = mutableMapOf<ManageChannelsFilter, Flow<PagingData<ChannelManagementItem>>>()
+    private val rowsByFilter = mutableMapOf<ManageChannelsFilter, Flow<PagingData<ManageChannelRowUiModel>>>()
     private val mutationMutex = Mutex()
 
     init {
         require(profileId.isNotBlank())
     }
 
-    fun rowsFor(filter: ManageChannelsFilter): Flow<PagingData<ChannelManagementItem>> =
+    fun rowsFor(filter: ManageChannelsFilter): Flow<PagingData<ManageChannelRowUiModel>> =
         rowsByFilter.getOrPut(filter) {
             channelBrowseRepository.managementPages(
                 ChannelManagementQuery(
                     profileId = profileId,
                     visibility = filter.toManagementVisibility(),
                 ),
-            ).cachedIn(viewModelScope)
+            ).map { pagingData ->
+                pagingData.map(::buildManageChannelRow)
+            }.cachedIn(viewModelScope)
         }
 
     fun setFilter(filter: ManageChannelsFilter) {
