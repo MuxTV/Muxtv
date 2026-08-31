@@ -53,6 +53,9 @@ sealed interface SourcePreparationResult {
         }
     }
 
+    /** Preparation must not perform network I/O until app-owned LAN permission is granted. */
+    data object LocalNetworkAccessRequired : SourcePreparationResult
+
     data object InsecureTransportApprovalRequired : SourcePreparationResult
 
     data class Failed(
