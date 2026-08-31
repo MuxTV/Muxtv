@@ -29,6 +29,7 @@ android {
 dependencies {
     implementation(project(":catalog:api"))
     implementation(project(":catalog:importer"))
+    implementation(project(":catalog:ingest"))
     implementation(project(":catalog:refresh"))
     implementation(project(":catalog:sync"))
     implementation(project(":catalog:onboarding"))
