@@ -318,7 +318,6 @@ class ChannelPreferencesRepositoryTest {
         revisionStore.stageBatch(
             sourceId = SOURCE_ID,
             revisionNumber = 2,
-            startedAtEpochMillis = 3_000,
             entries = listOf(
                 stagedEntry(
                     providerChannelId = "provider-replacement",
