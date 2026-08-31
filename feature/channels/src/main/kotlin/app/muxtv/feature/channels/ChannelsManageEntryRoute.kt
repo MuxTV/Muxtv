@@ -42,7 +42,6 @@ fun ChannelsRoute(
         )
         MuxTvActionButton(
             text = "Управление",
-            contentDescription = "Управление каналами",
             onClick = onManageChannels,
             modifier = Modifier
                 .align(Alignment.TopEnd)
