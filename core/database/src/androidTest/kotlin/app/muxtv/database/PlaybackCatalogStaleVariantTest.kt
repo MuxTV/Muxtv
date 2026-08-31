@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.PlaybackAccessDecision
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -31,6 +32,7 @@ class PlaybackCatalogStaleVariantTest {
         playbackCatalog = RoomPlaybackCatalog(
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = accessResolver,
+            playbackReferenceResolver = UnhandledPlaybackReferenceResolver,
         )
     }
 

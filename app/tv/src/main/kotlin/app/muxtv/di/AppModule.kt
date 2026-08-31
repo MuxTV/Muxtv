@@ -7,6 +7,7 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackCandidateResolver
+import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.catalog.SourceManagement
 import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.importer.CatalogRevisionImporter
@@ -23,6 +24,8 @@ import app.muxtv.catalog.refresh.RemoteSourceActivator
 import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.catalog.refresh.XtreamPlaybackReferenceResolver
+import app.muxtv.catalog.refresh.XtreamSourceAccessManager
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
@@ -63,18 +66,32 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideXtreamSourceAccessManager(
+        credentialStore: CredentialStore,
+    ): XtreamSourceAccessManager = XtreamSourceAccessManager(credentialStore)
+
+    @Provides
+    @Singleton
     fun providePlaybackAccessPolicyResolver(
         accessManager: RemoteSourceAccessManager,
     ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(accessManager)
 
     @Provides
     @Singleton
+    fun providePlaybackReferenceResolver(
+        accessManager: XtreamSourceAccessManager,
+    ): PlaybackReferenceResolver = XtreamPlaybackReferenceResolver(accessManager)
+
+    @Provides
+    @Singleton
     fun provideDatabaseComponents(
         @ApplicationContext context: Context,
         playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
+        playbackReferenceResolver: PlaybackReferenceResolver,
     ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(
         context = context,
         playbackAccessPolicyResolver = playbackAccessPolicyResolver,
+        playbackReferenceResolver = playbackReferenceResolver,
     )
 
     @Provides
