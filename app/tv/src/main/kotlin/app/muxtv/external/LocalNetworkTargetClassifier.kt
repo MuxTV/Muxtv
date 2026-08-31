@@ -23,6 +23,7 @@ object LocalNetworkTargetClassifier {
     private const val IPV4_PRIVATE_PREFIX_10 = 10L shl 24
     private const val IPV4_PRIVATE_PREFIX_172_16 = (172L shl 24) or (16L shl 16)
     private const val IPV4_PRIVATE_PREFIX_192_168 = (192L shl 24) or (168L shl 16)
+    private const val IPV4_CGNAT_PREFIX_100_64 = (100L shl 24) or (64L shl 16)
 
     fun classify(host: String): LocalNetworkClassification {
         val normalized = host.trim().lowercase()
@@ -49,6 +50,7 @@ object LocalNetworkTargetClassifier {
         address and 0xFF00_0000L == IPV4_PRIVATE_PREFIX_10 ||
             address and 0xFFF0_0000L == IPV4_PRIVATE_PREFIX_172_16 ||
             address and 0xFFFF_0000L == IPV4_PRIVATE_PREFIX_192_168 ||
+            address and 0xFFC0_0000L == IPV4_CGNAT_PREFIX_100_64 ||
             address and 0xFFFF_0000L == IPV4_LINK_LOCAL_PREFIX -> LocalNetworkClassification.LOCAL
         else -> LocalNetworkClassification.REMOTE
     }
