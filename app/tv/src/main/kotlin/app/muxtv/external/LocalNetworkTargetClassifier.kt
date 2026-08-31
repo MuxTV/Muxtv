@@ -69,6 +69,7 @@ object LocalNetworkTargetClassifier {
             address[0] == 0xFE.toByte() && (address[1].toInt() and 0xC0) == 0x80 ->
                 LocalNetworkClassification.LOCAL
             (address[0].toInt() and 0xFE) == 0xFC -> LocalNetworkClassification.LOCAL
+            (address[0].toInt() and 0xFF) == 0xFF -> LocalNetworkClassification.LOCAL
             else -> LocalNetworkClassification.REMOTE
         }
     }
