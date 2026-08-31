@@ -1,8 +1,7 @@
 package app.muxtv
 
-import androidx.paging.PagingData
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -10,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.paging.PagingData
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.ChannelBrowseRepository
@@ -71,6 +71,7 @@ class ManageChannelsAcceptanceJourneyTest {
         composeRule.waitUntilTag("manage-channel-row-channel-b")
         composeRule.onNodeWithTag("manage-channel-row-channel-b").performClick()
         composeRule.onNodeWithText("Показать").assertIsFocused().performClick()
+        composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("manage-channels-actions").fetchSemanticsNodes().isEmpty()
@@ -115,6 +116,7 @@ class ManageChannelsAcceptanceJourneyTest {
             .performTextClearance()
             .performTextInput("Мои новости")
         composeRule.onNodeWithText("Сохранить").performClick()
+        composeRule.waitForIdle()
         composeRule.waitUntilText("Мои новости")
 
         composeRule.onNodeWithTag("manage-channel-row-channel-news").performClick()
@@ -123,13 +125,14 @@ class ManageChannelsAcceptanceJourneyTest {
             .assertIsFocused()
             .performTextInput("77")
         composeRule.onNodeWithText("Сохранить").performClick()
+        composeRule.waitForIdle()
         composeRule.waitUntilText("77")
         composeRule.onNodeWithText("Видим · Избранное · Изменён").assertExists()
 
         composeRule.onNodeWithTag("manage-channel-row-channel-news").performClick()
         composeRule.onNodeWithText("Сбросить").performClick()
-        composeRule.waitUntilText("Новости")
         composeRule.waitForIdle()
+        composeRule.waitUntilText("Новости")
 
         composeRule.onNodeWithText("10").assertExists()
         composeRule.onNodeWithText("Видим · Избранное").assertExists()
@@ -169,8 +172,8 @@ private class ManageChannelsFixture(
         rows.map { current ->
             val filtered = when (query.visibility) {
                 ChannelManagementVisibility.ALL -> current
-                ChannelManagementVisibility.VISIBLE -> current.filterNot(ChannelManagementItem::isHidden)
-                ChannelManagementVisibility.HIDDEN -> current.filter(ChannelManagementItem::isHidden)
+                ChannelManagementVisibility.VISIBLE -> current.filterNot { it.isHidden }
+                ChannelManagementVisibility.HIDDEN -> current.filter { it.isHidden }
             }
             PagingData.from(filtered)
         }
