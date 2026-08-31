@@ -3,7 +3,7 @@ package app.muxtv
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -111,6 +111,7 @@ class ChannelQuickActionsJourneyTest {
             .performSemanticsAction(SemanticsActions.OnLongClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Скрыть").performClick()
+        composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
