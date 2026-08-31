@@ -20,6 +20,8 @@ sealed interface SourceEntryUiState {
     data object Editing : SourceEntryUiState
     data object Restoring : SourceEntryUiState
     data object Preparing : SourceEntryUiState
+    data object LocalNetworkPermissionRequired : SourceEntryUiState
+    data object LocalNetworkPermissionDenied : SourceEntryUiState
     data object HttpApprovalRequired : SourceEntryUiState
     data class Confirming(val endpoint: String) : SourceEntryUiState
     data object Activating : SourceEntryUiState
