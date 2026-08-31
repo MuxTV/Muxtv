@@ -56,4 +56,21 @@ class ChannelManagementContractTest {
         assertThat(item.toString()).doesNotContain("Discovery Channel HD")
         assertThat(item.toString()).doesNotContain("Discovery")
     }
+
+    @Test
+    fun managementItemRequiresAtLeastOneActiveVariant() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ChannelManagementItem(
+                channelId = "channel-1",
+                canonicalDisplayName = "Canonical",
+                effectiveDisplayName = "Effective",
+                defaultChannelNumber = null,
+                customChannelNumber = null,
+                effectiveChannelNumber = null,
+                isFavorite = false,
+                isHidden = false,
+                variantCount = 0,
+            )
+        }
+    }
 }
