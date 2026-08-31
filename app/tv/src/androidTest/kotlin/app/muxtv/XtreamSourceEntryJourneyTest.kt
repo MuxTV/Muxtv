@@ -3,7 +3,6 @@ package app.muxtv
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -42,7 +41,8 @@ class XtreamSourceEntryJourneyTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Xtream").assertExists()
+        composeRule.onAllNodesWithText("Xtream").assertCountEquals(1)
+        composeRule.onNodeWithText("Xtream")
             .performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -82,7 +82,7 @@ class XtreamSourceEntryJourneyTest {
     }
 }
 
-private class JourneyPreparationHandle : SourcePreparationHandle()
+private class XtreamJourneyPreparationHandle : SourcePreparationHandle()
 
 private class RecordingXtreamOnboarding : SourceOnboarding {
     val requests = mutableListOf<SourcePreparationRequest>()
@@ -95,7 +95,7 @@ private class RecordingXtreamOnboarding : SourceOnboarding {
     override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult {
         requests += request
         return SourcePreparationResult.Prepared(
-            handle = JourneyPreparationHandle(),
+            handle = XtreamJourneyPreparationHandle(),
             displayEndpoint = "https://provider.example",
         )
     }
