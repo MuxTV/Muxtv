@@ -6,12 +6,30 @@ import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessKind
+import app.muxtv.catalog.refresh.SourceAccessReference
 import app.muxtv.credentials.CredentialUnavailableReason
 import app.muxtv.database.PendingSourcePreparation
 import app.muxtv.database.PendingSourcePreparationStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+
+enum class DurablePreparationRegistrationResult {
+    Registered,
+    StorageUnavailable,
+}
+
+data class DurablePreparedSource(
+    val accessReference: SourceAccessReference,
+    val scheme: String,
+    val host: String,
+) {
+    init {
+        require(scheme == "http" || scheme == "https")
+        require(host.isNotBlank())
+    }
+}
 
 class DurableRemoteSourceOnboarding(
     private val delegate: RemoteSourceOnboarding,
@@ -22,26 +40,56 @@ class DurableRemoteSourceOnboarding(
         val result = delegate.prepare(input)
         if (result !is RemoteSourcePreparationResult.Prepared) return result
 
+        return when (
+            registerPrepared(
+                preparationId = result.token.value,
+                scheme = result.scheme,
+                host = result.host,
+                rollbackPrepared = { delegate.cancel(result.token) },
+            )
+        ) {
+            DurablePreparationRegistrationResult.Registered -> result
+            DurablePreparationRegistrationResult.StorageUnavailable ->
+                RemoteSourcePreparationResult.CredentialUnavailable(
+                    CredentialUnavailableReason.IoFailure,
+                )
+        }
+    }
+
+    suspend fun registerPrepared(
+        preparationId: String,
+        scheme: String,
+        host: String,
+        rollbackPrepared: suspend () -> Unit,
+    ): DurablePreparationRegistrationResult {
         val createdAt = currentTimeMillis()
         val preparation = PendingSourcePreparation(
-            preparationId = result.token.value,
-            scheme = result.scheme,
-            host = result.host,
+            preparationId = preparationId,
+            scheme = scheme,
+            host = host,
             createdAtEpochMillis = createdAt,
             expiresAtEpochMillis = createdAt + PREPARATION_TTL_MILLIS,
         )
         try {
             registry.upsert(preparation)
         } catch (cancelled: CancellationException) {
-            rollbackPreparedBestEffort(result.token)
+            rollbackPreparedBestEffort(rollbackPrepared)
             throw cancelled
         } catch (_: Exception) {
-            rollbackPreparedBestEffort(result.token)
-            return RemoteSourcePreparationResult.CredentialUnavailable(
-                CredentialUnavailableReason.IoFailure,
-            )
+            rollbackPreparedBestEffort(rollbackPrepared)
+            return DurablePreparationRegistrationResult.StorageUnavailable
         }
-        return result
+        return DurablePreparationRegistrationResult.Registered
+    }
+
+    suspend fun completeRegisteredSideEffect(preparationId: String) {
+        withContext(NonCancellable) {
+            try {
+                registry.remove(preparationId)
+            } catch (_: Exception) {
+                // Keep the durable row for the next bounded startup cleanup.
+            }
+        }
     }
 
     override suspend fun activate(
@@ -71,7 +119,7 @@ class DurableRemoteSourceOnboarding(
         return result
     }
 
-    suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? {
+    suspend fun restoreLatestRegistered(): DurablePreparedSource? {
         val now = currentTimeMillis()
         repeat(MAX_RESTORE_ATTEMPTS) {
             val preparation = try {
@@ -82,20 +130,30 @@ class DurableRemoteSourceOnboarding(
                 return null
             } ?: return null
 
-            val token = try {
-                RemoteSourcePreparationToken.parse(preparation.preparationId)
+            val accessReference = try {
+                SourceAccessReference.parse(preparation.preparationId)
             } catch (_: IllegalArgumentException) {
                 if (!removeRegistryByIdBestEffort(preparation.preparationId)) return null
                 return@repeat
             }
 
-            return RemoteSourcePreparationResult.Prepared(
-                token = token,
+            return DurablePreparedSource(
+                accessReference = accessReference,
                 scheme = preparation.scheme,
                 host = preparation.host,
             )
         }
         return null
+    }
+
+    suspend fun restoreLatestPrepared(): RemoteSourcePreparationResult.Prepared? {
+        val restored = restoreLatestRegistered() ?: return null
+        if (restored.accessReference.kind != SourceAccessKind.M3U) return null
+        return RemoteSourcePreparationResult.Prepared(
+            token = RemoteSourcePreparationToken.parse(restored.accessReference.credentialId.value),
+            scheme = restored.scheme,
+            host = restored.host,
+        )
     }
 
     suspend fun cleanupExpired(): PendingPreparationCleanupSummary {
@@ -162,10 +220,10 @@ class DurableRemoteSourceOnboarding(
         )
     }
 
-    private suspend fun rollbackPreparedBestEffort(token: RemoteSourcePreparationToken) {
+    private suspend fun rollbackPreparedBestEffort(rollbackPrepared: suspend () -> Unit) {
         withContext(NonCancellable) {
             try {
-                delegate.cancel(token)
+                rollbackPrepared()
             } catch (_: Exception) {
                 // The pending credential remains recoverable by domain-specific cleanup/reconciliation.
             }
@@ -173,13 +231,7 @@ class DurableRemoteSourceOnboarding(
     }
 
     private suspend fun removeRegistryAfterCompletedSideEffect(token: RemoteSourcePreparationToken) {
-        withContext(NonCancellable) {
-            try {
-                registry.remove(token.value)
-            } catch (_: Exception) {
-                // Keep the durable row for the next bounded startup cleanup.
-            }
-        }
+        completeRegisteredSideEffect(token.value)
     }
 
     private suspend fun removeRegistryByIdBestEffort(preparationId: String): Boolean = try {
