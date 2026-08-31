@@ -18,6 +18,53 @@ class LocalNetworkTargetClassifierTest {
     }
 
     @Test
+    fun `android local network cgnat range is local`() {
+        for (host in listOf(
+            "100.64.0.1",
+            "100.96.12.34",
+            "100.127.255.254",
+        )) {
+            assertThat(LocalNetworkTargetClassifier.classify(host))
+                .isEqualTo(LocalNetworkClassification.LOCAL)
+        }
+        assertThat(LocalNetworkTargetClassifier.classify("100.63.255.255"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+        assertThat(LocalNetworkTargetClassifier.classify("100.128.0.0"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+    }
+
+    @Test
+    fun `android local network multicast and broadcast are local`() {
+        for (host in listOf(
+            "224.0.0.1",
+            "239.255.255.250",
+            "255.255.255.255",
+        )) {
+            assertThat(LocalNetworkTargetClassifier.classify(host))
+                .isEqualTo(LocalNetworkClassification.LOCAL)
+        }
+        assertThat(LocalNetworkTargetClassifier.classify("223.255.255.255"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+        assertThat(LocalNetworkTargetClassifier.classify("240.0.0.0"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+    }
+
+    @Test
+    fun `android local network ipv6 multicast is local`() {
+        for (host in listOf(
+            "ff02::1",
+            "ff02::fb",
+            "ff05::1234",
+            "[FF02::FB]",
+        )) {
+            assertThat(LocalNetworkTargetClassifier.classify(host))
+                .isEqualTo(LocalNetworkClassification.LOCAL)
+        }
+        assertThat(LocalNetworkTargetClassifier.classify("feff::1"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+    }
+
+    @Test
     fun `link local ipv4 and ipv6 literals are local`() {
         assertThat(LocalNetworkTargetClassifier.classify("169.254.10.5"))
             .isEqualTo(LocalNetworkClassification.LOCAL)
