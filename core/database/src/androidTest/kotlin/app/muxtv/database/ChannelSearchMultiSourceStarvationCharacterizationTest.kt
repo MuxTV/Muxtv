@@ -44,13 +44,11 @@ class ChannelSearchMultiSourceStarvationCharacterizationTest {
             nowEpochMillis = 0,
             fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
         )
+        val candidateIds = candidates.map(ChannelSearchCandidateRow::canonicalChannelId)
 
         assertThat(candidates).hasSize(ChannelSearchLimits.CANDIDATE_FETCH_LIMIT)
-        assertThat(candidates.map(ChannelSearchCandidateRow::canonicalChannelId))
-            .containsNoneOf("b-0000", "c-0000")
-        assertThat(candidates)
-            .comparingElementsUsing(CANONICAL_ID_PREFIX_EQUIVALENCE)
-            .containsExactlyElementsIn(List(ChannelSearchLimits.CANDIDATE_FETCH_LIMIT) { SOURCE_A })
+        assertThat(candidateIds).containsNoneOf("b-0000", "c-0000")
+        assertThat(candidateIds.all { it.startsWith("$SOURCE_A-") }).isTrue()
     }
 
     private suspend fun publishSource(sourceId: String, channelCount: Int) {
@@ -107,14 +105,5 @@ class ChannelSearchMultiSourceStarvationCharacterizationTest {
         const val SOURCE_C_COUNT = 5
         const val REVISION = 1L
         const val STAGING_BATCH_SIZE = 500
-
-        val CANONICAL_ID_PREFIX_EQUIVALENCE =
-            object : com.google.common.truth.Correspondence<ChannelSearchCandidateRow, String>() {
-                override fun compare(actual: ChannelSearchCandidateRow?, expected: String?): Boolean =
-                    actual != null && expected != null &&
-                        actual.canonicalChannelId.startsWith("$expected-")
-
-                override fun toString(): String = "has canonical id prefix"
-            }
     }
 }
