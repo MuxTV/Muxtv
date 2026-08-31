@@ -2,9 +2,9 @@ package app.muxtv
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,6 +27,7 @@ import app.muxtv.catalog.RecentChannelsQuery
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.channels.ChannelsRoute
+import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -59,7 +60,7 @@ class ChannelQuickActionsJourneyTest {
             .pressEnter()
         composeRule.waitForIdle()
 
-        assert(openedChannelId == "channel-a")
+        assertThat(openedChannelId).isEqualTo("channel-a")
         composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
     }
 
@@ -83,7 +84,7 @@ class ChannelQuickActionsJourneyTest {
             .performSemanticsAction(SemanticsActions.OnLongClick)
         composeRule.waitForIdle()
 
-        assert(openedChannelId == null)
+        assertThat(openedChannelId).isNull()
         composeRule.onNodeWithTag("channel-quick-actions").assertExists()
         composeRule.onNodeWithText("В избранное").assertIsFocused()
     }
