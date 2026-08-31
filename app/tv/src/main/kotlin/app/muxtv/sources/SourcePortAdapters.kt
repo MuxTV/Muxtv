@@ -10,11 +10,14 @@ import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.SourcePlaybackApprovalResetResult
 import app.muxtv.catalog.SourcePreparationFailure
 import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.catalog.SourceRefreshOverview
 import app.muxtv.catalog.SourceRefreshPolicy
 import app.muxtv.catalog.SourceRefreshRunState
 import app.muxtv.catalog.SourceRefreshStatus
+import app.muxtv.catalog.onboarding.DurablePreparedSource
+import app.muxtv.catalog.onboarding.DurablePreparationRegistrationResult
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceActivationFailure
 import app.muxtv.catalog.refresh.RemoteSourceActivationResult
@@ -22,7 +25,14 @@ import app.muxtv.catalog.refresh.RemoteSourceCancellationResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboardingInput
 import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
+import app.muxtv.catalog.refresh.SourceAccessKind
+import app.muxtv.catalog.refresh.SourceAccessReference
+import app.muxtv.catalog.refresh.XtreamSourceLifecycle
+import app.muxtv.catalog.refresh.XtreamSourcePreparationInput
+import app.muxtv.catalog.refresh.XtreamSourcePreparationResult
+import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.catalog.sync.SourceRefreshScheduler
+import app.muxtv.credentials.CredentialRemoveResult
 import app.muxtv.database.SourceRefreshOverview as DatabaseSourceRefreshOverview
 import app.muxtv.database.SourceRefreshPolicy as DatabaseSourceRefreshPolicy
 import app.muxtv.database.SourceRefreshRunState as DatabaseSourceRefreshRunState
@@ -70,6 +80,8 @@ class AppSourceManagement(
 
 class AppSourceOnboarding(
     private val delegate: DurableRemoteSourceOnboarding,
+    private val xtreamPreparer: XtreamSourcePreparer? = null,
+    private val xtreamLifecycle: XtreamSourceLifecycle? = null,
 ) : SourceOnboarding {
     override suspend fun prepare(
         locator: String,
@@ -81,29 +93,129 @@ class AppSourceOnboarding(
         ),
     ).toApi()
 
+    override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult =
+        when (request) {
+            is SourcePreparationRequest.M3u -> prepare(
+                locator = request.locator,
+                insecureHttpApproved = request.insecureHttpApproved,
+            )
+
+            is SourcePreparationRequest.Xtream -> prepareXtream(request)
+        }
+
     override suspend fun activate(
         handle: SourcePreparationHandle,
         sourceName: String,
+    ): SourceActivationResult = when (handle) {
+        is RemotePreparationHandle -> delegate.activate(handle.token, sourceName).toApi()
+        is XtreamPreparationHandle -> activateXtream(handle, sourceName)
+        else -> SourceActivationResult.Failed(
+            reason = SourceActivationFailure.Unexpected,
+            cleanupPending = false,
+        )
+    }
+
+    override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult =
+        when (handle) {
+            is RemotePreparationHandle -> delegate.cancel(handle.token).toApi()
+            is XtreamPreparationHandle -> cancelXtream(handle)
+            else -> SourceCancellationResult.NotFound
+        }
+
+    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? =
+        delegate.restoreLatestRegistered()?.toApiPrepared()
+
+    private suspend fun prepareXtream(
+        request: SourcePreparationRequest.Xtream,
+    ): SourcePreparationResult {
+        val preparer = xtreamPreparer
+            ?: return SourcePreparationResult.Failed(SourcePreparationFailure.UnsupportedProvider)
+        return when (
+            val result = preparer.prepare(
+                XtreamSourcePreparationInput(
+                    endpoint = request.endpoint,
+                    username = request.username,
+                    password = request.password,
+                    insecureHttpApproved = request.insecureHttpApproved,
+                ),
+            )
+        ) {
+            is XtreamSourcePreparationResult.Prepared -> {
+                when (
+                    delegate.registerPrepared(
+                        preparationId = result.accessReference.value,
+                        scheme = result.scheme,
+                        host = result.host,
+                        rollbackPrepared = { preparer.rollback(result.accessReference) },
+                    )
+                ) {
+                    DurablePreparationRegistrationResult.Registered ->
+                        SourcePreparationResult.Prepared(
+                            handle = XtreamPreparationHandle(result.accessReference),
+                            displayEndpoint = "${result.scheme}://${result.host}",
+                        )
+
+                    DurablePreparationRegistrationResult.StorageUnavailable ->
+                        SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
+                }
+            }
+
+            XtreamSourcePreparationResult.InsecureTransportApprovalRequired ->
+                SourcePreparationResult.InsecureTransportApprovalRequired
+            is XtreamSourcePreparationResult.UrlRejected,
+            XtreamSourcePreparationResult.InvalidAccess,
+            -> SourcePreparationResult.Failed(SourcePreparationFailure.InvalidLocator)
+            is XtreamSourcePreparationResult.CredentialTooLarge ->
+                SourcePreparationResult.Failed(SourcePreparationFailure.CredentialTooLarge)
+            is XtreamSourcePreparationResult.CredentialUnavailable ->
+                SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
+        }
+    }
+
+    private suspend fun activateXtream(
+        handle: XtreamPreparationHandle,
+        sourceName: String,
     ): SourceActivationResult {
-        val remoteHandle = handle as? RemotePreparationHandle
+        val lifecycle = xtreamLifecycle
             ?: return SourceActivationResult.Failed(
                 reason = SourceActivationFailure.Unexpected,
                 cleanupPending = false,
             )
-        return delegate.activate(remoteHandle.token, sourceName).toApi()
+        val result = lifecycle.activate(handle.accessReference, sourceName)
+        val cleanupComplete = when (result) {
+            is RemoteSourceActivationResult.Activated -> true
+            is RemoteSourceActivationResult.Failed ->
+                result.credentialCleanupFailure == null && result.sourceCleanupFailure == null
+        }
+        if (cleanupComplete) {
+            delegate.completeRegisteredSideEffect(handle.accessReference.value)
+        }
+        return result.toApi()
     }
 
-    override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult {
-        val remoteHandle = handle as? RemotePreparationHandle
-            ?: return SourceCancellationResult.NotFound
-        return delegate.cancel(remoteHandle.token).toApi()
-    }
+    private suspend fun cancelXtream(handle: XtreamPreparationHandle): SourceCancellationResult {
+        val preparer = xtreamPreparer ?: return SourceCancellationResult.CleanupPending
+        return when (preparer.rollback(handle.accessReference)) {
+            CredentialRemoveResult.Removed -> {
+                delegate.completeRegisteredSideEffect(handle.accessReference.value)
+                SourceCancellationResult.Removed
+            }
 
-    override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? =
-        delegate.restoreLatestPrepared()?.toApiPrepared()
+            CredentialRemoveResult.NotFound -> {
+                delegate.completeRegisteredSideEffect(handle.accessReference.value)
+                SourceCancellationResult.NotFound
+            }
+
+            is CredentialRemoveResult.Unavailable -> SourceCancellationResult.CleanupPending
+        }
+    }
 
     private class RemotePreparationHandle(
         val token: RemoteSourcePreparationToken,
+    ) : SourcePreparationHandle()
+
+    private class XtreamPreparationHandle(
+        val accessReference: SourceAccessReference,
     ) : SourcePreparationHandle()
 
     private fun RemoteSourcePreparationResult.toApi(): SourcePreparationResult = when (this) {
@@ -122,6 +234,18 @@ class AppSourceOnboarding(
     private fun RemoteSourcePreparationResult.Prepared.toApiPrepared(): SourcePreparationResult.Prepared =
         SourcePreparationResult.Prepared(
             handle = RemotePreparationHandle(token),
+            displayEndpoint = "$scheme://$host",
+        )
+
+    private fun DurablePreparedSource.toApiPrepared(): SourcePreparationResult.Prepared =
+        SourcePreparationResult.Prepared(
+            handle = when (accessReference.kind) {
+                SourceAccessKind.M3U -> RemotePreparationHandle(
+                    RemoteSourcePreparationToken.parse(accessReference.credentialId.value),
+                )
+
+                SourceAccessKind.XTREAM -> XtreamPreparationHandle(accessReference)
+            },
             displayEndpoint = "$scheme://$host",
         )
 

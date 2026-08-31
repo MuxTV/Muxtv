@@ -2,6 +2,7 @@ package app.muxtv.catalog.refresh
 
 import app.muxtv.credentials.CredentialId
 import app.muxtv.credentials.CredentialReadResult
+import app.muxtv.credentials.CredentialRemoveResult
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.credentials.CredentialUnavailableReason
 import app.muxtv.credentials.CredentialWriteResult
@@ -83,6 +84,10 @@ class XtreamSourceAccessManager(
             CredentialReadResult.NotFound -> XtreamSourceAccessReadResult.NotFound
             is CredentialReadResult.Unavailable -> XtreamSourceAccessReadResult.Unavailable(credential.reason)
         }
+    }
+
+    suspend fun remove(id: CredentialId): CredentialRemoveResult = mutex.withLock {
+        credentialStore.remove(id)
     }
 }
 

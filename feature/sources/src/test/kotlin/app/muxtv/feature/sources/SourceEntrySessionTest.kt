@@ -5,6 +5,7 @@ import app.muxtv.catalog.SourceCancellationResult
 import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.SourcePreparationFailure
 import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -29,6 +30,72 @@ class SourceEntrySessionTest {
         )
         assertThat(session.state.value.toString()).doesNotContain("secret")
         assertThat(handle.toString()).doesNotContain("1")
+    }
+
+    @Test
+    fun xtreamPreparationUsesProviderNeutralRequest() = runTest {
+        val onboarding = FakeSourceEntryOnboarding(
+            prepareResult = SourcePreparationResult.Prepared(
+                handle = TestPreparationHandle(6),
+                displayEndpoint = "https://provider.example",
+            ),
+        )
+        val session = SourceEntrySession(onboarding)
+
+        session.prepareXtream(
+            endpoint = "https://provider.example",
+            username = "alice",
+            password = "secret",
+        )
+
+        assertThat(session.state.value).isEqualTo(
+            SourceEntryUiState.Confirming("https://provider.example"),
+        )
+        assertThat(onboarding.preparationRequests).hasSize(1)
+        val request = onboarding.preparationRequests.single() as SourcePreparationRequest.Xtream
+        assertThat(request.endpoint).isEqualTo("https://provider.example")
+        assertThat(request.username).isEqualTo("alice")
+        assertThat(request.password).isEqualTo("secret")
+        assertThat(request.insecureHttpApproved).isFalse()
+        assertThat(request.toString()).doesNotContain("alice")
+        assertThat(request.toString()).doesNotContain("secret")
+    }
+
+    @Test
+    fun xtreamHttpApprovalRepeatsSameProviderRequestWithApproval() = runTest {
+        val onboarding = FakeSourceEntryOnboarding(
+            prepareResults = ArrayDeque(
+                listOf(
+                    SourcePreparationResult.InsecureTransportApprovalRequired,
+                    SourcePreparationResult.Prepared(
+                        handle = TestPreparationHandle(7),
+                        displayEndpoint = "http://provider.example",
+                    ),
+                ),
+            ),
+        )
+        val session = SourceEntrySession(onboarding)
+
+        session.prepareXtream(
+            endpoint = "http://provider.example",
+            username = "alice",
+            password = "secret",
+        )
+        assertThat(session.state.value).isEqualTo(SourceEntryUiState.HttpApprovalRequired)
+
+        session.approveInsecureHttp()
+
+        assertThat(onboarding.preparationRequests).hasSize(2)
+        val first = onboarding.preparationRequests[0] as SourcePreparationRequest.Xtream
+        val approved = onboarding.preparationRequests[1] as SourcePreparationRequest.Xtream
+        assertThat(first.insecureHttpApproved).isFalse()
+        assertThat(approved.insecureHttpApproved).isTrue()
+        assertThat(approved.endpoint).isEqualTo(first.endpoint)
+        assertThat(approved.username).isEqualTo(first.username)
+        assertThat(approved.password).isEqualTo(first.password)
+        assertThat(session.state.value).isEqualTo(
+            SourceEntryUiState.Confirming("http://provider.example"),
+        )
     }
 
     @Test
@@ -156,6 +223,7 @@ private class FakeSourceEntryOnboarding(
     private val cancellationResult: SourceCancellationResult = SourceCancellationResult.Removed,
 ) : SourceOnboarding {
     val prepareInputs = mutableListOf<PrepareInput>()
+    val preparationRequests = mutableListOf<SourcePreparationRequest>()
     val activatedSourceNames = mutableListOf<String>()
     val cancelledHandles = mutableListOf<SourcePreparationHandle>()
 
@@ -164,7 +232,12 @@ private class FakeSourceEntryOnboarding(
         insecureHttpApproved: Boolean,
     ): SourcePreparationResult {
         prepareInputs += PrepareInput(locator, insecureHttpApproved)
-        return if (prepareResults.isEmpty()) prepareResult else prepareResults.removeFirst()
+        return nextPrepareResult()
+    }
+
+    override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult {
+        preparationRequests += request
+        return nextPrepareResult()
     }
 
     override suspend fun activate(
@@ -181,4 +254,7 @@ private class FakeSourceEntryOnboarding(
     }
 
     override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = restored
+
+    private fun nextPrepareResult(): SourcePreparationResult =
+        if (prepareResults.isEmpty()) prepareResult else prepareResults.removeFirst()
 }
