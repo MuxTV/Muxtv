@@ -21,7 +21,9 @@ sealed interface SourceEntryUiState {
     data object Restoring : SourceEntryUiState
     data object Preparing : SourceEntryUiState
     data object LocalNetworkPermissionRequired : SourceEntryUiState
-    data object LocalNetworkPermissionDenied : SourceEntryUiState
+    data class LocalNetworkPermissionDenied(
+        val permanently: Boolean,
+    ) : SourceEntryUiState
     data object HttpApprovalRequired : SourceEntryUiState
     data class Confirming(val endpoint: String) : SourceEntryUiState
     data object Activating : SourceEntryUiState
@@ -57,6 +59,7 @@ class SourceEntrySession(
 
     private var preparedHandle: SourcePreparationHandle? = null
     private var preparedEndpoint: String? = null
+    private var pendingLocalNetworkRequest: SourcePreparationRequest? = null
     private var pendingHttpRequest: SourcePreparationRequest? = null
 
     suspend fun restore() = runExclusive {
@@ -101,6 +104,23 @@ class SourceEntrySession(
                 insecureHttpApproved = false,
             ),
         )
+    }
+
+    suspend fun resumeAfterLocalNetworkPermissionGranted() = runExclusive {
+        val request = pendingLocalNetworkRequest ?: return@runExclusive
+        prepareLocked(request)
+    }
+
+    fun recordLocalNetworkPermissionDenied(permanently: Boolean) {
+        if (
+            !operationMutex.isLocked &&
+            pendingLocalNetworkRequest != null &&
+            mutableState.value is SourceEntryUiState.LocalNetworkPermissionRequired
+        ) {
+            mutableState.value = SourceEntryUiState.LocalNetworkPermissionDenied(
+                permanently = permanently,
+            )
+        }
     }
 
     suspend fun approveInsecureHttp() = runExclusive {
@@ -158,7 +178,7 @@ class SourceEntrySession(
     suspend fun cancel(): Boolean {
         if (!operationMutex.tryLock()) return false
         return try {
-            pendingHttpRequest = null
+            clearPendingAuthorization()
             val handle = preparedHandle
             if (handle == null) {
                 mutableState.value = SourceEntryUiState.Editing
@@ -198,24 +218,24 @@ class SourceEntrySession(
 
     fun editAgain() {
         if (preparedHandle == null && !operationMutex.isLocked) {
-            pendingHttpRequest = null
+            clearPendingAuthorization()
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
         }
     }
 
     fun clearTransientLocator() {
-        pendingHttpRequest = null
+        clearPendingAuthorization()
     }
 
     private suspend fun prepareLocked(request: SourcePreparationRequest) {
         if (!request.hasRequiredInput()) {
-            pendingHttpRequest = null
+            clearPendingAuthorization()
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.InvalidLocator)
             return
         }
 
-        pendingHttpRequest = request
+        clearPendingAuthorization()
         mutableState.value = SourceEntryUiState.Preparing
         val result = try {
             when (request) {
@@ -227,23 +247,31 @@ class SourceEntrySession(
                 is SourcePreparationRequest.Xtream -> onboarding.prepare(request)
             }
         } catch (cancelled: CancellationException) {
-            pendingHttpRequest = null
+            clearPendingAuthorization()
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
             throw cancelled
         } catch (_: Exception) {
-            pendingHttpRequest = null
+            clearPendingAuthorization()
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.Unexpected)
             return
         }
 
         when (result) {
             is SourcePreparationResult.Prepared -> acceptPrepared(result)
-            SourcePreparationResult.InsecureTransportApprovalRequired ->
+
+            SourcePreparationResult.LocalNetworkAccessRequired -> {
+                pendingLocalNetworkRequest = request
+                mutableState.value = SourceEntryUiState.LocalNetworkPermissionRequired
+            }
+
+            SourcePreparationResult.InsecureTransportApprovalRequired -> {
+                pendingHttpRequest = request
                 mutableState.value = SourceEntryUiState.HttpApprovalRequired
+            }
 
             is SourcePreparationResult.Failed -> {
-                pendingHttpRequest = null
+                clearPendingAuthorization()
                 mutableState.value = SourceEntryUiState.Failed(result.reason.toEntryFailure())
             }
         }
@@ -252,10 +280,15 @@ class SourceEntrySession(
     private fun acceptPrepared(result: SourcePreparationResult.Prepared) {
         preparedHandle = result.handle
         preparedEndpoint = result.displayEndpoint
-        pendingHttpRequest = null
+        clearPendingAuthorization()
         mutableState.value = SourceEntryUiState.Confirming(
             endpoint = result.displayEndpoint,
         )
+    }
+
+    private fun clearPendingAuthorization() {
+        pendingLocalNetworkRequest = null
+        pendingHttpRequest = null
     }
 
     private suspend inline fun runExclusive(crossinline block: suspend () -> Unit) {
