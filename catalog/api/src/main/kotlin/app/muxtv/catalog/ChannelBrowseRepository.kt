@@ -103,4 +103,6 @@ data class ChannelManagementItem(
 
 interface ChannelBrowseRepository {
     fun pages(query: ChannelBrowseQuery): Flow<PagingData<ChannelBrowseItem>>
+
+    fun managementPages(query: ChannelManagementQuery): Flow<PagingData<ChannelManagementItem>>
 }
