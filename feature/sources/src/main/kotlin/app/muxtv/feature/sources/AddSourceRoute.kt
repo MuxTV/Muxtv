@@ -157,7 +157,7 @@ fun AddSourceRoute(
             SourceEntryUiState.Restoring,
             SourceEntryUiState.Preparing,
             SourceEntryUiState.LocalNetworkPermissionRequired,
-            SourceEntryUiState.LocalNetworkPermissionDenied,
+            is SourceEntryUiState.LocalNetworkPermissionDenied,
             SourceEntryUiState.Activating,
             SourceEntryUiState.Completed,
             -> Unit
@@ -321,7 +321,7 @@ fun AddSourceRoute(
                 SourceEntryUiState.Preparing -> StatusText("Проверка источника…")
                 SourceEntryUiState.LocalNetworkPermissionRequired ->
                     StatusText("Для этого локального источника требуется доступ к локальной сети.")
-                SourceEntryUiState.LocalNetworkPermissionDenied ->
+                is SourceEntryUiState.LocalNetworkPermissionDenied ->
                     StatusText("Доступ к локальной сети не предоставлен.")
                 SourceEntryUiState.Activating -> StatusText("Импорт и активация источника…")
                 SourceEntryUiState.Completed -> StatusText("Источник добавлен.")
