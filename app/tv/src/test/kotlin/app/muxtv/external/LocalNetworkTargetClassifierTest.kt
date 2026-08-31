@@ -18,6 +18,22 @@ class LocalNetworkTargetClassifierTest {
     }
 
     @Test
+    fun `android local network cgnat range is local`() {
+        for (host in listOf(
+            "100.64.0.1",
+            "100.96.12.34",
+            "100.127.255.254",
+        )) {
+            assertThat(LocalNetworkTargetClassifier.classify(host))
+                .isEqualTo(LocalNetworkClassification.LOCAL)
+        }
+        assertThat(LocalNetworkTargetClassifier.classify("100.63.255.255"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+        assertThat(LocalNetworkTargetClassifier.classify("100.128.0.0"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+    }
+
+    @Test
     fun `link local ipv4 and ipv6 literals are local`() {
         assertThat(LocalNetworkTargetClassifier.classify("169.254.10.5"))
             .isEqualTo(LocalNetworkClassification.LOCAL)
