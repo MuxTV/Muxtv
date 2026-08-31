@@ -27,6 +27,7 @@ import app.muxtv.catalog.refresh.RemoteSourcePreparationResult
 import app.muxtv.catalog.refresh.RemoteSourcePreparationToken
 import app.muxtv.catalog.refresh.SourceAccessKind
 import app.muxtv.catalog.refresh.SourceAccessReference
+import app.muxtv.catalog.refresh.XtreamSourceLifecycle
 import app.muxtv.catalog.refresh.XtreamSourcePreparationInput
 import app.muxtv.catalog.refresh.XtreamSourcePreparationResult
 import app.muxtv.catalog.refresh.XtreamSourcePreparer
@@ -80,6 +81,7 @@ class AppSourceManagement(
 class AppSourceOnboarding(
     private val delegate: DurableRemoteSourceOnboarding,
     private val xtreamPreparer: XtreamSourcePreparer? = null,
+    private val xtreamLifecycle: XtreamSourceLifecycle? = null,
 ) : SourceOnboarding {
     override suspend fun prepare(
         locator: String,
@@ -104,13 +106,13 @@ class AppSourceOnboarding(
     override suspend fun activate(
         handle: SourcePreparationHandle,
         sourceName: String,
-    ): SourceActivationResult {
-        val remoteHandle = handle as? RemotePreparationHandle
-            ?: return SourceActivationResult.Failed(
-                reason = SourceActivationFailure.Unexpected,
-                cleanupPending = false,
-            )
-        return delegate.activate(remoteHandle.token, sourceName).toApi()
+    ): SourceActivationResult = when (handle) {
+        is RemotePreparationHandle -> delegate.activate(handle.token, sourceName).toApi()
+        is XtreamPreparationHandle -> activateXtream(handle, sourceName)
+        else -> SourceActivationResult.Failed(
+            reason = SourceActivationFailure.Unexpected,
+            cleanupPending = false,
+        )
     }
 
     override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult =
@@ -168,6 +170,27 @@ class AppSourceOnboarding(
             is XtreamSourcePreparationResult.CredentialUnavailable ->
                 SourcePreparationResult.Failed(SourcePreparationFailure.StorageUnavailable)
         }
+    }
+
+    private suspend fun activateXtream(
+        handle: XtreamPreparationHandle,
+        sourceName: String,
+    ): SourceActivationResult {
+        val lifecycle = xtreamLifecycle
+            ?: return SourceActivationResult.Failed(
+                reason = SourceActivationFailure.Unexpected,
+                cleanupPending = false,
+            )
+        val result = lifecycle.activate(handle.accessReference, sourceName)
+        val cleanupComplete = when (result) {
+            is RemoteSourceActivationResult.Activated -> true
+            is RemoteSourceActivationResult.Failed ->
+                result.credentialCleanupFailure == null && result.sourceCleanupFailure == null
+        }
+        if (cleanupComplete) {
+            delegate.completeRegisteredSideEffect(handle.accessReference.value)
+        }
+        return result.toApi()
     }
 
     private suspend fun cancelXtream(handle: XtreamPreparationHandle): SourceCancellationResult {
