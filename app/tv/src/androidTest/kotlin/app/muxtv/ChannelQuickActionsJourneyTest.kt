@@ -2,6 +2,7 @@ package app.muxtv
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeUiTestConfig
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -26,16 +27,26 @@ import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.channels.ChannelsRoute
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChannelQuickActionsJourneyTest {
+    private val effectScheduler = TestCoroutineScheduler()
+
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createComposeRule(
+        config = ComposeUiTestConfig(
+            effectContext = StandardTestDispatcher(effectScheduler),
+        ),
+    )
 
     @Test
     fun normalOkStillOpensPlaybackWhenQuickActionsAreEnabled() {
@@ -51,12 +62,12 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0")
             .assertIsFocused()
             .pressEnter()
-        composeRule.waitForIdle()
+        drainEffects()
 
         assertThat(openedChannelId).isEqualTo("channel-a")
         composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
@@ -76,11 +87,11 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0")
             .performSemanticsAction(SemanticsActions.OnLongClick)
-        composeRule.waitForIdle()
+        drainEffects()
 
         assertThat(openedChannelId).isNull()
         composeRule.onNodeWithTag("channel-quick-actions").assertExists()
@@ -100,7 +111,7 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0").performKeyInput {
             keyDown(Key.DirectionDown)
@@ -109,9 +120,9 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
         composeRule.onNodeWithTag("channel-row-1")
             .performSemanticsAction(SemanticsActions.OnLongClick)
-        composeRule.waitForIdle()
+        drainEffects()
         composeRule.onNodeWithText("Скрыть").performClick()
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
@@ -122,9 +133,16 @@ class ChannelQuickActionsJourneyTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Второй", substring = false).fetchSemanticsNodes().isEmpty()
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithText("Первый", substring = false).assertIsFocused()
+    }
+
+    private fun drainEffects() {
+        effectScheduler.runCurrent()
+        composeRule.waitForIdle()
+        effectScheduler.runCurrent()
+        composeRule.waitForIdle()
     }
 
     @androidx.compose.runtime.Composable
