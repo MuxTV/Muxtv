@@ -20,12 +20,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +61,8 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.designsystem.component.MuxTvChannelLogo
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -86,10 +92,25 @@ fun ManageChannelsRoute(
     var selectedChannel by remember { mutableStateOf<ChannelManagementItem?>(null) }
     var editor by remember { mutableStateOf<ManageChannelEditor?>(null) }
     var mutationMessage by remember { mutableStateOf<String?>(null) }
+    var selectionFocusAnchor by remember { mutableStateOf<FocusAnchor?>(null) }
+    var focusReturnRequest by remember { mutableStateOf<ManageChannelsFocusReturnRequest?>(null) }
+
+    fun dismissActions(waitForAnchorRemoval: Boolean) {
+        selectionFocusAnchor?.let { anchor ->
+            focusReturnRequest = ManageChannelsFocusReturnRequest(
+                anchor = anchor,
+                waitForAnchorRemoval = waitForAnchorRemoval,
+            )
+        }
+        selectionFocusAnchor = null
+        selectedChannel = null
+        editor = null
+    }
 
     fun consumeMutationResult(
         result: ChannelPreferenceMutationResult,
         invalidMessage: String,
+        waitForAnchorRemoval: Boolean = false,
     ) {
         mutationMessage = when (result) {
             ChannelPreferenceMutationResult.Applied,
@@ -99,12 +120,8 @@ fun ManageChannelsRoute(
             ChannelPreferenceMutationResult.NotFound -> "Канал больше недоступен в активном каталоге."
             ChannelPreferenceMutationResult.InvalidInput -> invalidMessage
         }
-        if (result == ChannelPreferenceMutationResult.Applied || result == ChannelPreferenceMutationResult.Unchanged) {
-            editor = null
-        }
-        if (result == ChannelPreferenceMutationResult.NotFound) {
-            selectedChannel = null
-            editor = null
+        if (result.shouldDismissManageChannelActions()) {
+            dismissActions(waitForAnchorRemoval = waitForAnchorRemoval)
         }
     }
 
@@ -114,27 +131,35 @@ fun ManageChannelsRoute(
         selectedChannel = selectedChannel,
         editor = editor,
         mutationMessage = mutationMessage,
+        focusReturnRequest = focusReturnRequest,
         onFilterChanged = { next ->
+            selectionFocusAnchor = null
+            focusReturnRequest = null
             selectedChannel = null
             editor = null
             mutationMessage = null
             screenViewModel.setFilter(next)
         },
-        onSelectChannel = { channel ->
+        onSelectChannel = { channel, anchor ->
             selectedChannel = channel
+            selectionFocusAnchor = anchor
+            focusReturnRequest = null
             editor = null
             mutationMessage = null
         },
         onCloseActions = {
-            selectedChannel = null
-            editor = null
+            dismissActions(waitForAnchorRemoval = false)
             mutationMessage = null
+        },
+        onFocusReturnConsumed = {
+            focusReturnRequest = null
         },
         onToggleHidden = { channel ->
             scope.launch {
                 consumeMutationResult(
                     result = screenViewModel.setHidden(channel.channelId, !channel.isHidden),
                     invalidMessage = "Не удалось изменить видимость канала.",
+                    waitForAnchorRemoval = filter != ManageChannelsFilter.ALL,
                 )
             }
         },
@@ -195,6 +220,7 @@ fun ManageChannelsRoute(
                 consumeMutationResult(
                     result = screenViewModel.resetCustomization(channel.channelId),
                     invalidMessage = "Не удалось сбросить настройки канала.",
+                    waitForAnchorRemoval = filter == ManageChannelsFilter.HIDDEN && channel.isHidden,
                 )
             }
         },
@@ -210,9 +236,11 @@ private fun ManageChannelsContent(
     selectedChannel: ChannelManagementItem?,
     editor: ManageChannelEditor?,
     mutationMessage: String?,
+    focusReturnRequest: ManageChannelsFocusReturnRequest?,
     onFilterChanged: (ManageChannelsFilter) -> Unit,
-    onSelectChannel: (ChannelManagementItem) -> Unit,
+    onSelectChannel: (ChannelManagementItem, FocusAnchor) -> Unit,
     onCloseActions: () -> Unit,
+    onFocusReturnConsumed: () -> Unit,
     onToggleHidden: (ChannelManagementItem) -> Unit,
     onRename: (ChannelManagementItem) -> Unit,
     onEditNumber: (ChannelManagementItem) -> Unit,
@@ -224,16 +252,89 @@ private fun ManageChannelsContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val rowFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     val allFocusRequester = remember { FocusRequester() }
     val visibleFocusRequester = remember { FocusRequester() }
     val hiddenFocusRequester = remember { FocusRequester() }
     val firstActionFocusRequester = remember { FocusRequester() }
     val editorFocusRequester = remember { FocusRequester() }
+    val selectedFilterFocusRequester = when (filter) {
+        ManageChannelsFilter.ALL -> allFocusRequester
+        ManageChannelsFilter.VISIBLE -> visibleFocusRequester
+        ManageChannelsFilter.HIDDEN -> hiddenFocusRequester
+    }
+    val refreshState = rows.loadState.refresh
+    val appendState = rows.loadState.append
 
     LaunchedEffect(selectedChannel?.channelId, editor) {
         when {
             editor != null -> editorFocusRequester.requestFocus()
             selectedChannel != null -> firstActionFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(
+        focusReturnRequest,
+        rows,
+        refreshState,
+        appendState,
+        rows.itemCount,
+    ) {
+        val request = focusReturnRequest ?: return@LaunchedEffect
+        if (refreshState !is LoadState.NotLoading) return@LaunchedEffect
+
+        if (rows.itemCount == 0) {
+            withFrameNanos { }
+            if (selectedFilterFocusRequester.requestFocus()) {
+                onFocusReturnConsumed()
+            }
+            return@LaunchedEffect
+        }
+
+        val requestedIndex = request.anchor.previousIndex.coerceIn(0, rows.itemCount - 1)
+        listState.scrollToItem(requestedIndex, request.anchor.scrollOffset)
+
+        val target = snapshotFlow {
+            val anchoredIndex = findLoadedManageChannelIndex(rows, request.anchor.itemKey)
+            when {
+                request.waitForAnchorRemoval && anchoredIndex != null -> null
+                !request.waitForAnchorRemoval && anchoredIndex != null -> {
+                    request.anchor.itemKey.let { anchoredIndex to it }
+                }
+
+                appendState is LoadState.NotLoading && appendState.endOfPaginationReached -> {
+                    val loadedIds = (0 until rows.itemCount)
+                        .mapNotNull { index -> rows.peek(index)?.channelId }
+                    if (loadedIds.size == rows.itemCount) {
+                        request.anchor.resolveAgainst(loadedIds)?.let { resolved ->
+                            resolved.index to resolved.itemKey
+                        }
+                    } else {
+                        null
+                    }
+                }
+
+                else -> null
+            }
+        }
+            .filterNotNull()
+            .first()
+
+        val (targetIndex, targetId) = target
+        if (targetIndex != requestedIndex) {
+            listState.scrollToItem(targetIndex, request.anchor.scrollOffset)
+        }
+
+        val requester = snapshotFlow {
+            val placed = listState.layoutInfo.visibleItemsInfo.any { item -> item.index == targetIndex }
+            if (placed) rowFocusRequesters[targetId] else null
+        }
+            .filterNotNull()
+            .first()
+
+        withFrameNanos { }
+        if (requester.requestFocus()) {
+            onFocusReturnConsumed()
         }
     }
 
@@ -346,23 +447,38 @@ private fun ManageChannelsContent(
                     if (channel == null) {
                         Text("Загрузка…")
                     } else {
+                        val focusRequester = remember(channel.channelId) { FocusRequester() }
+                        DisposableEffect(channel.channelId, focusRequester) {
+                            rowFocusRequesters[channel.channelId] = focusRequester
+                            onDispose {
+                                if (rowFocusRequesters[channel.channelId] === focusRequester) {
+                                    rowFocusRequesters.remove(channel.channelId)
+                                }
+                            }
+                        }
                         ManageChannelRow(
                             channel = channel,
                             selected = selectedChannel?.channelId == channel.channelId,
-                            onClick = { onSelectChannel(channel) },
+                            onClick = {
+                                onSelectChannel(
+                                    channel,
+                                    FocusAnchor(
+                                        itemKey = channel.channelId,
+                                        previousIndex = index,
+                                        scrollOffset = listState.firstVisibleItemScrollOffset,
+                                    ),
+                                )
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("$MANAGE_CHANNEL_ROW_TEST_TAG_PREFIX${channel.channelId}")
                                 .focusProperties {
                                     if (index == 0) {
-                                        up = when (filter) {
-                                            ManageChannelsFilter.ALL -> allFocusRequester
-                                            ManageChannelsFilter.VISIBLE -> visibleFocusRequester
-                                            ManageChannelsFilter.HIDDEN -> hiddenFocusRequester
-                                        }
+                                        up = selectedFilterFocusRequester
                                         left = railFocusRequester ?: FocusRequester.Default
                                     }
-                                },
+                                }
+                                .focusRequester(focusRequester),
                         )
                     }
                 }
@@ -374,6 +490,16 @@ private fun ManageChannelsContent(
             }
         }
     }
+}
+
+private fun findLoadedManageChannelIndex(
+    rows: LazyPagingItems<ChannelManagementItem>,
+    channelId: String,
+): Int? {
+    for (index in 0 until rows.itemCount) {
+        if (rows.peek(index)?.channelId == channelId) return index
+    }
+    return null
 }
 
 @Composable
@@ -575,12 +701,20 @@ private fun ManageChannelRow(
     }
 }
 
+private data class ManageChannelsFocusReturnRequest(
+    val anchor: FocusAnchor,
+    val waitForAnchorRemoval: Boolean,
+)
+
 private sealed interface ManageChannelEditor {
     val value: String
 
     data class Name(override val value: String) : ManageChannelEditor
     data class Number(override val value: String) : ManageChannelEditor
 }
+
+internal fun ChannelPreferenceMutationResult.shouldDismissManageChannelActions(): Boolean =
+    this != ChannelPreferenceMutationResult.InvalidInput
 
 private fun ManageChannelsFilter.summary(count: Int): String = when (this) {
     ManageChannelsFilter.ALL -> "Каналов в управлении: $count"
