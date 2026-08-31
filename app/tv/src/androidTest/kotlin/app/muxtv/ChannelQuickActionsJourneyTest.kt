@@ -111,13 +111,14 @@ class ChannelQuickActionsJourneyTest {
             .performSemanticsAction(SemanticsActions.OnLongClick)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Скрыть").performClick()
+        composeRule.waitForIdle()
 
+        composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Второй", substring = false).fetchSemanticsNodes().isEmpty()
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
         composeRule.onNodeWithText("Первый", substring = false).assertIsFocused()
     }
 
