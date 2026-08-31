@@ -7,6 +7,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseQuery
+import app.muxtv.catalog.ChannelManagementQuery
+import app.muxtv.catalog.ChannelManagementVisibility
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.NowNextQuery
@@ -107,6 +109,69 @@ class ChannelBrowseRepositoryTest {
     }
 
     @Test
+    fun managementVisibilityCanRecoverHiddenChannelsWithoutWeakeningBrowse() = runTest {
+        activateRevision(revisionNumber = 1L, channelCount = 2)
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = "channel-00002",
+                isHidden = true,
+            ),
+        )
+
+        val browse = repository.pages(query(ChannelBrowseFilter.ALL)).asSnapshot()
+        val all = repository.managementPages(managementQuery(ChannelManagementVisibility.ALL)).asSnapshot()
+        val visible = repository.managementPages(managementQuery(ChannelManagementVisibility.VISIBLE)).asSnapshot()
+        val hidden = repository.managementPages(managementQuery(ChannelManagementVisibility.HIDDEN)).asSnapshot()
+
+        assertThat(browse.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(all.map { it.channelId })
+            .containsExactly("channel-00001", "channel-00002")
+            .inOrder()
+        assertThat(visible.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(hidden.map { it.channelId }).containsExactly("channel-00002")
+        assertThat(hidden.single().isHidden).isTrue()
+    }
+
+    @Test
+    fun managementProjectionKeepsProviderDefaultsSeparateFromUserOverrides() = runTest {
+        activateRevision(revisionNumber = 1L, channelCount = 1)
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = "channel-00001",
+                isFavorite = true,
+                customName = "Renamed channel",
+                channelNumber = 7,
+            ),
+        )
+
+        val item = repository.managementPages(managementQuery(ChannelManagementVisibility.ALL))
+            .asSnapshot()
+            .single()
+
+        assertThat(item.canonicalDisplayName).isEqualTo("Channel 00001")
+        assertThat(item.effectiveDisplayName).isEqualTo("Renamed channel")
+        assertThat(item.defaultChannelNumber).isEqualTo("1")
+        assertThat(item.customChannelNumber).isEqualTo(7)
+        assertThat(item.effectiveChannelNumber).isEqualTo("7")
+        assertThat(item.isFavorite).isTrue()
+        assertThat(item.isHidden).isFalse()
+        assertThat(item.variantCount).isEqualTo(1)
+    }
+
+    @Test
+    fun managementProjectionReadsOnlyActiveSourceRevision() = runTest {
+        activateRevision(revisionNumber = 1L, channelCount = 2)
+        activateRevision(revisionNumber = 2L, channelCount = 1)
+
+        val rows = repository.managementPages(managementQuery(ChannelManagementVisibility.ALL)).asSnapshot()
+
+        assertThat(rows.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(rows.single().variantCount).isEqualTo(1)
+    }
+
+    @Test
     fun activeRevisionInvalidatesExistingPagingSource() = runTest {
         activateRevision(revisionNumber = 1L, channelCount = 1)
         val source = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
@@ -130,6 +195,9 @@ class ChannelBrowseRepositoryTest {
     }
 
     private fun query(filter: ChannelBrowseFilter) = ChannelBrowseQuery(PROFILE_ID, filter)
+
+    private fun managementQuery(visibility: ChannelManagementVisibility) =
+        ChannelManagementQuery(PROFILE_ID, visibility)
 
     private fun refresh(
         key: Int? = null,
