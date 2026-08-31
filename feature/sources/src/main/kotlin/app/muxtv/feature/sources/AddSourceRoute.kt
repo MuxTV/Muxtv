@@ -67,6 +67,10 @@ fun AddSourceRoute(
     onboarding: SourceEntryOnboarding,
     onCompleted: () -> Unit,
     onBack: () -> Unit,
+    requestLocalNetworkPermission: suspend () -> LocalNetworkPermissionOutcome = {
+        LocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val session = remember(onboarding) { SourceEntrySession(onboarding) }
@@ -89,6 +93,7 @@ fun AddSourceRoute(
     val xtreamPasswordFocusRequester = remember { FocusRequester() }
     val revealSensitiveFocusRequester = remember { FocusRequester() }
     val checkFocusRequester = remember { FocusRequester() }
+    val localNetworkActionFocusRequester = remember { FocusRequester() }
     val httpCancelFocusRequester = remember { FocusRequester() }
     val confirmFocusRequester = remember { FocusRequester() }
     val editAgainFocusRequester = remember { FocusRequester() }
@@ -119,6 +124,29 @@ fun AddSourceRoute(
         }
     }
 
+    fun requestLocalNetworkAccess() {
+        scope.launch {
+            when (requestLocalNetworkPermission()) {
+                LocalNetworkPermissionOutcome.GRANTED ->
+                    session.resumeAfterLocalNetworkPermissionGranted()
+
+                LocalNetworkPermissionOutcome.DENIED ->
+                    session.recordLocalNetworkPermissionDenied(permanently = false)
+
+                LocalNetworkPermissionOutcome.PERMANENTLY_DENIED ->
+                    session.recordLocalNetworkPermissionDenied(permanently = true)
+            }
+        }
+    }
+
+    fun openLocalNetworkSettings() {
+        scope.launch {
+            if (openLocalNetworkPermissionSettings()) {
+                session.resumeAfterLocalNetworkPermissionGranted()
+            }
+        }
+    }
+
     BackHandler(onBack = ::cancelAndLeave)
 
     LaunchedEffect(session) {
@@ -137,6 +165,9 @@ fun AddSourceRoute(
         withFrameNanos { }
         when (current) {
             SourceEntryUiState.Editing -> sourceNameFocusRequester.requestFocus()
+            SourceEntryUiState.LocalNetworkPermissionRequired,
+            is SourceEntryUiState.LocalNetworkPermissionDenied,
+            -> localNetworkActionFocusRequester.requestFocus()
             SourceEntryUiState.HttpApprovalRequired -> httpCancelFocusRequester.requestFocus()
             is SourceEntryUiState.Confirming -> {
                 if (sourceName.isBlank()) {
@@ -156,8 +187,6 @@ fun AddSourceRoute(
 
             SourceEntryUiState.Restoring,
             SourceEntryUiState.Preparing,
-            SourceEntryUiState.LocalNetworkPermissionRequired,
-            is SourceEntryUiState.LocalNetworkPermissionDenied,
             SourceEntryUiState.Activating,
             SourceEntryUiState.Completed,
             -> Unit
@@ -319,10 +348,52 @@ fun AddSourceRoute(
 
                 SourceEntryUiState.Restoring -> StatusText("Восстановление незавершённого добавления…")
                 SourceEntryUiState.Preparing -> StatusText("Проверка источника…")
-                SourceEntryUiState.LocalNetworkPermissionRequired ->
+                SourceEntryUiState.LocalNetworkPermissionRequired -> {
                     StatusText("Для этого локального источника требуется доступ к локальной сети.")
-                is SourceEntryUiState.LocalNetworkPermissionDenied ->
-                    StatusText("Доступ к локальной сети не предоставлен.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = "Разрешить доступ",
+                            onClick = ::requestLocalNetworkAccess,
+                            modifier = Modifier
+                                .testTag(SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG)
+                                .focusRequester(localNetworkActionFocusRequester),
+                        )
+                        MuxTvActionButton(
+                            text = "Отмена",
+                            onClick = ::cancelAndLeave,
+                            modifier = Modifier.testTag(SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG),
+                        )
+                    }
+                }
+
+                is SourceEntryUiState.LocalNetworkPermissionDenied -> {
+                    StatusText(
+                        if (current.permanently) {
+                            "Доступ к локальной сети отключён для MuxTV. Разрешите его в настройках Android."
+                        } else {
+                            "Доступ к локальной сети не предоставлен."
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = if (current.permanently) "Открыть настройки" else "Повторить",
+                            onClick = if (current.permanently) {
+                                ::openLocalNetworkSettings
+                            } else {
+                                ::requestLocalNetworkAccess
+                            },
+                            modifier = Modifier
+                                .testTag(SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG)
+                                .focusRequester(localNetworkActionFocusRequester),
+                        )
+                        MuxTvActionButton(
+                            text = "Отмена",
+                            onClick = ::cancelAndLeave,
+                            modifier = Modifier.testTag(SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG),
+                        )
+                    }
+                }
+
                 SourceEntryUiState.Activating -> StatusText("Импорт и активация источника…")
                 SourceEntryUiState.Completed -> StatusText("Источник добавлен.")
 
@@ -574,6 +645,8 @@ private const val SOURCE_XTREAM_ENDPOINT_TEST_TAG = "source-xtream-endpoint"
 private const val SOURCE_XTREAM_USERNAME_TEST_TAG = "source-xtream-username"
 private const val SOURCE_XTREAM_PASSWORD_TEST_TAG = "source-xtream-password"
 private const val SOURCE_CHECK_TEST_TAG = "source-check"
+private const val SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG = "source-local-network-action"
+private const val SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG = "source-local-network-cancel"
 private const val SOURCE_HTTP_CANCEL_TEST_TAG = "source-http-cancel"
 private const val SOURCE_CONFIRM_TEST_TAG = "source-confirm"
 private const val SOURCE_EDIT_AGAIN_TEST_TAG = "source-edit-again"
