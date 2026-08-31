@@ -1,6 +1,7 @@
 package app.muxtv.database
 
 import app.muxtv.catalog.ChannelFavoriteMutationResult
+import app.muxtv.catalog.ChannelPreferenceMutationResult
 import app.muxtv.catalog.ChannelPreferencesRepository
 
 internal class RoomChannelPreferencesRepository(
@@ -15,4 +16,27 @@ internal class RoomChannelPreferencesRepository(
         FavoriteWriteResult.Unchanged -> ChannelFavoriteMutationResult.Unchanged
         FavoriteWriteResult.NotFound -> ChannelFavoriteMutationResult.NotFound
     }
+
+    override suspend fun setHidden(
+        profileId: String,
+        channelId: String,
+        isHidden: Boolean,
+    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+
+    override suspend fun setCustomName(
+        profileId: String,
+        channelId: String,
+        customName: String?,
+    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+
+    override suspend fun setChannelNumber(
+        profileId: String,
+        channelId: String,
+        channelNumber: Int?,
+    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+
+    override suspend fun resetCustomization(
+        profileId: String,
+        channelId: String,
+    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
 }
