@@ -48,7 +48,7 @@ class AppSourceOnboardingLocalNetworkPreflightTest {
 
     @Test
     fun `local xtream is blocked before credential preparation`() = runBlocking {
-        val credentials = RecordingCredentialStore()
+        val credentials = PreflightRecordingCredentialStore()
         val onboarding = AppSourceOnboarding(
             delegate = DurableRemoteSourceOnboarding(
                 delegate = RecordingRemoteSourceOnboarding(),
@@ -75,9 +75,7 @@ class AppSourceOnboardingLocalNetworkPreflightTest {
     @Test
     fun `allowed endpoint keeps existing onboarding path`() = runBlocking {
         val remote = RecordingRemoteSourceOnboarding(
-            preparationResult = RemoteSourcePreparationResult.UrlRejected(
-                IllegalArgumentException("fixture"),
-            ),
+            preparationResult = RemoteSourcePreparationResult.InvalidAccess,
         )
         val onboarding = AppSourceOnboarding(
             delegate = DurableRemoteSourceOnboarding(
@@ -99,7 +97,7 @@ class AppSourceOnboardingLocalNetworkPreflightTest {
 
 private class RecordingRemoteSourceOnboarding(
     private val preparationResult: RemoteSourcePreparationResult =
-        RemoteSourcePreparationResult.UrlRejected(IllegalArgumentException("fixture")),
+        RemoteSourcePreparationResult.InvalidAccess,
 ) : RemoteSourceOnboarding {
     var prepareCalls: Int = 0
 
@@ -117,7 +115,7 @@ private class RecordingRemoteSourceOnboarding(
         error("Cancellation is outside this test.")
 }
 
-private class RecordingCredentialStore : CredentialStore {
+private class PreflightRecordingCredentialStore : CredentialStore {
     var putCalls: Int = 0
 
     override suspend fun put(
