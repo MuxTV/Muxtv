@@ -26,6 +26,7 @@ class ManageChannelsPresentationTest {
         assertThat(row.originalDisplayName).isEqualTo("Discovery Channel HD")
         assertThat(row.channelNumber).isEqualTo("7")
         assertThat(row.defaultChannelNumber).isEqualTo("501")
+        assertThat(row.customChannelNumber).isEqualTo(7)
         assertThat(row.hasCustomName).isTrue()
         assertThat(row.hasCustomNumber).isTrue()
         assertThat(row.isFavorite).isTrue()
@@ -50,6 +51,7 @@ class ManageChannelsPresentationTest {
         )
 
         assertThat(row.originalDisplayName).isNull()
+        assertThat(row.customChannelNumber).isNull()
         assertThat(row.hasCustomName).isFalse()
         assertThat(row.hasCustomNumber).isFalse()
     }
