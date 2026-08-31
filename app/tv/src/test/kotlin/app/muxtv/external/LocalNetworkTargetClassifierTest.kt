@@ -34,6 +34,22 @@ class LocalNetworkTargetClassifierTest {
     }
 
     @Test
+    fun `android local network multicast and broadcast are local`() {
+        for (host in listOf(
+            "224.0.0.1",
+            "239.255.255.250",
+            "255.255.255.255",
+        )) {
+            assertThat(LocalNetworkTargetClassifier.classify(host))
+                .isEqualTo(LocalNetworkClassification.LOCAL)
+        }
+        assertThat(LocalNetworkTargetClassifier.classify("223.255.255.255"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+        assertThat(LocalNetworkTargetClassifier.classify("240.0.0.0"))
+            .isEqualTo(LocalNetworkClassification.REMOTE)
+    }
+
+    @Test
     fun `link local ipv4 and ipv6 literals are local`() {
         assertThat(LocalNetworkTargetClassifier.classify("169.254.10.5"))
             .isEqualTo(LocalNetworkClassification.LOCAL)
