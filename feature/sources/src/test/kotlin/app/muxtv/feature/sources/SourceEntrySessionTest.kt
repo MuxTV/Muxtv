@@ -127,6 +127,14 @@ class SourceEntrySessionTest {
     }
 
     @Test
+    fun `local network permission is a dedicated state separate from HTTP approval`() {
+        val stateNames = SourceEntryUiState::class.java.declaredClasses.map { it.simpleName }
+
+        assertThat(stateNames).contains("LocalNetworkPermissionRequired")
+        assertThat(stateNames).contains("LocalNetworkPermissionDenied")
+    }
+
+    @Test
     fun restoreRecoversPreparedEndpointWithoutRouteArguments() = runTest {
         val onboarding = FakeSourceEntryOnboarding(
             restored = SourcePreparationResult.Prepared(
