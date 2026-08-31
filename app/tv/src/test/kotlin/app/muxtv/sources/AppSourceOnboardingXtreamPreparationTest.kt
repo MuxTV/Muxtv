@@ -98,6 +98,7 @@ class AppSourceOnboardingXtreamPreparationTest {
                 password = "secret",
             ),
         ) as SourcePreparationResult.Prepared
+        val expectedAccessReference = pendingStore.upserted.single().preparationId
 
         val result = onboarding.activate(prepared.handle, "My IPTV")
 
@@ -105,8 +106,8 @@ class AppSourceOnboardingXtreamPreparationTest {
         assertThat(activationRequests).hasSize(1)
         val activationRequest = activationRequests.single()
         assertThat(activationRequest.sourceName).isEqualTo("My IPTV")
-        assertThat(activationRequest.accessReference.value)
-            .isEqualTo(pendingStore.upserted.single().preparationId)
+        assertThat(activationRequest.accessReference.value).isEqualTo(expectedAccessReference)
+        assertThat(pendingStore.upserted).isEmpty()
         assertThat(activationRequest.toString()).doesNotContain("alice")
         assertThat(activationRequest.toString()).doesNotContain("secret")
     }
