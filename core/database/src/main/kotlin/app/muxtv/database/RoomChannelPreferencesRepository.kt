@@ -21,22 +21,29 @@ internal class RoomChannelPreferencesRepository(
         profileId: String,
         channelId: String,
         isHidden: Boolean,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+    ): ChannelPreferenceMutationResult = dao.setHidden(profileId, channelId, isHidden).toApiResult()
 
     override suspend fun setCustomName(
         profileId: String,
         channelId: String,
         customName: String?,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+    ): ChannelPreferenceMutationResult = dao.setCustomName(profileId, channelId, customName).toApiResult()
 
     override suspend fun setChannelNumber(
         profileId: String,
         channelId: String,
         channelNumber: Int?,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+    ): ChannelPreferenceMutationResult = dao.setChannelNumber(profileId, channelId, channelNumber).toApiResult()
 
     override suspend fun resetCustomization(
         profileId: String,
         channelId: String,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.InvalidInput
+    ): ChannelPreferenceMutationResult = dao.resetCustomization(profileId, channelId).toApiResult()
+}
+
+private fun PreferenceWriteResult.toApiResult(): ChannelPreferenceMutationResult = when (this) {
+    PreferenceWriteResult.Applied -> ChannelPreferenceMutationResult.Applied
+    PreferenceWriteResult.Unchanged -> ChannelPreferenceMutationResult.Unchanged
+    PreferenceWriteResult.NotFound -> ChannelPreferenceMutationResult.NotFound
+    PreferenceWriteResult.InvalidInput -> ChannelPreferenceMutationResult.InvalidInput
 }
