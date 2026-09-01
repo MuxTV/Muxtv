@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(project(":core:database"))
+    testImplementation(project(":player:api"))
     testImplementation(libs.junit)
     testImplementation(libs.truth)
     testImplementation(libs.coroutines.test)
