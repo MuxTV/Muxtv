@@ -21,6 +21,7 @@ import app.muxtv.catalog.ingest.StreamingXtreamParser
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
+import app.muxtv.catalog.refresh.M3uCatchupPlaybackReferenceResolver
 import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
@@ -96,7 +97,9 @@ object AppModule {
     @Singleton
     fun providePlaybackReferenceResolver(
         accessManager: XtreamSourceAccessManager,
-    ): PlaybackReferenceResolver = XtreamPlaybackReferenceResolver(accessManager)
+    ): PlaybackReferenceResolver = M3uCatchupPlaybackReferenceResolver(
+        fallback = XtreamPlaybackReferenceResolver(accessManager),
+    )
 
     @Provides
     @Singleton
