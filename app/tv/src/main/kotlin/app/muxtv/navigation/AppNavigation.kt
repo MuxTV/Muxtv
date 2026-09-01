@@ -44,6 +44,7 @@ import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
+import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
@@ -68,6 +69,10 @@ fun AppNavigation(
     playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
     doctorExportStatus: DoctorExportStatus = DoctorExportStatus.IDLE,
     onExportDoctorReport: (String) -> Unit = {},
+    requestLocalNetworkPermission: suspend () -> LocalNetworkPermissionOutcome = {
+        LocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -189,6 +194,8 @@ fun AppNavigation(
                             onboarding = sourceOnboarding,
                             onCompleted = ::goBack,
                             onBack = ::goBack,
+                            requestLocalNetworkPermission = requestLocalNetworkPermission,
+                            openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
                         )
 
                         is AppDestination.Player -> PlayerFavoriteRoute(

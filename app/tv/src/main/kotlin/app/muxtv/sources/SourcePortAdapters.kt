@@ -82,26 +82,42 @@ class AppSourceOnboarding(
     private val delegate: DurableRemoteSourceOnboarding,
     private val xtreamPreparer: XtreamSourcePreparer? = null,
     private val xtreamLifecycle: XtreamSourceLifecycle? = null,
+    private val localNetworkAccessRequired: (String) -> Boolean = { false },
 ) : SourceOnboarding {
     override suspend fun prepare(
         locator: String,
         insecureHttpApproved: Boolean,
-    ): SourcePreparationResult = delegate.prepare(
-        RemoteSourceOnboardingInput(
-            locator = locator,
-            insecureHttpApproved = insecureHttpApproved,
-        ),
-    ).toApi()
+    ): SourcePreparationResult {
+        if (localNetworkAccessRequired(locator)) {
+            return SourcePreparationResult.LocalNetworkAccessRequired
+        }
+        return delegate.prepare(
+            RemoteSourceOnboardingInput(
+                locator = locator,
+                insecureHttpApproved = insecureHttpApproved,
+            ),
+        ).toApi()
+    }
 
-    override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult =
-        when (request) {
-            is SourcePreparationRequest.M3u -> prepare(
-                locator = request.locator,
-                insecureHttpApproved = request.insecureHttpApproved,
-            )
+    override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult {
+        val locator = when (request) {
+            is SourcePreparationRequest.M3u -> request.locator
+            is SourcePreparationRequest.Xtream -> request.endpoint
+        }
+        if (localNetworkAccessRequired(locator)) {
+            return SourcePreparationResult.LocalNetworkAccessRequired
+        }
+        return when (request) {
+            is SourcePreparationRequest.M3u -> delegate.prepare(
+                RemoteSourceOnboardingInput(
+                    locator = request.locator,
+                    insecureHttpApproved = request.insecureHttpApproved,
+                ),
+            ).toApi()
 
             is SourcePreparationRequest.Xtream -> prepareXtream(request)
         }
+    }
 
     override suspend fun activate(
         handle: SourcePreparationHandle,

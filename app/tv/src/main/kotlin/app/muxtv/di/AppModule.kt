@@ -1,6 +1,9 @@
 package app.muxtv.di
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.EpgGuideRepository
@@ -43,6 +46,8 @@ import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.external.ExternalPlaybackOriginGrantStore
+import app.muxtv.external.LocalNetworkPermissionGate
+import app.muxtv.external.LocalNetworkSourcePreflight
 import app.muxtv.external.SharedPreferencesExternalPlaybackOriginGrantStore
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
@@ -273,14 +278,26 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSourceOnboarding(
+        @ApplicationContext context: Context,
         durable: DurableRemoteSourceOnboarding,
         xtreamPreparer: XtreamSourcePreparer,
         xtreamLifecycle: XtreamSourceLifecycle,
-    ): SourceOnboarding = AppSourceOnboarding(
-        delegate = durable,
-        xtreamPreparer = xtreamPreparer,
-        xtreamLifecycle = xtreamLifecycle,
-    )
+    ): SourceOnboarding {
+        val localNetworkPreflight = LocalNetworkSourcePreflight(
+            apiLevel = Build.VERSION.SDK_INT,
+            permissionGranted = {
+                Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
+                    context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                    PackageManager.PERMISSION_GRANTED
+            },
+        )
+        return AppSourceOnboarding(
+            delegate = durable,
+            xtreamPreparer = xtreamPreparer,
+            xtreamLifecycle = xtreamLifecycle,
+            localNetworkAccessRequired = localNetworkPreflight::accessRequired,
+        )
+    }
 
     @Provides
     @Singleton
