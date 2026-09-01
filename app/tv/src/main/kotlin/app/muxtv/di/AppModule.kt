@@ -100,6 +100,19 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideLocalNetworkSourcePreflight(
+        @ApplicationContext context: Context,
+    ): LocalNetworkSourcePreflight = LocalNetworkSourcePreflight(
+        apiLevel = Build.VERSION.SDK_INT,
+        permissionGranted = {
+            Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
+                context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                PackageManager.PERMISSION_GRANTED
+        },
+    )
+
+    @Provides
+    @Singleton
     fun provideDatabaseComponents(
         @ApplicationContext context: Context,
         playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
@@ -205,10 +218,12 @@ object AppModule {
         accessManager: RemoteSourceAccessManager,
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
+        localNetworkPreflight: LocalNetworkSourcePreflight,
     ): RemoteSourceRefresher = RemoteSourceRefresher(
         accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
     )
 
     @Provides
@@ -217,11 +232,13 @@ object AppModule {
         accessManager: XtreamSourceAccessManager,
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
+        localNetworkPreflight: LocalNetworkSourcePreflight,
     ): XtreamLiveRefresher = XtreamLiveRefresher(
         accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
         parser = StreamingXtreamParser(),
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
     )
 
     @Provides
@@ -278,26 +295,16 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSourceOnboarding(
-        @ApplicationContext context: Context,
         durable: DurableRemoteSourceOnboarding,
         xtreamPreparer: XtreamSourcePreparer,
         xtreamLifecycle: XtreamSourceLifecycle,
-    ): SourceOnboarding {
-        val localNetworkPreflight = LocalNetworkSourcePreflight(
-            apiLevel = Build.VERSION.SDK_INT,
-            permissionGranted = {
-                Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
-                    context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
-                    PackageManager.PERMISSION_GRANTED
-            },
-        )
-        return AppSourceOnboarding(
-            delegate = durable,
-            xtreamPreparer = xtreamPreparer,
-            xtreamLifecycle = xtreamLifecycle,
-            localNetworkAccessRequired = localNetworkPreflight::accessRequired,
-        )
-    }
+        localNetworkPreflight: LocalNetworkSourcePreflight,
+    ): SourceOnboarding = AppSourceOnboarding(
+        delegate = durable,
+        xtreamPreparer = xtreamPreparer,
+        xtreamLifecycle = xtreamLifecycle,
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
+    )
 
     @Provides
     @Singleton

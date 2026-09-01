@@ -77,6 +77,9 @@ enum class SourceActivationFailure {
 sealed interface SourceActivationResult {
     data object Activated : SourceActivationResult
 
+    /** Prepared access remains valid; activation may be replayed after app-owned LAN grant. */
+    data object LocalNetworkAccessRequired : SourceActivationResult
+
     data class Failed(
         val reason: SourceActivationFailure,
         val cleanupPending: Boolean,
