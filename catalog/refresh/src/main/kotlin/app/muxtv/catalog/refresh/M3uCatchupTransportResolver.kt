@@ -48,6 +48,8 @@ internal class M3uCatchupTransportResolver(
         if (liveLocator.isBlank() || sourceTemplate == null) {
             return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
         }
+        val granularityMillis = timeline.granularityMillis
+            ?: return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
 
         val correctedPositionMillis = runCatching {
             Math.subtractExact(
@@ -56,9 +58,9 @@ internal class M3uCatchupTransportResolver(
             )
         }.getOrNull() ?: return unavailable(M3uCatchupUnavailableReason.OUTSIDE_RETENTION)
 
-        val utcSeconds = Math.floorDiv(correctedPositionMillis, timeline.granularityMillis)
+        val utcSeconds = Math.floorDiv(correctedPositionMillis, granularityMillis)
         val materializedPositionMillis = runCatching {
-            Math.multiplyExact(utcSeconds, timeline.granularityMillis)
+            Math.multiplyExact(utcSeconds, granularityMillis)
         }.getOrNull() ?: return unavailable(M3uCatchupUnavailableReason.OUTSIDE_RETENTION)
 
         if (
