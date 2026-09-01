@@ -1,5 +1,26 @@
 package app.muxtv.catalog
 
+import app.muxtv.player.PlaybackIntent
+import app.muxtv.player.ResolvedPlaybackTimeline
+
+/** Minimum persisted archive metadata carried to the provider/catalog resolution boundary. */
+data class PlaybackCatchupMetadata(
+    val mode: String?,
+    val sourceTemplate: String?,
+    val retentionDays: Int?,
+    val correction: String?,
+) {
+    override fun toString(): String =
+        "PlaybackCatchupMetadata(modePresent=${mode != null}, sourceTemplate=<redacted>, " +
+            "retentionDays=$retentionDays, correctionPresent=${correction != null})"
+}
+
+enum class PlaybackCatchupUnavailableReason {
+    OUTSIDE_RETENTION,
+    UNSUPPORTED,
+    INVALID_METADATA,
+}
+
 /**
  * Provider-neutral request for resolving a persisted playback identity into an ephemeral transport locator.
  * Controlled reference values are deliberately excluded from diagnostics.
@@ -7,9 +28,13 @@ package app.muxtv.catalog
 data class PlaybackReferenceRequest(
     val credentialRef: String,
     val playbackReference: String,
+    val intent: PlaybackIntent? = null,
+    val catchupMetadata: PlaybackCatchupMetadata? = null,
 ) {
     override fun toString(): String =
-        "PlaybackReferenceRequest(credentialRefPresent=${credentialRef.isNotEmpty()}, playbackReference=<redacted>)"
+        "PlaybackReferenceRequest(credentialRefPresent=${credentialRef.isNotEmpty()}, " +
+            "playbackReference=<redacted>, intentPresent=${intent != null}, " +
+            "catchupMetadataPresent=${catchupMetadata != null})"
 }
 
 /**
@@ -31,6 +56,11 @@ sealed interface PlaybackReferenceResolution {
     /** Secure credential storage is temporarily unavailable. */
     data object CredentialUnavailable : PlaybackReferenceResolution
 
+    /** Provider-specific catch-up semantics could not produce a usable archive transport. */
+    data class CatchupUnavailable(
+        val reason: PlaybackCatchupUnavailableReason,
+    ) : PlaybackReferenceResolution
+
     /** Cleartext provider access exists but has not been explicitly approved. */
     class ApprovalRequired(
         val displayOrigin: String,
@@ -44,8 +74,8 @@ sealed interface PlaybackReferenceResolution {
     }
 
     /**
-     * Ephemeral transport output. The locator can contain credentials and therefore must never be logged,
-     * persisted, used as identity, or included in [toString].
+     * Ephemeral provider-owned transport output. The locator can contain credentials and therefore
+     * must never be logged, persisted, used as identity, or included in [toString].
      */
     class Ready(
         val locator: String,
@@ -53,6 +83,18 @@ sealed interface PlaybackReferenceResolution {
     ) : PlaybackReferenceResolution {
         override fun toString(): String =
             "PlaybackReferenceResolution.Ready(locator=<redacted>, insecureHttpPreapproved=$insecureHttpPreapproved)"
+    }
+
+    /**
+     * Archive transport materialized from an existing direct source. Unlike [Ready], this locator
+     * remains subject to the credential-bound direct-source access policy before playback.
+     */
+    data class MaterializedDirect(
+        val locator: String,
+        val timeline: ResolvedPlaybackTimeline,
+    ) : PlaybackReferenceResolution {
+        override fun toString(): String =
+            "PlaybackReferenceResolution.MaterializedDirect(locator=<redacted>, timeline=$timeline)"
     }
 }
 
