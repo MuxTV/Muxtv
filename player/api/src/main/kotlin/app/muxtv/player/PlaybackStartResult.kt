@@ -16,6 +16,17 @@ sealed interface PlaybackStartResult {
             "InsecureHttpApprovalRequired(displayOrigin=<redacted>, variantId=<redacted>)"
     }
 
+    data class LocalNetworkPermissionRequired(
+        val variantId: String,
+    ) : PlaybackStartResult {
+        init {
+            require(variantId.isNotBlank())
+        }
+
+        override fun toString(): String =
+            "LocalNetworkPermissionRequired(variantId=<redacted>)"
+    }
+
     data class Rejected(
         val reason: PlaybackStartFailure,
         val observationAvailable: Boolean = false,

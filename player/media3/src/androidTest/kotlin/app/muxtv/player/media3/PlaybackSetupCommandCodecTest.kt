@@ -172,6 +172,9 @@ class PlaybackSetupCommandCodecTest {
                 displayOrigin = "http://cdn.example:8080",
                 variantId = "variant-http",
             ),
+            PlaybackStartResult.LocalNetworkPermissionRequired(
+                variantId = "variant-local",
+            ),
             PlaybackStartResult.Rejected(
                 reason = PlaybackStartFailure.RecoveryExhausted,
                 observationAvailable = true,
@@ -186,6 +189,20 @@ class PlaybackSetupCommandCodecTest {
             assertThat(encoded.extras.keySet()).doesNotContain("headers")
             assertThat(encoded.extras.keySet()).doesNotContain("credentials")
         }
+    }
+
+    @Test
+    fun localNetworkPermissionPayloadWithSecretBearingExtraFailsClosed() {
+        val malformed = androidx.media3.session.SessionResult(
+            androidx.media3.session.SessionResult.RESULT_SUCCESS,
+            Bundle().apply {
+                putString("result_kind", "local_network_permission_required")
+                putString("variant_id", "variant-local")
+                putString("locator", "http://192.168.1.20/live.m3u8?token=codec-secret")
+            },
+        )
+
+        assertThat(MuxTvPlaybackSessionContract.parseResult(malformed)).isNull()
     }
 
     @Test

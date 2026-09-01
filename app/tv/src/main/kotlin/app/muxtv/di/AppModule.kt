@@ -56,6 +56,7 @@ import app.muxtv.player.InMemoryExternalPlaybackLeaseRegistry
 import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.Media3PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
+import app.muxtv.player.media3.PlaybackLocalNetworkAccessGate
 import app.muxtv.sources.AppSourceManagement
 import app.muxtv.sources.AppSourceOnboarding
 import dagger.Module
@@ -277,27 +278,38 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSourceOnboarding(
+    fun provideLocalNetworkSourcePreflight(
         @ApplicationContext context: Context,
+    ): LocalNetworkSourcePreflight = LocalNetworkSourcePreflight(
+        apiLevel = Build.VERSION.SDK_INT,
+        permissionGranted = {
+            Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
+                context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                PackageManager.PERMISSION_GRANTED
+        },
+    )
+
+    @Provides
+    @Singleton
+    fun providePlaybackLocalNetworkAccessGate(
+        localNetworkPreflight: LocalNetworkSourcePreflight,
+    ): PlaybackLocalNetworkAccessGate = PlaybackLocalNetworkAccessGate(
+        localNetworkPreflight::accessRequired,
+    )
+
+    @Provides
+    @Singleton
+    fun provideSourceOnboarding(
         durable: DurableRemoteSourceOnboarding,
         xtreamPreparer: XtreamSourcePreparer,
         xtreamLifecycle: XtreamSourceLifecycle,
-    ): SourceOnboarding {
-        val localNetworkPreflight = LocalNetworkSourcePreflight(
-            apiLevel = Build.VERSION.SDK_INT,
-            permissionGranted = {
-                Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
-                    context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
-                    PackageManager.PERMISSION_GRANTED
-            },
-        )
-        return AppSourceOnboarding(
-            delegate = durable,
-            xtreamPreparer = xtreamPreparer,
-            xtreamLifecycle = xtreamLifecycle,
-            localNetworkAccessRequired = localNetworkPreflight::accessRequired,
-        )
-    }
+        localNetworkPreflight: LocalNetworkSourcePreflight,
+    ): SourceOnboarding = AppSourceOnboarding(
+        delegate = durable,
+        xtreamPreparer = xtreamPreparer,
+        xtreamLifecycle = xtreamLifecycle,
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
+    )
 
     @Provides
     @Singleton

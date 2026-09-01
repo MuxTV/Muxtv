@@ -14,6 +14,7 @@ import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.player.PlaybackSurfaceRenderer
 import app.muxtv.feature.player.PlayerFavoriteAction
+import app.muxtv.feature.player.PlayerLocalNetworkPermissionOutcome
 import app.muxtv.feature.player.PlayerRoute
 import app.muxtv.player.PlaybackSessionGateway
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,10 @@ internal fun PlayerFavoriteRoute(
     onBack: () -> Unit,
     onOpenDoctor: () -> Unit,
     playbackStartGateway: PlaybackStartGateway? = null,
+    requestLocalNetworkPermission: suspend () -> PlayerLocalNetworkPermissionOutcome = {
+        PlayerLocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -104,6 +109,8 @@ internal fun PlayerFavoriteRoute(
                 failureLabel = if (mutationFailed) "Не удалось изменить избранное" else null,
             )
         },
+        requestLocalNetworkPermission = requestLocalNetworkPermission,
+        openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
         modifier = modifier,
     )
 }
