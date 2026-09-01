@@ -33,7 +33,9 @@ $homeProbe = Get-RepositoryFileContent "app\tv\src\androidTest\kotlin\app\muxtv\
 
 foreach ($token in @(
     'tools/ci/Run-HostedTvU1ShellTests.sh',
-    'script: bash ./tools/ci/Run-HostedAndroidProductTests.sh && bash ./tools/ci/Run-HostedTvU1ShellTests.sh',
+    'uses: ./.github/actions/run-hosted-android-tv',
+    'entrypoint: Run-HostedAndroidProductTests.sh',
+    'post-entrypoint: Run-HostedTvU1ShellTests.sh',
     'avd-name: MuxTV_TV_CURRENT_API36',
     'api-level: 36'
 )) {

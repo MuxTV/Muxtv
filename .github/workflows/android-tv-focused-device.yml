@@ -19,10 +19,13 @@ on:
       - core/designsystem/**
       - core/ui/**
       - tools/ci/Assert-AndroidTestResults.ps1
+      - tools/ci/Run-HostedAndroidAttempt.sh
       - tools/ci/Run-HostedAndroidProductTests.sh
       - tools/ci/Run-HostedTvU1ShellTests.sh
       - tools/ci/Test-TvU1FocusedProfileContract.ps1
+      - tools/ci/Test-HostedAndroidEmulatorBootstrapRetryContract.ps1
       - tools/ci/Enable-HostedAndroidKvm.sh
+      - '.github/actions/run-hosted-android-tv/**'
       - '.github/workflows/android-tv-focused-device.yml'
   workflow_dispatch:
 
@@ -70,26 +73,18 @@ jobs:
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
       - name: Run focused Android TV API36 connected tests
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        uses: ./.github/actions/run-hosted-android-tv
         env:
           MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
           MUXTV_DEVICE_EVIDENCE: .work/evidence/hosted-android/focused-api36
         with:
           api-level: 36
-          target: android-tv
           arch: x86_64
-          profile: tv_1080p
           avd-name: MuxTV_TV_CURRENT_API36
-          force-avd-creation: true
-          cores: 2
           ram-size: 2048M
-          heap-size: 256M
-          disk-size: 4G
-          enable-hw-keyboard: true
-          disable-animations: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh && bash ./tools/ci/Run-HostedTvU1ShellTests.sh
+          evidence-directory: .work/evidence/hosted-android/focused-api36
+          entrypoint: Run-HostedAndroidProductTests.sh
+          post-entrypoint: Run-HostedTvU1ShellTests.sh
 
       - name: Upload focused device evidence
         if: always()

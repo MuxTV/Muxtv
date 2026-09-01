@@ -1,0 +1,148 @@
+name: Run hosted Android TV emulator
+description: Run one hosted Android TV attempt and retry exactly once only when the MuxTV script never started.
+
+inputs:
+  api-level:
+    description: Android API level.
+    required: true
+  arch:
+    description: Android system-image architecture.
+    required: true
+  avd-name:
+    description: Canonical repository AVD identity.
+    required: true
+  ram-size:
+    description: Emulator RAM size.
+    required: true
+  evidence-directory:
+    description: Secret-free evidence directory used for bootstrap classification.
+    required: true
+  entrypoint:
+    description: Checked-in tools/ci shell entrypoint.
+    required: true
+  post-entrypoint:
+    description: Optional second checked-in tools/ci shell entrypoint.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare primary bootstrap marker
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$EVIDENCE_DIRECTORY"
+        rm -f "$EVIDENCE_DIRECTORY/mux-tv-script-started.marker"
+
+    - name: Run primary hosted Android TV attempt
+      id: primary
+      continue-on-error: true
+      uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+      with:
+        api-level: ${{ inputs.api-level }}
+        target: android-tv
+        arch: ${{ inputs.arch }}
+        profile: tv_1080p
+        avd-name: ${{ inputs.avd-name }}
+        force-avd-creation: true
+        cores: 2
+        ram-size: ${{ inputs.ram-size }}
+        heap-size: 256M
+        disk-size: 4G
+        enable-hw-keyboard: true
+        disable-animations: true
+        emulator-boot-timeout: 600
+        emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+        script: bash ./tools/ci/Run-HostedAndroidAttempt.sh '${{ inputs.evidence-directory }}' '${{ inputs.entrypoint }}' '${{ inputs.post-entrypoint }}'
+
+    - name: Classify primary failure boundary
+      id: classify
+      if: always()
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        PRIMARY_OUTCOME: ${{ steps.primary.outcome }}
+      run: |
+        set -euo pipefail
+        marker="$EVIDENCE_DIRECTORY/mux-tv-script-started.marker"
+        diagnostic="$EVIDENCE_DIRECTORY/emulator-bootstrap-retry.log"
+        retry_required=false
+        classification=primary_success
+        if [[ "$PRIMARY_OUTCOME" != "success" ]]; then
+          if [[ -f "$marker" ]]; then
+            classification=mux_script_failure
+          else
+            classification=pre_script_bootstrap_failure
+            retry_required=true
+          fi
+        fi
+        {
+          printf 'primary_outcome=%s\n' "$PRIMARY_OUTCOME"
+          printf 'classification=%s\n' "$classification"
+          printf 'retry_required=%s\n' "$retry_required"
+        } > "$diagnostic"
+        printf 'retry_required=%s\n' "$retry_required" >> "$GITHUB_OUTPUT"
+        printf 'classification=%s\n' "$classification" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare bounded bootstrap retry
+      if: steps.classify.outputs.retry_required == 'true'
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+      run: |
+        set -euo pipefail
+        rm -f "$EVIDENCE_DIRECTORY/mux-tv-script-started.marker"
+
+    - name: Run bounded hosted Android TV bootstrap retry
+      id: retry
+      if: steps.classify.outputs.retry_required == 'true'
+      continue-on-error: true
+      uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+      with:
+        api-level: ${{ inputs.api-level }}
+        target: android-tv
+        arch: ${{ inputs.arch }}
+        profile: tv_1080p
+        avd-name: ${{ inputs.avd-name }}
+        force-avd-creation: true
+        cores: 2
+        ram-size: ${{ inputs.ram-size }}
+        heap-size: 256M
+        disk-size: 4G
+        enable-hw-keyboard: true
+        disable-animations: true
+        emulator-boot-timeout: 600
+        emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+        script: bash ./tools/ci/Run-HostedAndroidAttempt.sh '${{ inputs.evidence-directory }}' '${{ inputs.entrypoint }}' '${{ inputs.post-entrypoint }}'
+
+    - name: Require primary or bounded bootstrap retry success
+      if: always()
+      shell: bash
+      env:
+        EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        PRIMARY_OUTCOME: ${{ steps.primary.outcome }}
+        RETRY_REQUIRED: ${{ steps.classify.outputs.retry_required }}
+        RETRY_OUTCOME: ${{ steps.retry.outcome }}
+      run: |
+        set -euo pipefail
+        diagnostic="$EVIDENCE_DIRECTORY/emulator-bootstrap-retry.log"
+        {
+          printf 'retry_outcome=%s\n' "$RETRY_OUTCOME"
+        } >> "$diagnostic"
+
+        if [[ "$PRIMARY_OUTCOME" == "success" ]]; then
+          exit 0
+        fi
+        if [[ "$RETRY_REQUIRED" != "true" ]]; then
+          echo "Hosted Android MuxTV script/test attempt failed; bootstrap retry is forbidden." >&2
+          exit 1
+        fi
+        if [[ "$RETRY_OUTCOME" == "success" ]]; then
+          echo "Hosted Android pre-script bootstrap failure recovered on the single bounded retry."
+          exit 0
+        fi
+        echo "Hosted Android bootstrap retry did not recover the lane." >&2
+        exit 1

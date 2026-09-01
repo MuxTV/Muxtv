@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/setup-muxtv-jdks/**'
+      - '.github/actions/run-hosted-android-tv/**'
       - 'feature/sources/**'
       - 'catalog/api/**'
       - 'feature/player/**'
@@ -14,12 +15,14 @@ on:
       - 'player/media3/**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
+      - 'tools/ci/Test-HostedAndroidEmulatorBootstrapRetryContract.ps1'
       - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
       - 'tools/ci/Test-SourcesStablePortContract.ps1'
       - 'tools/ci/Test-PlayerStablePortContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
+      - 'tools/ci/Run-HostedAndroidAttempt.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
       - 'tools/ci/Run-HostedTvU1ShellTests.sh'
       - 'tools/ci/Run-HostedDatabaseMigrationTests.sh'
@@ -55,6 +58,11 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-RiskBasedDeviceLaneContract.ps1
+
+      - name: Verify hosted emulator bootstrap retry contract
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File .\tools\ci\Test-HostedAndroidEmulatorBootstrapRetryContract.ps1
 
       - name: Verify U1 focused profile isolation contract
         shell: pwsh

@@ -75,26 +75,17 @@ jobs:
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
       - name: Run Macrobenchmark API36 dry run
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        uses: ./.github/actions/run-hosted-android-tv
         env:
           MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
           MUXTV_BENCHMARK_EVIDENCE: .work/evidence/benchmark-hosted-api36
         with:
           api-level: 36
-          target: android-tv
           arch: x86_64
-          profile: tv_1080p
           avd-name: MuxTV_TV_CURRENT_API36
-          force-avd-creation: true
-          cores: 2
           ram-size: 2048M
-          heap-size: 256M
-          disk-size: 4G
-          disable-animations: true
-          enable-hw-keyboard: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: bash ./tools/ci/Run-HostedMacrobenchmarkDryRun.sh
+          evidence-directory: .work/evidence/benchmark-hosted-api36
+          entrypoint: Run-HostedMacrobenchmarkDryRun.sh
 
       - name: Upload Macrobenchmark dry-run evidence
         if: always()

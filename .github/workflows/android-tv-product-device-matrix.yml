@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - '.github/actions/run-hosted-android-tv/**'
       - '.github/workflows/android-tv-product-device-matrix.yml'
       - 'feature/sources/**'
       - 'catalog/api/src/main/kotlin/app/muxtv/catalog/SourceManagement.kt'
@@ -15,7 +16,9 @@ on:
       - 'tools/android/**'
       - 'tools/measurements/**'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
+      - 'tools/ci/Test-HostedAndroidEmulatorBootstrapRetryContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
+      - 'tools/ci/Run-HostedAndroidAttempt.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - 'gradle/**'
@@ -80,26 +83,17 @@ jobs:
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
       - name: Run Android TV API${{ matrix.api }} connected tests
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        uses: ./.github/actions/run-hosted-android-tv
         env:
           MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
           MUXTV_DEVICE_EVIDENCE: .work/evidence/hosted-android/api-${{ matrix.api }}
         with:
           api-level: ${{ matrix.api }}
-          target: android-tv
           arch: ${{ matrix.arch }}
-          profile: tv_1080p
           avd-name: ${{ matrix.avd }}
-          force-avd-creation: true
-          cores: 2
           ram-size: ${{ matrix.ram }}
-          heap-size: 256M
-          disk-size: 4G
-          enable-hw-keyboard: true
-          disable-animations: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: bash ./tools/ci/Run-HostedAndroidProductTests.sh
+          evidence-directory: .work/evidence/hosted-android/api-${{ matrix.api }}
+          entrypoint: Run-HostedAndroidProductTests.sh
 
       - name: Upload API${{ matrix.api }} product evidence
         if: always()

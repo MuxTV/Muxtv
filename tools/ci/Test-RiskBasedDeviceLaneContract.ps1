@@ -36,13 +36,19 @@ function Assert-HostedEmulatorEntrypoint {
     param([Parameter(Mandatory)][string]$Content, [Parameter(Mandatory)][string]$WorkflowName, [Parameter(Mandatory)][string]$Entrypoint)
     foreach ($requiredToken in @(
         'run: bash ./tools/ci/Enable-HostedAndroidKvm.sh',
-        "script: bash ./tools/ci/$Entrypoint",
+        'uses: ./.github/actions/run-hosted-android-tv',
+        "entrypoint: $Entrypoint",
         'uses: ./.github/actions/setup-muxtv-jdks'
     )) {
         Assert-ContainsOrdinal -Content $Content -Token $requiredToken -Message "$WorkflowName is missing hosted Android entrypoint token: $requiredToken"
     }
-    foreach ($forbiddenToken in @('script: |', 'mapfile -t avds', '< <(avdmanager list avd -c')) {
-        Assert-NotContainsOrdinal -Content $Content -Token $forbiddenToken -Message "$WorkflowName embeds multi-process shell state in android-emulator-runner: $forbiddenToken"
+    foreach ($forbiddenToken in @(
+        'uses: ReactiveCircus/android-emulator-runner@',
+        'script: |',
+        'mapfile -t avds',
+        '< <(avdmanager list avd -c'
+    )) {
+        Assert-NotContainsOrdinal -Content $Content -Token $forbiddenToken -Message "$WorkflowName bypasses repository-owned hosted Android execution: $forbiddenToken"
     }
 }
 
@@ -96,7 +102,15 @@ foreach ($requiredBenchmarkToken in @(
     Assert-ContainsOrdinal -Content $benchmarkEntrypoint -Token $requiredBenchmarkToken -Message "Hosted benchmark entrypoint is missing token: $requiredBenchmarkToken"
 }
 
-foreach ($requiredFocusedToken in @('name: Android TV focused device', 'runs-on: ubuntu-latest', 'api-level: 36', 'target: android-tv', 'arch: x86_64', 'profile: tv_1080p', 'avd-name: MuxTV_TV_CURRENT_API36', 'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d', 'Assert-AndroidTestResults.ps1')) {
+foreach ($requiredFocusedToken in @(
+    'name: Android TV focused device',
+    'runs-on: ubuntu-latest',
+    'api-level: 36',
+    'arch: x86_64',
+    'avd-name: MuxTV_TV_CURRENT_API36',
+    'evidence-directory: .work/evidence/hosted-android/focused-api36',
+    'Assert-AndroidTestResults.ps1'
+)) {
     Assert-ContainsOrdinal -Content $focusedWorkflow -Token $requiredFocusedToken -Message "Focused Android TV workflow is missing hosted API36 contract token: $requiredFocusedToken"
 }
 Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $focusedWorkflow -WorkflowName 'Focused Android TV workflow'
@@ -107,7 +121,19 @@ foreach ($requiredMatrixRoutingToken in @('pull_request:', 'tools/android/**', '
 }
 $exactHeadExpression = "github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha"
 Assert-ContainsOrdinal -Content $standaloneMatrixWorkflow -Token $exactHeadExpression -Message "Android TV product matrix must checkout and attribute evidence to the exact PR head, not GITHUB_SHA merge-ref."
-foreach ($requiredHostedToken in @('runs-on: ubuntu-latest', 'fail-fast: false', 'api: 26', 'arch: x86', 'avd: MuxTV_TV_OLD_API26', 'api: 36', 'arch: x86_64', 'avd: MuxTV_TV_CURRENT_API36', 'target: android-tv', 'profile: tv_1080p', 'ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d', 'name: Android TV product device matrix', 'needs:', '- device')) {
+foreach ($requiredHostedToken in @(
+    'runs-on: ubuntu-latest',
+    'fail-fast: false',
+    'api: 26',
+    'arch: x86',
+    'avd: MuxTV_TV_OLD_API26',
+    'api: 36',
+    'arch: x86_64',
+    'avd: MuxTV_TV_CURRENT_API36',
+    'name: Android TV product device matrix',
+    'needs:',
+    '- device'
+)) {
     Assert-ContainsOrdinal -Content $standaloneMatrixWorkflow -Token $requiredHostedToken -Message "Android TV product matrix is missing hosted execution contract token: $requiredHostedToken"
 }
 Assert-HostedWorkflowNoLegacyRunnerOwnership -Content $standaloneMatrixWorkflow -WorkflowName 'Android TV product matrix'

@@ -11,8 +11,11 @@ on:
       - core/database/src/androidTest/kotlin/app/muxtv/database/**
       - core/database/schemas/**
       - tools/ci/Assert-AndroidTestResults.ps1
+      - tools/ci/Run-HostedAndroidAttempt.sh
       - tools/ci/Run-HostedDatabaseMigrationTests.sh
       - tools/ci/Enable-HostedAndroidKvm.sh
+      - tools/ci/Test-HostedAndroidEmulatorBootstrapRetryContract.ps1
+      - '.github/actions/run-hosted-android-tv/**'
       - '.github/workflows/database-migration-device-matrix.yml'
   workflow_dispatch:
 
@@ -60,26 +63,17 @@ jobs:
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
       - name: Run database migration API${{ matrix.api }} tests
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        uses: ./.github/actions/run-hosted-android-tv
         env:
           MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
           MUXTV_DEVICE_EVIDENCE: .work/evidence/database-migration/api-${{ matrix.api }}
         with:
           api-level: ${{ matrix.api }}
-          target: android-tv
           arch: ${{ matrix.arch }}
-          profile: tv_1080p
           avd-name: ${{ matrix.avd }}
-          force-avd-creation: true
-          cores: 2
           ram-size: ${{ matrix.ram }}
-          heap-size: 256M
-          disk-size: 4G
-          disable-animations: true
-          enable-hw-keyboard: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: bash ./tools/ci/Run-HostedDatabaseMigrationTests.sh
+          evidence-directory: .work/evidence/database-migration/api-${{ matrix.api }}
+          entrypoint: Run-HostedDatabaseMigrationTests.sh
 
       - name: Upload database migration evidence
         if: always()
