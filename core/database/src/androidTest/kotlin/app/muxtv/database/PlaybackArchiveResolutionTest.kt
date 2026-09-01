@@ -204,7 +204,7 @@ class PlaybackArchiveResolutionTest {
         val requests = mutableListOf<PlaybackArchiveRequest>()
         var nextResolution: PlaybackArchiveResolution = PlaybackArchiveResolution.NotApplicable
 
-        override suspend fun resolve(request: PlaybackArchiveRequest): PlaybackArchiveResolution {
+        override fun resolve(request: PlaybackArchiveRequest): PlaybackArchiveResolution {
             requests += request
             return nextResolution
         }
