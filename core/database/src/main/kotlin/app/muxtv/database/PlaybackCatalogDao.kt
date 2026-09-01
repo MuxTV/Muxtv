@@ -36,7 +36,20 @@ internal data class ActiveVariantAccessRow(
     val locator: String,
     val userAgent: String?,
     val referrer: String?,
-)
+    val catchupMode: String?,
+    val catchupSource: String?,
+    val catchupDays: Int?,
+    val catchupCorrection: String?,
+) {
+    override fun toString(): String =
+        "ActiveVariantAccessRow(channelId=<redacted>, variantId=<redacted>, " +
+            "credentialRefPresent=${credentialRef != null}, locator=<redacted>, " +
+            "hasUserAgent=${userAgent != null}, hasReferrer=${referrer != null}, " +
+            "catchupMetadataPresent=${
+                catchupMode != null || catchupSource != null ||
+                    catchupDays != null || catchupCorrection != null
+            })"
+}
 
 @Dao
 internal interface PlaybackCatalogDao {
@@ -180,7 +193,11 @@ internal interface PlaybackCatalogDao {
                sources.credentialRef AS credentialRef,
                stream_variants.locator AS locator,
                stream_variants.userAgent AS userAgent,
-               stream_variants.referrer AS referrer
+               stream_variants.referrer AS referrer,
+               provider_channels.catchupMode AS catchupMode,
+               provider_channels.catchupSource AS catchupSource,
+               provider_channels.catchupDays AS catchupDays,
+               provider_channels.catchupCorrection AS catchupCorrection
         FROM stream_variants
         INNER JOIN provider_channels
             ON provider_channels.id = stream_variants.providerChannelId
