@@ -7,12 +7,15 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlayableVariant
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackAccessUnavailableReason
 import app.muxtv.catalog.PlaybackCandidateIdentity
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackCatalog
+import app.muxtv.catalog.PlaybackCatchupMetadata
 import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.ResolvedPlaybackRequest
+import app.muxtv.player.PlaybackIntent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -54,18 +57,58 @@ internal class RoomPlaybackCatalog(
         channelId: String,
         preferredVariantId: String?,
     ): PlaybackVariantResolution? {
+        val candidate = selectCandidate(
+            profileId = profileId,
+            channelId = channelId,
+            preferredVariantId = preferredVariantId,
+        ) ?: return null
+        return resolveCandidate(profileId, candidate)
+    }
+
+    override suspend fun resolveIntent(
+        profileId: String,
+        intent: PlaybackIntent,
+        preferredVariantId: String?,
+    ): PlaybackVariantResolution? {
+        if (intent is PlaybackIntent.Live) {
+            return resolveVariant(
+                profileId = profileId,
+                channelId = intent.channelId,
+                preferredVariantId = preferredVariantId,
+            )
+        }
+        val candidate = selectCandidate(
+            profileId = profileId,
+            channelId = intent.channelId,
+            preferredVariantId = preferredVariantId,
+        ) ?: return null
+        val variant = dao.findActiveVariantAccess(
+            profileId = profileId,
+            channelId = candidate.channelId,
+            variantId = candidate.variantId,
+        ) ?: return null
+        return resolveAccess(
+            variant = variant,
+            intent = intent,
+        )
+    }
+
+    private suspend fun selectCandidate(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+    ): PlaybackCandidateIdentity? {
         val candidates = getCandidates(
             profileId = profileId,
             channelId = channelId,
             preferredVariantId = preferredVariantId,
             limit = 1,
         )
-        val candidate = if (preferredVariantId == null) {
+        return if (preferredVariantId == null) {
             candidates.firstOrNull()
         } else {
             candidates.firstOrNull { it.variantId == preferredVariantId }
-        } ?: return null
-        return resolveCandidate(profileId, candidate)
+        }
     }
 
     override suspend fun getCandidates(
@@ -102,17 +145,21 @@ internal class RoomPlaybackCatalog(
 
     private suspend fun resolveAccess(
         variant: ActiveVariantAccessRow,
+        intent: PlaybackIntent? = null,
     ): PlaybackVariantResolution = when (
         val access = accessCoordinator.resolve(
             credentialRef = variant.credentialRef.orEmpty(),
             playbackReference = variant.locator,
+            intent = intent,
+            catchupMetadata = if (intent == null) null else variant.toCatchupMetadataOrNull(),
         )
     ) {
         is CoordinatedPlaybackAccess.Ready -> PlaybackVariantResolution.Ready(
-            variant.toRequest(
+            request = variant.toRequest(
                 locator = access.locator,
                 insecureHttpApproved = access.insecureHttpApproved,
             ),
+            timeline = access.timeline,
         )
 
         is CoordinatedPlaybackAccess.ApprovalRequired ->
@@ -121,6 +168,9 @@ internal class RoomPlaybackCatalog(
                 variantId = variant.variantId,
                 displayOrigin = access.displayOrigin,
             )
+
+        is CoordinatedPlaybackAccess.CatchupUnavailable ->
+            PlaybackVariantResolution.AccessUnavailable(PlaybackAccessUnavailableReason.InvalidLocator)
 
         is CoordinatedPlaybackAccess.Unavailable ->
             PlaybackVariantResolution.AccessUnavailable(access.reason)
@@ -149,6 +199,23 @@ internal class RoomPlaybackCatalog(
             ?: return PlaybackAccessMutationResult.NotFound
         return accessPolicyResolver.revoke(credentialRef, variant.locator)
     }
+}
+
+private fun ActiveVariantAccessRow.toCatchupMetadataOrNull(): PlaybackCatchupMetadata? {
+    if (
+        catchupMode == null &&
+        catchupSource == null &&
+        catchupDays == null &&
+        catchupCorrection == null
+    ) {
+        return null
+    }
+    return PlaybackCatchupMetadata(
+        mode = catchupMode,
+        sourceTemplate = catchupSource,
+        retentionDays = catchupDays,
+        correction = catchupCorrection,
+    )
 }
 
 private fun ActiveVariantAccessRow.toRequest(
