@@ -41,15 +41,17 @@ class PlaybackCatchupMetadataProjectionTest {
         )
         stageRevision(
             revisionNumber = 1,
+            variantId = ACTIVE_VARIANT_ID,
             catchupSource = "?utc={utc}&token=$ACTIVE_SECRET",
             catchupDays = 7,
             catchupCorrection = "+2.0",
         )
         activateRevision(revisionNumber = 1)
 
-        // A newer staged revision must not leak into the active playback projection.
+        // A newer staged revision must remain unavailable until activation.
         stageRevision(
             revisionNumber = 2,
+            variantId = STAGED_VARIANT_ID,
             catchupSource = "?utc={utc}&token=$STAGED_SECRET",
             catchupDays = 2,
             catchupCorrection = "-1.0",
@@ -58,11 +60,17 @@ class PlaybackCatchupMetadataProjectionTest {
         val row = database.playbackCatalogDao().findActiveVariantAccess(
             profileId = PROFILE_ID,
             channelId = CHANNEL_ID,
-            variantId = VARIANT_ID,
+            variantId = ACTIVE_VARIANT_ID,
+        )
+        val stagedRow = database.playbackCatalogDao().findActiveVariantAccess(
+            profileId = PROFILE_ID,
+            channelId = CHANNEL_ID,
+            variantId = STAGED_VARIANT_ID,
         )
 
         assertThat(row).isNotNull()
         checkNotNull(row)
+        assertThat(stagedRow).isNull()
         assertThat(row.catchupMode).isEqualTo("append")
         assertThat(row.catchupSource).isEqualTo("?utc={utc}&token=$ACTIVE_SECRET")
         assertThat(row.catchupDays).isEqualTo(7)
@@ -85,6 +93,7 @@ class PlaybackCatchupMetadataProjectionTest {
 
     private suspend fun stageRevision(
         revisionNumber: Long,
+        variantId: String,
         catchupSource: String,
         catchupDays: Int,
         catchupCorrection: String,
@@ -104,7 +113,7 @@ class PlaybackCatchupMetadataProjectionTest {
                     rawName = "News",
                     canonicalChannelId = CHANNEL_ID,
                     canonicalDisplayName = "News",
-                    streamVariantId = VARIANT_ID,
+                    streamVariantId = variantId,
                     locator = "https://streams.invalid/live.m3u8?token=live-token",
                     catchupMode = "append",
                     catchupSource = catchupSource,
@@ -133,7 +142,8 @@ class PlaybackCatchupMetadataProjectionTest {
         const val PROFILE_ID = "profile-primary"
         const val SOURCE_ID = "source-m3u"
         const val CHANNEL_ID = "channel-news"
-        const val VARIANT_ID = "variant-news"
+        const val ACTIVE_VARIANT_ID = "variant-news-active"
+        const val STAGED_VARIANT_ID = "variant-news-staged"
         const val ACTIVE_SECRET = "TEST_CATCHUP_ACTIVE_SECRET"
         const val STAGED_SECRET = "TEST_CATCHUP_STAGED_SECRET"
     }
