@@ -8,6 +8,7 @@ import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackArchiveResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackReferenceResolver
@@ -21,6 +22,7 @@ import app.muxtv.catalog.ingest.StreamingXtreamParser
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
+import app.muxtv.catalog.refresh.M3uPlaybackArchiveResolver
 import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
@@ -100,6 +102,11 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePlaybackArchiveResolver(): PlaybackArchiveResolver =
+        M3uPlaybackArchiveResolver()
+
+    @Provides
+    @Singleton
     fun provideLocalNetworkSourcePreflight(
         @ApplicationContext context: Context,
     ): LocalNetworkSourcePreflight = LocalNetworkSourcePreflight(
@@ -117,10 +124,12 @@ object AppModule {
         @ApplicationContext context: Context,
         playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
         playbackReferenceResolver: PlaybackReferenceResolver,
+        playbackArchiveResolver: PlaybackArchiveResolver,
     ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(
         context = context,
         playbackAccessPolicyResolver = playbackAccessPolicyResolver,
         playbackReferenceResolver = playbackReferenceResolver,
+        playbackArchiveResolver = playbackArchiveResolver,
     )
 
     @Provides
