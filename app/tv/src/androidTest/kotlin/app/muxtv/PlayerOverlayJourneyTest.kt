@@ -125,13 +125,13 @@ class PlayerOverlayJourneyTest {
                 }
             }
 
+            val activity = composeRule.activity
             composeRule.runOnUiThread {
-                composeRule.activity.onBackPressedDispatcher.onBackPressed()
+                activity.onBackPressedDispatcher.onBackPressed()
             }
-            composeRule.waitForIdle()
 
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                composeRule.activity.isFinishing
+                activity.isFinishing || activity.isDestroyed
             }
         } finally {
             connector.close()
