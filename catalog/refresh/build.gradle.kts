@@ -13,12 +13,12 @@ dependencies {
     implementation(project(":catalog:ingest"))
     implementation(project(":core:credentials"))
     implementation(project(":core:network"))
+    implementation(project(":player:api"))
     implementation(libs.coroutines.core)
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
 
     testImplementation(project(":core:database"))
-    testImplementation(project(":player:api"))
     testImplementation(libs.junit)
     testImplementation(libs.truth)
     testImplementation(libs.coroutines.test)
