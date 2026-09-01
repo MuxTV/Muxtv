@@ -1,5 +1,7 @@
 package app.muxtv.catalog
 
+import app.muxtv.player.PlaybackIntent
+import app.muxtv.player.ResolvedPlaybackTimeline
 import kotlinx.coroutines.flow.Flow
 
 const val MAX_PLAYBACK_CANDIDATES: Int = 3
@@ -87,6 +89,7 @@ data class ResolvedPlaybackRequest(
     val locator: String,
     val requestHeaders: Map<String, String>,
     val insecureHttpApproved: Boolean,
+    val timeline: ResolvedPlaybackTimeline? = null,
 ) {
     init {
         require(channelId.isNotBlank())
@@ -98,7 +101,7 @@ data class ResolvedPlaybackRequest(
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
             "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()}, " +
-            "insecureHttpApproved=$insecureHttpApproved)"
+            "insecureHttpApproved=$insecureHttpApproved, hasTimeline=${timeline != null})"
 }
 
 enum class PlaybackAccessUnavailableReason {
@@ -106,6 +109,9 @@ enum class PlaybackAccessUnavailableReason {
     CredentialNotFound,
     CredentialCorrupted,
     CredentialUnavailable,
+    ArchiveOutsideRetention,
+    ArchiveUnsupported,
+    ArchiveInvalidMetadata,
 }
 
 sealed interface PlaybackVariantResolution {
@@ -174,6 +180,24 @@ interface PlaybackCatalog {
         channelId: String,
         preferredVariantId: String? = null,
     ): PlaybackVariantResolution?
+
+    suspend fun resolveIntent(
+        profileId: String,
+        intent: PlaybackIntent,
+        preferredVariantId: String? = null,
+    ): PlaybackVariantResolution? = when (intent) {
+        is PlaybackIntent.Live -> resolveVariant(
+            profileId = profileId,
+            channelId = intent.channelId,
+            preferredVariantId = preferredVariantId,
+        )
+
+        is PlaybackIntent.CatchupProgram,
+        is PlaybackIntent.CatchupPosition,
+        -> PlaybackVariantResolution.AccessUnavailable(
+            PlaybackAccessUnavailableReason.ArchiveUnsupported,
+        )
+    }
 
     suspend fun approveInsecurePlayback(
         profileId: String,

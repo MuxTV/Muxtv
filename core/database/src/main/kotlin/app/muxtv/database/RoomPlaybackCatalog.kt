@@ -7,12 +7,21 @@ import app.muxtv.catalog.PlayableChannelSummary
 import app.muxtv.catalog.PlayableVariant
 import app.muxtv.catalog.PlaybackAccessMutationResult
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackAccessUnavailableReason
+import app.muxtv.catalog.PlaybackArchiveMetadata
+import app.muxtv.catalog.PlaybackArchiveRequest
+import app.muxtv.catalog.PlaybackArchiveResolution
+import app.muxtv.catalog.PlaybackArchiveResolver
+import app.muxtv.catalog.PlaybackArchiveUnavailableReason
 import app.muxtv.catalog.PlaybackCandidateIdentity
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.catalog.PlaybackVariantResolution
 import app.muxtv.catalog.ResolvedPlaybackRequest
+import app.muxtv.catalog.UnhandledPlaybackArchiveResolver
+import app.muxtv.player.PlaybackIntent
+import app.muxtv.player.ResolvedPlaybackTimeline
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -20,6 +29,7 @@ internal class RoomPlaybackCatalog(
     private val dao: PlaybackCatalogDao,
     private val accessPolicyResolver: PlaybackAccessPolicyResolver,
     playbackReferenceResolver: PlaybackReferenceResolver,
+    private val playbackArchiveResolver: PlaybackArchiveResolver = UnhandledPlaybackArchiveResolver,
 ) : PlaybackCatalog, PlaybackCandidateResolver {
     private val accessCoordinator = PlaybackAccessCoordinator(
         referenceResolver = playbackReferenceResolver,
@@ -54,18 +64,85 @@ internal class RoomPlaybackCatalog(
         channelId: String,
         preferredVariantId: String?,
     ): PlaybackVariantResolution? {
+        val candidate = selectCandidate(
+            profileId = profileId,
+            channelId = channelId,
+            preferredVariantId = preferredVariantId,
+        ) ?: return null
+        return resolveCandidate(profileId, candidate)
+    }
+
+    override suspend fun resolveIntent(
+        profileId: String,
+        intent: PlaybackIntent,
+        preferredVariantId: String?,
+    ): PlaybackVariantResolution? {
+        if (intent is PlaybackIntent.Live) {
+            return resolveVariant(
+                profileId = profileId,
+                channelId = intent.channelId,
+                preferredVariantId = preferredVariantId,
+            )
+        }
+
+        val candidate = selectCandidate(
+            profileId = profileId,
+            channelId = intent.channelId,
+            preferredVariantId = preferredVariantId,
+        ) ?: return null
+        val variant = dao.findActiveVariantAccess(
+            profileId = profileId,
+            channelId = candidate.channelId,
+            variantId = candidate.variantId,
+        ) ?: return null
+
+        return when (
+            val archive = playbackArchiveResolver.resolve(
+                PlaybackArchiveRequest(
+                    intent = intent,
+                    livePlaybackReference = variant.locator,
+                    metadata = PlaybackArchiveMetadata(
+                        mode = variant.catchupMode,
+                        source = variant.catchupSource,
+                        days = variant.catchupDays,
+                        correction = variant.catchupCorrection,
+                    ),
+                ),
+            )
+        ) {
+            PlaybackArchiveResolution.NotApplicable ->
+                PlaybackVariantResolution.AccessUnavailable(
+                    PlaybackAccessUnavailableReason.ArchiveUnsupported,
+                )
+
+            is PlaybackArchiveResolution.Unavailable ->
+                PlaybackVariantResolution.AccessUnavailable(archive.reason.toAccessReason())
+
+            is PlaybackArchiveResolution.Ready ->
+                resolveAccess(
+                    variant = variant,
+                    playbackReference = archive.locator,
+                    timeline = archive.timeline,
+                )
+        }
+    }
+
+    private suspend fun selectCandidate(
+        profileId: String,
+        channelId: String,
+        preferredVariantId: String?,
+    ): PlaybackCandidateIdentity? {
         val candidates = getCandidates(
             profileId = profileId,
             channelId = channelId,
             preferredVariantId = preferredVariantId,
             limit = 1,
         )
-        val candidate = if (preferredVariantId == null) {
+        return if (preferredVariantId == null) {
             candidates.firstOrNull()
         } else {
             candidates.firstOrNull { it.variantId == preferredVariantId }
-        } ?: return null
-        return resolveCandidate(profileId, candidate)
+        }
     }
 
     override suspend fun getCandidates(
@@ -102,16 +179,19 @@ internal class RoomPlaybackCatalog(
 
     private suspend fun resolveAccess(
         variant: ActiveVariantAccessRow,
+        playbackReference: String = variant.locator,
+        timeline: ResolvedPlaybackTimeline? = null,
     ): PlaybackVariantResolution = when (
         val access = accessCoordinator.resolve(
             credentialRef = variant.credentialRef.orEmpty(),
-            playbackReference = variant.locator,
+            playbackReference = playbackReference,
         )
     ) {
         is CoordinatedPlaybackAccess.Ready -> PlaybackVariantResolution.Ready(
             variant.toRequest(
                 locator = access.locator,
                 insecureHttpApproved = access.insecureHttpApproved,
+                timeline = timeline,
             ),
         )
 
@@ -151,9 +231,20 @@ internal class RoomPlaybackCatalog(
     }
 }
 
+private fun PlaybackArchiveUnavailableReason.toAccessReason(): PlaybackAccessUnavailableReason =
+    when (this) {
+        PlaybackArchiveUnavailableReason.OutsideRetention ->
+            PlaybackAccessUnavailableReason.ArchiveOutsideRetention
+        PlaybackArchiveUnavailableReason.UnsupportedMode ->
+            PlaybackAccessUnavailableReason.ArchiveUnsupported
+        PlaybackArchiveUnavailableReason.InvalidMetadata ->
+            PlaybackAccessUnavailableReason.ArchiveInvalidMetadata
+    }
+
 private fun ActiveVariantAccessRow.toRequest(
     locator: String,
     insecureHttpApproved: Boolean,
+    timeline: ResolvedPlaybackTimeline? = null,
 ): ResolvedPlaybackRequest = ResolvedPlaybackRequest(
     channelId = channelId,
     variantId = variantId,
@@ -163,6 +254,7 @@ private fun ActiveVariantAccessRow.toRequest(
         referrer?.takeIf(String::isNotBlank)?.let { put("Referer", it) }
     },
     insecureHttpApproved = insecureHttpApproved,
+    timeline = timeline,
 )
 
 private fun ActiveChannelSummaryRow.toModel(): PlayableChannelSummary = PlayableChannelSummary(
