@@ -40,6 +40,27 @@ class M3uCatchupResolverContractTest {
     }
 
     @Test
+    fun correctionOutsideDocumentedRangeReturnsInvalidMetadata() {
+        val nowEpochMillis = 1_800_000_000_000L
+        val intent = PlaybackIntent.CatchupPosition(
+            channelId = "channel-catchup",
+            positionEpochMillis = nowEpochMillis - HOUR_MILLIS,
+        )
+        val resolver = M3uCatchupResolver(nowEpochMillis = { nowEpochMillis })
+
+        listOf("-12.1", "+14.1").forEach { correction ->
+            val result = resolver.resolve(
+                intent = intent,
+                metadata = supportedMetadata(correction = correction),
+            )
+
+            assertThat(result).isEqualTo(
+                M3uCatchupResolution.Unavailable(M3uCatchupUnavailableReason.INVALID_METADATA),
+            )
+        }
+    }
+
+    @Test
     fun liveIntentNeverSelectsArchiveMetadata() {
         val result = M3uCatchupResolver(nowEpochMillis = { 1_800_000_000_000L }).resolve(
             intent = PlaybackIntent.Live(channelId = "channel-live"),
@@ -90,11 +111,11 @@ class M3uCatchupResolverContractTest {
         assertThat(result.toString()).doesNotContain("TEST_CATCHUP_SECRET")
     }
 
-    private fun supportedMetadata() = M3uCatchupMetadata(
+    private fun supportedMetadata(correction: String = "+2.0") = M3uCatchupMetadata(
         mode = "append",
         source = "?utc={utc}&token=TEST_CATCHUP_SECRET",
         days = 7,
-        correction = "+2.0",
+        correction = correction,
     )
 
     private companion object {
