@@ -1,5 +1,7 @@
 package app.muxtv.catalog
 
+import app.muxtv.player.PlaybackIntent
+import app.muxtv.player.ResolvedPlaybackTimeline
 import kotlinx.coroutines.flow.Flow
 
 const val MAX_PLAYBACK_CANDIDATES: Int = 3
@@ -111,6 +113,7 @@ enum class PlaybackAccessUnavailableReason {
 sealed interface PlaybackVariantResolution {
     data class Ready(
         val request: ResolvedPlaybackRequest,
+        val timeline: ResolvedPlaybackTimeline? = null,
     ) : PlaybackVariantResolution
 
     data class InsecureTransportApprovalRequired(
@@ -174,6 +177,25 @@ interface PlaybackCatalog {
         channelId: String,
         preferredVariantId: String? = null,
     ): PlaybackVariantResolution?
+
+    /**
+     * Provider-neutral semantic playback entry point. Existing implementations retain Live behavior
+     * automatically; archive intents are opt-in until a provider/catalog implementation supports them.
+     */
+    suspend fun resolveIntent(
+        profileId: String,
+        intent: PlaybackIntent,
+        preferredVariantId: String? = null,
+    ): PlaybackVariantResolution? = when (intent) {
+        is PlaybackIntent.Live -> resolveVariant(
+            profileId = profileId,
+            channelId = intent.channelId,
+            preferredVariantId = preferredVariantId,
+        )
+        is PlaybackIntent.CatchupProgram,
+        is PlaybackIntent.CatchupPosition,
+        -> null
+    }
 
     suspend fun approveInsecurePlayback(
         profileId: String,
