@@ -41,6 +41,7 @@ import app.muxtv.feature.doctor.DoctorRoute
 import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.player.PlaybackStartGateway
+import app.muxtv.feature.player.PlayerLocalNetworkPermissionOutcome
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
@@ -213,6 +214,10 @@ fun AppNavigation(
                             onBack = ::goBack,
                             onOpenDoctor = ::openDoctorFromPlayer,
                             playbackStartGateway = playbackStartGateway,
+                            requestLocalNetworkPermission = {
+                                requestLocalNetworkPermission().toPlayerOutcome()
+                            },
+                            openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
                         )
                     }
                 }
@@ -235,6 +240,14 @@ fun AppNavigation(
 private fun rememberHasSources(sourceManagement: SourceManagement): Flow<Boolean> =
     remember(sourceManagement) {
         sourceManagement.observeOverviews().map { overviews -> overviews.isNotEmpty() }
+    }
+
+private fun LocalNetworkPermissionOutcome.toPlayerOutcome(): PlayerLocalNetworkPermissionOutcome =
+    when (this) {
+        LocalNetworkPermissionOutcome.GRANTED -> PlayerLocalNetworkPermissionOutcome.GRANTED
+        LocalNetworkPermissionOutcome.DENIED -> PlayerLocalNetworkPermissionOutcome.DENIED
+        LocalNetworkPermissionOutcome.PERMANENTLY_DENIED ->
+            PlayerLocalNetworkPermissionOutcome.PERMANENTLY_DENIED
     }
 
 @Composable

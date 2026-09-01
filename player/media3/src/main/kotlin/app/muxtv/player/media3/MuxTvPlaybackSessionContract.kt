@@ -45,6 +45,11 @@ object MuxTvPlaybackSessionContract {
     private const val KEY_SEEK_TARGET_MS = "seek_target_ms"
     private const val KEY_SEEK_REJECT_REASON = "seek_reject_reason"
 
+    private const val RESULT_KIND_STARTED = "started"
+    private const val RESULT_KIND_APPROVAL_REQUIRED = "approval_required"
+    private const val RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED =
+        "local_network_permission_required"
+    private const val RESULT_KIND_REJECTED = "rejected"
     private const val SEEK_KIND_RELATIVE = "relative"
     private const val SEEK_KIND_ABSOLUTE = "absolute"
     private const val RESULT_KIND_SEEK_ACCEPTED = "seek_accepted"
@@ -169,14 +174,18 @@ object MuxTvPlaybackSessionContract {
         SessionResult.RESULT_SUCCESS,
         Bundle().apply {
             when (result) {
-                PlaybackStartResult.Started -> putString(KEY_RESULT_KIND, "started")
+                PlaybackStartResult.Started -> putString(KEY_RESULT_KIND, RESULT_KIND_STARTED)
                 is PlaybackStartResult.InsecureHttpApprovalRequired -> {
-                    putString(KEY_RESULT_KIND, "approval_required")
+                    putString(KEY_RESULT_KIND, RESULT_KIND_APPROVAL_REQUIRED)
                     putString(KEY_DISPLAY_ORIGIN, result.displayOrigin)
                     putString(KEY_VARIANT_ID, result.variantId)
                 }
+                is PlaybackStartResult.LocalNetworkPermissionRequired -> {
+                    putString(KEY_RESULT_KIND, RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED)
+                    putString(KEY_VARIANT_ID, result.variantId)
+                }
                 is PlaybackStartResult.Rejected -> {
-                    putString(KEY_RESULT_KIND, "rejected")
+                    putString(KEY_RESULT_KIND, RESULT_KIND_REJECTED)
                     putString(KEY_FAILURE, result.reason.name)
                     putBoolean(KEY_OBSERVATION_AVAILABLE, result.observationAvailable)
                 }
@@ -205,10 +214,10 @@ object MuxTvPlaybackSessionContract {
         if (result.resultCode != SessionResult.RESULT_SUCCESS) return null
         val extras = result.extras
         return when (extras.getString(KEY_RESULT_KIND)) {
-            "started" -> PlaybackStartResult.Started.takeIf {
+            RESULT_KIND_STARTED -> PlaybackStartResult.Started.takeIf {
                 extras.keySet() == setOf(KEY_RESULT_KIND)
             }
-            "approval_required" -> {
+            RESULT_KIND_APPROVAL_REQUIRED -> {
                 if (extras.keySet() != setOf(
                         KEY_RESULT_KIND,
                         KEY_DISPLAY_ORIGIN,
@@ -222,7 +231,15 @@ object MuxTvPlaybackSessionContract {
                     )
                 }.getOrNull()
             }
-            "rejected" -> {
+            RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED -> {
+                if (extras.keySet() != setOf(KEY_RESULT_KIND, KEY_VARIANT_ID)) return null
+                runCatching {
+                    PlaybackStartResult.LocalNetworkPermissionRequired(
+                        variantId = extras.getString(KEY_VARIANT_ID) ?: return null,
+                    )
+                }.getOrNull()
+            }
+            RESULT_KIND_REJECTED -> {
                 if (extras.keySet() != setOf(
                         KEY_RESULT_KIND,
                         KEY_FAILURE,
