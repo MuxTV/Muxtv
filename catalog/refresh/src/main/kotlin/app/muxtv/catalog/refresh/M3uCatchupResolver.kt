@@ -130,11 +130,14 @@ internal class M3uCatchupResolver(
 
 private fun String?.toCorrectionMillisOrNull(): Long? {
     if (this.isNullOrBlank()) return 0L
-    return runCatching {
+    val correctionMillis = runCatching {
         BigDecimal(trim())
             .multiply(BigDecimal.valueOf(HOUR_MILLIS))
             .longValueExact()
-    }.getOrNull()
+    }.getOrNull() ?: return null
+    return correctionMillis.takeIf {
+        it in MIN_CORRECTION_MILLIS..MAX_CORRECTION_MILLIS
+    }
 }
 
 private const val MODE_APPEND = "append"
@@ -142,3 +145,5 @@ private const val UTC_TOKEN = "{utc}"
 private const val SECOND_MILLIS = 1_000L
 private const val HOUR_MILLIS = 60 * 60 * SECOND_MILLIS
 private const val DAY_MILLIS = 24 * HOUR_MILLIS
+private const val MIN_CORRECTION_MILLIS = -12 * HOUR_MILLIS
+private const val MAX_CORRECTION_MILLIS = 14 * HOUR_MILLIS
