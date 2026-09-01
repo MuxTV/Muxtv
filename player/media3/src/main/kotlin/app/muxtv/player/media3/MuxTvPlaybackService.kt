@@ -56,6 +56,9 @@ class MuxTvPlaybackService : MediaSessionService() {
     lateinit var playbackCandidateResolver: PlaybackCandidateResolver
 
     @Inject
+    lateinit var playbackLocalNetworkAccessGate: PlaybackLocalNetworkAccessGate
+
+    @Inject
     lateinit var playbackObservationRecorder: PlaybackObservationRecorder
 
     @Inject
@@ -388,6 +391,16 @@ class MuxTvPlaybackService : MediaSessionService() {
                         activeGeneration != action.generation ||
                         activeCandidate != action.candidate
                     ) return
+                    val localNetworkResult = PlaybackLocalNetworkAccessDecision.requiredResult(
+                        candidate = action.candidate,
+                        resolution = resolution,
+                        gate = playbackLocalNetworkAccessGate,
+                    )
+                    if (localNetworkResult != null) {
+                        recovery.cancel()
+                        complete(localNetworkResult)
+                        return
+                    }
                     val resolutionAccepted = resolution.matches(action.candidate)
                     action = recovery.onCandidateResolved(
                         generation = action.generation,

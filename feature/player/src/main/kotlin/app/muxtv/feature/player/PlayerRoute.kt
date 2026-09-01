@@ -51,9 +51,19 @@ class PlayerFavoriteAction(
     }
 }
 
+enum class PlayerLocalNetworkPermissionOutcome {
+    GRANTED,
+    DENIED,
+    PERMANENTLY_DENIED,
+}
+
 private sealed interface PlayerRouteState {
     data object Connecting : PlayerRouteState
     data object Resolving : PlayerRouteState
+
+    data class LocalNetworkPermissionRequired(
+        val variantId: String,
+    ) : PlayerRouteState
 
     data class HttpApprovalRequired(
         val displayOrigin: String,
@@ -70,6 +80,11 @@ private sealed interface PlayerRouteState {
         val doctorAvailable: Boolean = false,
     ) : PlayerRouteState
 }
+
+private data class PlayerLocalNetworkPermissionDenial(
+    val variantId: String,
+    val permanently: Boolean,
+)
 
 /** Test seam for starting playback without exposing an engine-specific controller to presentation. */
 fun interface PlaybackStartGateway {
@@ -92,6 +107,10 @@ fun PlayerRoute(
     modifier: Modifier = Modifier,
     playbackStartGateway: PlaybackStartGateway? = null,
     favoriteAction: PlayerFavoriteAction? = null,
+    requestLocalNetworkPermission: suspend () -> PlayerLocalNetworkPermissionOutcome = {
+        PlayerLocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
 ) {
     val connectionEpoch by playbackSessionGateway.connectionEpoch.collectAsState()
     val startGateway = playbackStartGateway ?: remember {
@@ -99,10 +118,18 @@ fun PlayerRoute(
             session.start(request = request, timeoutMillis = timeoutMillis)
         }
     }
-    val approvalScope = rememberCoroutineScope()
+    val actionScope = rememberCoroutineScope()
     var approvalGeneration by remember(profileId, channelId) { mutableIntStateOf(0) }
     var approvalInProgress by remember(profileId, channelId) { mutableStateOf(false) }
     var approvalFailure by remember(profileId, channelId) { mutableStateOf<String?>(null) }
+    var localNetworkGeneration by remember(profileId, channelId) { mutableIntStateOf(0) }
+    var localNetworkPreferredVariantId by remember(profileId, channelId) {
+        mutableStateOf<String?>(null)
+    }
+    var localNetworkInProgress by remember(profileId, channelId) { mutableStateOf(false) }
+    var localNetworkDenial by remember(profileId, channelId) {
+        mutableStateOf<PlayerLocalNetworkPermissionDenial?>(null)
+    }
     val routeState by produceState<PlayerRouteState>(
         initialValue = PlayerRouteState.Connecting,
         playbackCatalog,
@@ -110,6 +137,8 @@ fun PlayerRoute(
         startGateway,
         connectionEpoch,
         approvalGeneration,
+        localNetworkGeneration,
+        localNetworkPreferredVariantId,
         profileId,
         channelId,
     ) {
@@ -144,7 +173,11 @@ fun PlayerRoute(
             val startResult = try {
                 startGateway.start(
                     session = session,
-                    request = PlaybackStartRequest(profileId, channelId),
+                    request = PlaybackStartRequest(
+                        profileId = profileId,
+                        channelId = channelId,
+                        preferredVariantId = localNetworkPreferredVariantId,
+                    ),
                     timeoutMillis = COMMAND_TIMEOUT_MILLIS,
                 )
             } catch (cancelled: CancellationException) {
@@ -158,6 +191,12 @@ fun PlayerRoute(
             }
 
             when (startResult) {
+                is PlaybackStartResult.LocalNetworkPermissionRequired -> {
+                    value = PlayerRouteState.LocalNetworkPermissionRequired(
+                        variantId = startResult.variantId,
+                    )
+                }
+
                 is PlaybackStartResult.InsecureHttpApprovalRequired -> {
                     value = PlayerRouteState.HttpApprovalRequired(
                         displayOrigin = startResult.displayOrigin,
@@ -202,6 +241,79 @@ fun PlayerRoute(
             modifier = modifier,
         )
 
+        is PlayerRouteState.LocalNetworkPermissionRequired -> {
+            LaunchedEffect(current.variantId) {
+                if (localNetworkDenial?.variantId != current.variantId) {
+                    localNetworkDenial = null
+                }
+            }
+            val denial = localNetworkDenial?.takeIf { it.variantId == current.variantId }
+            LocalNetworkPermissionMessage(
+                permanentlyDenied = denial?.permanently == true,
+                temporarilyDenied = denial != null && !denial.permanently,
+                requesting = localNetworkInProgress,
+                onRequestPermission = {
+                    if (!localNetworkInProgress) {
+                        localNetworkInProgress = true
+                        actionScope.launch {
+                            try {
+                                when (requestLocalNetworkPermission()) {
+                                    PlayerLocalNetworkPermissionOutcome.GRANTED -> {
+                                        localNetworkDenial = null
+                                        localNetworkPreferredVariantId = current.variantId
+                                        localNetworkGeneration += 1
+                                    }
+
+                                    PlayerLocalNetworkPermissionOutcome.DENIED -> {
+                                        localNetworkDenial = PlayerLocalNetworkPermissionDenial(
+                                            variantId = current.variantId,
+                                            permanently = false,
+                                        )
+                                    }
+
+                                    PlayerLocalNetworkPermissionOutcome.PERMANENTLY_DENIED -> {
+                                        localNetworkDenial = PlayerLocalNetworkPermissionDenial(
+                                            variantId = current.variantId,
+                                            permanently = true,
+                                        )
+                                    }
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                localNetworkDenial = PlayerLocalNetworkPermissionDenial(
+                                    variantId = current.variantId,
+                                    permanently = false,
+                                )
+                            } finally {
+                                localNetworkInProgress = false
+                            }
+                        }
+                    }
+                },
+                onOpenSettings = {
+                    if (!localNetworkInProgress) {
+                        localNetworkInProgress = true
+                        actionScope.launch {
+                            try {
+                                if (openLocalNetworkPermissionSettings()) {
+                                    localNetworkDenial = null
+                                    localNetworkPreferredVariantId = current.variantId
+                                    localNetworkGeneration += 1
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } finally {
+                                localNetworkInProgress = false
+                            }
+                        }
+                    }
+                },
+                onBack = onBack,
+                modifier = modifier,
+            )
+        }
+
         is PlayerRouteState.HttpApprovalRequired -> {
             LaunchedEffect(current.displayOrigin) {
                 approvalFailure = null
@@ -214,7 +326,7 @@ fun PlayerRoute(
                     if (!approvalInProgress) {
                         approvalInProgress = true
                         approvalFailure = null
-                        approvalScope.launch {
+                        actionScope.launch {
                             try {
                                 when (
                                     playbackCatalog.approveInsecurePlayback(
@@ -276,6 +388,58 @@ fun PlayerRoute(
             ),
             modifier = modifier,
         )
+    }
+}
+
+@Composable
+private fun LocalNetworkPermissionMessage(
+    permanentlyDenied: Boolean,
+    temporarilyDenied: Boolean,
+    requesting: Boolean,
+    onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier,
+) {
+    val actionFocusRequester = remember(permanentlyDenied, temporarilyDenied) { FocusRequester() }
+    LaunchedEffect(permanentlyDenied, temporarilyDenied) {
+        withFrameNanos { }
+        actionFocusRequester.requestFocus()
+    }
+
+    Column(
+        modifier = modifier.fillMaxSize().padding(56.dp),
+        verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.medium),
+    ) {
+        Text(
+            text = when {
+                permanentlyDenied ->
+                    "Доступ к локальной сети отключён для MuxTV. Разрешите его в настройках Android."
+                temporarilyDenied -> "Доступ к локальной сети не предоставлен."
+                else -> "Для этого локального потока требуется доступ к локальной сети."
+            },
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+            MuxTvActionButton(
+                text = when {
+                    requesting -> "Проверка…"
+                    permanentlyDenied -> "Открыть настройки"
+                    temporarilyDenied -> "Повторить"
+                    else -> "Разрешить доступ"
+                },
+                onClick = if (permanentlyDenied) onOpenSettings else onRequestPermission,
+                enabled = !requesting,
+                modifier = Modifier
+                    .testTag(PLAYER_LOCAL_NETWORK_ACTION_TEST_TAG)
+                    .focusRequester(actionFocusRequester),
+            )
+            MuxTvActionButton(
+                text = "Назад к каналам",
+                onClick = onBack,
+                modifier = Modifier.testTag(PLAYER_BACK_TEST_TAG),
+            )
+        }
     }
 }
 
@@ -411,6 +575,7 @@ private const val CONNECTION_FAILED_MESSAGE =
     "Не удалось подключиться к службе воспроизведения."
 private const val COMMAND_FAILED_MESSAGE = "Не удалось подготовить выбранный поток."
 private const val HTTP_APPROVAL_FAILED_MESSAGE = "Не удалось сохранить HTTP-разрешение."
+private const val PLAYER_LOCAL_NETWORK_ACTION_TEST_TAG = "player-local-network-action"
 private const val PLAYER_HTTP_APPROVE_TEST_TAG = "player-http-approve"
 private const val PLAYER_BACK_TEST_TAG = "player-back"
 private const val PLAYER_DOCTOR_TEST_TAG = "player-doctor"
