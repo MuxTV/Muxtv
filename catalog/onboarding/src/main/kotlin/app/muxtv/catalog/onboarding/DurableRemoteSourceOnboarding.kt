@@ -99,6 +99,7 @@ class DurableRemoteSourceOnboarding(
         val result = delegate.activate(token, sourceName)
         val cleanupComplete = when (result) {
             is RemoteSourceActivationResult.Activated -> true
+            RemoteSourceActivationResult.LocalNetworkAccessRequired -> false
             is RemoteSourceActivationResult.Failed ->
                 result.credentialCleanupFailure == null && result.sourceCleanupFailure == null
         }

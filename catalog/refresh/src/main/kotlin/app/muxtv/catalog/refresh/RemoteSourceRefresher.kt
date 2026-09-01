@@ -68,6 +68,7 @@ sealed interface RemoteSourceRefreshResult {
         val reason: SourceUrlRejectionReason,
     ) : RemoteSourceRefreshResult
 
+    data object LocalNetworkAccessRequired : RemoteSourceRefreshResult
     data object InsecureTransportApprovalRequired : RemoteSourceRefreshResult
 
     data class HttpFailure(
@@ -105,6 +106,7 @@ class RemoteSourceRefresher(
     private val accessManager: RemoteSourceAccessManager,
     private val importer: CatalogRevisionImporter,
     private val sourceClient: OkHttpClient,
+    private val localNetworkAccessRequired: (String) -> Boolean = { false },
 ) {
     internal constructor(
         credentialStore: CredentialStore,
@@ -129,17 +131,22 @@ class RemoteSourceRefresher(
                 return RemoteSourceRefreshResult.AccessCredentialUnavailable(accessResult.reason)
         }
 
-        val normalizedUrl = when (val decision = SourceUrlPolicy.evaluate(access.url)) {
-            is SourceUrlDecision.Allowed -> decision.normalizedUrl
-            is SourceUrlDecision.RequiresInsecureTransportApproval -> {
-                if (!access.insecureHttpApproved) {
-                    return RemoteSourceRefreshResult.InsecureTransportApprovalRequired
-                }
-                decision.normalizedUrl
-            }
-
+        val urlDecision = SourceUrlPolicy.evaluate(access.url)
+        val normalizedUrl = when (urlDecision) {
+            is SourceUrlDecision.Allowed -> urlDecision.normalizedUrl
+            is SourceUrlDecision.RequiresInsecureTransportApproval -> urlDecision.normalizedUrl
             is SourceUrlDecision.Rejected ->
-                return RemoteSourceRefreshResult.UrlRejected(decision.reason)
+                return RemoteSourceRefreshResult.UrlRejected(urlDecision.reason)
+        }
+
+        if (localNetworkAccessRequired(normalizedUrl)) {
+            return RemoteSourceRefreshResult.LocalNetworkAccessRequired
+        }
+        if (
+            urlDecision is SourceUrlDecision.RequiresInsecureTransportApproval &&
+            !access.insecureHttpApproved
+        ) {
+            return RemoteSourceRefreshResult.InsecureTransportApprovalRequired
         }
 
         val networkRequest = Request.Builder()

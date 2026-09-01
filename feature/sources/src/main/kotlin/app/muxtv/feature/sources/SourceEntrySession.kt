@@ -60,6 +60,7 @@ class SourceEntrySession(
     private var preparedHandle: SourcePreparationHandle? = null
     private var preparedEndpoint: String? = null
     private var pendingLocalNetworkRequest: SourcePreparationRequest? = null
+    private var pendingLocalNetworkActivationSourceName: String? = null
     private var pendingHttpRequest: SourcePreparationRequest? = null
 
     suspend fun restore() = runExclusive {
@@ -107,14 +108,20 @@ class SourceEntrySession(
     }
 
     suspend fun resumeAfterLocalNetworkPermissionGranted() = runExclusive {
-        val request = pendingLocalNetworkRequest ?: return@runExclusive
-        prepareLocked(request)
+        val request = pendingLocalNetworkRequest
+        if (request != null) {
+            prepareLocked(request)
+            return@runExclusive
+        }
+        val sourceName = pendingLocalNetworkActivationSourceName ?: return@runExclusive
+        pendingLocalNetworkActivationSourceName = null
+        activateLocked(sourceName)
     }
 
     fun recordLocalNetworkPermissionDenied(permanently: Boolean) {
         if (
             !operationMutex.isLocked &&
-            pendingLocalNetworkRequest != null &&
+            (pendingLocalNetworkRequest != null || pendingLocalNetworkActivationSourceName != null) &&
             mutableState.value is SourceEntryUiState.LocalNetworkPermissionRequired
         ) {
             mutableState.value = SourceEntryUiState.LocalNetworkPermissionDenied(
@@ -129,50 +136,7 @@ class SourceEntrySession(
     }
 
     suspend fun activate(sourceName: String) = runExclusive {
-        val handle = preparedHandle
-        if (handle == null) {
-            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
-            return@runExclusive
-        }
-
-        val endpoint = preparedEndpoint
-        if (endpoint == null) {
-            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
-            return@runExclusive
-        }
-
-        mutableState.value = SourceEntryUiState.Activating
-        val result = try {
-            onboarding.activate(handle, sourceName)
-        } catch (cancelled: CancellationException) {
-            mutableState.value = SourceEntryUiState.Confirming(endpoint = endpoint)
-            throw cancelled
-        } catch (_: Exception) {
-            mutableState.value = SourceEntryUiState.Failed(
-                reason = SourceEntryFailure.CleanupPending,
-                cleanupPending = true,
-            )
-            return@runExclusive
-        }
-
-        when (result) {
-            SourceActivationResult.Activated -> {
-                preparedHandle = null
-                preparedEndpoint = null
-                mutableState.value = SourceEntryUiState.Completed
-            }
-
-            is SourceActivationResult.Failed -> {
-                if (!result.cleanupPending) {
-                    preparedHandle = null
-                    preparedEndpoint = null
-                }
-                mutableState.value = SourceEntryUiState.Failed(
-                    reason = result.reason.toEntryFailure(),
-                    cleanupPending = result.cleanupPending,
-                )
-            }
-        }
+        activateLocked(sourceName)
     }
 
     suspend fun cancel(): Boolean {
@@ -277,6 +241,63 @@ class SourceEntrySession(
         }
     }
 
+    private suspend fun activateLocked(sourceName: String) {
+        val handle = preparedHandle
+        if (handle == null) {
+            clearPendingAuthorization()
+            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
+            return
+        }
+
+        val endpoint = preparedEndpoint
+        if (endpoint == null) {
+            clearPendingAuthorization()
+            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
+            return
+        }
+
+        pendingLocalNetworkActivationSourceName = null
+        mutableState.value = SourceEntryUiState.Activating
+        val result = try {
+            onboarding.activate(handle, sourceName)
+        } catch (cancelled: CancellationException) {
+            mutableState.value = SourceEntryUiState.Confirming(endpoint = endpoint)
+            throw cancelled
+        } catch (_: Exception) {
+            mutableState.value = SourceEntryUiState.Failed(
+                reason = SourceEntryFailure.CleanupPending,
+                cleanupPending = true,
+            )
+            return
+        }
+
+        when (result) {
+            SourceActivationResult.Activated -> {
+                preparedHandle = null
+                preparedEndpoint = null
+                clearPendingAuthorization()
+                mutableState.value = SourceEntryUiState.Completed
+            }
+
+            SourceActivationResult.LocalNetworkAccessRequired -> {
+                pendingLocalNetworkActivationSourceName = sourceName
+                mutableState.value = SourceEntryUiState.LocalNetworkPermissionRequired
+            }
+
+            is SourceActivationResult.Failed -> {
+                clearPendingAuthorization()
+                if (!result.cleanupPending) {
+                    preparedHandle = null
+                    preparedEndpoint = null
+                }
+                mutableState.value = SourceEntryUiState.Failed(
+                    reason = result.reason.toEntryFailure(),
+                    cleanupPending = result.cleanupPending,
+                )
+            }
+        }
+    }
+
     private fun acceptPrepared(result: SourcePreparationResult.Prepared) {
         preparedHandle = result.handle
         preparedEndpoint = result.displayEndpoint
@@ -288,6 +309,7 @@ class SourceEntrySession(
 
     private fun clearPendingAuthorization() {
         pendingLocalNetworkRequest = null
+        pendingLocalNetworkActivationSourceName = null
         pendingHttpRequest = null
     }
 

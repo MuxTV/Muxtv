@@ -84,6 +84,7 @@ sealed interface XtreamLiveRefreshResult {
         val reason: SourceUrlRejectionReason,
     ) : XtreamLiveRefreshResult
 
+    data object LocalNetworkAccessRequired : XtreamLiveRefreshResult
     data object InsecureTransportApprovalRequired : XtreamLiveRefreshResult
     data object AuthenticationRejected : XtreamLiveRefreshResult
 
@@ -117,6 +118,7 @@ class XtreamLiveRefresher(
     private val importer: CatalogRevisionImporter,
     private val sourceClient: OkHttpClient,
     private val parser: StreamingXtreamParser,
+    private val localNetworkAccessRequired: (String) -> Boolean = { false },
 ) {
     suspend fun refresh(request: XtreamLiveRefreshRequest): XtreamLiveRefreshResult {
         val access = when (val accessResult = accessManager.read(request.accessCredentialId)) {
@@ -127,16 +129,21 @@ class XtreamLiveRefresher(
                 return XtreamLiveRefreshResult.AccessCredentialUnavailable(accessResult.reason)
         }
 
-        val normalizedBaseUrl = when (val decision = SourceUrlPolicy.evaluate(access.baseUrl)) {
-            is SourceUrlDecision.Allowed -> decision.normalizedUrl
-            is SourceUrlDecision.RequiresInsecureTransportApproval -> {
-                if (!access.insecureHttpApproved) {
-                    return XtreamLiveRefreshResult.InsecureTransportApprovalRequired
-                }
-                decision.normalizedUrl
-            }
+        val urlDecision = SourceUrlPolicy.evaluate(access.baseUrl)
+        val normalizedBaseUrl = when (urlDecision) {
+            is SourceUrlDecision.Allowed -> urlDecision.normalizedUrl
+            is SourceUrlDecision.RequiresInsecureTransportApproval -> urlDecision.normalizedUrl
+            is SourceUrlDecision.Rejected -> return XtreamLiveRefreshResult.UrlRejected(urlDecision.reason)
+        }
 
-            is SourceUrlDecision.Rejected -> return XtreamLiveRefreshResult.UrlRejected(decision.reason)
+        if (localNetworkAccessRequired(normalizedBaseUrl)) {
+            return XtreamLiveRefreshResult.LocalNetworkAccessRequired
+        }
+        if (
+            urlDecision is SourceUrlDecision.RequiresInsecureTransportApproval &&
+            !access.insecureHttpApproved
+        ) {
+            return XtreamLiveRefreshResult.InsecureTransportApprovalRequired
         }
 
         val requestContext = SourceRequestContext(

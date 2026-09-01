@@ -98,6 +98,9 @@ class XtreamSourceLifecycle(
                 RemoteSourceActivationFailure.UrlRejected(result.reason),
             )
 
+            XtreamLiveRefreshResult.LocalNetworkAccessRequired ->
+                RemoteSourceActivationResult.LocalNetworkAccessRequired
+
             XtreamLiveRefreshResult.InsecureTransportApprovalRequired -> cleanupFailure(
                 accessReference,
                 sourceId,

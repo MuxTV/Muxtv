@@ -2,6 +2,7 @@ package app.muxtv.catalog.sync
 
 import app.muxtv.catalog.refresh.RemoteSourceNetworkFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceRefreshResult
+import app.muxtv.catalog.refresh.XtreamLiveRefreshResult
 import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
 import com.google.common.truth.Truth.assertThat
@@ -38,6 +39,32 @@ class SourceRefreshOutcomeMapperTest {
         assertThat(decision.parsedEntries).isNull()
         assertThat(decision.retryable).isFalse()
         assertThat(decision.workSucceeded).isTrue()
+    }
+
+    @Test
+    fun `M3U local network permission requirement is terminal for worker`() {
+        val decision = SourceRefreshOutcomeMapper.map(
+            RemoteSourceRefreshResult.LocalNetworkAccessRequired,
+        )
+
+        assertThat(decision.state).isEqualTo(SourceRefreshRunState.FAILED)
+        assertThat(decision.resultFamily).isEqualTo("LOCAL_NETWORK")
+        assertThat(decision.resultCode).isEqualTo("PERMISSION_REQUIRED")
+        assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
+    }
+
+    @Test
+    fun `Xtream local network permission requirement uses the same stable outcome`() {
+        val decision = SourceRefreshOutcomeMapper.map(
+            XtreamLiveRefreshResult.LocalNetworkAccessRequired,
+        )
+
+        assertThat(decision.state).isEqualTo(SourceRefreshRunState.FAILED)
+        assertThat(decision.resultFamily).isEqualTo("LOCAL_NETWORK")
+        assertThat(decision.resultCode).isEqualTo("PERMISSION_REQUIRED")
+        assertThat(decision.retryable).isFalse()
+        assertThat(decision.workSucceeded).isFalse()
     }
 
     @Test

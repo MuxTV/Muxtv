@@ -200,6 +200,7 @@ class AppSourceOnboarding(
         val result = lifecycle.activate(handle.accessReference, sourceName)
         val cleanupComplete = when (result) {
             is RemoteSourceActivationResult.Activated -> true
+            RemoteSourceActivationResult.LocalNetworkAccessRequired -> false
             is RemoteSourceActivationResult.Failed ->
                 result.credentialCleanupFailure == null && result.sourceCleanupFailure == null
         }
@@ -267,6 +268,8 @@ class AppSourceOnboarding(
 
     private fun RemoteSourceActivationResult.toApi(): SourceActivationResult = when (this) {
         is RemoteSourceActivationResult.Activated -> SourceActivationResult.Activated
+        RemoteSourceActivationResult.LocalNetworkAccessRequired ->
+            SourceActivationResult.LocalNetworkAccessRequired
         is RemoteSourceActivationResult.Failed -> SourceActivationResult.Failed(
             reason = failure.toApi(),
             cleanupPending = credentialCleanupFailure != null || sourceCleanupFailure != null,
@@ -308,7 +311,13 @@ private fun DatabaseSourceRefreshOverview.toApi(): SourceRefreshOverview = Sourc
     hasStoredAccess = hasCredentialReference,
     activeRevision = activeRevision,
     policy = policy?.toApi(),
-    status = status?.let { SourceRefreshStatus(state = it.state.toApi()) },
+    status = status?.let {
+        SourceRefreshStatus(
+            state = it.state.toApi(),
+            failureFamily = it.failureFamily,
+            failureCode = it.failureCode,
+        )
+    },
 )
 
 private fun DatabaseSourceRefreshPolicy.toApi(): SourceRefreshPolicy = SourceRefreshPolicy(
