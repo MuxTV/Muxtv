@@ -30,7 +30,7 @@ class CatchupPlaybackMetadataProjectionTest {
     }
 
     @Test
-    fun activeVariantAccessCarriesPersistedCatchupMetadataFromOwningProviderChannel() = runTest {
+    fun activeVariantAccessCarriesOnlyActivePersistedCatchupMetadataAndRedactsSecrets() = runTest {
         database.profileDao().insert(
             ProfileEntity(
                 id = PROFILE_ID,
@@ -45,29 +45,14 @@ class CatchupPlaybackMetadataProjectionTest {
                 credentialRef = CREDENTIAL_REF,
             ),
         )
-        revisionStore.beginRevision(
-            sourceId = SOURCE_ID,
+        stageRevision(
             revisionNumber = 1L,
-            startedAtEpochMillis = 1_000L,
-        )
-        revisionStore.stageBatch(
-            sourceId = SOURCE_ID,
-            revisionNumber = 1L,
-            entries = listOf(
-                StagedCatalogEntry(
-                    providerChannelId = PROVIDER_CHANNEL_ID,
-                    providerKey = "m3u:catchup-news",
-                    rawName = "Catch-up News",
-                    canonicalChannelId = CHANNEL_ID,
-                    canonicalDisplayName = "Catch-up News",
-                    streamVariantId = VARIANT_ID,
-                    locator = LIVE_LOCATOR,
-                    catchupMode = "append",
-                    catchupSource = CATCHUP_SOURCE,
-                    catchupDays = 7,
-                    catchupCorrection = "+2.0",
-                ),
-            ),
+            providerChannelId = ACTIVE_PROVIDER_CHANNEL_ID,
+            variantId = ACTIVE_VARIANT_ID,
+            locator = ACTIVE_LIVE_LOCATOR,
+            catchupSource = ACTIVE_CATCHUP_SOURCE,
+            catchupDays = 7,
+            catchupCorrection = "+2.0",
         )
         assertThat(
             revisionStore.activate(
@@ -82,28 +67,93 @@ class CatchupPlaybackMetadataProjectionTest {
             ),
         ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
 
+        // A newer staged revision must remain invisible until activation.
+        stageRevision(
+            revisionNumber = 2L,
+            providerChannelId = STAGED_PROVIDER_CHANNEL_ID,
+            variantId = STAGED_VARIANT_ID,
+            locator = STAGED_LIVE_LOCATOR,
+            catchupSource = STAGED_CATCHUP_SOURCE,
+            catchupDays = 3,
+            catchupCorrection = "-1.0",
+        )
+
         val row = database.playbackCatalogDao().findActiveVariantAccess(
             profileId = PROFILE_ID,
             channelId = CHANNEL_ID,
-            variantId = VARIANT_ID,
+            variantId = ACTIVE_VARIANT_ID,
         )
 
         requireNotNull(row)
         assertThat(row.catchupMode).isEqualTo("append")
-        assertThat(row.catchupSource).isEqualTo(CATCHUP_SOURCE)
+        assertThat(row.catchupSource).isEqualTo(ACTIVE_CATCHUP_SOURCE)
         assertThat(row.catchupDays).isEqualTo(7)
         assertThat(row.catchupCorrection).isEqualTo("+2.0")
-        assertThat(row.toString()).doesNotContain("TEST_CATCHUP_PROJECTION_SECRET")
+        assertThat(
+            database.playbackCatalogDao().findActiveVariantAccess(
+                profileId = PROFILE_ID,
+                channelId = CHANNEL_ID,
+                variantId = STAGED_VARIANT_ID,
+            ),
+        ).isNull()
+
+        val diagnostic = row.toString()
+        assertThat(diagnostic).doesNotContain(ACTIVE_CATCHUP_SECRET)
+        assertThat(diagnostic).doesNotContain(STAGED_CATCHUP_SECRET)
+        assertThat(diagnostic).doesNotContain(LIVE_SECRET)
+        assertThat(diagnostic).doesNotContain(CREDENTIAL_REF)
+    }
+
+    private suspend fun stageRevision(
+        revisionNumber: Long,
+        providerChannelId: String,
+        variantId: String,
+        locator: String,
+        catchupSource: String,
+        catchupDays: Int,
+        catchupCorrection: String,
+    ) {
+        revisionStore.beginRevision(
+            sourceId = SOURCE_ID,
+            revisionNumber = revisionNumber,
+            startedAtEpochMillis = 1_000L + revisionNumber,
+        )
+        revisionStore.stageBatch(
+            sourceId = SOURCE_ID,
+            revisionNumber = revisionNumber,
+            entries = listOf(
+                StagedCatalogEntry(
+                    providerChannelId = providerChannelId,
+                    providerKey = "m3u:catchup-news",
+                    rawName = "Catch-up News",
+                    canonicalChannelId = CHANNEL_ID,
+                    canonicalDisplayName = "Catch-up News",
+                    streamVariantId = variantId,
+                    locator = locator,
+                    catchupMode = "append",
+                    catchupSource = catchupSource,
+                    catchupDays = catchupDays,
+                    catchupCorrection = catchupCorrection,
+                ),
+            ),
+        )
     }
 
     private companion object {
         const val PROFILE_ID = "profile-primary"
         const val SOURCE_ID = "source-m3u-catchup"
         const val CREDENTIAL_REF = "00000000-0000-0000-0000-0000000000c1"
-        const val PROVIDER_CHANNEL_ID = "provider-catchup-news"
         const val CHANNEL_ID = "canonical-catchup-news"
-        const val VARIANT_ID = "variant-catchup-news"
-        const val LIVE_LOCATOR = "https://streams.invalid/live/news.m3u8"
-        const val CATCHUP_SOURCE = "?utc={utc}&token=TEST_CATCHUP_PROJECTION_SECRET"
+        const val ACTIVE_PROVIDER_CHANNEL_ID = "provider-catchup-news-active"
+        const val STAGED_PROVIDER_CHANNEL_ID = "provider-catchup-news-staged"
+        const val ACTIVE_VARIANT_ID = "variant-catchup-news-active"
+        const val STAGED_VARIANT_ID = "variant-catchup-news-staged"
+        const val LIVE_SECRET = "TEST_LIVE_PROJECTION_SECRET"
+        const val ACTIVE_CATCHUP_SECRET = "TEST_CATCHUP_PROJECTION_SECRET"
+        const val STAGED_CATCHUP_SECRET = "TEST_STAGED_CATCHUP_SECRET"
+        const val ACTIVE_LIVE_LOCATOR = "https://streams.invalid/live/news.m3u8?token=$LIVE_SECRET"
+        const val STAGED_LIVE_LOCATOR = "https://streams.invalid/live/news-v2.m3u8?token=$LIVE_SECRET"
+        const val ACTIVE_CATCHUP_SOURCE = "?utc={utc}&token=$ACTIVE_CATCHUP_SECRET"
+        const val STAGED_CATCHUP_SOURCE = "?utc={utc}&token=$STAGED_CATCHUP_SECRET"
     }
 }
