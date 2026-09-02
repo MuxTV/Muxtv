@@ -142,44 +142,46 @@ object MuxTvPlaybackSessionContract {
     private fun parsePlaybackIntent(
         requestBundle: Bundle,
         channelId: String,
-    ): PlaybackIntent? = when (requestBundle.getString(KEY_INTENT_KIND)) {
-        null -> {
-            if (!hasExactRequestKeys(requestBundle, LIVE_REQUIRED_KEYS, LIVE_OPTIONAL_KEYS)) {
-                return null
+    ): PlaybackIntent? {
+        return when (requestBundle.getString(KEY_INTENT_KIND)) {
+            null -> {
+                if (!hasExactRequestKeys(requestBundle, LIVE_REQUIRED_KEYS, LIVE_OPTIONAL_KEYS)) {
+                    return null
+                }
+                runCatching { PlaybackIntent.Live(channelId) }.getOrNull()
             }
-            runCatching { PlaybackIntent.Live(channelId) }.getOrNull()
+            INTENT_KIND_CATCHUP_PROGRAM -> {
+                if (!hasExactRequestKeys(
+                        requestBundle,
+                        CATCHUP_PROGRAM_REQUIRED_KEYS,
+                        CATCHUP_OPTIONAL_KEYS,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackIntent.CatchupProgram(
+                        channelId = channelId,
+                        programmeId = requestBundle.getString(KEY_PROGRAMME_ID) ?: return null,
+                        startEpochMillis = requestBundle.getLong(KEY_PROGRAMME_START_EPOCH_MILLIS),
+                        endEpochMillis = requestBundle.getLong(KEY_PROGRAMME_END_EPOCH_MILLIS),
+                    )
+                }.getOrNull()
+            }
+            INTENT_KIND_CATCHUP_POSITION -> {
+                if (!hasExactRequestKeys(
+                        requestBundle,
+                        CATCHUP_POSITION_REQUIRED_KEYS,
+                        CATCHUP_OPTIONAL_KEYS,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackIntent.CatchupPosition(
+                        channelId = channelId,
+                        positionEpochMillis = requestBundle.getLong(KEY_POSITION_EPOCH_MILLIS),
+                    )
+                }.getOrNull()
+            }
+            else -> null
         }
-        INTENT_KIND_CATCHUP_PROGRAM -> {
-            if (!hasExactRequestKeys(
-                    requestBundle,
-                    CATCHUP_PROGRAM_REQUIRED_KEYS,
-                    CATCHUP_OPTIONAL_KEYS,
-                )
-            ) return null
-            runCatching {
-                PlaybackIntent.CatchupProgram(
-                    channelId = channelId,
-                    programmeId = requestBundle.getString(KEY_PROGRAMME_ID) ?: return null,
-                    startEpochMillis = requestBundle.getLong(KEY_PROGRAMME_START_EPOCH_MILLIS),
-                    endEpochMillis = requestBundle.getLong(KEY_PROGRAMME_END_EPOCH_MILLIS),
-                )
-            }.getOrNull()
-        }
-        INTENT_KIND_CATCHUP_POSITION -> {
-            if (!hasExactRequestKeys(
-                    requestBundle,
-                    CATCHUP_POSITION_REQUIRED_KEYS,
-                    CATCHUP_OPTIONAL_KEYS,
-                )
-            ) return null
-            runCatching {
-                PlaybackIntent.CatchupPosition(
-                    channelId = channelId,
-                    positionEpochMillis = requestBundle.getLong(KEY_POSITION_EPOCH_MILLIS),
-                )
-            }.getOrNull()
-        }
-        else -> null
     }
 
     private fun hasExactRequestKeys(
