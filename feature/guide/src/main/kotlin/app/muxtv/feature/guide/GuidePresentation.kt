@@ -13,6 +13,8 @@ internal data class GuideCellProjection(
     val state: GuideProjectionState,
     val startEpochMillis: Long,
     val endEpochMillis: Long,
+    val originalStartEpochMillis: Long?,
+    val originalEndEpochMillis: Long?,
     val title: String,
     val timeLabel: String?,
     val detailLabel: String,
@@ -21,6 +23,14 @@ internal data class GuideCellProjection(
         require(title.isNotBlank())
         require(startEpochMillis >= 0L)
         require(endEpochMillis > startEpochMillis)
+        require((originalStartEpochMillis == null) == (originalEndEpochMillis == null))
+        require((programmeKey == null) == (originalStartEpochMillis == null))
+        if (originalStartEpochMillis != null && originalEndEpochMillis != null) {
+            require(originalStartEpochMillis >= 0L)
+            require(originalEndEpochMillis > originalStartEpochMillis)
+            require(startEpochMillis >= originalStartEpochMillis)
+            require(endEpochMillis <= originalEndEpochMillis)
+        }
         require(detailLabel.isNotBlank())
     }
 
@@ -28,7 +38,8 @@ internal data class GuideCellProjection(
 
     override fun toString(): String =
         "GuideCellProjection(state=$state, programmePresent=${programmeKey != null}, " +
-            "startEpochMillis=$startEpochMillis, endEpochMillis=$endEpochMillis)"
+            "startEpochMillis=$startEpochMillis, endEpochMillis=$endEpochMillis, " +
+            "originalBoundsPresent=${originalStartEpochMillis != null})"
 }
 
 internal data class GuideRowProjection(
@@ -178,6 +189,8 @@ private fun readyCells(
                 state = GuideProjectionState.READY,
                 startEpochMillis = startEpochMillis,
                 endEpochMillis = endEpochMillis,
+                originalStartEpochMillis = programme.startEpochMillis,
+                originalEndEpochMillis = programme.endEpochMillis,
                 title = title,
                 timeLabel = timeLabel,
                 detailLabel = "$channelDisplayName · $title · $timeLabel",
@@ -212,6 +225,8 @@ private fun statusCell(
         viewportToEpochMillis,
         viewportFromEpochMillis + STATUS_CELL_SPAN_MILLIS,
     ),
+    originalStartEpochMillis = null,
+    originalEndEpochMillis = null,
     title = title,
     timeLabel = null,
     detailLabel = detailLabel,

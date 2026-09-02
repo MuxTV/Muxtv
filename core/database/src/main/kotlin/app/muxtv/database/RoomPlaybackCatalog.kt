@@ -77,54 +77,16 @@ internal class RoomPlaybackCatalog(
         intent: PlaybackIntent,
         preferredVariantId: String?,
     ): PlaybackVariantResolution? {
-        if (intent is PlaybackIntent.Live) {
-            return resolveVariant(
-                profileId = profileId,
-                channelId = intent.channelId,
-                preferredVariantId = preferredVariantId,
-            )
-        }
-
         val candidate = selectCandidate(
             profileId = profileId,
             channelId = intent.channelId,
             preferredVariantId = preferredVariantId,
         ) ?: return null
-        val variant = dao.findActiveVariantAccess(
+        return resolveIntentCandidate(
             profileId = profileId,
-            channelId = candidate.channelId,
-            variantId = candidate.variantId,
-        ) ?: return null
-
-        return when (
-            val archive = playbackArchiveResolver.resolve(
-                PlaybackArchiveRequest(
-                    intent = intent,
-                    livePlaybackReference = variant.locator,
-                    metadata = PlaybackArchiveMetadata(
-                        mode = variant.catchupMode,
-                        source = variant.catchupSource,
-                        days = variant.catchupDays,
-                        correction = variant.catchupCorrection,
-                    ),
-                ),
-            )
-        ) {
-            PlaybackArchiveResolution.NotApplicable ->
-                PlaybackVariantResolution.AccessUnavailable(
-                    PlaybackAccessUnavailableReason.ArchiveUnsupported,
-                )
-
-            is PlaybackArchiveResolution.Unavailable ->
-                PlaybackVariantResolution.AccessUnavailable(archive.reason.toAccessReason())
-
-            is PlaybackArchiveResolution.Ready ->
-                resolveAccess(
-                    variant = variant,
-                    playbackReference = archive.locator,
-                    timeline = archive.timeline,
-                )
-        }
+            intent = intent,
+            candidate = candidate,
+        )
     }
 
     private suspend fun selectCandidate(
@@ -175,6 +137,57 @@ internal class RoomPlaybackCatalog(
             variantId = candidate.variantId,
         ) ?: return null
         return resolveAccess(variant)
+    }
+
+    override suspend fun resolveIntentCandidate(
+        profileId: String,
+        intent: PlaybackIntent,
+        candidate: PlaybackCandidateIdentity,
+    ): PlaybackVariantResolution? {
+        require(profileId.isNotBlank())
+        if (candidate.channelId != intent.channelId) return null
+        if (intent is PlaybackIntent.Live) {
+            return resolveCandidate(
+                profileId = profileId,
+                candidate = candidate,
+            )
+        }
+
+        val variant = dao.findActiveVariantAccess(
+            profileId = profileId,
+            channelId = candidate.channelId,
+            variantId = candidate.variantId,
+        ) ?: return null
+
+        return when (
+            val archive = playbackArchiveResolver.resolve(
+                PlaybackArchiveRequest(
+                    intent = intent,
+                    livePlaybackReference = variant.locator,
+                    metadata = PlaybackArchiveMetadata(
+                        mode = variant.catchupMode,
+                        source = variant.catchupSource,
+                        days = variant.catchupDays,
+                        correction = variant.catchupCorrection,
+                    ),
+                ),
+            )
+        ) {
+            PlaybackArchiveResolution.NotApplicable ->
+                PlaybackVariantResolution.AccessUnavailable(
+                    PlaybackAccessUnavailableReason.ArchiveUnsupported,
+                )
+
+            is PlaybackArchiveResolution.Unavailable ->
+                PlaybackVariantResolution.AccessUnavailable(archive.reason.toAccessReason())
+
+            is PlaybackArchiveResolution.Ready ->
+                resolveAccess(
+                    variant = variant,
+                    playbackReference = archive.locator,
+                    timeline = archive.timeline,
+                )
+        }
     }
 
     private suspend fun resolveAccess(

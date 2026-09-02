@@ -160,6 +160,9 @@ fun AppNavigation(
                                 open(AppDestination.Player(channelId))
                             },
                             railFocusRequester = railFocusRequester,
+                            onPlaybackSelected = { selection ->
+                                open(selection.toPlayerDestination())
+                            },
                         )
 
                         AppDestination.Search -> SearchRoute(
@@ -199,26 +202,30 @@ fun AppNavigation(
                             openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
                         )
 
-                        is AppDestination.Player -> PlayerFavoriteRoute(
-                            playbackCatalog = playbackCatalog,
-                            channelPreferencesRepository = channelPreferencesRepository,
-                            playbackSessionGateway = playbackSessionGateway,
-                            playbackSurface = { session, surfaceModifier ->
-                                Media3PlaybackSurface(
-                                    session = session,
-                                    modifier = surfaceModifier,
-                                )
-                            },
-                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
-                            channelId = destination.channelId,
-                            onBack = ::goBack,
-                            onOpenDoctor = ::openDoctorFromPlayer,
-                            playbackStartGateway = playbackStartGateway,
-                            requestLocalNetworkPermission = {
-                                requestLocalNetworkPermission().toPlayerOutcome()
-                            },
-                            openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
-                        )
+                        is AppDestination.Player -> {
+                            val playbackIntent = destination.toPlaybackIntent()
+                            PlayerFavoriteRoute(
+                                playbackCatalog = playbackCatalog,
+                                channelPreferencesRepository = channelPreferencesRepository,
+                                playbackSessionGateway = playbackSessionGateway,
+                                playbackSurface = { session, surfaceModifier ->
+                                    Media3PlaybackSurface(
+                                        session = session,
+                                        modifier = surfaceModifier,
+                                    )
+                                },
+                                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                                channelId = playbackIntent.channelId,
+                                onBack = ::goBack,
+                                onOpenDoctor = ::openDoctorFromPlayer,
+                                playbackStartGateway = playbackStartGateway,
+                                requestLocalNetworkPermission = {
+                                    requestLocalNetworkPermission().toPlayerOutcome()
+                                },
+                                openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
+                                playbackIntent = playbackIntent,
+                            )
+                        }
                     }
                 }
             },

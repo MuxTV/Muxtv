@@ -2,8 +2,9 @@ package app.muxtv.player.media3
 
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import app.muxtv.player.PlaybackStartRequest
+import app.muxtv.player.PlaybackIntent
 import app.muxtv.player.PlaybackStartFailure
+import app.muxtv.player.PlaybackStartRequest
 import app.muxtv.player.PlaybackStartResult
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -36,6 +37,107 @@ class PlaybackSetupCommandCodecTest {
             .containsExactly("profile_id", "channel_id")
         assertThat(MuxTvPlaybackSessionContract.parseSetupArgs(encoded)!!.request.preferredVariantId)
             .isNull()
+    }
+
+    @Test
+    fun catchupProgrammeRoundTripsOnlyProviderNeutralSemanticFields() {
+        val setupId = setupId("10000000-0000-0000-0000-000000000007")
+        val request = PlaybackStartRequest(
+            profileId = PROFILE_ID,
+            intent = PlaybackIntent.CatchupProgram(
+                channelId = CHANNEL_ID,
+                programmeId = PROGRAMME_ID,
+                startEpochMillis = PROGRAMME_START,
+                endEpochMillis = PROGRAMME_END,
+            ),
+            preferredVariantId = PREFERRED_VARIANT_ID,
+        )
+
+        val encoded = MuxTvPlaybackSessionContract.setupArgs(setupId, request)
+        val requestBundle = requireNotNull(encoded.getBundle("request"))
+        val decoded = MuxTvPlaybackSessionContract.parseSetupArgs(encoded)
+
+        assertThat(requestBundle.keySet()).containsExactly(
+            "profile_id",
+            "channel_id",
+            "preferred_variant_id",
+            "intent_kind",
+            "programme_id",
+            "programme_start_epoch_millis",
+            "programme_end_epoch_millis",
+        )
+        assertThat(requestBundle.getString("intent_kind")).isEqualTo("catchup_program")
+        assertThat(requestBundle.getString("programme_id")).isEqualTo(PROGRAMME_ID)
+        assertThat(requestBundle.getLong("programme_start_epoch_millis")).isEqualTo(PROGRAMME_START)
+        assertThat(requestBundle.getLong("programme_end_epoch_millis")).isEqualTo(PROGRAMME_END)
+        assertThat(decoded).isEqualTo(PlaybackSetupCommand(setupId, request))
+        assertThat(requestBundle.keySet()).doesNotContain("locator")
+        assertThat(requestBundle.keySet()).doesNotContain("headers")
+        assertThat(requestBundle.keySet()).doesNotContain("credentials")
+    }
+
+    @Test
+    fun catchupPositionRoundTripsOnlyProviderNeutralSemanticFields() {
+        val setupId = setupId("10000000-0000-0000-0000-000000000008")
+        val request = PlaybackStartRequest(
+            profileId = PROFILE_ID,
+            intent = PlaybackIntent.CatchupPosition(
+                channelId = CHANNEL_ID,
+                positionEpochMillis = PROGRAMME_START,
+            ),
+        )
+
+        val encoded = MuxTvPlaybackSessionContract.setupArgs(setupId, request)
+        val requestBundle = requireNotNull(encoded.getBundle("request"))
+        val decoded = MuxTvPlaybackSessionContract.parseSetupArgs(encoded)
+
+        assertThat(requestBundle.keySet()).containsExactly(
+            "profile_id",
+            "channel_id",
+            "intent_kind",
+            "position_epoch_millis",
+        )
+        assertThat(requestBundle.getString("intent_kind")).isEqualTo("catchup_position")
+        assertThat(requestBundle.getLong("position_epoch_millis")).isEqualTo(PROGRAMME_START)
+        assertThat(decoded).isEqualTo(PlaybackSetupCommand(setupId, request))
+    }
+
+    @Test
+    fun malformedCatchupSemanticPayloadsFailClosed() {
+        val setupId = "10000000-0000-0000-0000-000000000009"
+
+        val missingProgrammeEnd = setupBundle(
+            setupId = setupId,
+            request = Bundle().apply {
+                putString("profile_id", PROFILE_ID)
+                putString("channel_id", CHANNEL_ID)
+                putString("intent_kind", "catchup_program")
+                putString("programme_id", PROGRAMME_ID)
+                putLong("programme_start_epoch_millis", PROGRAMME_START)
+            },
+        )
+        val unknownKind = setupBundle(
+            setupId = setupId,
+            request = Bundle().apply {
+                putString("profile_id", PROFILE_ID)
+                putString("channel_id", CHANNEL_ID)
+                putString("intent_kind", "provider_specific_secret_mode")
+            },
+        )
+        val secretBearingExtra = setupBundle(
+            setupId = setupId,
+            request = Bundle().apply {
+                putString("profile_id", PROFILE_ID)
+                putString("channel_id", CHANNEL_ID)
+                putString("intent_kind", "catchup_position")
+                putLong("position_epoch_millis", PROGRAMME_START)
+                putString("locator", "https://provider.invalid/archive?token=codec-secret")
+            },
+        )
+
+        assertThat(MuxTvPlaybackSessionContract.parseSetupArgs(missingProgrammeEnd)).isNull()
+        assertThat(MuxTvPlaybackSessionContract.parseSetupArgs(unknownKind)).isNull()
+        assertThat(MuxTvPlaybackSessionContract.parseSetupArgs(secretBearingExtra)).isNull()
     }
 
     @Test
@@ -221,6 +323,11 @@ class PlaybackSetupCommandCodecTest {
     private fun setupId(raw: String): PlaybackSetupId =
         requireNotNull(PlaybackSetupId.parse(raw))
 
+    private fun setupBundle(setupId: String, request: Bundle): Bundle = Bundle().apply {
+        putString("setup_id", setupId)
+        putBundle("request", request)
+    }
+
     private fun request() = PlaybackStartRequest(
         profileId = PROFILE_ID,
         channelId = CHANNEL_ID,
@@ -231,5 +338,8 @@ class PlaybackSetupCommandCodecTest {
         const val PROFILE_ID = "profile-main"
         const val CHANNEL_ID = "channel-news"
         const val PREFERRED_VARIANT_ID = "variant-primary"
+        const val PROGRAMME_ID = "programme-epg-42"
+        const val PROGRAMME_START = 1_800_000_000_000L
+        const val PROGRAMME_END = PROGRAMME_START + 3_600_000L
     }
 }

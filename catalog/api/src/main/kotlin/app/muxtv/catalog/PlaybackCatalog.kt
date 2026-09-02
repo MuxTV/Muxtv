@@ -165,6 +165,23 @@ interface PlaybackCandidateResolver {
         profileId: String,
         candidate: PlaybackCandidateIdentity,
     ): PlaybackVariantResolution?
+
+    suspend fun resolveIntentCandidate(
+        profileId: String,
+        intent: PlaybackIntent,
+        candidate: PlaybackCandidateIdentity,
+    ): PlaybackVariantResolution? = when (intent) {
+        is PlaybackIntent.Live -> resolveCandidate(
+            profileId = profileId,
+            candidate = candidate,
+        )
+
+        is PlaybackIntent.CatchupProgram,
+        is PlaybackIntent.CatchupPosition,
+        -> PlaybackVariantResolution.AccessUnavailable(
+            PlaybackAccessUnavailableReason.ArchiveUnsupported,
+        )
+    }
 }
 
 interface PlaybackCatalog {
