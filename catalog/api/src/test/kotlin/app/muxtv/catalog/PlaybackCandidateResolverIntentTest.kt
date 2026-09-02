@@ -7,31 +7,30 @@ import org.junit.Test
 
 class PlaybackCandidateResolverIntentTest {
     @Test
-    fun liveIntentDefaultsToExistingExactCandidateResolution() {
-        runBlocking {
-            val candidate = PlaybackCandidateIdentity(
-                channelId = CHANNEL_ID,
-                variantId = VARIANT_ID,
-            )
-            val expected = PlaybackVariantResolution.AccessUnavailable(
-                PlaybackAccessUnavailableReason.CredentialUnavailable,
-            )
-            val resolvedCandidates = mutableListOf<PlaybackCandidateIdentity>()
-            val resolver = recordingResolver(resolvedCandidates, expected)
+    fun liveIntentDefaultsToExistingExactCandidateResolution(): Unit = runBlocking {
+        val candidate = PlaybackCandidateIdentity(
+            channelId = CHANNEL_ID,
+            variantId = VARIANT_ID,
+        )
+        val expected = PlaybackVariantResolution.AccessUnavailable(
+            PlaybackAccessUnavailableReason.CredentialUnavailable,
+        )
+        val resolvedCandidates = mutableListOf<PlaybackCandidateIdentity>()
+        val resolver = recordingResolver(resolvedCandidates, expected)
 
-            val result = resolver.resolveIntentCandidate(
-                profileId = PROFILE_ID,
-                intent = PlaybackIntent.Live(CHANNEL_ID),
-                candidate = candidate,
-            )
+        val result = resolver.resolveIntentCandidate(
+            profileId = PROFILE_ID,
+            intent = PlaybackIntent.Live(CHANNEL_ID),
+            candidate = candidate,
+        )
 
-            assertThat(result).isEqualTo(expected)
-            assertThat(resolvedCandidates).containsExactly(candidate)
-        }
+        assertThat(result).isEqualTo(expected)
+        assertThat(resolvedCandidates).containsExactly(candidate)
+        Unit
     }
 
     @Test
-    fun archiveIntentDefaultsToUnsupportedWithoutFallingBackToLiveCandidateResolution() {
+    fun archiveIntentDefaultsToUnsupportedWithoutFallingBackToLiveCandidateResolution(): Unit =
         runBlocking {
             val candidate = PlaybackCandidateIdentity(
                 channelId = CHANNEL_ID,
@@ -60,8 +59,8 @@ class PlaybackCandidateResolverIntentTest {
                 ),
             )
             assertThat(resolvedCandidates).isEmpty()
+            Unit
         }
-    }
 
     private fun recordingResolver(
         resolvedCandidates: MutableList<PlaybackCandidateIdentity>,
