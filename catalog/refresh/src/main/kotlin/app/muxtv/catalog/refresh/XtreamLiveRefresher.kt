@@ -323,9 +323,9 @@ private fun XtreamLiveEntry.toCatalogImportEntry(): CatalogImportEntry =
         logoUrl = null,
         groupTitle = null,
         channelNumber = channelNumber?.toString(),
-        catchupMode = null,
+        catchupMode = if (archiveAvailable == true) XTREAM_CATCHUP_MODE else null,
         catchupSource = null,
-        catchupDays = null,
+        catchupDays = if (archiveAvailable == true) archiveDurationDays else null,
         catchupCorrection = null,
         userAgent = null,
         referrer = null,
@@ -340,3 +340,5 @@ private fun String.toXtreamEndpoint(): HttpUrl = toHttpUrl()
 private class XtreamHttpStatusException(
     val statusCode: Int,
 ) : IOException("Xtream endpoint returned HTTP $statusCode.")
+
+private const val XTREAM_CATCHUP_MODE = "xtream"
