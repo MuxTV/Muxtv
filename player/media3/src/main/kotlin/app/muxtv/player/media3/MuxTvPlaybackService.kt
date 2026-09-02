@@ -378,8 +378,9 @@ class MuxTvPlaybackService : MediaSessionService() {
                     recordObservation(PlaybackObservationKind.ATTEMPT_STARTED)
                     val request = activeRequest ?: return
                     val resolution = try {
-                        playbackCandidateResolver.resolveCandidate(
-                            profileId = request.profileId,
+                        resolvePlaybackCandidateForRecovery(
+                            resolver = playbackCandidateResolver,
+                            request = request,
                             candidate = action.candidate,
                         )
                     } catch (cancelled: CancellationException) {
