@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "releaseTrack": "0.1.0-alpha",
+  "gates": [
+    { "id": "scope.alpha_dependencies", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "truth.version", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "truth.clean_tree", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "build.release_assemble", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "build.r8_shrinking", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "build.baseline_profile_packaged", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "build.signing", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "build.sbom", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "build.dependency_report", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "virtual.old_edge", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "virtual.current", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "virtual.low_ram", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "data.room_current_schema", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "data.upgrade_previous_supported", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "security.keystore_persistence", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "security.keystore_reset", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "security.redaction", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "recovery.tv_path", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "recovery.failure_previous_good", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "recovery.user_docs", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "player.core_journey", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "player.transport", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "diagnostics.export", "requiredByDefault": true, "availabilityConditional": false },
+
+    { "id": "physical.current_android_tv", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "physical.constrained_tv", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "physical.fire_tv", "requiredByDefault": false, "availabilityConditional": true },
+
+    { "id": "perf.baseline_profile_effect", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "perf.startup_frames_memory", "requiredByDefault": true, "availabilityConditional": false },
+    { "id": "perf.measurement_provenance", "requiredByDefault": true, "availabilityConditional": false }
+  ]
+}
