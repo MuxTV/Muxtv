@@ -120,6 +120,12 @@ function Assert-ValidatorFailure {
 
     try {
         $path = Write-FixtureManifest -Name $Name -Manifest $Manifest
+    } catch {
+        $script:failures.Add("$Name fixture setup failed: $($_.Exception.Message)")
+        return
+    }
+
+    try {
         $null = Invoke-Validator -ManifestPath $path
         $script:failures.Add("$Name expected failure but validator accepted the manifest.")
     } catch {
@@ -263,6 +269,44 @@ try {
         -Name "signed-query-secret" `
         -Manifest $signedQueryReference `
         -ForbiddenEcho $signedQuerySecret
+
+    $sourceRefSecret = "source-ref-secret"
+    $sourceRefReference = New-EligibleManifest
+    $sourceRefReference.sourceRef = "https://example.invalid/source?token=$sourceRefSecret"
+    Assert-ValidatorFailure `
+        -Name "source-ref-secret" `
+        -Manifest $sourceRefReference `
+        -ForbiddenEcho $sourceRefSecret
+
+    $deferRationaleSecret = "defer-rationale-secret"
+    $deferRationaleReference = New-EligibleManifest
+    $deferRationaleReference.claimEligible = $false
+    $deferRationaleGate = $deferRationaleReference.gates["physical.fire_tv"]
+    $deferRationaleGate.status = "DEFERRED"
+    $deferRationaleGate.defer = [ordered]@{
+        issueNumber = 31
+        rationale = "https://example.invalid/defer?token=$deferRationaleSecret"
+        scopeEffect = "Fire TV remains outside current alpha claims."
+    }
+    Assert-ValidatorFailure `
+        -Name "defer-rationale-secret" `
+        -Manifest $deferRationaleReference `
+        -ForbiddenEcho $deferRationaleSecret
+
+    $deferScopeEffectSecret = "defer-scope-secret"
+    $deferScopeEffectReference = New-EligibleManifest
+    $deferScopeEffectReference.claimEligible = $false
+    $deferScopeEffectGate = $deferScopeEffectReference.gates["physical.fire_tv"]
+    $deferScopeEffectGate.status = "DEFERRED"
+    $deferScopeEffectGate.defer = [ordered]@{
+        issueNumber = 31
+        rationale = "Fire TV evidence is unavailable."
+        scopeEffect = "Authorization: Bearer $deferScopeEffectSecret"
+    }
+    Assert-ValidatorFailure `
+        -Name "defer-scope-effect-secret" `
+        -Manifest $deferScopeEffectReference `
+        -ForbiddenEcho $deferScopeEffectSecret
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
