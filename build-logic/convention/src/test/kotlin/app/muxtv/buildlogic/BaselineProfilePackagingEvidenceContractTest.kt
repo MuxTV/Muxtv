@@ -36,6 +36,7 @@ class BaselineProfilePackagingEvidenceContractTest {
             "app\\tv\\src\\release\\generated\\baselineProfiles\\baseline-prof.txt",
             "assets/dexopt/baseline.prof",
             "assets/dexopt/baseline.profm",
+            "1572864",
             "Get-FileHash",
             "SHA256",
             "sourceCommit",
@@ -56,7 +57,10 @@ class BaselineProfilePackagingEvidenceContractTest {
         listOf(
             "workflow_dispatch:",
             "pull_request:",
+            "contents: read",
+            "actions: read",
             "runs-on: windows-latest",
+            "github.event.pull_request.head.sha",
             "persist-credentials: false",
             "uses: ./.github/actions/setup-muxtv-jdks",
             "Initialize-AndroidSdkEnvironment.ps1",
@@ -65,6 +69,7 @@ class BaselineProfilePackagingEvidenceContractTest {
             "app/tv/build/outputs/apk/release/**",
             ".work/evidence/release-baseline-profile/**",
         ).forEach { token -> assertContains(workflowText, token) }
+        assertFalse(workflowText.contains("contents: write"), "Permanent packaging evidence workflow must be read-only.")
         assertFalse(
             Regex("(?m)^\\s*uses:\\s*actions/upload-artifact@").containsMatchIn(workflowText),
             "Baseline Profile evidence must use the shared bounded artifact uploader.",

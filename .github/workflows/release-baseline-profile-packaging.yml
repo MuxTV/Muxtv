@@ -1,0 +1,68 @@
+name: Release Baseline Profile packaging evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/tv/**'
+      - 'benchmark/macrobenchmark/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/BaselineProfilePackagingEvidenceContractTest.kt'
+      - 'tools/release/Invoke-BaselineProfilePackagingEvidence.ps1'
+      - '.github/workflows/release-baseline-profile-packaging.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-baseline-profile-packaging-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  packaging:
+    name: Release Baseline Profile packaging
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Initialize Android SDK environment
+        shell: pwsh
+        run: . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Verify Baseline Profile packaging evidence contract
+        shell: pwsh
+        run: |
+          .\gradlew.bat -p build-logic :convention:test `
+            --tests "app.muxtv.buildlogic.BaselineProfilePackagingEvidenceContractTest" `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Baseline Profile packaging evidence contract failed." }
+
+      - name: Build and inspect exact-head release APK
+        shell: pwsh
+        run: |
+          & .\tools\release\Invoke-BaselineProfilePackagingEvidence.ps1 `
+            -SourceCommit "$env:SOURCE_COMMIT"
+
+      - name: Upload Baseline Profile packaging evidence
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: release-baseline-profile-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/tv/build/outputs/apk/release/**
+            .work/evidence/release-baseline-profile/**
+          retention-days: 7
+          github-token: ${{ github.token }}
