@@ -131,6 +131,10 @@ foreach ($id in $manifestById.Keys) {
     }
 }
 
+if ($null -ne $manifest.PSObject.Properties["sourceRef"] -and $null -ne $manifest.sourceRef) {
+    Assert-PublicSafeValue -Value ([string]$manifest.sourceRef) -RejectAbsolutePath $true
+}
+
 $manifestCommit = [string]$manifest.commit
 foreach ($gate in $manifestById.Values) {
     if ([string]$gate.status -ceq "PASSED") {
@@ -153,6 +157,11 @@ foreach ($gate in $manifestById.Values) {
                 Assert-PublicSafeValue -Value ([string]$factProperty.Value) -RejectAbsolutePath $false
             }
         }
+    }
+
+    if ($null -ne $gate.PSObject.Properties["defer"] -and $null -ne $gate.defer) {
+        Assert-PublicSafeValue -Value ([string]$gate.defer.rationale) -RejectAbsolutePath $false
+        Assert-PublicSafeValue -Value ([string]$gate.defer.scopeEffect) -RejectAbsolutePath $false
     }
 }
 
