@@ -137,7 +137,7 @@ function Invoke-CleanReleaseBuild {
         --no-daemon `
         --stacktrace `
         --console=plain `
-        --no-problems-report | ForEach-Object { Write-Host $_ }
+        --no-problems-report
     if ($LASTEXITCODE -ne 0) {
         throw "Exact-head release $BuildLabel failed."
     }

@@ -36,9 +36,8 @@ class ReleaseReproducibilityEvidenceContractTest {
             "release-reproducibility-evidence.json",
         ).forEach { token -> assertContains(scriptText, token) }
 
-        assertContains(
-            scriptText,
-            "| ForEach-Object { Write-Host \$_ }",
+        assertTrue(
+            scriptText.contains("| ForEach-Object { Write-Host \$_ }"),
             "Gradle stdout must be consumed as log output so Invoke-CleanReleaseBuild returns only its artifact descriptor.",
         )
         assertTrue(
