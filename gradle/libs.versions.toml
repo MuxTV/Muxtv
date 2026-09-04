@@ -7,7 +7,7 @@ tv-material = "1.1.0"
 tv-foundation = "1.0.0"
 navigation3 = "1.1.4"
 media3 = "1.11.0"
-room3 = "3.0.0"
+room3 = "3.0.2"
 paging = "3.5.0"
 dagger-hilt = "2.60.1"
 androidx-hilt = "1.4.0"
@@ -62,7 +62,7 @@ paging-compose = { module = "androidx.paging:paging-compose", version.ref = "pag
 paging-testing = { module = "androidx.paging:paging-testing", version.ref = "paging" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "dagger-hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "dagger-hilt" }
-androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "androidx-hilt" }
+androidx-hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "work" }
 androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "androidx-hilt" }
 work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
