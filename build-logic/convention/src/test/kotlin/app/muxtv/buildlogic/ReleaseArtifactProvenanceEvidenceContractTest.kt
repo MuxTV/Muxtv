@@ -34,8 +34,15 @@ class ReleaseArtifactProvenanceEvidenceContractTest {
             "PENDING",
             "apksigner",
             "certificate SHA-256 digest",
+            "signerExitCode = ",
+            "LASTEXITCODE = 0",
             "release-artifact-provenance.json",
         ).forEach { token -> assertContains(scriptText, token) }
+
+        val signerCapture = scriptText.indexOf("signerExitCode = ")
+        val nativeExitReset = scriptText.indexOf("LASTEXITCODE = 0", startIndex = signerCapture.coerceAtLeast(0))
+        assertTrue(signerCapture >= 0, "The apksigner native exit code must be captured before normalization.")
+        assertTrue(nativeExitReset > signerCapture, "The expected unsigned apksigner exit must be neutralized after it is captured.")
 
         listOf(
             "debug.keystore",
