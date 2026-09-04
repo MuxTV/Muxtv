@@ -47,6 +47,69 @@ class XtreamPlaybackReferenceResolverContractTest {
     }
 
     @Test
+    fun `archive reference resolves to conventional UTC timeshift URL without diagnostic leakage`() =
+        runTest {
+            val manager = manager(
+                XtreamSourceAccess(
+                    baseUrl = "https://provider.example/root/",
+                    username = USERNAME,
+                    password = PASSWORD,
+                ),
+            )
+
+            val result = XtreamPlaybackReferenceResolver(manager).resolve(
+                PlaybackReferenceRequest(CREDENTIAL_ID.value, ARCHIVE_REFERENCE),
+            )
+
+            assertThat(result).isInstanceOf(PlaybackReferenceResolution.Ready::class.java)
+            val ready = result as PlaybackReferenceResolution.Ready
+            assertThat(ready.locator).isEqualTo(
+                "https://provider.example/root/timeshift/" +
+                    "user%2Fname/p%20ass/91/2026-09-02:14-05/707.m3u8",
+            )
+            assertThat(ready.insecureHttpPreapproved).isFalse()
+            assertThat(ready.toString()).doesNotContain(USERNAME)
+            assertThat(ready.toString()).doesNotContain(PASSWORD)
+            assertThat(ready.toString()).doesNotContain("provider.example")
+            assertThat(ready.toString()).doesNotContain("707")
+        }
+
+    @Test
+    fun `archive reference reuses existing plain http approval gate`() = runTest {
+        val manager = manager(
+            XtreamSourceAccess(
+                baseUrl = "http://provider.example/",
+                username = USERNAME,
+                password = PASSWORD,
+                insecureHttpApproved = false,
+            ),
+        )
+
+        val result = XtreamPlaybackReferenceResolver(manager).resolve(
+            PlaybackReferenceRequest(CREDENTIAL_ID.value, ARCHIVE_REFERENCE),
+        )
+
+        assertThat(result).isInstanceOf(PlaybackReferenceResolution.ApprovalRequired::class.java)
+        assertThat(result.toString()).doesNotContain(USERNAME)
+        assertThat(result.toString()).doesNotContain(PASSWORD)
+        assertThat(result.toString()).doesNotContain("707")
+    }
+
+    @Test
+    fun `malformed archive reference fails closed before credential lookup`() = runTest {
+        val resolver = XtreamPlaybackReferenceResolver(manager = manager(null))
+
+        val result = resolver.resolve(
+            PlaybackReferenceRequest(
+                credentialRef = CREDENTIAL_ID.value,
+                playbackReference = "muxtv-provider://xtream/archive/707/0/1788357900000/m3u8",
+            ),
+        )
+
+        assertThat(result).isEqualTo(PlaybackReferenceResolution.InvalidReference)
+    }
+
+    @Test
     fun `legacy format-less reference resolves as ts without changing persisted identity`() = runTest {
         val manager = manager(
             XtreamSourceAccess(
@@ -146,6 +209,8 @@ class XtreamPlaybackReferenceResolverContractTest {
         val CREDENTIAL_ID: CredentialId = CredentialId.parse("00000000-0000-0000-0000-000000000234")
         const val USERNAME = "user/name"
         const val PASSWORD = "p ass"
+        const val ARCHIVE_REFERENCE =
+            "muxtv-provider://xtream/archive/707/91/1788357900000/m3u8"
     }
 }
 

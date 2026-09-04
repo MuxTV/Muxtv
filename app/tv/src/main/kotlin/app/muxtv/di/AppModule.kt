@@ -102,8 +102,16 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun providePlaybackArchiveResolver(): PlaybackArchiveResolver =
-        M3uPlaybackArchiveResolver()
+    fun providePlaybackArchiveResolver(): PlaybackArchiveResolver {
+        val xtream = app.muxtv.catalog.refresh.XtreamPlaybackArchiveResolver()
+        val m3u = M3uPlaybackArchiveResolver()
+        return PlaybackArchiveResolver { request ->
+            when (val resolution = xtream.resolve(request)) {
+                app.muxtv.catalog.PlaybackArchiveResolution.NotApplicable -> m3u.resolve(request)
+                else -> resolution
+            }
+        }
+    }
 
     @Provides
     @Singleton
