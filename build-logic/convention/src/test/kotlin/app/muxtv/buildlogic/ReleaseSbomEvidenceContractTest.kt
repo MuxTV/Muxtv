@@ -53,6 +53,11 @@ class ReleaseSbomEvidenceContractTest {
             "sourceCommit",
             "sbomSha256",
             "release-sbom-evidence.json",
+            "cyclonedx-generation.log",
+            "Unable to resolve POM for",
+            "metadataResolutionWarningCount",
+            "metadataResolutionWarnings",
+            "metadataResolutionWarningComponentsPresent",
         ).forEach { token -> assertContains(scriptText, token) }
         assertFalse(
             scriptText.contains(":benchmark:"),
