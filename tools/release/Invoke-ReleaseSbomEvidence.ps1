@@ -16,6 +16,7 @@ $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory "..\.."
 $sbomPath = Join-Path $repositoryRoot "app\tv\build\reports\sbom\muxtv-tv-release.cdx.json"
 $evidenceDirectory = Join-Path $repositoryRoot ".work\evidence\release-sbom"
 $metadataPath = Join-Path $evidenceDirectory "release-sbom-evidence.json"
+$generationLogPath = Join-Path $evidenceDirectory "cyclonedx-generation.log"
 
 Push-Location $repositoryRoot
 try {
@@ -25,14 +26,31 @@ try {
     Remove-Item -LiteralPath $evidenceDirectory -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
 
-    & .\gradlew.bat :app:tv:cyclonedxDirectBom `
-        --no-daemon `
-        --stacktrace `
-        --console=plain `
-        --no-problems-report
-    if ($LASTEXITCODE -ne 0) {
+    $generationOutput = @(
+        & .\gradlew.bat :app:tv:cyclonedxDirectBom `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report 2>&1
+    )
+    $generationExitCode = $LASTEXITCODE
+    $generationOutput | Set-Content -LiteralPath $generationLogPath -Encoding utf8
+    $generationOutput | ForEach-Object { Write-Host ([string]$_) }
+    if ($generationExitCode -ne 0) {
         throw "CycloneDX releaseRuntimeClasspath SBOM generation failed."
     }
+
+    $metadataResolutionWarnings = @(
+        $generationOutput |
+            ForEach-Object {
+                $line = [string]$_
+                $match = [regex]::Match($line, 'Unable to resolve POM for\s+(?<coordinate>[^\s]+)')
+                if ($match.Success) {
+                    $match.Groups['coordinate'].Value
+                }
+            } |
+            Sort-Object -Unique
+    )
 
     if (-not (Test-Path -LiteralPath $sbomPath -PathType Leaf)) {
         throw "Expected release SBOM was not generated: app/tv/build/reports/sbom/muxtv-tv-release.cdx.json"
@@ -75,6 +93,25 @@ try {
         throw "Release SBOM contains no dependency graph nodes."
     }
 
+    $metadataResolutionWarningComponentsPresent = $true
+    foreach ($coordinate in $metadataResolutionWarnings) {
+        $parts = @($coordinate -split ':', 3)
+        if ($parts.Count -ne 3) {
+            throw "CycloneDX reported an unparseable POM metadata warning coordinate: $coordinate"
+        }
+        $matchingComponents = @(
+            $components | Where-Object {
+                [string]$_.group -ceq $parts[0] -and
+                [string]$_.name -ceq $parts[1] -and
+                [string]$_.version -ceq $parts[2]
+            }
+        )
+        if ($matchingComponents.Count -lt 1) {
+            $metadataResolutionWarningComponentsPresent = $false
+            throw "CycloneDX metadata enrichment failed and the warned component is absent from the SBOM graph: $coordinate"
+        }
+    }
+
     $forbiddenDependencyFragments = @(
         "pkg:maven/junit/junit@",
         "pkg:maven/androidx.test/",
@@ -89,6 +126,7 @@ try {
 
     $sbomSha256 = (Get-FileHash -LiteralPath $sbomPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $sbomRelativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $sbomPath).Replace('\', '/')
+    $generationLogRelativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $generationLogPath).Replace('\', '/')
 
     $metadata = [ordered]@{
         schemaVersion = 1
@@ -106,8 +144,12 @@ try {
         componentVersion = [string]$sbom.metadata.component.version
         componentCount = $components.Count
         dependencyNodeCount = $dependencies.Count
+        generationLogPath = $generationLogRelativePath
+        metadataResolutionWarningCount = $metadataResolutionWarnings.Count
+        metadataResolutionWarnings = $metadataResolutionWarnings
+        metadataResolutionWarningComponentsPresent = $metadataResolutionWarningComponentsPresent
     }
-    $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding utf8
+    $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
     Write-Host "Release SBOM evidence generated."
     Write-Host "sourceCommit=$SourceCommit"
@@ -116,6 +158,11 @@ try {
     Write-Host "sbomSizeBytes=$($sbomFile.Length)"
     Write-Host "components=$($components.Count)"
     Write-Host "dependencies=$($dependencies.Count)"
+    Write-Host "metadataResolutionWarningCount=$($metadataResolutionWarnings.Count)"
+    if ($metadataResolutionWarnings.Count -gt 0) {
+        Write-Host "metadataResolutionWarnings=$($metadataResolutionWarnings -join ',')"
+    }
+    Write-Host "metadataResolutionWarningComponentsPresent=$metadataResolutionWarningComponentsPresent"
     Write-Host "metadata=.work/evidence/release-sbom/release-sbom-evidence.json"
     exit 0
 }
