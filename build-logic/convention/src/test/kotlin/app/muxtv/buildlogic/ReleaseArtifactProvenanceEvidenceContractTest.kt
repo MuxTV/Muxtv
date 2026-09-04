@@ -11,6 +11,7 @@ class ReleaseArtifactProvenanceEvidenceContractTest {
 
     @Test
     fun `alpha release records exact-head apk aab dependency and signing provenance`() {
+        // Test-only RED state: production provenance entry points are intentionally absent.
         val script = repositoryRoot.resolve("tools/release/Invoke-ReleaseArtifactProvenanceEvidence.ps1")
         assertTrue(script.isFile, "Missing release artifact provenance evidence entry point.")
         val scriptText = script.readText()
