@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - 'app/tv/**'
+      - 'gradle/libs.versions.toml'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/ReleaseArtifactProvenanceEvidenceContractTest.kt'
       - 'tools/android/**'
       - 'tools/ci/Assert-EvidenceCommit.ps1'
