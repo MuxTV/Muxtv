@@ -74,11 +74,12 @@ try {
         throw "Application release build configuration is missing."
     }
     $applicationBuild = Get-Content -LiteralPath $applicationBuildPath -Raw
-    foreach ($forbiddenDebugSigning in @(
-        'signingConfigs.getByName("debug")',
-        'signingConfig = signingConfigs.debug'
-    )) {
-        if ($applicationBuild.Contains($forbiddenDebugSigning)) {
+    $debugSigningPatterns = @(
+        'signingConfigs\s*\.\s*getByName\(\s*[''"]debug[''"]\s*\)',
+        'signingConfig\s*=\s*signingConfigs\s*\.\s*debug'
+    )
+    foreach ($debugSigningPattern in $debugSigningPatterns) {
+        if ($applicationBuild -match $debugSigningPattern) {
             throw "Release build configuration attempts to substitute debug signing; refusing provenance collection."
         }
     }
@@ -133,6 +134,7 @@ try {
     $signingGateStatus = "PENDING"
     $signerCertificateSha256 = $null
     $signerIdentity = $null
+    $signerFingerprintMatchesExpected = $null
 
     if ($signerExitCode -eq 0) {
         $signingStatus = "SIGNED"
@@ -164,7 +166,7 @@ try {
             if ($signerCertificateSha256 -cne $expectedSigner) {
                 throw "Release signer certificate fingerprint does not match the expected release signer."
             }
-            $signingGateStatus = "PASSED"
+            $signerFingerprintMatchesExpected = $true
         }
     }
 
@@ -185,6 +187,7 @@ try {
         signerEvidenceArtifact = $apkRelativePath
         signerCertificateSha256 = $signerCertificateSha256
         signerIdentity = $signerIdentity
+        signerFingerprintMatchesExpected = $signerFingerprintMatchesExpected
     }
     $metadata | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
