@@ -1,0 +1,72 @@
+name: Release artifact provenance evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/tv/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/ReleaseArtifactProvenanceEvidenceContractTest.kt'
+      - 'tools/android/**'
+      - 'tools/ci/Assert-EvidenceCommit.ps1'
+      - 'tools/release/Invoke-ReleaseArtifactProvenanceEvidence.ps1'
+      - '.github/actions/setup-muxtv-jdks/**'
+      - '.github/actions/upload-evidence-with-retry/**'
+      - '.github/workflows/release-artifact-provenance.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-artifact-provenance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  provenance:
+    name: Release APK/AAB provenance
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Initialize Android SDK environment
+        shell: pwsh
+        run: . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Verify release artifact provenance contract
+        shell: pwsh
+        run: |
+          .\gradlew.bat -p build-logic :convention:test `
+            --tests "app.muxtv.buildlogic.ReleaseArtifactProvenanceEvidenceContractTest" `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Release artifact provenance contract failed." }
+
+      - name: Build and inspect exact-head release artifacts
+        shell: pwsh
+        run: |
+          & .\tools\release\Invoke-ReleaseArtifactProvenanceEvidence.ps1 `
+            -SourceCommit "$env:SOURCE_COMMIT"
+
+      - name: Upload release artifact provenance evidence
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: release-artifact-provenance-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/tv/build/outputs/apk/release/**
+            app/tv/build/outputs/bundle/release/**
+            .work/evidence/release-artifact-provenance/**
+          retention-days: 7
+          github-token: ${{ github.token }}
