@@ -24,18 +24,42 @@ function Get-JsonPropertyValue {
     return $property.Value
 }
 
-function Get-ComponentPropertyValue {
-    param(
-        [Parameter(Mandatory)][object]$Component,
-        [Parameter(Mandatory)][string]$Name
-    )
+function Get-GradleProjectPathFromPurl {
+    param([Parameter(Mandatory)][object]$Component)
 
-    $properties = Get-JsonPropertyValue -Object $Component -Name "properties"
-    foreach ($property in @($properties)) {
-        if ([string](Get-JsonPropertyValue -Object $property -Name "name") -ceq $Name) {
-            return [string](Get-JsonPropertyValue -Object $property -Name "value")
-        }
+    $purl = [string](Get-JsonPropertyValue -Object $Component -Name "purl")
+    if ([string]::IsNullOrWhiteSpace($purl)) {
+        $purl = [string](Get-JsonPropertyValue -Object $Component -Name "bom-ref")
     }
+    if ([string]::IsNullOrWhiteSpace($purl)) {
+        return $null
+    }
+
+    $queryIndex = $purl.IndexOf("?", [System.StringComparison]::Ordinal)
+    if ($queryIndex -lt 0 -or $queryIndex -eq ($purl.Length - 1)) {
+        return $null
+    }
+
+    foreach ($pair in $purl.Substring($queryIndex + 1).Split("&", [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        $separatorIndex = $pair.IndexOf("=", [System.StringComparison]::Ordinal)
+        if ($separatorIndex -lt 1) {
+            continue
+        }
+
+        $key = [System.Uri]::UnescapeDataString($pair.Substring(0, $separatorIndex))
+        if ($key -cne "project_path") {
+            continue
+        }
+
+        $encodedValue = $pair.Substring($separatorIndex + 1)
+        $projectPath = [System.Uri]::UnescapeDataString($encodedValue)
+        if ([string]::IsNullOrWhiteSpace($projectPath) -or
+            -not $projectPath.StartsWith(":", [System.StringComparison]::Ordinal)) {
+            throw "CycloneDX project_path query must contain a non-empty Gradle project path beginning with ':'."
+        }
+        return $projectPath
+    }
+
     return $null
 }
 
@@ -196,8 +220,8 @@ try {
 
     foreach ($component in $components) {
         $coordinate = Get-ComponentCoordinate -Component $component
-        $projectPath = Get-ComponentPropertyValue -Component $component -Name "project_path"
-        $isFirstParty = -not [string]::IsNullOrWhiteSpace($projectPath) -and $projectPath.StartsWith(":", [System.StringComparison]::Ordinal)
+        $projectPath = Get-GradleProjectPathFromPurl -Component $component
+        $isFirstParty = -not [string]::IsNullOrWhiteSpace($projectPath)
         if ($isFirstParty) {
             $firstPartyComponentCount++
             continue
@@ -240,6 +264,10 @@ try {
         })
     }
 
+    if ($firstPartyComponentCount -eq 0) {
+        throw "No first-party Gradle project components were detected from CycloneDX project_path purl queries."
+    }
+
     foreach ($coordinate in $overrideMap.Keys) {
         if (-not $usedOverrideCoordinates.Contains([string]$coordinate)) {
             throw "Curated license override was not required by the exact-head third-party graph: $coordinate"
@@ -259,7 +287,7 @@ try {
     [void]$markdown.Add("- Third-party components: $thirdPartyComponentCount")
     [void]$markdown.Add("- Unknown third-party licenses: $unknownThirdPartyLicenseCount")
     [void]$markdown.Add("")
-    [void]$markdown.Add("First-party ownership is derived from the exact-head CycloneDX ``project_path`` property for repository Gradle projects under the MuxTV namespace policy ``$firstPartyNamespace``.")
+    [void]$markdown.Add("First-party ownership is derived only from the exact-head CycloneDX Gradle purl/bom-ref query ``project_path=...`` for repository project dependencies under the MuxTV namespace policy ``$firstPartyNamespace``.")
     [void]$markdown.Add("")
     [void]$markdown.Add("| Component | License source | License |")
     [void]$markdown.Add("| --- | --- | --- |")
@@ -285,7 +313,7 @@ try {
             usedCount = $usedOverrideCoordinates.Count
         }
         firstPartyPolicy = [ordered]@{
-            ownershipProperty = "project_path"
+            ownershipSignal = "purl/bom-ref query project_path"
             namespace = $firstPartyNamespace
         }
         firstPartyComponentCount = $firstPartyComponentCount
