@@ -130,6 +130,7 @@ try {
 
     $signerOutput = @(& $apksigner verify --print-certs $apk.FullName 2>&1)
     $signerExitCode = $LASTEXITCODE
+    $LASTEXITCODE = 0
     $signingStatus = "UNSIGNED"
     $signingGateStatus = "PENDING"
     $signerCertificateSha256 = $null
