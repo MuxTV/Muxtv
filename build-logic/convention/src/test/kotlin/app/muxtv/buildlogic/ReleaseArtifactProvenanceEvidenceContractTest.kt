@@ -37,12 +37,21 @@ class ReleaseArtifactProvenanceEvidenceContractTest {
             "signerExitCode = ",
             "LASTEXITCODE = 0",
             "release-artifact-provenance.json",
+            "exit 0",
         ).forEach { token -> assertContains(scriptText, token) }
 
         val signerCapture = scriptText.indexOf("signerExitCode = ")
         val nativeExitReset = scriptText.indexOf("LASTEXITCODE = 0", startIndex = signerCapture.coerceAtLeast(0))
         assertTrue(signerCapture >= 0, "The apksigner native exit code must be captured before normalization.")
         assertTrue(nativeExitReset > signerCapture, "The expected unsigned apksigner exit must be neutralized after it is captured.")
+
+        val metadataWrite = scriptText.indexOf("metadata | ConvertTo-Json")
+        val explicitSuccessExit = scriptText.lastIndexOf("exit 0")
+        assertTrue(metadataWrite >= 0, "Release provenance metadata must be written before the success boundary.")
+        assertTrue(
+            explicitSuccessExit > metadataWrite,
+            "The script must explicitly return exit 0 only after release provenance metadata is written.",
+        )
 
         listOf(
             "debug.keystore",
