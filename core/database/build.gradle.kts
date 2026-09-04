@@ -70,7 +70,6 @@ dependencies {
     implementation(libs.room3.runtime)
     implementation(libs.room3.paging)
     implementation(libs.paging.runtime)
-    implementation(libs.androidx.tracing)
     ksp(libs.room3.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -1,7 +1,7 @@
 package app.muxtv.database
 
-import androidx.tracing.Trace
-import java.util.concurrent.atomic.AtomicInteger
+import app.muxtv.common.tracing.MuxTvTrace
+import app.muxtv.common.tracing.MuxTvTraceSection
 
 internal class RoomSourceRevisionStore(
     private val dao: SourceRevisionDao,
@@ -43,7 +43,7 @@ internal class RoomSourceRevisionStore(
         }
         if (entries.isEmpty()) return
 
-        traceAsyncSection(TRACE_STAGE_BATCH) {
+        MuxTvTrace.global.coroutineSection(MuxTvTraceSection.CATALOG_STAGE) {
             val canonicalChannels = ArrayList<CanonicalChannelEntity>(entries.size)
             val providerChannels = ArrayList<ProviderChannelEntity>(entries.size)
             val streamVariants = ArrayList<StreamVariantEntity>(entries.size)
@@ -152,21 +152,3 @@ internal class RoomSourceRevisionStore(
         const val MAX_BATCH_SIZE = 500
     }
 }
-
-private suspend inline fun <T> traceAsyncSection(
-    sectionName: String,
-    block: () -> T,
-): T {
-    if (!Trace.isEnabled()) return block()
-
-    val cookie = TRACE_COOKIE.incrementAndGet()
-    Trace.beginAsyncSection(sectionName, cookie)
-    return try {
-        block()
-    } finally {
-        Trace.endAsyncSection(sectionName, cookie)
-    }
-}
-
-private const val TRACE_STAGE_BATCH = "MuxTV.catalog.stageBatch"
-private val TRACE_COOKIE = AtomicInteger()
