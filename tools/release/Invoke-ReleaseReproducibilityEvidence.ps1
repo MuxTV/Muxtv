@@ -59,7 +59,7 @@ function Get-ArchiveContentManifest {
                 $stream.Dispose()
             }
 
-            $manifest.Add([pscustomobject][ordered]@{
+            [void]$manifest.Add([pscustomobject][ordered]@{
                 path = $entry.FullName
                 sizeBytes = [long]$entry.Length
                 entrySha256 = $entrySha256
