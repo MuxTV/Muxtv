@@ -202,6 +202,7 @@ try {
     Write-Host "signingStatus=$signingStatus"
     Write-Host "signingGateStatus=$signingGateStatus"
     Write-Host "metadata=.work/evidence/release-artifact-provenance/release-artifact-provenance.json"
+    exit 0
 }
 finally {
     Pop-Location
