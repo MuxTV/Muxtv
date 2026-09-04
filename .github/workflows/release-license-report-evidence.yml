@@ -1,0 +1,86 @@
+name: Release license report evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/tv/build.gradle.kts'
+      - 'gradle/libs.versions.toml'
+      - 'config/release/license-overrides.json'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/ReleaseLicenseReportEvidenceContractTest.kt'
+      - 'tools/ci/Assert-EvidenceCommit.ps1'
+      - 'tools/release/Invoke-ReleaseSbomEvidence.ps1'
+      - 'tools/release/Invoke-ReleaseLicenseReportEvidence.ps1'
+      - '.github/actions/setup-muxtv-jdks/**'
+      - '.github/actions/upload-evidence-with-retry/**'
+      - '.github/workflows/release-license-report-evidence.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-license-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  license-report:
+    name: Fail-closed third-party license report
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Initialize Android SDK environment
+        shell: pwsh
+        run: . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Verify release license report evidence contract
+        shell: pwsh
+        run: |
+          .\gradlew.bat -p build-logic :convention:test `
+            --tests "app.muxtv.buildlogic.ReleaseLicenseReportEvidenceContractTest" `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "Release license report evidence contract failed." }
+
+      - name: Generate exact-head third-party license report
+        id: license
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          & .\tools\release\Invoke-ReleaseLicenseReportEvidence.ps1 `
+            -SourceCommit "$env:SOURCE_COMMIT"
+
+      - name: Upload release license evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: release-license-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/release-license/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+      - name: Enforce fail-closed license gate after evidence upload
+        if: always()
+        shell: pwsh
+        env:
+          LICENSE_OUTCOME: ${{ steps.license.outcome }}
+        run: |
+          if ($env:LICENSE_OUTCOME -cne "success") {
+            throw "License report gate failed after evidence upload"
+          }
+          Write-Host "License report gate passed after evidence upload."
