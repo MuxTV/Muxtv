@@ -30,6 +30,8 @@ class ReleaseLicenseReportEvidenceContractTest {
             "muxtv-tv-release.cdx.json",
             "ConvertFrom-Json",
             "project_path",
+            "project_path=",
+            "UnescapeDataString",
             "MuxTV.",
             "licenses",
             "expression",
