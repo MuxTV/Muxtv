@@ -71,6 +71,7 @@ class ReleaseArtifactProvenanceEvidenceContractTest {
             "actions: read",
             "github.event.pull_request.head.sha",
             "persist-credentials: false",
+            "cancel-in-progress: true",
             "uses: ./.github/actions/setup-muxtv-jdks",
             "Initialize-AndroidSdkEnvironment.ps1",
             "Invoke-ReleaseArtifactProvenanceEvidence.ps1",
@@ -79,6 +80,10 @@ class ReleaseArtifactProvenanceEvidenceContractTest {
             "app/tv/build/outputs/bundle/release/**",
             ".work/evidence/release-artifact-provenance/**",
         ).forEach { token -> assertContains(workflowText, token) }
+        assertFalse(
+            workflowText.contains("cancel-in-progress: false"),
+            "Stale PR provenance runs must not block a newer exact-head evidence run.",
+        )
         assertFalse(workflowText.contains("contents: write"), "Release provenance workflow must be read-only.")
         assertFalse(
             Regex("(?m)^\\s*uses:\\s*actions/upload-artifact@").containsMatchIn(workflowText),
