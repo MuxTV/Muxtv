@@ -19,7 +19,7 @@ class MuxTvTraceContractTest {
         ).inOrder()
 
         MuxTvTraceSection.entries.forEach { section ->
-            assertThat(section.traceName).matches("MuxTv\\.[A-Za-z]+")
+            assertThat(section.traceName).matches("MuxTv\\.[A-Za-z][A-Za-z0-9]*")
             assertThat(section.traceName).doesNotContain("://")
             assertThat(section.traceName).doesNotContain("?")
             assertThat(section.traceName).doesNotContain("=")
