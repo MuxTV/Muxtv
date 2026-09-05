@@ -7,6 +7,8 @@ import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelManagementItem
+import app.muxtv.catalog.ChannelManagementQuery
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.ChannelQuery
 import app.muxtv.catalog.EpgGuideRepository
@@ -18,6 +20,7 @@ import app.muxtv.catalog.RecentChannelsQuery
 import app.muxtv.catalog.RecentChannelsRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -58,6 +61,9 @@ internal class TestChannelBrowseRepository(
             )
         }
     }
+
+    override fun managementPages(query: ChannelManagementQuery): Flow<PagingData<ChannelManagementItem>> =
+        flowOf(PagingData.empty())
 
     private companion object {
         val COMPLETED_LOAD_STATES = LoadStates(

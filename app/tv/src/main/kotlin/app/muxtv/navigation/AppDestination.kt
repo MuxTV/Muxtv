@@ -12,6 +12,9 @@ sealed interface AppDestination : NavKey {
     data object Channels : AppDestination
 
     @Serializable
+    data object ManageChannels : AppDestination
+
+    @Serializable
     data object Guide : AppDestination
 
     @Serializable
