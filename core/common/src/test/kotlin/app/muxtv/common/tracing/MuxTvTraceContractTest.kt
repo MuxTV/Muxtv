@@ -1,6 +1,7 @@
 package app.muxtv.common.tracing
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
@@ -123,6 +124,46 @@ class MuxTvTraceContractTest {
     }
 
     @Test
+    fun `coroutine trace cancellation before product block is not swallowed`() = runBlocking {
+        val expected = CancellationException("trace cancelled before product")
+        var executions = 0
+        val trace = MuxTvTrace.forTesting(CancellationBeforeBackend(expected))
+
+        val actual = try {
+            trace.coroutineSection(MuxTvTraceSection.SOURCE_REFRESH) {
+                executions += 1
+                50
+            }
+            null
+        } catch (failure: Throwable) {
+            failure
+        }
+
+        assertThat(actual).isSameInstanceAs(expected)
+        assertThat(executions).isEqualTo(0)
+    }
+
+    @Test
+    fun `coroutine trace cancellation after product block is not swallowed`() = runBlocking {
+        val expected = CancellationException("trace cancelled after product")
+        var executions = 0
+        val trace = MuxTvTrace.forTesting(CancellationAfterBackend(expected))
+
+        val actual = try {
+            trace.coroutineSection(MuxTvTraceSection.CATALOG_ACTIVATE) {
+                executions += 1
+                51
+            }
+            null
+        } catch (failure: Throwable) {
+            failure
+        }
+
+        assertThat(actual).isSameInstanceAs(expected)
+        assertThat(executions).isEqualTo(1)
+    }
+
+    @Test
     fun `product failure remains authoritative when tracer also fails`() {
         val expected = IllegalArgumentException("product failure")
         val trace = MuxTvTrace.forTesting(ThrowingAfterBackend)
@@ -230,6 +271,40 @@ private object LinkageFailureAfterBackend : MuxTvTraceBackend {
     ): T {
         block()
         throw NoClassDefFoundError("androidx/tracing/Tracer")
+    }
+}
+
+private class CancellationBeforeBackend(
+    private val failure: CancellationException,
+) : MuxTvTraceBackend {
+    override fun <T> trace(
+        section: MuxTvTraceSection,
+        block: () -> T,
+    ): T = throw failure
+
+    override suspend fun <T> traceCoroutine(
+        section: MuxTvTraceSection,
+        block: suspend () -> T,
+    ): T = throw failure
+}
+
+private class CancellationAfterBackend(
+    private val failure: CancellationException,
+) : MuxTvTraceBackend {
+    override fun <T> trace(
+        section: MuxTvTraceSection,
+        block: () -> T,
+    ): T {
+        block()
+        throw failure
+    }
+
+    override suspend fun <T> traceCoroutine(
+        section: MuxTvTraceSection,
+        block: suspend () -> T,
+    ): T {
+        block()
+        throw failure
     }
 }
 
