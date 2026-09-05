@@ -141,7 +141,7 @@ private object XtreamSourceAccessCodec {
             data.writeString(access.username)
             data.writeString(access.password)
             data.writeBoolean(access.archiveTimeZoneId != null)
-            access.archiveTimeZoneId?.let(data::writeString)
+            access.archiveTimeZoneId?.let { zoneId -> data.writeString(zoneId) }
         }
 
         val bytes = output.toByteArray()
