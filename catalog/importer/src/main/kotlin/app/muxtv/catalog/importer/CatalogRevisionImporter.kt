@@ -1,6 +1,5 @@
 package app.muxtv.catalog.importer
 
-import androidx.tracing.Trace
 import app.muxtv.catalog.ingest.M3uEncodingException
 import app.muxtv.catalog.ingest.M3uEntry
 import app.muxtv.catalog.ingest.M3uLimitExceededException
@@ -10,13 +9,14 @@ import app.muxtv.catalog.ingest.M3uParseSink
 import app.muxtv.catalog.ingest.M3uPlaylistHeader
 import app.muxtv.catalog.ingest.M3uWarning
 import app.muxtv.catalog.ingest.StreamingM3uParser
+import app.muxtv.common.tracing.MuxTvTrace
+import app.muxtv.common.tracing.MuxTvTraceSection
 import app.muxtv.database.SourceDefinition
 import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.database.StagedCatalogEntry
 import java.io.InputStream
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -138,7 +138,7 @@ class CatalogRevisionImporter(
                 revisionStore = revisionStore,
                 identityFactory = CatalogEntryIdentityFactory(),
             )
-            val report = traceAsyncSection(TRACE_PARSE) {
+            val report = MuxTvTrace.global.coroutineSection(MuxTvTraceSection.M3U_PARSE) {
                 feed.streamTo(sink)
             }
             sink.flush()
@@ -148,7 +148,7 @@ class CatalogRevisionImporter(
                 skippedEntries = report.skippedEntries,
                 warningCount = report.warningCount,
             )
-            val activation = traceAsyncSection(TRACE_ACTIVATE) {
+            val activation = MuxTvTrace.global.coroutineSection(MuxTvTraceSection.CATALOG_ACTIVATE) {
                 when (request.sourceOwnership) {
                     CatalogImportSourceOwnership.UPSERT_METADATA -> revisionStore.activate(
                         sourceId = request.sourceId,
@@ -350,38 +350,3 @@ private fun CatalogImportRequest.toRevisionImportRequest(): CatalogRevisionImpor
         refreshRunToken = refreshRunToken,
         sourceOwnership = sourceOwnership,
     )
-
-private suspend inline fun <T> traceAsyncSection(
-    sectionName: String,
-    block: () -> T,
-): T {
-    val traceCookie = try {
-        if (!Trace.isEnabled()) {
-            null
-        } else {
-            TRACE_COOKIE.incrementAndGet().also { cookie ->
-                Trace.beginAsyncSection(sectionName, cookie)
-            }
-        }
-    } catch (_: RuntimeException) {
-        // Android framework stubs used by local JVM tests do not implement android.os.Trace.
-        // Tracing is diagnostic-only and must never change importer behavior.
-        null
-    }
-
-    return try {
-        block()
-    } finally {
-        if (traceCookie != null) {
-            try {
-                Trace.endAsyncSection(sectionName, traceCookie)
-            } catch (_: RuntimeException) {
-                // A tracing backend failure must not replace the parser/storage result.
-            }
-        }
-    }
-}
-
-private const val TRACE_PARSE = "MuxTV.catalog.parse"
-private const val TRACE_ACTIVATE = "MuxTV.catalog.activate"
-private val TRACE_COOKIE = AtomicInteger()
