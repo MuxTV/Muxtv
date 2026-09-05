@@ -67,6 +67,20 @@ class MuxTvTraceContractTest {
     }
 
     @Test
+    fun `trace linkage failure before product block falls back without duplicate execution`() {
+        var executions = 0
+        val trace = MuxTvTrace.forTesting(LinkageFailureBeforeBackend)
+
+        val result = trace.section(MuxTvTraceSection.CATALOG_STAGE) {
+            executions += 1
+            47
+        }
+
+        assertThat(result).isEqualTo(47)
+        assertThat(executions).isEqualTo(1)
+    }
+
+    @Test
     fun `trace failure after product block preserves product result without duplicate execution`() {
         var executions = 0
         val trace = MuxTvTrace.forTesting(ThrowingAfterBackend)
@@ -77,6 +91,20 @@ class MuxTvTraceContractTest {
         }
 
         assertThat(result).isEqualTo(45)
+        assertThat(executions).isEqualTo(1)
+    }
+
+    @Test
+    fun `trace linkage failure after product block preserves product result`() {
+        var executions = 0
+        val trace = MuxTvTrace.forTesting(LinkageFailureAfterBackend)
+
+        val result = trace.section(MuxTvTraceSection.CATALOG_STAGE) {
+            executions += 1
+            48
+        }
+
+        assertThat(result).isEqualTo(48)
         assertThat(executions).isEqualTo(1)
     }
 
@@ -101,6 +129,36 @@ class MuxTvTraceContractTest {
 
         val actual = try {
             trace.section(MuxTvTraceSection.SEARCH) { throw expected }
+            null
+        } catch (failure: Throwable) {
+            failure
+        }
+
+        assertThat(actual).isSameInstanceAs(expected)
+    }
+
+    @Test
+    fun `product error remains authoritative when tracer reports linkage failure`() {
+        val expected = AssertionError("product failure")
+        val trace = MuxTvTrace.forTesting(LinkageFailureAfterBackend)
+
+        val actual = try {
+            trace.section(MuxTvTraceSection.CATALOG_STAGE) { throw expected }
+            null
+        } catch (failure: Throwable) {
+            failure
+        }
+
+        assertThat(actual).isSameInstanceAs(expected)
+    }
+
+    @Test
+    fun `non recoverable tracer error before product block is not swallowed`() {
+        val expected = AssertionError("tracer contract failure")
+        val trace = MuxTvTrace.forTesting(NonRecoverableErrorBackend(expected))
+
+        val actual = try {
+            trace.section(MuxTvTraceSection.SEARCH) { 49 }
             null
         } catch (failure: Throwable) {
             failure
@@ -143,4 +201,48 @@ private object ThrowingAfterBackend : MuxTvTraceBackend {
         block()
         throw IllegalStateException("trace infrastructure failure")
     }
+}
+
+private object LinkageFailureBeforeBackend : MuxTvTraceBackend {
+    override fun <T> trace(
+        section: MuxTvTraceSection,
+        block: () -> T,
+    ): T = throw NoClassDefFoundError("androidx/tracing/Tracer")
+
+    override suspend fun <T> traceCoroutine(
+        section: MuxTvTraceSection,
+        block: suspend () -> T,
+    ): T = throw NoClassDefFoundError("androidx/tracing/Tracer")
+}
+
+private object LinkageFailureAfterBackend : MuxTvTraceBackend {
+    override fun <T> trace(
+        section: MuxTvTraceSection,
+        block: () -> T,
+    ): T {
+        block()
+        throw NoClassDefFoundError("androidx/tracing/Tracer")
+    }
+
+    override suspend fun <T> traceCoroutine(
+        section: MuxTvTraceSection,
+        block: suspend () -> T,
+    ): T {
+        block()
+        throw NoClassDefFoundError("androidx/tracing/Tracer")
+    }
+}
+
+private class NonRecoverableErrorBackend(
+    private val failure: Error,
+) : MuxTvTraceBackend {
+    override fun <T> trace(
+        section: MuxTvTraceSection,
+        block: () -> T,
+    ): T = throw failure
+
+    override suspend fun <T> traceCoroutine(
+        section: MuxTvTraceSection,
+        block: suspend () -> T,
+    ): T = throw failure
 }
