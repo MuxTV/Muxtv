@@ -46,11 +46,13 @@ class XtreamFormatException : IllegalArgumentException("Xtream input has an inva
 sealed interface XtreamAuthResult {
     class Authenticated(
         allowedOutputFormats: List<String>,
+        val serverTimeZoneId: String? = null,
     ) : XtreamAuthResult {
         val allowedOutputFormats: List<String> = allowedOutputFormats.distinct().toList()
 
         override fun toString(): String =
-            "XtreamAuthResult.Authenticated(outputFormatCount=${allowedOutputFormats.size})"
+            "XtreamAuthResult.Authenticated(outputFormatCount=${allowedOutputFormats.size}, " +
+                "serverTimeZonePresent=${serverTimeZoneId != null})"
     }
 
     data object Rejected : XtreamAuthResult
@@ -134,8 +136,15 @@ class StreamingXtreamParser(
             }
             else -> throw XtreamFormatException()
         }
+        val serverTimeZoneId = (root["server_info"] as? JsonObject)
+            ?.let { serverInfo -> strictStringOrNull(serverInfo["timezone"], limits) }
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
 
-        return XtreamAuthResult.Authenticated(allowedOutputFormats)
+        return XtreamAuthResult.Authenticated(
+            allowedOutputFormats = allowedOutputFormats,
+            serverTimeZoneId = serverTimeZoneId,
+        )
     }
 
     @OptIn(ExperimentalSerializationApi::class)
