@@ -9,6 +9,8 @@ import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
 import app.muxtv.catalog.NowNextQuery
 import app.muxtv.catalog.PlayableChannelSummary
+import app.muxtv.common.tracing.MuxTvTrace
+import app.muxtv.common.tracing.MuxTvTraceSection
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -27,11 +29,13 @@ internal class RoomChannelSearchRepository(
         val queryTokenOverflow = SearchQueryEncoder.hasTokenOverflow(query.normalizedText)
 
         return dataSource.observeChanges().mapLatest {
-            buildSnapshot(
-                query = query,
-                tokens = tokens,
-                queryTokenOverflow = queryTokenOverflow,
-            )
+            MuxTvTrace.global.coroutineSection(MuxTvTraceSection.SEARCH) {
+                buildSnapshot(
+                    query = query,
+                    tokens = tokens,
+                    queryTokenOverflow = queryTokenOverflow,
+                )
+            }
         }
     }
 
