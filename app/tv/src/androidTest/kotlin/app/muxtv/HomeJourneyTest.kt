@@ -233,6 +233,10 @@ class HomeJourneyTest {
         val EmptyBrowseRepository = object : ChannelBrowseRepository {
             override fun pages(query: ChannelBrowseQuery): Flow<androidx.paging.PagingData<ChannelBrowseItem>> =
                 flowOf(androidx.paging.PagingData.empty())
+
+            override fun managementPages(query: app.muxtv.catalog.ChannelManagementQuery):
+                Flow<androidx.paging.PagingData<app.muxtv.catalog.ChannelManagementItem>> =
+                flowOf(androidx.paging.PagingData.empty())
         }
 
         val FavoritesBrowseRepository = object : ChannelBrowseRepository {
@@ -257,6 +261,10 @@ class HomeJourneyTest {
                         ),
                     ),
                 )
+
+            override fun managementPages(query: app.muxtv.catalog.ChannelManagementQuery):
+                Flow<androidx.paging.PagingData<app.muxtv.catalog.ChannelManagementItem>> =
+                flowOf(androidx.paging.PagingData.empty())
         }
     }
 }
