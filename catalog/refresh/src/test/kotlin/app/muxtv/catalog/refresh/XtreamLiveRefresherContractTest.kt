@@ -8,6 +8,7 @@ import app.muxtv.credentials.CredentialReadResult
 import app.muxtv.credentials.CredentialRemoveResult
 import app.muxtv.credentials.CredentialResetResult
 import app.muxtv.credentials.CredentialStore
+import app.muxtv.credentials.CredentialUnavailableReason
 import app.muxtv.credentials.CredentialWriteResult
 import app.muxtv.credentials.SecretBytes
 import app.muxtv.database.InactiveSourceRemovalResult
@@ -29,7 +30,7 @@ class XtreamLiveRefresherContractTest {
     fun `authenticated live sync publishes only opaque non-secret playback references`() = runTest {
         MockWebServer().use { server ->
             server.start()
-            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE).build())
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE_WITH_TIMEZONE).build())
             server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
             val fixture = fixture(server, insecureHttpApproved = true)
 
@@ -42,6 +43,11 @@ class XtreamLiveRefresherContractTest {
                 SourceAccessReference.xtream(CREDENTIAL_ID).value,
             )
             assertThat(fixture.revisionStore.guardedRunTokens).containsExactly(RUN_TOKEN)
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId)
+                .isEqualTo(ARCHIVE_TIME_ZONE_ID)
 
             val staged = fixture.revisionStore.batches.single().single()
             assertThat(staged.providerKey).isEqualTo("provider:707")
@@ -67,6 +73,111 @@ class XtreamLiveRefresherContractTest {
             assertThat(liveRequest.url.queryParameter("username")).isEqualTo(USERNAME)
             assertThat(liveRequest.url.queryParameter("password")).isEqualTo(PASSWORD)
             assertThat(liveRequest.url.queryParameter("action")).isEqualTo("get_live_streams")
+        }
+    }
+
+    @Test
+    fun `missing current provider timezone clears stale timezone and suppresses catch-up only`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE).build())
+            server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
+            val fixture = fixture(
+                server = server,
+                insecureHttpApproved = true,
+                initialArchiveTimeZoneId = ARCHIVE_TIME_ZONE_ID,
+            )
+
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
+
+            assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
+            val staged = fixture.revisionStore.batches.single().single()
+            assertThat(staged.locator).isEqualTo("muxtv-provider://xtream/live/707")
+            assertThat(staged.catchupMode).isNull()
+            assertThat(staged.catchupDays).isNull()
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId).isNull()
+        }
+    }
+
+    @Test
+    fun `invalid current provider timezone clears stale timezone and suppresses catch-up only`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE_WITH_INVALID_TIMEZONE).build())
+            server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
+            val fixture = fixture(
+                server = server,
+                insecureHttpApproved = true,
+                initialArchiveTimeZoneId = ARCHIVE_TIME_ZONE_ID,
+            )
+
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
+
+            assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
+            val staged = fixture.revisionStore.batches.single().single()
+            assertThat(staged.locator).isEqualTo("muxtv-provider://xtream/live/707")
+            assertThat(staged.catchupMode).isNull()
+            assertThat(staged.catchupDays).isNull()
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId).isNull()
+        }
+    }
+
+    @Test
+    fun `timezone persistence failure preserves live refresh but suppresses catch-up`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE_WITH_TIMEZONE).build())
+            server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
+            val fixture = fixture(
+                server = server,
+                insecureHttpApproved = true,
+                rejectCredentialUpdates = true,
+            )
+
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
+
+            assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
+            val staged = fixture.revisionStore.batches.single().single()
+            assertThat(staged.locator).isEqualTo("muxtv-provider://xtream/live/707")
+            assertThat(staged.catchupMode).isNull()
+            assertThat(staged.catchupDays).isNull()
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId).isNull()
+        }
+    }
+
+    @Test
+    fun `matching persisted timezone does not require a credential rewrite`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE_WITH_TIMEZONE).build())
+            server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
+            val fixture = fixture(
+                server = server,
+                insecureHttpApproved = true,
+                initialArchiveTimeZoneId = ARCHIVE_TIME_ZONE_ID,
+                rejectCredentialUpdates = true,
+            )
+
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
+
+            assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
+            val staged = fixture.revisionStore.batches.single().single()
+            assertThat(staged.catchupMode).isEqualTo("xtream")
+            assertThat(staged.catchupDays).isEqualTo(7)
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId)
+                .isEqualTo(ARCHIVE_TIME_ZONE_ID)
         }
     }
 
@@ -177,6 +288,8 @@ class XtreamLiveRefresherContractTest {
         server: MockWebServer,
         insecureHttpApproved: Boolean,
         cancelOnStage: Boolean = false,
+        initialArchiveTimeZoneId: String? = null,
+        rejectCredentialUpdates: Boolean = false,
     ): Fixture {
         val credentialStore = InMemoryXtreamCredentialStore()
         val accessManager = XtreamSourceAccessManager(credentialStore)
@@ -188,9 +301,11 @@ class XtreamLiveRefresherContractTest {
                     username = USERNAME,
                     password = PASSWORD,
                     insecureHttpApproved = insecureHttpApproved,
+                    archiveTimeZoneId = initialArchiveTimeZoneId,
                 ),
             ),
         ).isEqualTo(CredentialWriteResult.Stored)
+        credentialStore.rejectWrites = rejectCredentialUpdates
 
         val revisionStore = XtreamRefreshRevisionStore(cancelOnStage = cancelOnStage)
         val importer = CatalogRevisionImporter(
@@ -206,6 +321,7 @@ class XtreamLiveRefresherContractTest {
                 parser = StreamingXtreamParser(),
             ),
             revisionStore = revisionStore,
+            accessManager = accessManager,
         )
     }
 
@@ -220,6 +336,7 @@ class XtreamLiveRefresherContractTest {
     private data class Fixture(
         val refresher: XtreamLiveRefresher,
         val revisionStore: XtreamRefreshRevisionStore,
+        val accessManager: XtreamSourceAccessManager,
     )
 
     private companion object {
@@ -231,8 +348,15 @@ class XtreamLiveRefresherContractTest {
         const val RUN_TOKEN = "xtream-refresh-run-224"
         const val USERNAME = "TEST_USER_224"
         const val PASSWORD = "TEST_PASS_224"
+        const val ARCHIVE_TIME_ZONE_ID = "Europe/Stockholm"
         const val AUTH_ACTIVE =
             "{\"user_info\":{\"auth\":1,\"status\":\"Active\",\"allowed_output_formats\":[\"ts\",\"m3u8\"]}}"
+        const val AUTH_ACTIVE_WITH_TIMEZONE =
+            "{\"user_info\":{\"auth\":1,\"status\":\"Active\",\"allowed_output_formats\":[\"ts\",\"m3u8\"]}," +
+                "\"server_info\":{\"timezone\":\"Europe/Stockholm\"}}"
+        const val AUTH_ACTIVE_WITH_INVALID_TIMEZONE =
+            "{\"user_info\":{\"auth\":1,\"status\":\"Active\",\"allowed_output_formats\":[\"ts\",\"m3u8\"]}," +
+                "\"server_info\":{\"timezone\":\"Mars/Olympus\"}}"
         const val AUTH_REJECTED =
             "{\"user_info\":{\"auth\":0,\"status\":\"Disabled\",\"allowed_output_formats\":[\"ts\"]}}"
         const val LIVE_BASIC =
@@ -244,11 +368,15 @@ class XtreamLiveRefresherContractTest {
 
 private class InMemoryXtreamCredentialStore : CredentialStore {
     private val records = mutableMapOf<CredentialId, ByteArray>()
+    var rejectWrites: Boolean = false
 
     override suspend fun put(
         id: CredentialId,
         secret: SecretBytes,
     ): CredentialWriteResult {
+        if (rejectWrites) {
+            return CredentialWriteResult.Unavailable(CredentialUnavailableReason.IoFailure)
+        }
         records[id] = secret.copyBytes()
         return CredentialWriteResult.Stored
     }

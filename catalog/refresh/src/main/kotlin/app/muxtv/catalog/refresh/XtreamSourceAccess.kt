@@ -13,6 +13,7 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.time.ZoneId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -21,6 +22,7 @@ class XtreamSourceAccess(
     val username: String,
     val password: String,
     val insecureHttpApproved: Boolean = false,
+    val archiveTimeZoneId: String? = null,
 ) {
     init {
         require(baseUrl.isNotBlank()) { "Xtream base URL must not be blank." }
@@ -31,16 +33,40 @@ class XtreamSourceAccess(
         require(password.length <= MAX_PASSWORD_CHARACTERS) { "Xtream password is too long." }
         require(username.none(::isProhibitedControl)) { "Xtream username contains a prohibited control character." }
         require(password.none(::isProhibitedControl)) { "Xtream password contains a prohibited control character." }
+        archiveTimeZoneId?.let { zoneId ->
+            require(zoneId.isNotBlank()) { "Xtream archive timezone must not be blank." }
+            require(zoneId == zoneId.trim()) { "Xtream archive timezone must be normalized." }
+            require(zoneId.length <= MAX_ARCHIVE_TIME_ZONE_ID_CHARACTERS) {
+                "Xtream archive timezone is too long."
+            }
+            require(zoneId.none(::isProhibitedControl)) {
+                "Xtream archive timezone contains a prohibited control character."
+            }
+            require(runCatching { ZoneId.of(zoneId) }.isSuccess) {
+                "Xtream archive timezone is invalid."
+            }
+        }
     }
+
+    internal fun withArchiveTimeZoneId(archiveTimeZoneId: String?): XtreamSourceAccess =
+        XtreamSourceAccess(
+            baseUrl = baseUrl,
+            username = username,
+            password = password,
+            insecureHttpApproved = insecureHttpApproved,
+            archiveTimeZoneId = archiveTimeZoneId,
+        )
 
     override fun toString(): String =
         "XtreamSourceAccess(baseUrl=<redacted>, username=<redacted>, password=<redacted>, " +
-            "insecureHttpApproved=$insecureHttpApproved)"
+            "insecureHttpApproved=$insecureHttpApproved, " +
+            "archiveTimeZonePresent=${archiveTimeZoneId != null})"
 
     companion object {
         internal const val MAX_BASE_URL_CHARACTERS = 8 * 1024
         internal const val MAX_USERNAME_CHARACTERS = 4 * 1024
         internal const val MAX_PASSWORD_CHARACTERS = 8 * 1024
+        internal const val MAX_ARCHIVE_TIME_ZONE_ID_CHARACTERS = 128
     }
 }
 
@@ -109,11 +135,13 @@ private object XtreamSourceAccessCodec {
         val output = ByteArrayOutputStream()
         DataOutputStream(output).use { data ->
             data.write(MAGIC)
-            data.writeByte(VERSION)
+            data.writeByte(CURRENT_VERSION)
             data.writeBoolean(access.insecureHttpApproved)
             data.writeString(access.baseUrl)
             data.writeString(access.username)
             data.writeString(access.password)
+            data.writeBoolean(access.archiveTimeZoneId != null)
+            access.archiveTimeZoneId?.let { zoneId -> data.writeString(zoneId) }
         }
 
         val bytes = output.toByteArray()
@@ -137,7 +165,8 @@ private object XtreamSourceAccessCodec {
             if (!magic.contentEquals(MAGIC)) {
                 throw XtreamSourceAccessFormatException(XtreamSourceAccessFormatReason.InvalidMagic)
             }
-            if (data.readUnsignedByte() != VERSION) {
+            val version = data.readUnsignedByte()
+            if (version != LEGACY_VERSION && version != CURRENT_VERSION) {
                 throw XtreamSourceAccessFormatException(XtreamSourceAccessFormatReason.UnsupportedVersion)
             }
 
@@ -145,6 +174,11 @@ private object XtreamSourceAccessCodec {
             val baseUrl = data.readBoundedString(XtreamSourceAccess.MAX_BASE_URL_CHARACTERS)
             val username = data.readBoundedString(XtreamSourceAccess.MAX_USERNAME_CHARACTERS)
             val password = data.readBoundedString(XtreamSourceAccess.MAX_PASSWORD_CHARACTERS)
+            val archiveTimeZoneId = if (version >= CURRENT_VERSION && data.readBoolean()) {
+                data.readBoundedString(XtreamSourceAccess.MAX_ARCHIVE_TIME_ZONE_ID_CHARACTERS)
+            } else {
+                null
+            }
             if (input.available() != 0) {
                 throw XtreamSourceAccessFormatException(XtreamSourceAccessFormatReason.TrailingData)
             }
@@ -155,6 +189,7 @@ private object XtreamSourceAccessCodec {
                     username = username,
                     password = password,
                     insecureHttpApproved = insecureHttpApproved,
+                    archiveTimeZoneId = archiveTimeZoneId,
                 )
             } catch (error: IllegalArgumentException) {
                 throw XtreamSourceAccessFormatException(XtreamSourceAccessFormatReason.InvalidField, error)
@@ -199,7 +234,8 @@ private object XtreamSourceAccessCodec {
     }
 
     private val MAGIC = byteArrayOf('M'.code.toByte(), 'X'.code.toByte(), 'X'.code.toByte(), 'A'.code.toByte())
-    private const val VERSION = 1
+    private const val LEGACY_VERSION = 1
+    private const val CURRENT_VERSION = 2
     private const val MAX_ENCODED_FIELD_BYTES = 32 * 1024
 }
 
