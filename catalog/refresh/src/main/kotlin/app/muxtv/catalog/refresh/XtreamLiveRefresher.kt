@@ -222,6 +222,7 @@ class XtreamLiveRefresher(
             }
             return false
         }
+        if (normalizedTimeZoneId == access.archiveTimeZoneId) return true
 
         return accessManager.save(
             credentialId,
