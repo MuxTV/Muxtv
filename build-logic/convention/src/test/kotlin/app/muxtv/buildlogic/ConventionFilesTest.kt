@@ -23,6 +23,7 @@ class ConventionFilesTest {
             "dagger-hilt = \"2.60.1\"",
             "work = \"2.11.2\"",
             "datastore = \"1.2.1\"",
+            "tracing = \"2.0.1\"",
         ).forEach { expected -> assertContains(catalog, expected) }
     }
 
