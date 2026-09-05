@@ -46,7 +46,8 @@ class MuxTvTracer internal constructor(
                     throw failure
                 }
             }
-        } catch (traceFailure: Exception) {
+        } catch (traceFailure: Throwable) {
+            traceFailure.throwIfNotRecoverableTraceInfrastructureFailure(outcome)
             when (val productOutcome = outcome) {
                 is ProductOutcome.Success -> productOutcome.value
                 is ProductOutcome.Failure -> throw productOutcome.failure
@@ -76,7 +77,8 @@ class MuxTvTracer internal constructor(
                     throw failure
                 }
             }
-        } catch (traceFailure: Exception) {
+        } catch (traceFailure: Throwable) {
+            traceFailure.throwIfNotRecoverableTraceInfrastructureFailure(outcome)
             when (val productOutcome = outcome) {
                 is ProductOutcome.Success -> productOutcome.value
                 is ProductOutcome.Failure -> throw productOutcome.failure
@@ -129,4 +131,10 @@ private fun <T> ProductOutcome<T>?.resolveAlreadyStarted(): T = when (this) {
     is ProductOutcome.Success -> value
     is ProductOutcome.Failure -> throw failure
     null -> error("Trace backend attempted to execute a product block concurrently.")
+}
+
+private fun Throwable.throwIfNotRecoverableTraceInfrastructureFailure(productOutcome: ProductOutcome<*>?) {
+    if (productOutcome is ProductOutcome.Failure) return
+    if (this is Exception || this is LinkageError) return
+    throw this
 }
