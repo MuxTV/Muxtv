@@ -1,3 +1,7 @@
+import org.cyclonedx.Version
+import org.cyclonedx.gradle.CyclonedxDirectTask
+import org.cyclonedx.model.Component
+
 plugins {
     id("muxtv.android.application")
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +9,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.cyclonedx.bom)
 }
 
 android {
@@ -85,4 +90,18 @@ dependencies {
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
+}
+
+tasks.named<CyclonedxDirectTask>("cyclonedxDirectBom") {
+    projectType = Component.Type.APPLICATION
+    schemaVersion = Version.VERSION_16
+    componentName = "app.muxtv.tv"
+    componentVersion = android.defaultConfig.versionName ?: error("MuxTV release versionName must be defined for SBOM generation.")
+    includeConfigs = listOf("releaseRuntimeClasspath")
+    testConfigs = emptyList()
+    includeBuildEnvironment = false
+    includeBomSerialNumber = false
+    includeBuildSystem = false
+    jsonOutput.set(layout.buildDirectory.file("reports/sbom/muxtv-tv-release.cdx.json"))
+    xmlOutput.unsetConvention()
 }
