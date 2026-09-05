@@ -51,9 +51,9 @@ class XtreamLiveRefresherContractTest {
             assertThat(staged.locator).doesNotContain(server.hostName)
             assertThat(staged.tvgId).isEqualTo("epg-707")
             assertThat(staged.groupTitle).isNull()
-            assertThat(staged.catchupMode).isNull()
+            assertThat(staged.catchupMode).isEqualTo("xtream")
             assertThat(staged.catchupSource).isNull()
-            assertThat(staged.catchupDays).isNull()
+            assertThat(staged.catchupDays).isEqualTo(7)
             assertThat(staged.catchupCorrection).isNull()
 
             assertThat(server.requestCount).isEqualTo(2)
