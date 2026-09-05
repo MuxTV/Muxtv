@@ -8,7 +8,7 @@ import app.muxtv.network.ExactHttpOrigin
 import app.muxtv.network.SourceUrlDecision
 import app.muxtv.network.SourceUrlPolicy
 import java.time.Instant
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import okhttp3.HttpUrl
@@ -60,14 +60,20 @@ class XtreamPlaybackReferenceResolver(
                 format = parsed.format,
             )
 
-            is ParsedXtreamArchiveReference -> baseUrl.toArchiveUrl(
-                username = access.username,
-                password = access.password,
-                streamId = parsed.streamId,
-                durationMinutes = parsed.durationMinutes,
-                startEpochMillis = parsed.startEpochMillis,
-                format = parsed.format,
-            )
+            is ParsedXtreamArchiveReference -> {
+                val archiveTimeZone = access.archiveTimeZoneId
+                    ?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+                    ?: return PlaybackReferenceResolution.InvalidReference
+                baseUrl.toArchiveUrl(
+                    username = access.username,
+                    password = access.password,
+                    streamId = parsed.streamId,
+                    durationMinutes = parsed.durationMinutes,
+                    startEpochMillis = parsed.startEpochMillis,
+                    archiveTimeZone = archiveTimeZone,
+                    format = parsed.format,
+                )
+            }
         }
 
         return PlaybackReferenceResolution.Ready(
@@ -125,6 +131,7 @@ class XtreamPlaybackReferenceResolver(
         streamId: Long,
         durationMinutes: Int,
         startEpochMillis: Long,
+        archiveTimeZone: ZoneId,
         format: String,
     ): HttpUrl = newBuilder()
         .query(null)
@@ -133,7 +140,11 @@ class XtreamPlaybackReferenceResolver(
         .addPathSegment(username)
         .addPathSegment(password)
         .addPathSegment(durationMinutes.toString())
-        .addPathSegment(ARCHIVE_START_FORMATTER.format(Instant.ofEpochMilli(startEpochMillis)))
+        .addPathSegment(
+            ARCHIVE_START_FORMATTER.format(
+                Instant.ofEpochMilli(startEpochMillis).atZone(archiveTimeZone),
+            ),
+        )
         .addPathSegment("$streamId.$format")
         .build()
 
@@ -160,7 +171,6 @@ class XtreamPlaybackReferenceResolver(
         const val LEGACY_FORMAT = "ts"
         val ARCHIVE_START_FORMATTER: DateTimeFormatter = DateTimeFormatter
             .ofPattern("yyyy-MM-dd:HH-mm", Locale.ROOT)
-            .withZone(ZoneOffset.UTC)
         val LIVE_REFERENCE = Regex(
             "^muxtv-provider://xtream/live/([1-9][0-9]{0,18})(?:/(ts|m3u8))?$",
         )
