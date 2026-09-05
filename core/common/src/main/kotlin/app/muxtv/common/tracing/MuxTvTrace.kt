@@ -1,6 +1,7 @@
 package app.muxtv.common.tracing
 
 import androidx.tracing.Tracer
+import kotlinx.coroutines.CancellationException
 
 enum class MuxTvTraceSection(val traceName: String) {
     SOURCE_REFRESH("MuxTv.SourceRefresh"),
@@ -135,6 +136,7 @@ private fun <T> ProductOutcome<T>?.resolveAlreadyStarted(): T = when (this) {
 
 private fun Throwable.throwIfNotRecoverableTraceInfrastructureFailure(productOutcome: ProductOutcome<*>?) {
     if (productOutcome is ProductOutcome.Failure) return
+    if (this is CancellationException) throw this
     if (this is Exception || this is LinkageError) return
     throw this
 }
