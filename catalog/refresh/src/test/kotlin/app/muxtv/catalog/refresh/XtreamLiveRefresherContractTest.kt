@@ -155,6 +155,33 @@ class XtreamLiveRefresherContractTest {
     }
 
     @Test
+    fun `matching persisted timezone does not require a credential rewrite`() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            server.enqueue(MockResponse.Builder().body(AUTH_ACTIVE_WITH_TIMEZONE).build())
+            server.enqueue(MockResponse.Builder().body(LIVE_BASIC).build())
+            val fixture = fixture(
+                server = server,
+                insecureHttpApproved = true,
+                initialArchiveTimeZoneId = ARCHIVE_TIME_ZONE_ID,
+                rejectCredentialUpdates = true,
+            )
+
+            val result = fixture.refresher.refresh(request(refreshRunToken = RUN_TOKEN))
+
+            assertThat(result).isInstanceOf(XtreamLiveRefreshResult.Refreshed::class.java)
+            val staged = fixture.revisionStore.batches.single().single()
+            assertThat(staged.catchupMode).isEqualTo("xtream")
+            assertThat(staged.catchupDays).isEqualTo(7)
+
+            val persisted = fixture.accessManager.read(CREDENTIAL_ID)
+            assertThat(persisted).isInstanceOf(XtreamSourceAccessReadResult.Found::class.java)
+            assertThat((persisted as XtreamSourceAccessReadResult.Found).access.archiveTimeZoneId)
+                .isEqualTo(ARCHIVE_TIME_ZONE_ID)
+        }
+    }
+
+    @Test
     fun `authentication rejection is typed and never starts a revision or live request`() = runTest {
         MockWebServer().use { server ->
             server.start()
