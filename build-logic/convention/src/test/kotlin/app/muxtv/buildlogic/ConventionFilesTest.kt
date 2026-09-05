@@ -3,6 +3,7 @@ package app.muxtv.buildlogic
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ConventionFilesTest {
@@ -38,4 +39,36 @@ class ConventionFilesTest {
             assertTrue(sourceRoot.resolve(name).isFile, "Missing convention plugin source: $name")
         }
     }
+
+    @Test
+    fun `tracing instruments accepted search and player adapter boundaries`() {
+        val searchRepository = repositoryRoot.resolve(
+            "core/database/src/main/kotlin/app/muxtv/database/RoomChannelSearchRepository.kt",
+        ).readText()
+        val playbackService = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt",
+        ).readText()
+
+        assertContains(
+            searchRepository,
+            "MuxTvTrace.global.coroutineSection(MuxTvTraceSection.SEARCH) {",
+        )
+        assertEquals(
+            2,
+            playbackService.countLiteral(
+                "MuxTvTrace.global.section(MuxTvTraceSection.PLAYER_PREPARE) {",
+            ),
+            "Internal and external player prepare paths must share the same bounded trace taxonomy.",
+        )
+        assertEquals(
+            2,
+            playbackService.countLiteral(
+                "MuxTvTrace.global.section(MuxTvTraceSection.FIRST_FRAME) {",
+            ),
+            "Internal and external first-frame callbacks must emit the same bounded trace slice.",
+        )
+    }
 }
+
+private fun String.countLiteral(value: String): Int =
+    windowed(value.length, step = 1, partialWindows = false).count { it == value }
