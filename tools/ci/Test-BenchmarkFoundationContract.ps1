@@ -139,9 +139,10 @@ foreach ($token in @(
     }
 }
 
-# O2.4: prove that the Benchmark 1.5 target variant can merge AndroidX Tracing 2.0
-# in-process packets into its system Perfetto trace without enabling persistent trace
-# storage in production/release variants.
+# O2.4: prove that Benchmark 1.5 can merge AndroidX Tracing 2.0 in-process packets
+# from the measured target into its system Perfetto trace. tracing-wire is bound only
+# to the Baseline Profile plugin's generated benchmarkRelease app variant; normal
+# release/debug variants must not persist in-process trace files.
 $versionCatalog = Read-RequiredFile "gradle\libs.versions.toml"
 foreach ($token in @(
     'benchmark = "1.5.0-rc02"',
@@ -153,26 +154,36 @@ foreach ($token in @(
 }
 
 foreach ($token in @(
-    'create("benchmarkRelease")',
-    'initWith(getByName("release"))',
-    'matchingFallbacks += listOf("release")',
-    'add("benchmarkReleaseImplementation", libs.androidx.tracing.wire)'
+    'name == "benchmarkReleaseImplementation"',
+    'libs.androidx.tracing.wire.get()'
 )) {
     if ($appBuild.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
         throw "O2.4 target app benchmark-only tracing contract is missing: $token"
     }
 }
+if ($appBuild.IndexOf('create("benchmarkRelease")', [System.StringComparison]::Ordinal) -ge 0) {
+    throw "O2.4 must use the Baseline Profile plugin generated benchmarkRelease variant instead of declaring a conflicting build type."
+}
 foreach ($forbiddenToken in @(
     'implementation(libs.androidx.tracing.wire)',
+    'debugImplementation(libs.androidx.tracing.wire)',
     'releaseImplementation(libs.androidx.tracing.wire)',
+    'add("debugImplementation", libs.androidx.tracing.wire)',
     'add("releaseImplementation", libs.androidx.tracing.wire)'
 )) {
     if ($appBuild.IndexOf($forbiddenToken, [System.StringComparison]::Ordinal) -ge 0) {
-        throw "O2.4 must not persist AndroidX in-process trace files in production/release: $forbiddenToken"
+        throw "O2.4 must not persist AndroidX in-process trace files in normal debug/release variants: $forbiddenToken"
     }
 }
 
-foreach ($token in @('runSearchTraceEvidence', 'search-input', 'search-status', 'setText(TRACE_SEARCH_QUERY)')) {
+foreach ($token in @(
+    'runSearchTraceEvidence',
+    'search-input',
+    'search-status',
+    'setText(TRACE_SEARCH_QUERY)',
+    'Until.textNotEquals(SEARCH_IDLE_STATUS)',
+    'Until.textNotEquals(SEARCH_LOADING_STATUS)'
+)) {
     if ($journeys.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
         throw "O2.4 focused trace journey is missing: $token"
     }
@@ -189,6 +200,19 @@ foreach ($token in @(
     }
 }
 
+$traceAssert = Read-RequiredFile "tools\ci\Assert-BenchmarkInProcessTraceEvidence.ps1"
+foreach ($token in @(
+    '*-benchmarkData.json',
+    'MuxTv.SearchCount',
+    '*.perfetto-trace',
+    'minimumCount',
+    'trace-capture-correctness-only'
+)) {
+    if ($traceAssert.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
+        throw "O2.4 trace evidence assertion is missing: $token"
+    }
+}
+
 $traceWorkflow = Read-RequiredFile ".github\workflows\benchmark-in-process-tracing.yml"
 foreach ($token in @(
     'name: Benchmark in-process trace API36 evidence',
@@ -199,6 +223,8 @@ foreach ($token in @(
     'connectedBenchmarkReleaseAndroidTest',
     'app.muxtv.benchmark.MuxTvMacrobenchmarks#searchInProcessTraceEvidence',
     'androidx.benchmark.enabledRules=Macrobenchmark',
+    'androidx.benchmark.suppressErrors=EMULATOR',
+    'Assert-BenchmarkInProcessTraceEvidence.ps1',
     'uses: ./.github/actions/upload-evidence-with-retry',
     'connected_android_test_additional_output'
 )) {
