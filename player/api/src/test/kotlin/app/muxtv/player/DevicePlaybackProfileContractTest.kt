@@ -101,6 +101,19 @@ class DevicePlaybackProfileContractTest {
         assertThat(profile.videoDecoders).hasSize(1)
         assertThat(profile.display.supportedModes).containsExactly(current)
         assertThat(profile.display.hdrTypes).containsExactly(DeviceHdrType.HDR10)
+
+        assertPublishedCollectionCannotMutate {
+            @Suppress("UNCHECKED_CAST")
+            (profile.videoDecoders as MutableList<DeviceVideoDecodeCapability>).clear()
+        }
+        assertPublishedCollectionCannotMutate {
+            @Suppress("UNCHECKED_CAST")
+            (profile.display.supportedModes as MutableList<DeviceDisplayMode>).clear()
+        }
+        assertPublishedCollectionCannotMutate {
+            @Suppress("UNCHECKED_CAST")
+            (profile.display.hdrTypes as MutableSet<DeviceHdrType>).clear()
+        }
     }
 
     @Test
@@ -133,5 +146,10 @@ class DevicePlaybackProfileContractTest {
     private fun assertInvalid(block: () -> Unit) {
         assertThat(runCatching(block).exceptionOrNull())
             .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    private fun assertPublishedCollectionCannotMutate(block: () -> Unit) {
+        assertThat(runCatching(block).exceptionOrNull())
+            .isInstanceOf(UnsupportedOperationException::class.java)
     }
 }
