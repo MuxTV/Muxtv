@@ -1,0 +1,107 @@
+name: Benchmark in-process trace API36 evidence
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/tv/**"
+      - "benchmark/macrobenchmark/**"
+      - "core/common/**"
+      - "core/database/**"
+      - "gradle/libs.versions.toml"
+      - "tools/ci/Assert-BenchmarkInProcessTraceEvidence.ps1"
+      - ".github/workflows/benchmark-in-process-tracing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-in-process-tracing-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  trace-evidence:
+    name: Benchmark in-process trace API36 evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify evidence commit provenance
+        shell: pwsh
+        run: |
+          $expectedCommit = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expectedCommit
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/benchmark-in-process-trace-api36
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Capture and verify merged MuxTV in-process trace
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: |
+            set -euo pipefail
+            mapfile -t avds < <(avdmanager list avd -c | sed '/^[[:space:]]*$/d')
+            if (( ${#avds[@]} != 1 )) || [[ "${avds[0]}" != "$MUXTV_EXPECTED_AVD" ]]; then
+              echo "Expected exactly $MUXTV_EXPECTED_AVD, found: ${avds[*]-<none>}" >&2
+              exit 1
+            fi
+
+            chmod +x ./gradlew
+            ./gradlew \
+              :benchmark:macrobenchmark:connectedBenchmarkReleaseAndroidTest \
+              --no-daemon \
+              --stacktrace \
+              --console=plain \
+              --no-problems-report \
+              '-Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.benchmark.MuxTvMacrobenchmarks#searchInProcessTraceEvidence' \
+              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
+              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
+
+            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
+              -ModulePaths benchmark/macrobenchmark \
+              -OutputPath .work/evidence/benchmark-in-process-trace-api36/android-test-results.json
+            pwsh -NoProfile -File ./tools/ci/Assert-BenchmarkInProcessTraceEvidence.ps1
+
+      - name: Upload in-process trace evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: benchmark-in-process-trace-api36-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/benchmark-in-process-trace-api36/**
+            benchmark/macrobenchmark/build/outputs/androidTest-results/**
+            benchmark/macrobenchmark/build/outputs/connected_android_test_additional_output/**
+          retention-days: 7
+          github-token: ${{ github.token }}
