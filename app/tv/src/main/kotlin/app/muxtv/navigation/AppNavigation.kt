@@ -47,6 +47,7 @@ import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
 import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.feature.sources.SourcesRoute
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.Media3PlaybackSurface
@@ -76,6 +77,8 @@ fun AppNavigation(
     openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
+    devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader =
+        DevicePlaybackProfileSummaryReader { null },
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
     val railFocusRequester = remember { FocusRequester() }
@@ -192,6 +195,7 @@ fun AppNavigation(
                             exportStatus = doctorExportStatus,
                             onExport = onExportDoctorReport,
                             railFocusRequester = railFocusRequester,
+                            devicePlaybackProfileSummaryReader = devicePlaybackProfileSummaryReader,
                         )
 
                         AppDestination.AddSource -> AddSourceRoute(
