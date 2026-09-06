@@ -82,6 +82,15 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 }
 
+// The Baseline Profile plugin creates benchmarkRelease after the Android DSL is evaluated.
+// Bind the automatic tracing-wire initializer only to that generated evidence variant.
+// release/debug therefore keep the existing no-persisted-trace production behavior.
+configurations.configureEach {
+    if (name == "benchmarkReleaseImplementation") {
+        dependencies.add(project.dependencies.create(libs.androidx.tracing.wire.get()))
+    }
+}
+
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
