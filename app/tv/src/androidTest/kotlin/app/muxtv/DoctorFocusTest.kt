@@ -1,7 +1,7 @@
 package app.muxtv
 
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -70,7 +70,7 @@ class DoctorFocusTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("doctor-device-summary")
-            .assertExists()
+            .assertIsDisplayed()
             .assertTextContains("Данные устройства недоступны.")
         composeRule.onNodeWithTag(DOCTOR_REFRESH_TEST_TAG).assertIsFocused()
     }
