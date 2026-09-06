@@ -53,6 +53,25 @@ class MuxTvNetworkTimingModelTest {
     }
 
     @Test
+    fun `missing phase is explicit rather than fabricated as zero`() {
+        val missing = MuxTvNetworkTimingObservation(
+            clientKind = MuxTvNetworkClientKind.SOURCE,
+            phase = MuxTvNetworkPhase.TLS,
+            outcome = MuxTvNetworkOutcome.SUCCEEDED,
+            durationNanos = null,
+        )
+        val measuredZero = MuxTvNetworkTimingObservation(
+            clientKind = MuxTvNetworkClientKind.SOURCE,
+            phase = MuxTvNetworkPhase.TLS,
+            outcome = MuxTvNetworkOutcome.SUCCEEDED,
+            durationNanos = 0L,
+        )
+
+        assertThat(missing.durationNanos).isNull()
+        assertThat(measuredZero.durationNanos).isEqualTo(0L)
+    }
+
+    @Test
     fun `negative duration is rejected`() {
         assertThrows(IllegalArgumentException::class.java) {
             MuxTvNetworkTimingObservation(
