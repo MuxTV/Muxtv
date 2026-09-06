@@ -26,6 +26,7 @@ class M3uPlaybackArchiveResolver(
                 PlaybackArchiveResolution.Ready(
                     locator = result.locator,
                     timeline = result.timeline,
+                    initialMediaPositionMillis = result.initialMediaPositionMillis,
                 )
 
             is M3uCatchupTransportResolution.Unavailable ->
