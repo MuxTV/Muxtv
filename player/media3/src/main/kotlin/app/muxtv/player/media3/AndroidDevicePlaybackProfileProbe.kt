@@ -24,16 +24,17 @@ internal class AndroidDevicePlaybackProfileProbe(
         val displayManager = requireNotNull(
             applicationContext.getSystemService(DisplayManager::class.java),
         ) { "Android display manager is unavailable." }
+        val display = displayManager.defaultDisplay()
 
         return projectDevicePlaybackProfile(
             DevicePlaybackProbeEvidence(
                 videoDecoders = collectVideoDecoderEvidence(),
-                currentDisplayMode = displayManager.defaultDisplay()?.mode?.toEvidence(),
-                supportedDisplayModes = displayManager.defaultDisplay()
+                currentDisplayMode = display?.mode?.toEvidence(),
+                supportedDisplayModes = display
                     ?.supportedModes
                     ?.map(Display.Mode::toEvidence)
                     .orEmpty(),
-                hdrTypes = displayManager.defaultDisplay()?.reportedHdrTypes().orEmpty(),
+                hdrTypes = display?.reportedHdrTypes().orEmpty(),
                 lowRamDevice = activityManager.isLowRamDevice,
                 memoryClassMb = activityManager.memoryClass,
             ),
@@ -88,24 +89,23 @@ private fun Display.Mode.toEvidence(): DisplayModeEvidence {
     )
 }
 
-private fun Display.reportedHdrTypes(): Set<DeviceHdrType> =
-    hdrCapabilities.supportedHdrTypes.mapNotNullTo(LinkedHashSet()) { hdrType ->
+private fun Display.reportedHdrTypes(): Set<DeviceHdrType> = buildSet {
+    hdrCapabilities.supportedHdrTypes.forEach { hdrType ->
         when (hdrType) {
-            Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> DeviceHdrType.DOLBY_VISION
-            Display.HdrCapabilities.HDR_TYPE_HDR10 -> DeviceHdrType.HDR10
-            Display.HdrCapabilities.HDR_TYPE_HLG -> DeviceHdrType.HLG
+            Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> add(DeviceHdrType.DOLBY_VISION)
+            Display.HdrCapabilities.HDR_TYPE_HDR10 -> add(DeviceHdrType.HDR10)
+            Display.HdrCapabilities.HDR_TYPE_HLG -> add(DeviceHdrType.HLG)
             else -> {
                 if (
                     Build.VERSION.SDK_INT >= 29 &&
                     hdrType == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS
                 ) {
-                    DeviceHdrType.HDR10_PLUS
-                } else {
-                    null
+                    add(DeviceHdrType.HDR10_PLUS)
                 }
             }
         }
     }
+}
 
 private const val MIME_AVC = "video/avc"
 private const val MIME_HEVC = "video/hevc"
