@@ -8,7 +8,7 @@ class M3uCatchupTransportResolverContractTest {
     @Test
     fun appendUtcProgrammeMaterializesCorrectedEpochSecondsAndRedactsTransport() {
         val nowEpochMillis = 1_800_000_000_000L
-        val programmeStart = nowEpochMillis - (2 * HOUR_MILLIS)
+        val programmeStart = nowEpochMillis - (2 * HOUR_MILLIS) + 999L
         val programmeEnd = nowEpochMillis - HOUR_MILLIS
         val result = M3uCatchupTransportResolver(nowEpochMillis = { nowEpochMillis }).resolve(
             intent = PlaybackIntent.CatchupProgram(
@@ -27,6 +27,7 @@ class M3uCatchupTransportResolverContractTest {
             .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(programmeStart)
         assertThat(ready.timeline.correctionMillis).isEqualTo(2 * HOUR_MILLIS)
+        assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
         assertThat(result.toString()).doesNotContain("TEST_CATCHUP_SECRET")
     }
 
@@ -48,6 +49,7 @@ class M3uCatchupTransportResolverContractTest {
         assertThat(ready.locator)
             .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(positionEpochMillis)
+        assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
     }
 
     @Test
@@ -80,6 +82,11 @@ class M3uCatchupTransportResolverContractTest {
 
         assertThat(result).isEqualTo(M3uCatchupTransportResolution.NotApplicable)
     }
+
+    private fun initialMediaPositionMillisOrNull(ready: M3uCatchupTransportResolution.Ready): Long? =
+        ready.javaClass.methods
+            .firstOrNull { it.name == "getInitialMediaPositionMillis" && it.parameterCount == 0 }
+            ?.invoke(ready) as? Long
 
     private fun supportedMetadata(correction: String = "+2.0") = M3uCatchupMetadata(
         mode = "append",
