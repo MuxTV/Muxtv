@@ -186,6 +186,7 @@ internal class RoomPlaybackCatalog(
                     variant = variant,
                     playbackReference = archive.locator,
                     timeline = archive.timeline,
+                    initialMediaPositionMillis = archive.initialMediaPositionMillis,
                 )
         }
     }
@@ -194,6 +195,7 @@ internal class RoomPlaybackCatalog(
         variant: ActiveVariantAccessRow,
         playbackReference: String = variant.locator,
         timeline: ResolvedPlaybackTimeline? = null,
+        initialMediaPositionMillis: Long = 0L,
     ): PlaybackVariantResolution = when (
         val access = accessCoordinator.resolve(
             credentialRef = variant.credentialRef.orEmpty(),
@@ -205,6 +207,7 @@ internal class RoomPlaybackCatalog(
                 locator = access.locator,
                 insecureHttpApproved = access.insecureHttpApproved,
                 timeline = timeline,
+                initialMediaPositionMillis = initialMediaPositionMillis,
             ),
         )
 
@@ -258,6 +261,7 @@ private fun ActiveVariantAccessRow.toRequest(
     locator: String,
     insecureHttpApproved: Boolean,
     timeline: ResolvedPlaybackTimeline? = null,
+    initialMediaPositionMillis: Long = 0L,
 ): ResolvedPlaybackRequest = ResolvedPlaybackRequest(
     channelId = channelId,
     variantId = variantId,
@@ -268,6 +272,7 @@ private fun ActiveVariantAccessRow.toRequest(
     },
     insecureHttpApproved = insecureHttpApproved,
     timeline = timeline,
+    initialMediaPositionMillis = initialMediaPositionMillis,
 )
 
 private fun ActiveChannelSummaryRow.toModel(): PlayableChannelSummary = PlayableChannelSummary(
