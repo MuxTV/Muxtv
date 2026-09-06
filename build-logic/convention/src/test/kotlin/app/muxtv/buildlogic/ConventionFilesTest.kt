@@ -88,7 +88,11 @@ class ConventionFilesTest {
         assertContains(roomPlaybackCatalog, "initialMediaPositionMillis = archive.initialMediaPositionMillis,")
         assertContains(playbackSessionRequest, "val initialMediaPositionMillis: Long = 0L,")
         assertContains(playbackService, "initialMediaPositionMillis = resolved.initialMediaPositionMillis,")
-        assertContains(playbackService, "sessionRequest.initialMediaPositionMillis,")
+        assertContains(
+            playbackService,
+            "sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET",
+        )
+        assertContains(playbackService, "startPositionMillis,")
     }
 }
 
