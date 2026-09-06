@@ -70,13 +70,13 @@ New-Item -ItemType Directory -Force -Path $resolvedEvidenceRoot | Out-Null
 $summary = [ordered]@{
     schemaVersion = 1
     benchmark = [string]$match.Benchmark.name
-    report = $match.Report.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
+    report = [System.IO.Path]::GetRelativePath($repositoryRoot, $match.Report.FullName)
     metric = "MuxTv.SearchCount"
     runs = $runs
     minimumCount = ($runs | Measure-Object -Minimum).Minimum
     perfettoTraceCount = $traces.Count
     perfettoTraces = @($traces | ForEach-Object {
-        $_.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
+        [System.IO.Path]::GetRelativePath($repositoryRoot, $_.FullName)
     })
     result = "PASS"
     claim = "trace-capture-correctness-only"
