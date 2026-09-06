@@ -11,6 +11,7 @@ on:
       - "core/database/**"
       - "gradle/libs.versions.toml"
       - "tools/ci/Assert-BenchmarkInProcessTraceEvidence.ps1"
+      - "tools/ci/Run-BenchmarkInProcessTraceEvidence.sh"
       - ".github/workflows/benchmark-in-process-tracing.yml"
   workflow_dispatch:
 
@@ -55,6 +56,7 @@ jobs:
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         env:
           MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+          MUXTV_BENCHMARK_EVIDENCE: .work/evidence/benchmark-in-process-trace-api36
         with:
           api-level: 36
           target: android-tv
@@ -70,29 +72,7 @@ jobs:
           enable-hw-keyboard: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: |
-            set -euo pipefail
-            mapfile -t avds < <(avdmanager list avd -c | sed '/^[[:space:]]*$/d')
-            if (( ${#avds[@]} != 1 )) || [[ "${avds[0]}" != "$MUXTV_EXPECTED_AVD" ]]; then
-              echo "Expected exactly $MUXTV_EXPECTED_AVD, found: ${avds[*]-<none>}" >&2
-              exit 1
-            fi
-
-            chmod +x ./gradlew
-            ./gradlew \
-              :benchmark:macrobenchmark:connectedBenchmarkReleaseAndroidTest \
-              --no-daemon \
-              --stacktrace \
-              --console=plain \
-              --no-problems-report \
-              '-Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.benchmark.MuxTvMacrobenchmarks#searchInProcessTraceEvidence' \
-              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
-              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
-
-            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
-              -ModulePaths benchmark/macrobenchmark \
-              -OutputPath .work/evidence/benchmark-in-process-trace-api36/android-test-results.json
-            pwsh -NoProfile -File ./tools/ci/Assert-BenchmarkInProcessTraceEvidence.ps1
+          script: bash ./tools/ci/Run-BenchmarkInProcessTraceEvidence.sh
 
       - name: Upload in-process trace evidence
         if: always()
