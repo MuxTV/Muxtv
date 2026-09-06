@@ -89,18 +89,21 @@ private fun Display.Mode.toEvidence(): DisplayModeEvidence {
     )
 }
 
-private fun Display.reportedHdrTypes(): Set<DeviceHdrType> = buildSet {
-    hdrCapabilities.supportedHdrTypes.forEach { hdrType ->
-        when (hdrType) {
-            Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> add(DeviceHdrType.DOLBY_VISION)
-            Display.HdrCapabilities.HDR_TYPE_HDR10 -> add(DeviceHdrType.HDR10)
-            Display.HdrCapabilities.HDR_TYPE_HLG -> add(DeviceHdrType.HLG)
-            else -> {
-                if (
-                    Build.VERSION.SDK_INT >= 29 &&
-                    hdrType == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS
-                ) {
-                    add(DeviceHdrType.HDR10_PLUS)
+private fun Display.reportedHdrTypes(): Set<DeviceHdrType> {
+    val hdrCapabilities = hdrCapabilities ?: return emptySet()
+    return buildSet {
+        hdrCapabilities.supportedHdrTypes.forEach { hdrType ->
+            when (hdrType) {
+                Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> add(DeviceHdrType.DOLBY_VISION)
+                Display.HdrCapabilities.HDR_TYPE_HDR10 -> add(DeviceHdrType.HDR10)
+                Display.HdrCapabilities.HDR_TYPE_HLG -> add(DeviceHdrType.HLG)
+                else -> {
+                    if (
+                        Build.VERSION.SDK_INT >= 29 &&
+                        hdrType == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS
+                    ) {
+                        add(DeviceHdrType.HDR10_PLUS)
+                    }
                 }
             }
         }
