@@ -48,6 +48,7 @@ class XtreamPlaybackArchiveResolverContractTest {
         assertThat(ready.timeline.correctionMillis).isEqualTo(0L)
         assertThat(ready.timeline.granularityMillis).isEqualTo(MINUTE_MILLIS)
         assertThat(ready.timeline.playAsLive).isFalse()
+        assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(30_000L)
         assertThat(ready.toString()).doesNotContain("707")
     }
 
@@ -131,6 +132,11 @@ class XtreamPlaybackArchiveResolverContractTest {
             PlaybackArchiveResolution.Unavailable(PlaybackArchiveUnavailableReason.UnsupportedMode),
         )
     }
+
+    private fun initialMediaPositionMillisOrNull(ready: PlaybackArchiveResolution.Ready): Long? =
+        ready.javaClass.methods
+            .firstOrNull { it.name == "getInitialMediaPositionMillis" && it.parameterCount == 0 }
+            ?.invoke(ready) as? Long
 
     private fun request(
         intent: PlaybackIntent,
