@@ -511,6 +511,7 @@ class MuxTvPlaybackService : MediaSessionService() {
             locator = resolved.locator,
             requestHeaders = resolved.requestHeaders,
             insecureHttpApproved = resolved.insecureHttpApproved,
+            initialMediaPositionMillis = resolved.initialMediaPositionMillis,
         )
         val token = PlaybackAttemptToken(
             setupId = setupId,
@@ -526,7 +527,11 @@ class MuxTvPlaybackService : MediaSessionService() {
             callbackGate.activate(token)
             activePlayerListener = createPlayerListener(token).also(player::addListener)
             MuxTvTrace.global.section(MuxTvTraceSection.PLAYER_PREPARE) {
-                player.setMediaSource(mediaSourceFactory.create(sessionRequest, seekGeneration))
+                val startPositionMillis = sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET
+                player.setMediaSource(
+                    mediaSourceFactory.create(sessionRequest, seekGeneration),
+                    startPositionMillis,
+                )
                 firstFrameTracker.activate(setupId, request.profileId, request.channelId)
                 player.prepare()
             }

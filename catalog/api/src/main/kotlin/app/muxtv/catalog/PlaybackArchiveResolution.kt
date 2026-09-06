@@ -41,13 +41,16 @@ sealed interface PlaybackArchiveResolution {
     data class Ready(
         val locator: String,
         val timeline: ResolvedPlaybackTimeline,
+        val initialMediaPositionMillis: Long = 0L,
     ) : PlaybackArchiveResolution {
         init {
             require(locator.isNotBlank())
+            require(initialMediaPositionMillis >= 0L)
         }
 
         override fun toString(): String =
-            "PlaybackArchiveResolution.Ready(locator=<redacted>, timeline=$timeline)"
+            "PlaybackArchiveResolution.Ready(locator=<redacted>, timeline=$timeline, " +
+                "initialMediaPositionMillis=$initialMediaPositionMillis)"
     }
 
     data class Unavailable(

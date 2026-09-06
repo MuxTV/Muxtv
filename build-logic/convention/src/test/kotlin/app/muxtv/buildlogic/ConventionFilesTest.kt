@@ -68,6 +68,32 @@ class ConventionFilesTest {
             "Internal and external first-frame callbacks must emit the same bounded trace slice.",
         )
     }
+
+    @Test
+    fun `catchup initial media position reaches the service owned Media3 install`() {
+        val playbackCatalogApi = repositoryRoot.resolve(
+            "catalog/api/src/main/kotlin/app/muxtv/catalog/PlaybackCatalog.kt",
+        ).readText()
+        val roomPlaybackCatalog = repositoryRoot.resolve(
+            "core/database/src/main/kotlin/app/muxtv/database/RoomPlaybackCatalog.kt",
+        ).readText()
+        val playbackSessionRequest = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSessionRequest.kt",
+        ).readText()
+        val playbackService = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt",
+        ).readText()
+
+        assertContains(playbackCatalogApi, "val initialMediaPositionMillis: Long = 0L,")
+        assertContains(roomPlaybackCatalog, "initialMediaPositionMillis = archive.initialMediaPositionMillis,")
+        assertContains(playbackSessionRequest, "val initialMediaPositionMillis: Long = 0L,")
+        assertContains(playbackService, "initialMediaPositionMillis = resolved.initialMediaPositionMillis,")
+        assertContains(
+            playbackService,
+            "sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET",
+        )
+        assertContains(playbackService, "startPositionMillis,")
+    }
 }
 
 private fun String.countLiteral(value: String): Int =

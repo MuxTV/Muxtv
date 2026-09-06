@@ -9,9 +9,15 @@ internal sealed interface M3uCatchupTransportResolution {
     data class Ready(
         val locator: String,
         val timeline: ResolvedPlaybackTimeline,
+        val initialMediaPositionMillis: Long,
     ) : M3uCatchupTransportResolution {
+        init {
+            require(initialMediaPositionMillis >= 0L)
+        }
+
         override fun toString(): String =
-            "M3uCatchupTransportResolution.Ready(locator=<redacted>, timeline=$timeline)"
+            "M3uCatchupTransportResolution.Ready(locator=<redacted>, timeline=$timeline, " +
+                "initialMediaPositionMillis=$initialMediaPositionMillis)"
     }
 
     data class Unavailable(
@@ -50,6 +56,9 @@ internal class M3uCatchupTransportResolver(
         }
         val granularityMillis = timeline.granularityMillis
             ?: return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
+        if (granularityMillis <= 0L) {
+            return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
+        }
 
         val correctedPositionMillis = runCatching {
             Math.subtractExact(
@@ -62,6 +71,12 @@ internal class M3uCatchupTransportResolver(
         val materializedPositionMillis = runCatching {
             Math.multiplyExact(utcSeconds, granularityMillis)
         }.getOrNull() ?: return unavailable(M3uCatchupUnavailableReason.OUTSIDE_RETENTION)
+        val initialMediaPositionMillis = runCatching {
+            Math.subtractExact(correctedPositionMillis, materializedPositionMillis)
+        }.getOrNull() ?: return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
+        if (initialMediaPositionMillis < 0L || initialMediaPositionMillis >= granularityMillis) {
+            return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
+        }
 
         if (
             materializedPositionMillis < timeline.windowStartEpochMillis ||
@@ -74,6 +89,7 @@ internal class M3uCatchupTransportResolver(
         return M3uCatchupTransportResolution.Ready(
             locator = liveLocator + suffix,
             timeline = timeline,
+            initialMediaPositionMillis = initialMediaPositionMillis,
         )
     }
 

@@ -84,6 +84,14 @@ class XtreamPlaybackArchiveResolver(
         if (transportStart < windowStart) {
             return PlaybackArchiveResolution.Unavailable(PlaybackArchiveUnavailableReason.OutsideRetention)
         }
+        val initialMediaPositionMillis = try {
+            Math.subtractExact(intent.startEpochMillis, transportStart)
+        } catch (_: ArithmeticException) {
+            return PlaybackArchiveResolution.Unavailable(PlaybackArchiveUnavailableReason.InvalidMetadata)
+        }
+        if (initialMediaPositionMillis < 0L || initialMediaPositionMillis >= MINUTE_MILLIS) {
+            return PlaybackArchiveResolution.Unavailable(PlaybackArchiveUnavailableReason.InvalidMetadata)
+        }
 
         val durationMillis = intent.endEpochMillis - transportStart
         if (durationMillis <= 0L) {
@@ -120,6 +128,7 @@ class XtreamPlaybackArchiveResolver(
                 granularityMillis = MINUTE_MILLIS,
                 playAsLive = false,
             ),
+            initialMediaPositionMillis = initialMediaPositionMillis,
         )
     }
 

@@ -90,18 +90,21 @@ data class ResolvedPlaybackRequest(
     val requestHeaders: Map<String, String>,
     val insecureHttpApproved: Boolean,
     val timeline: ResolvedPlaybackTimeline? = null,
+    val initialMediaPositionMillis: Long = 0L,
 ) {
     init {
         require(channelId.isNotBlank())
         require(variantId.isNotBlank())
         require(locator.isNotBlank())
         require(requestHeaders.keys.none(String::isBlank))
+        require(initialMediaPositionMillis >= 0L)
     }
 
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
             "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()}, " +
-            "insecureHttpApproved=$insecureHttpApproved, hasTimeline=${timeline != null})"
+            "insecureHttpApproved=$insecureHttpApproved, hasTimeline=${timeline != null}, " +
+            "initialMediaPositionMillis=$initialMediaPositionMillis)"
 }
 
 enum class PlaybackAccessUnavailableReason {
