@@ -213,6 +213,26 @@ foreach ($token in @(
     }
 }
 
+$traceRunner = Read-RequiredFile "tools\ci\Run-BenchmarkInProcessTraceEvidence.sh"
+foreach ($token in @(
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    'connectedBenchmarkReleaseAndroidTest',
+    'app.muxtv.benchmark.MuxTvMacrobenchmarks#searchInProcessTraceEvidence',
+    'androidx.benchmark.enabledRules=Macrobenchmark',
+    'androidx.benchmark.suppressErrors=EMULATOR',
+    'Assert-AndroidTestResults.ps1',
+    'Assert-BenchmarkInProcessTraceEvidence.ps1',
+    'O2.4 Macrobenchmark executed zero non-skipped tests.'
+)) {
+    if ($traceRunner.IndexOf($token, [System.StringComparison]::Ordinal) -lt 0) {
+        throw "O2.4 bash trace runner is missing contract token: $token"
+    }
+}
+if ($traceRunner.IndexOf('androidx.benchmark.dryRunMode.enable=true', [System.StringComparison]::Ordinal) -ge 0) {
+    throw "O2.4 bash trace runner must not use Macrobenchmark dry-run mode."
+}
+
 $traceWorkflow = Read-RequiredFile ".github\workflows\benchmark-in-process-tracing.yml"
 foreach ($token in @(
     'name: Benchmark in-process trace API36 evidence',
@@ -220,11 +240,8 @@ foreach ($token in @(
     'workflow_dispatch:',
     'ref: ${{ github.event_name == ''pull_request'' && github.event.pull_request.head.sha || github.sha }}',
     'Assert-EvidenceCommit.ps1',
-    'connectedBenchmarkReleaseAndroidTest',
-    'app.muxtv.benchmark.MuxTvMacrobenchmarks#searchInProcessTraceEvidence',
-    'androidx.benchmark.enabledRules=Macrobenchmark',
-    'androidx.benchmark.suppressErrors=EMULATOR',
-    'Assert-BenchmarkInProcessTraceEvidence.ps1',
+    'MUXTV_BENCHMARK_EVIDENCE: .work/evidence/benchmark-in-process-trace-api36',
+    'script: bash ./tools/ci/Run-BenchmarkInProcessTraceEvidence.sh',
     'uses: ./.github/actions/upload-evidence-with-retry',
     'connected_android_test_additional_output'
 )) {
@@ -232,8 +249,8 @@ foreach ($token in @(
         throw "O2.4 exact trace evidence workflow is missing contract token: $token"
     }
 }
-if ($traceWorkflow.IndexOf('androidx.benchmark.dryRunMode.enable=true', [System.StringComparison]::Ordinal) -ge 0) {
-    throw "O2.4 exact trace evidence must not run in Macrobenchmark dry-run mode."
+if ($traceWorkflow.IndexOf('script: |', [System.StringComparison]::Ordinal) -ge 0) {
+    throw "O2.4 android-emulator-runner must delegate bash-only syntax to the repository bash script instead of /usr/bin/sh inline execution."
 }
 
 Write-Host "Benchmark foundation contract passed for hosted dry-run CI and O2.4 in-process trace evidence."
