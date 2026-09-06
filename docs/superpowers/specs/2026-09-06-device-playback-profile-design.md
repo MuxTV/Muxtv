@@ -34,10 +34,10 @@ data class DeviceDisplayMode(
     val refreshRateMilliHz: Int,
 )
 
-data class DeviceDisplayCapabilities(
+class DeviceDisplayCapabilities(
     val currentMode: DeviceDisplayMode?,
-    val supportedModes: List<DeviceDisplayMode>,
-    val hdrTypes: Set<DeviceHdrType>,
+    supportedModes: List<DeviceDisplayMode>,
+    hdrTypes: Set<DeviceHdrType>,
 )
 
 data class DeviceMemoryCapabilities(
@@ -45,14 +45,14 @@ data class DeviceMemoryCapabilities(
     val memoryClassMb: Int,
 )
 
-data class DevicePlaybackProfile(
-    val videoDecoders: List<DeviceVideoDecodeCapability>,
+class DevicePlaybackProfile(
+    videoDecoders: List<DeviceVideoDecodeCapability>,
     val display: DeviceDisplayCapabilities,
     val memory: DeviceMemoryCapabilities,
 )
 ```
 
-Validation keeps values meaningful and collections bounded. `videoDecoders` has at most one entry per accepted codec family; display modes are positive and bounded to 64 normalized entries; HDR types are limited by the enum; memory class is positive.
+The aggregate classes expose value equality but deliberately do not use generated `data class.copy()`: caller-provided collections are defensively copied and published through unmodifiable snapshots, so later mutation cannot invalidate an already-created profile. Validation keeps values meaningful and collections bounded. `videoDecoders` has at most one entry per accepted codec family; display modes are positive and bounded to 64 normalized entries; HDR types are limited by the enum; memory class is positive.
 
 ## Android probe
 
@@ -67,7 +67,7 @@ Video:
 - aggregate multiple decoders deterministically per codec family.
 
 Display:
-- obtain the default display through `DisplayManager`;
+- obtain the default display once through `DisplayManager` for the snapshot;
 - project current and supported `Display.Mode` values;
 - normalize refresh rate to integer milli-Hz;
 - map Android `Display.HdrCapabilities` constants only;
@@ -78,11 +78,11 @@ Memory:
 
 ## Deterministic projection
 
-Android collection is separated from a pure normalization step. Raw evidence is deduplicated and sorted by accepted codec enum order and display `(width, height, refreshRateMilliHz)`. Invalid raw display values are dropped rather than published. Supported display modes are capped at 64 after deterministic sorting. If current mode is valid but missing from the platform-supported array it is inserted before the cap so the profile never contradicts itself.
+Android collection is separated from a pure normalization step. Raw evidence is deduplicated and sorted by accepted codec enum order and display `(width, height, refreshRateMilliHz)`. Invalid raw display values are dropped rather than published. Supported display modes are capped at 64 after deterministic sorting. If current mode is valid but missing from the platform-supported array it is inserted before the cap so the profile never contradicts itself. Hardware evidence aggregation is conservative: any hardware decoder yields `PRESENT`; otherwise any unknown observation yields `UNKNOWN`; only all-known-software observations yield `ABSENT`.
 
 ## Evidence and claims
 
-JVM tests cover model validation plus deterministic dedupe/order/unknown semantics. Android instrumentation on canonical API26/API36 validates the real probe can capture a self-consistent profile without crash. Emulator evidence proves API/runtime correctness only; #31 remains the authority for physical codec/HDR/audio support claims.
+JVM tests cover model validation, immutable collection ownership and deterministic dedupe/order/unknown semantics. Android instrumentation on canonical API26/API36 validates the real probe can capture a self-consistent profile without crash. Emulator evidence proves API/runtime correctness only; #31 remains the authority for physical codec/HDR/audio support claims.
 
 ## Non-goals
 
