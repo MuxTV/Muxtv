@@ -74,6 +74,36 @@ class DevicePlaybackProfileContractTest {
     }
 
     @Test
+    fun aggregateCollectionsAreImmutableSnapshots() {
+        val current = DeviceDisplayMode(1920, 1080, 60_000)
+        val mutableModes = mutableListOf(current)
+        val mutableHdrTypes = mutableSetOf(DeviceHdrType.HDR10)
+        val mutableDecoders = mutableListOf(
+            DeviceVideoDecodeCapability(
+                codec = DeviceVideoCodec.AVC,
+                hardwareAcceleration = HardwareAccelerationEvidence.PRESENT,
+            ),
+        )
+        val profile = DevicePlaybackProfile(
+            videoDecoders = mutableDecoders,
+            display = DeviceDisplayCapabilities(
+                currentMode = current,
+                supportedModes = mutableModes,
+                hdrTypes = mutableHdrTypes,
+            ),
+            memory = DeviceMemoryCapabilities(lowRamDevice = false, memoryClassMb = 256),
+        )
+
+        mutableModes.clear()
+        mutableHdrTypes.clear()
+        mutableDecoders.clear()
+
+        assertThat(profile.videoDecoders).hasSize(1)
+        assertThat(profile.display.supportedModes).containsExactly(current)
+        assertThat(profile.display.hdrTypes).containsExactly(DeviceHdrType.HDR10)
+    }
+
+    @Test
     fun profileRejectsDuplicateCodecFamilies() {
         val capability = DeviceVideoDecodeCapability(
             codec = DeviceVideoCodec.AVC,
