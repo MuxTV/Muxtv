@@ -527,9 +527,10 @@ class MuxTvPlaybackService : MediaSessionService() {
             callbackGate.activate(token)
             activePlayerListener = createPlayerListener(token).also(player::addListener)
             MuxTvTrace.global.section(MuxTvTraceSection.PLAYER_PREPARE) {
+                val startPositionMillis = sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET
                 player.setMediaSource(
                     mediaSourceFactory.create(sessionRequest, seekGeneration),
-                    sessionRequest.initialMediaPositionMillis,
+                    startPositionMillis,
                 )
                 firstFrameTracker.activate(setupId, request.profileId, request.channelId)
                 player.prepare()
