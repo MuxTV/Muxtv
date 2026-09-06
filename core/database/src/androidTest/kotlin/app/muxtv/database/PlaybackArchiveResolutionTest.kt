@@ -59,6 +59,7 @@ class PlaybackArchiveResolutionTest {
         archiveResolver.nextResolution = PlaybackArchiveResolution.Ready(
             locator = MATERIALIZED_LOCATOR,
             timeline = TIMELINE,
+            initialMediaPositionMillis = INITIAL_MEDIA_POSITION_MILLIS,
         )
 
         val resolution = playbackCatalog.resolveIntent(
@@ -93,6 +94,7 @@ class PlaybackArchiveResolutionTest {
         assertThat(accessResolver.lastLocator).isEqualTo(MATERIALIZED_LOCATOR)
         assertThat(ready.request.locator).isEqualTo(MATERIALIZED_LOCATOR)
         assertThat(ready.request.timeline).isEqualTo(TIMELINE)
+        assertThat(ready.request.initialMediaPositionMillis).isEqualTo(INITIAL_MEDIA_POSITION_MILLIS)
         assertThat(ready.request.toString()).doesNotContain(LIVE_SECRET)
         assertThat(ready.request.toString()).doesNotContain(CATCHUP_SECRET)
         assertThat(ready.request.toString()).doesNotContain(CREDENTIAL_REF)
@@ -116,6 +118,7 @@ class PlaybackArchiveResolutionTest {
         assertThat(accessResolver.lastLocator).isEqualTo(LIVE_LOCATOR)
         assertThat(ready.request.locator).isEqualTo(LIVE_LOCATOR)
         assertThat(ready.request.timeline).isNull()
+        assertThat(ready.request.initialMediaPositionMillis).isEqualTo(0L)
     }
 
     @Test
@@ -248,6 +251,7 @@ class PlaybackArchiveResolutionTest {
         const val MATERIALIZED_LOCATOR =
             "http://archive.example/live.m3u8?token=$LIVE_SECRET&utc=1799989200&archiveToken=$CATCHUP_SECRET"
         const val POSITION_EPOCH_MILLIS = 1_799_989_200_000L
+        const val INITIAL_MEDIA_POSITION_MILLIS = 999L
 
         val TIMELINE = ResolvedPlaybackTimeline(
             windowStartEpochMillis = 1_799_395_200_000L,
