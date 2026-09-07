@@ -64,13 +64,13 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         reachedReadyOnce = false
         rebufferStartedAtRealtimeMs = null
 
-        val safeMemoryClass = deviceSummary?.memoryClassMb?.takeIf { it > 0 }
-        if (safeMemoryClass == null) {
+        val summary = deviceSummary
+        if (summary == null || summary.memoryClassMb <= 0) {
             lowRamDevice = null
             memoryClassMb = null
         } else {
-            lowRamDevice = deviceSummary.lowRamDevice
-            memoryClassMb = safeMemoryClass
+            lowRamDevice = summary.lowRamDevice
+            memoryClassMb = summary.memoryClassMb
         }
     }
 
