@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -23,6 +24,7 @@ internal fun PlaybackTransport.toPlaybackRuntimeTransport(): PlaybackRuntimeTran
 
 internal fun Format.toPlaybackRuntimeVideoFormatEvidence(): PlaybackRuntimeVideoFormatEvidence {
     val mimeType = sampleMimeType
+    val colorTransfer = colorInfo?.colorTransfer
     return PlaybackRuntimeVideoFormatEvidence(
         codec = when (mimeType) {
             null -> null
@@ -37,13 +39,21 @@ internal fun Format.toPlaybackRuntimeVideoFormatEvidence(): PlaybackRuntimeVideo
         bitrateBitsPerSecond = averageBitrate.takeIf { it > 0 },
         hdr = when {
             mimeType == MimeTypes.VIDEO_DOLBY_VISION -> PlaybackRuntimeHdr.DOLBY_VISION
-            colorInfo == null -> PlaybackRuntimeHdr.UNKNOWN
-            colorInfo!!.colorTransfer == C.COLOR_TRANSFER_ST2084 -> PlaybackRuntimeHdr.PQ
-            colorInfo!!.colorTransfer == C.COLOR_TRANSFER_HLG -> PlaybackRuntimeHdr.HLG
-            colorInfo!!.colorTransfer == C.COLOR_TRANSFER_UNSPECIFIED -> PlaybackRuntimeHdr.UNKNOWN
+            colorTransfer == null || colorTransfer == C.COLOR_TRANSFER_UNSPECIFIED ->
+                PlaybackRuntimeHdr.UNKNOWN
+            colorTransfer == C.COLOR_TRANSFER_ST2084 -> PlaybackRuntimeHdr.PQ
+            colorTransfer == C.COLOR_TRANSFER_HLG -> PlaybackRuntimeHdr.HLG
             else -> PlaybackRuntimeHdr.SDR
         },
     )
+}
+
+/** Resolves only the MediaItem associated with this analytics event, never the current player item. */
+internal fun AnalyticsListener.EventTime.playbackRuntimeGeneration(): Long? {
+    if (windowIndex !in 0 until timeline.windowCount) return null
+    val window = Timeline.Window()
+    timeline.getWindow(windowIndex, window)
+    return window.mediaItem.playbackSeekToken()?.generation
 }
 
 /**
