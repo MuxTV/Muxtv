@@ -35,7 +35,22 @@ jobs:
           actual="$(git rev-parse HEAD)"
           test "$actual" = "$C03_SOURCE_SHA"
           mkdir -p "$MUXTV_EVIDENCE_DIR"
-          printf 'sourceCommit=%s\nworkflowCommit=%s\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
+          printf 'sourceCommit=%s\nworkflowCommit=%s\ndiagnosticPatch=true\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
+
+      - name: Add diagnostic-only invariant context
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt')
+          text = path.read_text()
+          old = 'check(actualRowMutations > 0L)'
+          new = 'check(actualRowMutations > 0L) { "C03 zero row mutations scenario=${scenario.id} variant=$variant rowEvidence=$rowEvidence" }'
+          if text.count(old) != 1:
+              raise SystemExit('diagnostic target not unique')
+          path.write_text(text.replace(old, new))
+          PY
 
       - name: Enable KVM for Android Emulator
         shell: bash
@@ -43,7 +58,7 @@ jobs:
           MUXTV_KVM_EVIDENCE: .work/evidence/c03-room/kvm
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Run exact-head C03 file-backed measurement
+      - name: Run diagnostic C03 file-backed measurement
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         with:
           api-level: 36
@@ -67,16 +82,14 @@ jobs:
             ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_SOURCE_SHA -Pandroid.testInstrumentationRunnerArguments.c03Warmups=1 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=5
             mkdir -p "$MUXTV_EVIDENCE_DIR"
             remote=/sdcard/Android/data/app.muxtv.database.test/files/c03-room/c03-refresh-delta.json
-            adb shell "test -f '$remote'"
-            adb pull "$remote" "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
-            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 -ModulePaths core/database -OutputPath "$MUXTV_EVIDENCE_DIR/android-test-results-core-database.json"
-            test -s "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
+            if adb shell "test -f '$remote'"; then adb pull "$remote" "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"; fi
+            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 -ModulePaths core/database -OutputPath "$MUXTV_EVIDENCE_DIR/android-test-results-core-database.json" || true
 
-      - name: Upload C03 Room evidence
+      - name: Upload C03 diagnostic evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: c03-room-${{ env.C03_SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: c03-room-diagnostic-${{ env.C03_SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .work/evidence/c03-room/**
             core/database/build/outputs/androidTest-results/**
