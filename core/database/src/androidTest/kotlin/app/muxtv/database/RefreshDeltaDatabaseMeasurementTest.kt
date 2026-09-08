@@ -62,6 +62,7 @@ class RefreshDeltaDatabaseMeasurementTest {
             "delta-100",
             "reorder",
             "remove-10",
+            "token-churn",
         ).inOrder()
 
         val competitiveReports = report.scenarios.map { scenario ->
