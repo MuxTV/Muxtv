@@ -477,7 +477,13 @@ class StreamingM3uParser {
 
         val parsed = parseAmpersandHeaderAssignments(locator.substring(pipe + 1))
         val recognized = parsed.assignments.any { assignment ->
-            ProviderRequestHeaderPolicy.canonicalize(assignment.rawName) is ProviderRequestHeaderDecision.Accepted
+            when (ProviderRequestHeaderPolicy.canonicalize(assignment.rawName)) {
+                is ProviderRequestHeaderDecision.Accepted -> true
+                ProviderRequestHeaderDecision.Forbidden -> true
+                ProviderRequestHeaderDecision.Malformed,
+                ProviderRequestHeaderDecision.Unsupported,
+                -> false
+            }
         }
         if (!recognized) {
             return LocatorNormalizationResult(locator = locator)
