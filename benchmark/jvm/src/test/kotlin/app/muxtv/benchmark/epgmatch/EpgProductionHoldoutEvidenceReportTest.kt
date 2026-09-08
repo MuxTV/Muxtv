@@ -20,7 +20,7 @@ class EpgProductionHoldoutEvidenceReportTest {
             ?: "0000000000000000000000000000000000000000"
 
         assertThat(c06Reference.metrics.falseAutomaticMatches).isEqualTo(0)
-        assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(3)
+        assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(0)
         assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(3)
         assertThat(gate.passed).isFalse()
         assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.REJECT_AUTOMATIC_FUZZY)
@@ -45,6 +45,7 @@ class EpgProductionHoldoutEvidenceReportTest {
             appendLine("- production_policy_on_frozen_c06_false_auto: `${gate.frozenC06.metrics.falseAutomaticMatches}`")
             appendLine("- holdout_false_auto: `${gate.holdout.metrics.falseAutomaticMatches}`")
             appendLine("- automatic_fuzzy_admission: `REJECTED`")
+            appendLine("- rejection_boundary: `FROZEN_C06_REGRESSION`")
             appendLine("- production_adoption: `REVIEW_ONLY_DEFERRED`")
             appendLine("- holdout_exact_miss_recovery: `${gate.holdoutExactMissRecovery.f6()}`")
             appendLine("- automatic_decision_exposure: `${gate.automaticDecisionExposure}`")
@@ -64,8 +65,9 @@ class EpgProductionHoldoutEvidenceReportTest {
 
         assertThat(report).contains("- frozen_c06_reference_false_auto: `0`")
         assertThat(report).contains("- production_policy_on_frozen_c06_false_auto: `3`")
-        assertThat(report).contains("- holdout_false_auto: `3`")
+        assertThat(report).contains("- holdout_false_auto: `0`")
         assertThat(report).contains("- automatic_fuzzy_admission: `REJECTED`")
+        assertThat(report).contains("- rejection_boundary: `FROZEN_C06_REGRESSION`")
         assertThat(report).contains("- production_adoption: `REVIEW_ONLY_DEFERRED`")
         assertThat(report).contains("- disposition: `REJECT_AUTOMATIC_FUZZY`")
         assertThat(report).doesNotContain("http://")
