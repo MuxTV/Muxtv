@@ -24,7 +24,7 @@ class M3uCatchupTransportResolverContractTest {
         val ready = result as M3uCatchupTransportResolution.Ready
         val expectedUtcSeconds = (programmeStart - (2 * HOUR_MILLIS)) / SECOND_MILLIS
         assertThat(ready.locator)
-            .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
+            .isEqualTo("$LIVE_LOCATOR&utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(programmeStart)
         assertThat(ready.timeline.correctionMillis).isEqualTo(2 * HOUR_MILLIS)
         assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
@@ -47,7 +47,7 @@ class M3uCatchupTransportResolverContractTest {
         val ready = result as M3uCatchupTransportResolution.Ready
         val expectedUtcSeconds = positionEpochMillis / SECOND_MILLIS
         assertThat(ready.locator)
-            .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
+            .isEqualTo("$LIVE_LOCATOR&utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(positionEpochMillis)
         assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
     }
