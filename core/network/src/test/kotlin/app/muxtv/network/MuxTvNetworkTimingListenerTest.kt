@@ -83,7 +83,7 @@ class MuxTvNetworkTimingListenerTest {
         val server = MockWebServer()
         server.start()
         val url = server.url("/unreachable.m3u")
-        server.shutdown()
+        server.close()
         val observations = CopyOnWriteArrayList<MuxTvNetworkTimingObservation>()
         val clients = MuxTvHttpClients(
             sourceTimingSink = MuxTvNetworkTimingSink { observation ->
