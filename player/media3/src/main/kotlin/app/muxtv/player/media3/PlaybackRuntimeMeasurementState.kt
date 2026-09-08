@@ -7,6 +7,8 @@ import app.muxtv.player.PlaybackRuntimeMeasurementSnapshot
 import app.muxtv.player.PlaybackRuntimeTransport
 import app.muxtv.player.PlaybackRuntimeVideoCodec
 
+private const val MAX_DECODER_NAME_LENGTH = 128
+
 /**
  * Safe scalar evidence projected from a runtime video format.
  *
@@ -38,6 +40,11 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
     private var firstFrameLatencyMillis: Long? = null
     private var rebufferCount: Int = 0
     private var completedRebufferDurationMillis: Long = 0L
+    private var videoDecoderName: String? = null
+    private var videoDecoderInitializationDurationMillis: Long? = null
+    private var decoderInitializationFailureCount: Int = 0
+    private var videoCodecErrorCount: Int = 0
+    private var droppedVideoFrameCount: Int = 0
     private var lowRamDevice: Boolean? = null
     private var memoryClassMb: Int? = null
     private var reachedReadyOnce: Boolean = false
@@ -61,6 +68,7 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         firstFrameLatencyMillis = null
         rebufferCount = 0
         completedRebufferDurationMillis = 0L
+        clearDecoderMeasurements()
         reachedReadyOnce = false
         rebufferStartedAtRealtimeMs = null
         clearDeviceSummary()
@@ -97,7 +105,7 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         val startedAt = rebufferStartedAtRealtimeMs ?: return
         rebufferStartedAtRealtimeMs = null
         val duration = (realtimeMs - startedAt).coerceAtLeast(0L)
-        if (rebufferCount < Int.MAX_VALUE) rebufferCount++
+        rebufferCount = saturatedAdd(rebufferCount, 1)
         completedRebufferDurationMillis = saturatedAdd(
             completedRebufferDurationMillis,
             duration,
@@ -124,6 +132,39 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
     }
 
     @Synchronized
+    fun onVideoDecoderInitialized(
+        generation: Long,
+        decoderName: String,
+        initializationDurationMillis: Long,
+    ) {
+        if (!isActive(generation) || initializationDurationMillis < 0L) return
+        val safeDecoderName = decoderName.trim()
+            .takeIf(String::isNotEmpty)
+            ?.take(MAX_DECODER_NAME_LENGTH)
+            ?: return
+        videoDecoderName = safeDecoderName
+        videoDecoderInitializationDurationMillis = initializationDurationMillis
+    }
+
+    @Synchronized
+    fun onDecoderInitializationFailure(generation: Long) {
+        if (!isActive(generation)) return
+        decoderInitializationFailureCount = saturatedAdd(decoderInitializationFailureCount, 1)
+    }
+
+    @Synchronized
+    fun onVideoCodecError(generation: Long) {
+        if (!isActive(generation)) return
+        videoCodecErrorCount = saturatedAdd(videoCodecErrorCount, 1)
+    }
+
+    @Synchronized
+    fun onDroppedVideoFrames(generation: Long, count: Int) {
+        if (!isActive(generation) || count <= 0) return
+        droppedVideoFrameCount = saturatedAdd(droppedVideoFrameCount, count)
+    }
+
+    @Synchronized
     fun clear() {
         activeGeneration = null
         transport = null
@@ -135,6 +176,7 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         firstFrameLatencyMillis = null
         rebufferCount = 0
         completedRebufferDurationMillis = 0L
+        clearDecoderMeasurements()
         clearDeviceSummary()
         reachedReadyOnce = false
         rebufferStartedAtRealtimeMs = null
@@ -154,6 +196,11 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
             firstFrameLatencyMillis = firstFrameLatencyMillis,
             rebufferCount = rebufferCount,
             completedRebufferDurationMillis = completedRebufferDurationMillis,
+            videoDecoderName = videoDecoderName,
+            videoDecoderInitializationDurationMillis = videoDecoderInitializationDurationMillis,
+            decoderInitializationFailureCount = decoderInitializationFailureCount,
+            videoCodecErrorCount = videoCodecErrorCount,
+            droppedVideoFrameCount = droppedVideoFrameCount,
             lowRamDevice = lowRamDevice,
             memoryClassMb = memoryClassMb,
         )
@@ -169,9 +216,20 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         memoryClassMb = null
     }
 
+    private fun clearDecoderMeasurements() {
+        videoDecoderName = null
+        videoDecoderInitializationDurationMillis = null
+        decoderInitializationFailureCount = 0
+        videoCodecErrorCount = 0
+        droppedVideoFrameCount = 0
+    }
+
     private fun isActive(generation: Long): Boolean =
         generation > 0L && activeGeneration == generation
 
     private fun saturatedAdd(left: Long, right: Long): Long =
         if (right > Long.MAX_VALUE - left) Long.MAX_VALUE else left + right
+
+    private fun saturatedAdd(left: Int, right: Int): Int =
+        if (right > Int.MAX_VALUE - left) Int.MAX_VALUE else left + right
 }
