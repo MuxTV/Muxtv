@@ -1,5 +1,6 @@
 package app.muxtv.catalog.ingest
 
+import app.muxtv.model.ProviderRequestTarget
 import com.google.common.truth.Truth.assertThat
 import java.io.InputStream
 import java.net.URI
@@ -137,6 +138,10 @@ class M3uCompatibilityCorpusTest {
                 val entry = sink.entries.single()
                 assertThat(entry.userAgent).isEqualTo("MuxTV TEST_VLC_SECRET Agent")
                 assertThat(entry.referrer).isEqualTo("https://referrer.invalid/TEST_VLC_SECRET/")
+                assertThat(entry.requestMetadata.defaultHeaders).containsExactly(
+                    "User-Agent", "MuxTV TEST_VLC_SECRET Agent",
+                    "Referer", "https://referrer.invalid/TEST_VLC_SECRET/",
+                )
                 assertThat(entry.locator).isEqualTo("https://streams.invalid/live/vlc.m3u8?token=TEST_VLC_SECRET")
             }
 
@@ -144,6 +149,10 @@ class M3uCompatibilityCorpusTest {
                 val entry = sink.entries.single()
                 assertThat(entry.userAgent).isEqualTo("MuxTV TEST_KODI_SECRET Agent")
                 assertThat(entry.referrer).isEqualTo("https://referrer.invalid/TEST_KODI_SECRET/")
+                assertThat(entry.requestMetadata.defaultHeaders).containsExactly(
+                    "User-Agent", "MuxTV TEST_KODI_SECRET Agent",
+                    "Referer", "https://referrer.invalid/TEST_KODI_SECRET/",
+                )
                 assertThat(entry.locator).isEqualTo("https://streams.invalid/live/kodi.ts?token=TEST_KODI_SECRET")
             }
 
@@ -196,6 +205,65 @@ class M3uCompatibilityCorpusTest {
                 assertThat(sink.warnings).isEmpty()
             }
 
+            "request-ext-http" -> {
+                val entry = sink.entries.single()
+                assertThat(entry.requestMetadata.defaultHeaders).containsExactly(
+                    "User-Agent", "MuxTV TEST_C21_EXTHTTP Agent",
+                    "Origin", "https://portal.invalid",
+                    "Authorization", "Bearer TEST_C21_EXTHTTP",
+                ).inOrder()
+            }
+
+            "request-kodi-scoped-headers" -> {
+                val entry = sink.entries.single()
+                assertThat(entry.requestMetadata.defaultHeaders).containsExactly(
+                    "User-Agent", "MuxTV TEST_C21_KODI Default",
+                )
+                assertThat(entry.requestMetadata.headersFor(ProviderRequestTarget.MANIFEST)).containsExactly(
+                    "User-Agent", "MuxTV TEST_C21_KODI Manifest",
+                    "Referer", "https://referrer.invalid/TEST_C21_KODI/",
+                )
+                assertThat(entry.requestMetadata.headersFor(ProviderRequestTarget.SEGMENT)).containsExactly(
+                    "User-Agent", "MuxTV TEST_C21_KODI Segment",
+                    "Origin", "https://portal.invalid",
+                )
+            }
+
+            "request-url-pipe-precedence" -> {
+                val entry = sink.entries.single()
+                assertThat(entry.locator).isEqualTo("https://streams.invalid/live/pipe.m3u8?token=TEST_C21_PIPE")
+                assertThat(entry.requestMetadata.defaultHeaders).containsExactly(
+                    "User-Agent", "MuxTV TEST_C21_PIPE Pipe",
+                    "Referer", "https://referrer.invalid/TEST_C21_PIPE/pipe/",
+                ).inOrder()
+            }
+
+            "request-no-leakage" -> {
+                val entries = sink.entries
+                assertThat(entries).hasSize(2)
+                assertThat(entries[0].requestMetadata.defaultHeaders).containsExactly(
+                    "Cookie", "session=TEST_C21_ISOLATION",
+                )
+                assertThat(entries[1].requestMetadata.defaultHeaders).isEmpty()
+            }
+
+            "request-invalid-metadata" -> {
+                val entry = sink.entries.single()
+                assertThat(entry.requestMetadata.defaultHeaders).isEmpty()
+                assertThat(sink.warnings.map { it.kind }).containsExactly(
+                    M3uWarningKind.ForbiddenRequestHeader,
+                    M3uWarningKind.UnsupportedRequestHeader,
+                    M3uWarningKind.MalformedRequestMetadata,
+                    M3uWarningKind.ForbiddenRequestHeader,
+                ).inOrder()
+            }
+
+            "request-literal-pipe-preserved" -> {
+                val entry = sink.entries.single()
+                assertThat(entry.locator).isEqualTo("https://streams.invalid/live/path|weird/segment.ts")
+                assertThat(entry.requestMetadata.defaultHeaders).isEmpty()
+            }
+
             else -> error("Manifest fixture has no semantic contract: $id")
         }
     }
@@ -209,7 +277,10 @@ class M3uCompatibilityCorpusTest {
         val diagnostics = buildString {
             append(report).append('\n')
             sink.headers.forEach { append(it).append('\n') }
-            sink.entries.forEach { append(it).append('\n') }
+            sink.entries.forEach { entry ->
+                append(entry).append('\n')
+                append(entry.requestMetadata).append('\n')
+            }
             sink.warnings.forEach { append(it).append('\n') }
         }
         assertThat(diagnostics).doesNotContain(probe)
@@ -260,6 +331,12 @@ class M3uCompatibilityCorpusTest {
             "malformed-entry-preserves-following-valid-entry",
             "secret-redaction",
             "extgrp-begin-directive-scope",
+            "request-ext-http",
+            "request-kodi-scoped-headers",
+            "request-url-pipe-precedence",
+            "request-no-leakage",
+            "request-invalid-metadata",
+            "request-literal-pipe-preserved",
         )
         val HTTP_URL = Regex("https?://[^\\s\\\",]+")
     }
