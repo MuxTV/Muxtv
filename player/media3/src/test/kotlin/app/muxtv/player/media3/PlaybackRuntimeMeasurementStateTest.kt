@@ -112,7 +112,40 @@ class PlaybackRuntimeMeasurementStateTest {
     @Test
     fun `device summary is copied as scalar evidence and clear removes current session`() {
         val state = PlaybackRuntimeMeasurementState()
-        val summary = DevicePlaybackProfileSummary(
+        val summary = deviceSummary(lowRam = true, memoryClassMb = 256)
+
+        state.activate(5L, PlaybackRuntimeTransport.HLS, summary)
+        assertThat(state.snapshot()!!.lowRamDevice).isTrue()
+        assertThat(state.snapshot()!!.memoryClassMb).isEqualTo(256)
+
+        state.clear()
+        assertThat(state.snapshot()).isNull()
+    }
+
+    @Test
+    fun `late device summary updates only the active generation`() {
+        val state = PlaybackRuntimeMeasurementState()
+        state.activate(20L, PlaybackRuntimeTransport.HLS, null)
+
+        assertThat(state.snapshot()!!.lowRamDevice).isNull()
+        assertThat(state.snapshot()!!.memoryClassMb).isNull()
+
+        state.onDeviceSummary(20L, deviceSummary(lowRam = false, memoryClassMb = 384))
+        assertThat(state.snapshot()!!.lowRamDevice).isFalse()
+        assertThat(state.snapshot()!!.memoryClassMb).isEqualTo(384)
+
+        state.activate(21L, PlaybackRuntimeTransport.DASH, null)
+        state.onDeviceSummary(20L, deviceSummary(lowRam = true, memoryClassMb = 128))
+
+        assertThat(state.snapshot()!!.lowRamDevice).isNull()
+        assertThat(state.snapshot()!!.memoryClassMb).isNull()
+    }
+
+    private fun deviceSummary(
+        lowRam: Boolean,
+        memoryClassMb: Int,
+    ): DevicePlaybackProfileSummary =
+        DevicePlaybackProfileSummary(
             videoDecoders = listOf(
                 DeviceVideoDecodeCapability(
                     codec = DeviceVideoCodec.HEVC,
@@ -122,15 +155,7 @@ class PlaybackRuntimeMeasurementStateTest {
             currentDisplayMode = DeviceDisplayMode(1_920, 1_080, 60_000),
             supportedDisplayModeCount = 1,
             hdrTypes = setOf(DeviceHdrType.HDR10),
-            lowRamDevice = true,
-            memoryClassMb = 256,
+            lowRamDevice = lowRam,
+            memoryClassMb = memoryClassMb,
         )
-
-        state.activate(5L, PlaybackRuntimeTransport.HLS, summary)
-        assertThat(state.snapshot()!!.lowRamDevice).isTrue()
-        assertThat(state.snapshot()!!.memoryClassMb).isEqualTo(256)
-
-        state.clear()
-        assertThat(state.snapshot()).isNull()
-    }
 }
