@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.room3.runtime)
     implementation(libs.room3.paging)
     implementation(libs.paging.runtime)
+    debugImplementation(project(":benchmark:competitive"))
     ksp(libs.room3.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
