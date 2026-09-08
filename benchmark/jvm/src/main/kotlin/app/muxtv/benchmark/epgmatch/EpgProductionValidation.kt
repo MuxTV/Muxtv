@@ -89,7 +89,7 @@ data class EpgProductionDecisionProvenance(
     val familyId: String,
 )
 
-private data class EpgProductionCaseMetadata(
+internal data class EpgProductionCaseMetadata(
     val sourceBucket: String,
     val familyId: String,
 )
@@ -170,7 +170,7 @@ object EpgProductionValidationCorpora {
         val byPartition = EpgProductionDatasetPartition.entries.associateWith { partition ->
             seeds.filter { it.partition == partition }
         }
-        require(byPartition.values.all(List<EpgProductionSeed>::isNotEmpty))
+        require(byPartition.values.all { it.isNotEmpty() })
 
         val calibrationSources = byPartition.getValue(EpgProductionDatasetPartition.CALIBRATION)
             .mapTo(linkedSetOf(), EpgProductionSeed::sourceBucket)
@@ -800,8 +800,7 @@ private fun EpgBenchmarkReason.toProductionReason(): EpgProductionReason = when 
     EpgBenchmarkReason.FUZZY_REVIEW -> EpgProductionReason.FUZZY_REVIEW
     EpgBenchmarkReason.NO_MATCH -> EpgProductionReason.NO_MATCH
     EpgBenchmarkReason.OWNTV_REFERENCE_AUTO,
-    EpgBenchmarkReason.OWNTV_REFERENCE_REVIEW,
-    -> error("OwnTV benchmark reasons are not production policy provenance")
+    EpgBenchmarkReason.OWNTV_REFERENCE_REVIEW -> error("OwnTV benchmark reasons are not production policy provenance")
 }
 
 private fun EpgCaseOutcome.isCorrectAutomatic(case: EpgLabeledCase): Boolean =
@@ -840,15 +839,6 @@ private fun fullWidthAscii(value: String): String = buildString(value.length) {
 
 private fun replaceFirstAsciiDigitRun(value: String, replacement: String): String =
     Regex("[0-9]+").replaceFirst(value, replacement)
-
-private fun scoreBreakpoints(values: List<Double>): List<Double> = buildSet {
-    values.forEach { raw ->
-        val value = raw.coerceIn(0.0, 1.0)
-        add(value)
-        val stricter = Math.nextUp(value)
-        if (stricter <= 1.0) add(stricter)
-    }
-}.sorted()
 
 private fun EpgHybridThresholds.canonical(): String = String.format(
     Locale.ROOT,
