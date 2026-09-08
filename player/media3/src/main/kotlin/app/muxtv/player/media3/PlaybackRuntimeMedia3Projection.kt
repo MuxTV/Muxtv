@@ -39,11 +39,14 @@ internal fun Format.toPlaybackRuntimeVideoFormatEvidence(): PlaybackRuntimeVideo
         bitrateBitsPerSecond = averageBitrate.takeIf { it > 0 },
         hdr = when {
             mimeType == MimeTypes.VIDEO_DOLBY_VISION -> PlaybackRuntimeHdr.DOLBY_VISION
-            colorTransfer == null || colorTransfer == C.COLOR_TRANSFER_UNSPECIFIED ->
-                PlaybackRuntimeHdr.UNKNOWN
+            colorTransfer == null || colorTransfer == Format.NO_VALUE -> PlaybackRuntimeHdr.UNKNOWN
             colorTransfer == C.COLOR_TRANSFER_ST2084 -> PlaybackRuntimeHdr.PQ
             colorTransfer == C.COLOR_TRANSFER_HLG -> PlaybackRuntimeHdr.HLG
-            else -> PlaybackRuntimeHdr.SDR
+            colorTransfer == C.COLOR_TRANSFER_LINEAR ||
+                colorTransfer == C.COLOR_TRANSFER_SDR ||
+                colorTransfer == C.COLOR_TRANSFER_SRGB ||
+                colorTransfer == C.COLOR_TRANSFER_GAMMA_2_2 -> PlaybackRuntimeHdr.SDR
+            else -> PlaybackRuntimeHdr.UNKNOWN
         },
     )
 }
