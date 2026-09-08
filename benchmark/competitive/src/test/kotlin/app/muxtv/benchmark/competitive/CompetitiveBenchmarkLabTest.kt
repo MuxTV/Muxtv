@@ -25,6 +25,18 @@ class CompetitiveBenchmarkLabTest {
     }
 
     @Test
+    fun `seed changes randomized per-round execution order`() {
+        val orderings = (1L..16L).map { seed ->
+            val candidate = scenario(seed = seed, warmupRounds = 1, measuredRounds = 2)
+            val correctness = candidate.variants.associate { variant -> variant.id to true }
+            CompetitiveExecutionPlanner.planPerformance(candidate, correctness)
+                .map(CompetitiveRunSlot::variant)
+        }.toSet()
+
+        assertThat(orderings.size).isGreaterThan(1)
+    }
+
+    @Test
     fun `performance plan rejects any failed or missing correctness result`() {
         val scenario = scenario()
 
@@ -57,6 +69,16 @@ class CompetitiveBenchmarkLabTest {
     }
 
     @Test
+    fun `environment metadata rejects sensitive fields`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            environment(runtime = mapOf("authorization" to "redacted"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            environment(runtime = mapOf("os" to "secret-token"))
+        }
+    }
+
+    @Test
     fun `source corpus and evidence provenance reject invalid or unsafe values`() {
         assertThrows(IllegalArgumentException::class.java) {
             RepositoryPin("MuxTV/Muxtv", "main")
@@ -74,6 +96,7 @@ class CompetitiveBenchmarkLabTest {
             CompetitiveEvidenceRef("reports/result.json?access_token=secret")
         }
 
+        assertThat(RepositoryPin("ahXN00/OwnTV_Core", OWNTV_CORE_SHA).sha).isEqualTo(OWNTV_CORE_SHA)
         assertThat(CompetitiveEvidenceRef("reports/run-001/result.json").value)
             .isEqualTo("reports/run-001/result.json")
     }
@@ -115,7 +138,29 @@ class CompetitiveBenchmarkLabTest {
                 environment,
                 valid.map { value ->
                     if (value.variant == CompetitiveVariant.B) value.copy(
+                        source = value.source.copy(sha = OTHER_SHA1),
+                    ) else value
+                },
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            CompetitiveAggregator.aggregate(
+                scenario,
+                environment,
+                valid.map { value ->
+                    if (value.variant == CompetitiveVariant.B) value.copy(
                         corpus = value.corpus.copy(contentSha256 = OTHER_SHA256),
+                    ) else value
+                },
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            CompetitiveAggregator.aggregate(
+                scenario,
+                environment,
+                valid.map { value ->
+                    if (value.variant == CompetitiveVariant.B) value.copy(
+                        environmentFingerprintSha256 = OTHER_SHA256,
                     ) else value
                 },
             )
@@ -230,6 +275,8 @@ class CompetitiveBenchmarkLabTest {
         private const val MUX_SHA = "9daac297ef4e2c7748e243fc3e912142bbbc6076"
         private const val CANDIDATE_SHA = "1111111111111111111111111111111111111111"
         private const val OWNTV_SHA = "b70af186731fa860da2b99aa05ead5d77f4da927"
+        private const val OWNTV_CORE_SHA = "630e9c09c80345279e248c336657645300208c09"
+        private const val OTHER_SHA1 = "2222222222222222222222222222222222222222"
         private const val SHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         private const val CONTENT_SHA256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         private const val OTHER_SHA256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
