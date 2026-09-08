@@ -41,15 +41,18 @@ private class MuxTvNetworkTimingListener(
     private var dnsStartNanos: Long? = null
     private var connectStartNanos: Long? = null
     private var tlsStartNanos: Long? = null
+    private var connectionAcquireStartNanos: Long? = null
     private var requestStartNanos: Long? = null
     private var ttfbStartNanos: Long? = null
     private var responseBodyStartNanos: Long? = null
     private var finished = false
 
     override fun callStart(call: Call) {
+        val now = System.nanoTime()
         synchronized(lock) {
             if (!finished) {
-                callStartNanos = System.nanoTime()
+                callStartNanos = now
+                connectionAcquireStartNanos = now
             }
         }
     }
@@ -155,9 +158,22 @@ private class MuxTvNetworkTimingListener(
     }
 
     override fun connectionAcquired(call: Call, connection: Connection) {
+        val now = System.nanoTime()
         synchronized(lock) {
             if (!finished) {
-                markObserved(MuxTvNetworkPhase.CONNECTION_ACQUIRE)
+                connectionAcquireStartNanos = finishInterval(
+                    phase = MuxTvNetworkPhase.CONNECTION_ACQUIRE,
+                    startNanos = connectionAcquireStartNanos,
+                    endNanos = now,
+                )
+            }
+        }
+    }
+
+    override fun connectionReleased(call: Call, connection: Connection) {
+        synchronized(lock) {
+            if (!finished) {
+                connectionAcquireStartNanos = System.nanoTime()
             }
         }
     }
@@ -264,6 +280,7 @@ private class MuxTvNetworkTimingListener(
                 )
             }
             callStartNanos = null
+            connectionAcquireStartNanos = null
 
             MuxTvNetworkPhase.entries.map { phase ->
                 MuxTvNetworkTimingObservation(
@@ -296,10 +313,6 @@ private class MuxTvNetworkTimingListener(
             )
         }
         return null
-    }
-
-    private fun markObserved(phase: MuxTvNetworkPhase) {
-        observed[phase.ordinal] = true
     }
 
     private fun addDuration(
