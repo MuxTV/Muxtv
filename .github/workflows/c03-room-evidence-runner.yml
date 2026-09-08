@@ -1,0 +1,96 @@
+name: C03 Room evidence runner
+
+on:
+  push:
+    branches:
+      - evidence/c03-room-874b0c
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  measure:
+    name: C03 file-backed Room SQLite evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      C03_SOURCE_SHA: 874b0c56848c74e85285712a12c5b09600e4f2aa
+      MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+      MUXTV_EVIDENCE_DIR: .work/evidence/c03-room
+    steps:
+      - name: Checkout exact C03 source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.C03_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$C03_SOURCE_SHA"
+          mkdir -p "$MUXTV_EVIDENCE_DIR"
+          printf 'sourceCommit=%s\nworkflowCommit=%s\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/c03-room/kvm
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run exact-head C03 file-backed measurement
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          enable-hw-keyboard: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: |
+            set -euo pipefail
+            chmod +x ./gradlew
+            rm -rf core/database/build/outputs/androidTest-results/connected/debug
+            ./gradlew \
+              :core:database:connectedDebugAndroidTest \
+              --no-daemon \
+              --stacktrace \
+              --console=plain \
+              --no-problems-report \
+              -PcatalogMeasurements=true \
+              -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest \
+              -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_SOURCE_SHA \
+              -Pandroid.testInstrumentationRunnerArguments.c03Warmups=1 \
+              -Pandroid.testInstrumentationRunnerArguments.c03Iterations=5
+            mkdir -p "$MUXTV_EVIDENCE_DIR"
+            remote=/sdcard/Android/data/app.muxtv.database.test/files/c03-room/c03-refresh-delta.json
+            adb shell "test -f '$remote'"
+            adb pull "$remote" "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
+            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
+              -ModulePaths core/database \
+              -OutputPath "$MUXTV_EVIDENCE_DIR/android-test-results-core-database.json"
+            test -s "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
+
+      - name: Upload C03 Room evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c03-room-${{ env.C03_SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c03-room/**
+            core/database/build/outputs/androidTest-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
