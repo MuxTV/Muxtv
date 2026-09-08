@@ -1,7 +1,9 @@
 package app.muxtv
 
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
@@ -52,5 +54,24 @@ class DoctorFocusTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(doctorObservationTestTag(0)).assertIsFocused()
+    }
+
+    @Test
+    fun deviceSummaryUnavailableStateIsVisibleWithoutStealingInitialFocus() {
+        composeRule.setContent {
+            MuxTvTheme {
+                DoctorRoute(
+                    observationReader = PlaybackObservationReader { emptyList() },
+                    exportStatus = DoctorExportStatus.IDLE,
+                    onExport = {},
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("doctor-device-summary")
+            .assertIsDisplayed()
+            .assertTextContains("Данные устройства недоступны.")
+        composeRule.onNodeWithTag(DOCTOR_REFRESH_TEST_TAG).assertIsFocused()
     }
 }

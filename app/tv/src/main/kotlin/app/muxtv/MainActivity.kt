@@ -25,6 +25,7 @@ import app.muxtv.external.LocalNetworkPermissionGate
 import app.muxtv.external.LocalNetworkPermissionState
 import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.navigation.AppNavigation
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
@@ -91,6 +92,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var playbackObservationReader: PlaybackObservationReader
 
+    @Inject
+    lateinit var devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         doctorExportState = DoctorExportState(
@@ -116,6 +120,7 @@ class MainActivity : ComponentActivity() {
                     onExportDoctorReport = ::beginDoctorExport,
                     requestLocalNetworkPermission = ::requestLocalNetworkPermission,
                     openLocalNetworkPermissionSettings = ::openLocalNetworkPermissionSettings,
+                    devicePlaybackProfileSummaryReader = devicePlaybackProfileSummaryReader,
                 )
             }
         }

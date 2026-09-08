@@ -1,5 +1,11 @@
 package app.muxtv.feature.doctor
 
+import app.muxtv.player.DeviceDisplayMode
+import app.muxtv.player.DeviceHdrType
+import app.muxtv.player.DevicePlaybackProfileSummary
+import app.muxtv.player.DeviceVideoCodec
+import app.muxtv.player.DeviceVideoDecodeCapability
+import app.muxtv.player.HardwareAccelerationEvidence
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
 import app.muxtv.player.PlaybackObservationKind
@@ -72,5 +78,85 @@ class DoctorReportFormatterTest {
         assertThat(report).contains("observation_count=64")
         assertThat(report).doesNotContain("timestamp_epoch_ms=0|")
         assertThat(report).contains("timestamp_epoch_ms=64|")
+    }
+
+    @Test
+    fun `v2 device summary is bounded typed and deterministic`() {
+        val summary = DevicePlaybackProfileSummary(
+            videoDecoders = listOf(
+                DeviceVideoDecodeCapability(
+                    codec = DeviceVideoCodec.AVC,
+                    hardwareAcceleration = HardwareAccelerationEvidence.PRESENT,
+                ),
+                DeviceVideoDecodeCapability(
+                    codec = DeviceVideoCodec.HEVC,
+                    hardwareAcceleration = HardwareAccelerationEvidence.UNKNOWN,
+                ),
+            ),
+            currentDisplayMode = DeviceDisplayMode(1_920, 1_080, 60_000),
+            supportedDisplayModeCount = 2,
+            hdrTypes = linkedSetOf(DeviceHdrType.HDR10, DeviceHdrType.HLG),
+            lowRamDevice = true,
+            memoryClassMb = 256,
+        )
+        val method = DoctorReportFormatter::class.java.getDeclaredMethod(
+            "format",
+            java.lang.Long.TYPE,
+            List::class.java,
+            DevicePlaybackProfileSummary::class.java,
+        )
+
+        val report = method.invoke(
+            DoctorReportFormatter,
+            2_000L,
+            emptyList<PlaybackObservation>(),
+            summary,
+        ) as String
+
+        assertThat(report).isEqualTo(
+            """
+            MuxTV Doctor Report v2
+            generated_at_epoch_ms=2000
+            device_summary=available
+            device_video_decoders=AVC:PRESENT,HEVC:UNKNOWN
+            device_current_display=1920x1080@60000mHz
+            device_supported_display_mode_count=2
+            device_hdr=HDR10,HLG
+            device_low_ram=true
+            device_memory_class_mb=256
+            observation_count=0
+            no_observations
+            """.trimIndent(),
+        )
+        assertThat(report).doesNotContain("http://")
+        assertThat(report).doesNotContain("Authorization")
+        assertThat(report).doesNotContain("Cookie")
+    }
+
+    @Test
+    fun `v2 report represents unavailable device evidence without raw failure text`() {
+        val method = DoctorReportFormatter::class.java.getDeclaredMethod(
+            "format",
+            java.lang.Long.TYPE,
+            List::class.java,
+            DevicePlaybackProfileSummary::class.java,
+        )
+
+        val report = method.invoke(
+            DoctorReportFormatter,
+            7L,
+            emptyList<PlaybackObservation>(),
+            null,
+        ) as String
+
+        assertThat(report).isEqualTo(
+            """
+            MuxTV Doctor Report v2
+            generated_at_epoch_ms=7
+            device_summary=unavailable
+            observation_count=0
+            no_observations
+            """.trimIndent(),
+        )
     }
 }
