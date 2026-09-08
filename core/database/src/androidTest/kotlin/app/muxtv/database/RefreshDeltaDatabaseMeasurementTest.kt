@@ -1,5 +1,7 @@
 package app.muxtv.database
 
+import android.os.Bundle
+import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.benchmark.competitive.CompetitiveAggregator
@@ -85,6 +87,13 @@ class RefreshDeltaDatabaseMeasurementTest {
         val output = publishReport(report, competitiveReports)
         assertThat(output.isFile).isTrue()
         assertThat(output.length()).isGreaterThan(0L)
+
+        val encodedReport = Base64.encodeToString(output.readBytes(), Base64.NO_WRAP)
+        instrumentation.addResults(
+            Bundle().apply {
+                putString(RESULT_REPORT_BASE64, encodedReport)
+            },
+        )
     }
 
     private fun app.muxtv.database.measurement.RefreshDeltaDatabaseScenarioReport.toCompetitiveReport(
@@ -229,6 +238,7 @@ class RefreshDeltaDatabaseMeasurementTest {
         const val OUTPUT_DIRECTORY = "c03-room"
         const val OUTPUT_FILE = "c03-refresh-delta.json"
         const val EVIDENCE_REF = "c03-room/c03-refresh-delta.json"
+        const val RESULT_REPORT_BASE64 = "c03RefreshDeltaDatabaseMeasurementReportBase64"
         const val C03_SEED = 348_003L
     }
 }
