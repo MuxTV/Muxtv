@@ -1,0 +1,57 @@
+name: C359 EPG production holdout
+
+on:
+  push:
+    branches:
+      - feat/359-epg-production-holdout
+    paths:
+      - 'benchmark/jvm/**'
+      - '.github/workflows/c359-epg-production-holdout.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: c359-epg-production-holdout-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  correctness:
+    name: C359 holdout correctness
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      MUXTV_EVIDENCE_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.MUXTV_EVIDENCE_SHA }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert exact source
+        shell: pwsh
+        run: |
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $env:MUXTV_EVIDENCE_SHA
+
+      - name: Run C359 holdout contracts
+        shell: pwsh
+        run: |
+          .\gradlew.bat :benchmark:jvm:test --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Upload bounded evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c359-holdout-${{ env:MUXTV_EVIDENCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchmark/jvm/build/reports/tests/**
+            benchmark/jvm/build/test-results/**
+            benchmark/jvm/build/reports/c359/**
+          retention-days: 7
+          github-token: ${{ github.token }}
