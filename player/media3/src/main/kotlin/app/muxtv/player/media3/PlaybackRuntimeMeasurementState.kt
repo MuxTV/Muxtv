@@ -63,15 +63,17 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         completedRebufferDurationMillis = 0L
         reachedReadyOnce = false
         rebufferStartedAtRealtimeMs = null
+        clearDeviceSummary()
+        deviceSummary?.let(::applyDeviceSummary)
+    }
 
-        val summary = deviceSummary
-        if (summary == null || summary.memoryClassMb <= 0) {
-            lowRamDevice = null
-            memoryClassMb = null
-        } else {
-            lowRamDevice = summary.lowRamDevice
-            memoryClassMb = summary.memoryClassMb
-        }
+    @Synchronized
+    fun onDeviceSummary(
+        generation: Long,
+        deviceSummary: DevicePlaybackProfileSummary,
+    ) {
+        if (!isActive(generation)) return
+        applyDeviceSummary(deviceSummary)
     }
 
     @Synchronized
@@ -133,8 +135,7 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
         firstFrameLatencyMillis = null
         rebufferCount = 0
         completedRebufferDurationMillis = 0L
-        lowRamDevice = null
-        memoryClassMb = null
+        clearDeviceSummary()
         reachedReadyOnce = false
         rebufferStartedAtRealtimeMs = null
     }
@@ -156,6 +157,16 @@ internal class PlaybackRuntimeMeasurementState : PlaybackRuntimeMeasurementReade
             lowRamDevice = lowRamDevice,
             memoryClassMb = memoryClassMb,
         )
+    }
+
+    private fun applyDeviceSummary(deviceSummary: DevicePlaybackProfileSummary) {
+        lowRamDevice = deviceSummary.lowRamDevice
+        memoryClassMb = deviceSummary.memoryClassMb
+    }
+
+    private fun clearDeviceSummary() {
+        lowRamDevice = null
+        memoryClassMb = null
     }
 
     private fun isActive(generation: Long): Boolean =
