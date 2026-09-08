@@ -174,6 +174,10 @@ class MuxTvNetworkTimingListenerTest {
         assertThat(observations.single { it.phase == MuxTvNetworkPhase.TOTAL }.durationNanos)
             .isNotNull()
         if (requireResponseBody) {
+            val connectionAcquireDuration = requireNotNull(
+                observations.single { it.phase == MuxTvNetworkPhase.CONNECTION_ACQUIRE }.durationNanos,
+            )
+            assertThat(connectionAcquireDuration).isGreaterThan(0L)
             assertThat(observations.single { it.phase == MuxTvNetworkPhase.REQUEST }.durationNanos)
                 .isNotNull()
             assertThat(observations.single { it.phase == MuxTvNetworkPhase.TTFB }.durationNanos)
