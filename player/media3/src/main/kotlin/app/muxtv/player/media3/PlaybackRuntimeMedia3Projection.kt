@@ -22,6 +22,7 @@ internal fun PlaybackTransport.toPlaybackRuntimeTransport(): PlaybackRuntimeTran
         PlaybackTransport.AUTO -> PlaybackRuntimeTransport.AUTO
     }
 
+@AndroidXOptIn(UnstableApi::class)
 internal fun Format.toPlaybackRuntimeVideoFormatEvidence(): PlaybackRuntimeVideoFormatEvidence {
     val mimeType = sampleMimeType
     val colorTransfer = colorInfo?.colorTransfer
@@ -52,6 +53,7 @@ internal fun Format.toPlaybackRuntimeVideoFormatEvidence(): PlaybackRuntimeVideo
 }
 
 /** Resolves only the MediaItem associated with this analytics event, never the current player item. */
+@AndroidXOptIn(UnstableApi::class)
 internal fun AnalyticsListener.EventTime.playbackRuntimeGeneration(): Long? {
     if (windowIndex !in 0 until timeline.windowCount) return null
     val window = Timeline.Window()
