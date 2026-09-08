@@ -1,0 +1,58 @@
+name: C03 refresh delta evidence
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'benchmark/jvm/**'
+      - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/**'
+      - 'core/database/src/androidTest/kotlin/app/muxtv/database/**RefreshDelta**'
+      - 'tools/ci/Run-HostedC03RefreshDelta.sh'
+      - '.github/workflows/c03-refresh-delta.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: c03-refresh-delta-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  jvm-contract:
+    name: C03 JVM correctness + JMH compile
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert exact source
+        shell: pwsh
+        run: |
+          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
+
+      - name: Run C03 JVM correctness contract
+        shell: pwsh
+        run: |
+          .\gradlew.bat :benchmark:jvm:test :benchmark:jvm:jmhClasses --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Upload bounded JVM evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c03-jvm-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            benchmark/jvm/build/reports/tests/**
+            benchmark/jvm/build/test-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
