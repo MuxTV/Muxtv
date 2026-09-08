@@ -22,14 +22,16 @@ concurrency:
 
 jobs:
   jvm-contract:
-    name: C03 JVM correctness + JMH compile
+    name: C03 JVM correctness + focused JMH
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
+    env:
+      C03_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.C03_SOURCE_SHA }}
           persist-credentials: false
 
       - name: Set up MuxTV JDK toolchains
@@ -38,21 +40,52 @@ jobs:
       - name: Assert exact source
         shell: pwsh
         run: |
-          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
-          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
+          & .\tools\ci\Assert-EvidenceCommit.ps1 -ExpectedCommit $env:C03_SOURCE_SHA
 
       - name: Run C03 JVM correctness contract
         shell: pwsh
         run: |
           .\gradlew.bat :benchmark:jvm:test :benchmark:jvm:jmhClasses --no-daemon --stacktrace --console=plain --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "C03 JVM correctness failed." }
+
+      - name: Build focused JMH executable
+        shell: pwsh
+        run: |
+          .\gradlew.bat :benchmark:jvm:jmhJar --no-daemon --stacktrace --console=plain --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "C03 JMH jar build failed." }
+
+      - name: Run C03 regular JMH evidence
+        shell: pwsh
+        run: |
+          $reportDir = Join-Path $PWD "benchmark/jvm/build/reports/jmh/c03"
+          New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+          $jmhJar = Get-ChildItem -Path "benchmark/jvm/build/libs" -Filter "*-jmh.jar" | Select-Object -First 1
+          if ($null -eq $jmhJar) { throw "C03 JMH executable jar was not produced." }
+          $json = Join-Path $reportDir "results.json"
+          $human = Join-Path $reportDir "human.txt"
+          & java -jar $jmhJar.FullName `
+            "app.muxtv.benchmark.RefreshDeltaBenchmark.*" `
+            -p "size=1000,10000" `
+            -wi 5 `
+            -i 5 `
+            -f 2 `
+            -w 1s `
+            -r 1s `
+            -prof gc `
+            -foe true `
+            -rf json `
+            -rff $json 2>&1 | Tee-Object -FilePath $human
+          if ($LASTEXITCODE -ne 0) { throw "C03 focused JMH execution failed." }
+          if (!(Test-Path $json) -or (Get-Item $json).Length -eq 0) { throw "C03 JMH JSON evidence is missing." }
 
       - name: Upload bounded JVM evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: c03-jvm-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: c03-jvm-${{ env.C03_SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             benchmark/jvm/build/reports/tests/**
             benchmark/jvm/build/test-results/**
+            benchmark/jvm/build/reports/jmh/c03/**
           retention-days: 7
           github-token: ${{ github.token }}
