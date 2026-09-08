@@ -8,7 +8,12 @@ dependencies {
     add("jmh", project(":catalog:ingest"))
     add("jmh", project(":player:api"))
     add("jmh", libs.coroutines.core)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }
+
+tasks.test { useJUnit() }
 
 val dryRun = providers.gradleProperty("muxtvJmhDryRun").map(String::toBoolean).orElse(false)
 
