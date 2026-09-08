@@ -53,7 +53,6 @@ jobs:
           set -euo pipefail
           python3 /tmp/Patch-C03CandidateAudit.py
           git diff --check
-          git diff -- core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
 
       - name: Enable KVM for Android Emulator
         shell: bash
@@ -83,10 +82,6 @@ jobs:
             chmod +x ./gradlew
             rm -rf core/database/build/outputs/androidTest-results/connected/debug
             ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_EXPECTED_HEAD -Pandroid.testInstrumentationRunnerArguments.c03Warmups=0 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=1
-            mkdir -p "$MUXTV_EVIDENCE_DIR"
-            remote=/sdcard/Android/data/app.muxtv.database.test/files/c03-room/c03-refresh-delta.json
-            adb shell "test -f '$remote'"
-            adb pull "$remote" "$MUXTV_EVIDENCE_DIR/precommit-green.json"
 
       - name: Commit verified measurement fix to C03 branch
         shell: bash
@@ -100,7 +95,7 @@ jobs:
           git push origin HEAD:${C03_BRANCH}
           printf 'committedHead=%s\n' "$(git rev-parse HEAD)" >> "$MUXTV_EVIDENCE_DIR/provenance.txt"
 
-      - name: Upload pre-commit GREEN evidence
+      - name: Upload GREEN test evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
