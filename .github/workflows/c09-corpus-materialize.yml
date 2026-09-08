@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'ci(c09): materialize canonical playback corpus'
+    if: "startsWith(github.event.head_commit.message, 'ci(c09): materialize canonical playback corpus')"
     runs-on: ubuntu-latest
     container: debian:trixie-slim
     timeout-minutes: 20
@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates ffmpeg git
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates ffmpeg git python3
           ffmpeg -version | head -n 1 | grep -F 'ffmpeg version 7.1.5-0+deb13u1'
 
       - name: Checkout exact source with write credential
