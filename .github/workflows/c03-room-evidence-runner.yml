@@ -6,39 +6,56 @@ on:
       - evidence/c03-room-874b0c
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
   measure:
-    name: C03 token-churn RED contract
+    name: C03 token-churn GREEN executor
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       C03_EXPECTED_HEAD: 7546738fe00ae746a7e67389bbe7a4519102495b
+      C03_BRANCH: feature/c03-refresh-delta
       MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
     steps:
-      - name: Checkout exact C03 source
+      - name: Checkout exact C03 branch head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.C03_EXPECTED_HEAD }}
-          persist-credentials: false
+          ref: ${{ env.C03_BRANCH }}
+          persist-credentials: true
           fetch-depth: 1
 
       - name: Set up MuxTV JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Assert exact source
+      - name: Assert expected RED head
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$C03_EXPECTED_HEAD"
 
+      - name: Fetch token-churn patch helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin evidence/c03-room-874b0c:refs/remotes/origin/evidence/c03-room-874b0c
+          git show "origin/evidence/c03-room-874b0c:tools/ci/Patch-C03TokenChurn.py" > /tmp/Patch-C03TokenChurn.py
+          test -s /tmp/Patch-C03TokenChurn.py
+
+      - name: Apply debug-only token-churn scenario
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 /tmp/Patch-C03TokenChurn.py
+          git diff --check
+          git diff -- core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
+
       - name: Enable KVM for Android Emulator
         shell: bash
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Run token-churn RED contract on API36
+      - name: Verify token-churn GREEN on API36
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         with:
           api-level: 36
@@ -59,3 +76,14 @@ jobs:
             set -eu
             chmod +x ./gradlew
             ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_EXPECTED_HEAD -Pandroid.testInstrumentationRunnerArguments.c03Warmups=0 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=1
+
+      - name: Commit verified token-churn scenario
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
+          git commit -m "feat(c03): add physical token churn scenario"
+          git push origin HEAD:${C03_BRANCH}
