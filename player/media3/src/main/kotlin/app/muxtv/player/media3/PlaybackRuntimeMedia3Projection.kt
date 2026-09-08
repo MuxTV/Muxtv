@@ -4,6 +4,7 @@ import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
@@ -61,11 +62,16 @@ internal fun AnalyticsListener.EventTime.playbackRuntimeGeneration(): Long? {
     return window.mediaItem.playbackSeekToken()?.generation
 }
 
+internal fun isDecoderInitializationFailure(error: PlaybackException): Boolean =
+    error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+
 /**
  * Measurement-only adapter from Media3 analytics callbacks into the process-local runtime state.
  *
  * [eventGeneration] resolves the generation owned by the callback's EventTime. Keeping generation
  * resolution outside this listener makes stale/prebuffered event attribution explicit and testable.
+ * Codec errors remain non-fatal diagnostics; only Media3's fatal decoder-init error code is counted
+ * as decoder initialization failure evidence.
  */
 @AndroidXOptIn(UnstableApi::class)
 internal class PlaybackRuntimeAnalyticsListener(
@@ -90,5 +96,45 @@ internal class PlaybackRuntimeAnalyticsListener(
     ) {
         val generation = eventGeneration(eventTime) ?: return
         state.onVideoFormat(generation, format.toPlaybackRuntimeVideoFormatEvidence())
+    }
+
+    override fun onVideoDecoderInitialized(
+        eventTime: AnalyticsListener.EventTime,
+        decoderName: String,
+        initializedTimestampMs: Long,
+        initializationDurationMs: Long,
+    ) {
+        val generation = eventGeneration(eventTime) ?: return
+        state.onVideoDecoderInitialized(
+            generation = generation,
+            decoderName = decoderName,
+            initializationDurationMillis = initializationDurationMs,
+        )
+    }
+
+    override fun onDroppedVideoFrames(
+        eventTime: AnalyticsListener.EventTime,
+        droppedFrames: Int,
+        elapsedMs: Long,
+    ) {
+        val generation = eventGeneration(eventTime) ?: return
+        state.onDroppedVideoFrames(generation, droppedFrames)
+    }
+
+    override fun onVideoCodecError(
+        eventTime: AnalyticsListener.EventTime,
+        videoCodecError: Exception,
+    ) {
+        val generation = eventGeneration(eventTime) ?: return
+        state.onVideoCodecError(generation)
+    }
+
+    override fun onPlayerError(
+        eventTime: AnalyticsListener.EventTime,
+        error: PlaybackException,
+    ) {
+        if (!isDecoderInitializationFailure(error)) return
+        val generation = eventGeneration(eventTime) ?: return
+        state.onDecoderInitializationFailure(generation)
     }
 }
