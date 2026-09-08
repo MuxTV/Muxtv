@@ -112,9 +112,9 @@ class M3uCompatibilityCorpusTest {
 
     private fun assertSyntheticNetworkLocationsOnly(rawFixture: String) {
         HTTP_URL.findAll(rawFixture).forEach { match ->
-            val host = URI(match.value).host
+            val host = URI(match.value.substringBefore('|')).host
             check(host != null && host.endsWith(".invalid")) {
-                "Compatibility fixture contains a non-synthetic network host: ${match.value}"
+                "Compatibility fixture contains a non-synthetic network host."
             }
         }
     }
