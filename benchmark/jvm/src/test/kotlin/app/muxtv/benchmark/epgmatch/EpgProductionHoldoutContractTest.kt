@@ -115,7 +115,7 @@ class EpgProductionHoldoutContractTest {
         val match = EpgProductionPolicy.evaluateCase(overflow, calibration.selectedThresholds)
 
         assertThat(match.decision).isEqualTo(EpgBenchmarkDecision.UNRESOLVED)
-        assertThat(match.reason).isEqualTo(EpgBenchmarkReason.CANDIDATE_BUDGET_EXCEEDED)
+        assertThat(match.reason).isEqualTo(EpgProductionReason.CANDIDATE_BUDGET_EXCEEDED)
         assertThat(EpgProductionPolicyContract.MAX_NORMALIZATION_CACHE_ENTRIES).isAtLeast(8)
         assertThat(EpgProductionPolicyContract.MAX_NORMALIZATION_CACHE_ENTRIES).isAtMost(4_096)
     }
