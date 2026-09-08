@@ -4,13 +4,21 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":benchmark:competitive"))
+
     add("jmh", project(":catalog:api"))
     add("jmh", project(":catalog:ingest"))
     add("jmh", project(":player:api"))
     add("jmh", libs.coroutines.core)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }
 
+tasks.test { useJUnit() }
+
 val dryRun = providers.gradleProperty("muxtvJmhDryRun").map(String::toBoolean).orElse(false)
+val c06JmhOnly = providers.gradleProperty("muxtvC06JmhOnly").map(String::toBoolean).orElse(false)
 
 jmh {
     jmhVersion = "1.37"
@@ -24,4 +32,7 @@ jmh {
     resultsFile = layout.buildDirectory.file("reports/jmh/results.json").get().asFile
     humanOutputFile = layout.buildDirectory.file("reports/jmh/human.txt").get().asFile
     failOnError = true
+    if (c06JmhOnly.get()) {
+        includes = listOf(".*EpgMatchingBenchmark.*")
+    }
 }
