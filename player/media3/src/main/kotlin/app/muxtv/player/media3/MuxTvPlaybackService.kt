@@ -18,6 +18,8 @@ import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.common.tracing.MuxTvTrace
 import app.muxtv.common.tracing.MuxTvTraceSection
 import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.player.DevicePlaybackProfileSummary
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.ExternalPlaybackClaimResult
 import app.muxtv.player.ExternalPlaybackDescriptor
 import app.muxtv.player.ExternalPlaybackLeaseRegistry
@@ -44,6 +46,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 @AndroidXOptIn(UnstableApi::class)
@@ -66,12 +69,19 @@ class MuxTvPlaybackService : MediaSessionService() {
     @Inject
     lateinit var externalLeaseRegistry: ExternalPlaybackLeaseRegistry
 
+    @Inject
+    lateinit var devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader
+
+    @Inject
+    internal lateinit var playbackRuntimeMeasurementState: PlaybackRuntimeMeasurementState
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaSession
     private lateinit var firstFrameTracker: PlaybackFirstFrameTracker
     private lateinit var recovery: PlaybackRecoveryOrchestrator
+    private lateinit var runtimeAnalyticsListener: PlaybackRuntimeAnalyticsListener
 
     private var activeSetupId: PlaybackSetupId? = null
     private var activeRequest: PlaybackStartRequest? = null
@@ -82,6 +92,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeExternal: ActiveExternalSetup? = null
     private var activeAttemptNumber = 0
     private var lastFailure: Media3Failure? = null
+    private var cachedDevicePlaybackProfileSummary: DevicePlaybackProfileSummary? = null
     private val callbackGate = PlaybackCallbackGate()
     private var activePlayerListener: Player.Listener? = null
     private var activeFuture: SettableFuture<SessionResult>? = null
@@ -110,6 +121,17 @@ class MuxTvPlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceScope.launch(Dispatchers.Default) {
+            val summary = runCatching { devicePlaybackProfileSummaryReader.snapshot() }
+                .getOrNull()
+                ?: return@launch
+            withContext(Dispatchers.Main.immediate) {
+                cachedDevicePlaybackProfileSummary = summary
+                activeSeekGeneration?.let { generation ->
+                    playbackRuntimeMeasurementState.onDeviceSummary(generation, summary)
+                }
+            }
+        }
         mediaSourceFactory = PlaybackMediaSourceFactory(this, httpClients)
         firstFrameTracker = PlaybackFirstFrameTracker(
             elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
@@ -121,6 +143,11 @@ class MuxTvPlaybackService : MediaSessionService() {
             maxRecoveryDurationMillis = MAX_RECOVERY_DURATION_MILLIS,
         )
         player = ExoPlayer.Builder(this).build()
+        runtimeAnalyticsListener = PlaybackRuntimeAnalyticsListener(
+            state = playbackRuntimeMeasurementState,
+            eventGeneration = { eventTime -> eventTime.playbackRuntimeGeneration() },
+        )
+        player.addAnalyticsListener(runtimeAnalyticsListener)
         player.addListener(seekConfirmationListener)
         val sessionPlayer = MuxTvSessionPlayer(
             player = player,
@@ -141,6 +168,9 @@ class MuxTvPlaybackService : MediaSessionService() {
         removeActivePlayerListener()
         if (::mediaSession.isInitialized) mediaSession.release()
         if (::player.isInitialized) {
+            if (::runtimeAnalyticsListener.isInitialized) {
+                player.removeAnalyticsListener(runtimeAnalyticsListener)
+            }
             player.removeListener(seekConfirmationListener)
             player.release()
         }
@@ -524,8 +554,16 @@ class MuxTvPlaybackService : MediaSessionService() {
             val seekGeneration = nextSeekGeneration()
             activeSeekGeneration = seekGeneration
             activeAttemptNumber = action.attempt + 1
+            playbackRuntimeMeasurementState.activate(
+                generation = seekGeneration,
+                transport = PlaybackTransportClassifier.classify(sessionRequest.locator)
+                    .transport
+                    .toPlaybackRuntimeTransport(),
+                deviceSummary = cachedDevicePlaybackProfileSummary,
+            )
             callbackGate.activate(token)
-            activePlayerListener = createPlayerListener(token).also(player::addListener)
+            activePlayerListener = createPlayerListener(token, seekGeneration)
+                .also(player::addListener)
             MuxTvTrace.global.section(MuxTvTraceSection.PLAYER_PREPARE) {
                 val startPositionMillis = sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET
                 player.setMediaSource(
@@ -552,16 +590,23 @@ class MuxTvPlaybackService : MediaSessionService() {
         }
     }
 
-    private fun createPlayerListener(token: PlaybackAttemptToken): Player.Listener =
+    private fun createPlayerListener(
+        token: PlaybackAttemptToken,
+        runtimeGeneration: Long,
+    ): Player.Listener =
         object : Player.Listener {
             override fun onRenderedFirstFrame() {
                 if (!token.matches(activeSetupId, activeGeneration, activeCandidate) ||
                     !callbackGate.isCurrent(token)
                 ) return
-                firstFrameTracker.onRenderedFirstFrame(
+                val firstFrameEvent = firstFrameTracker.onRenderedFirstFrame(
                     setupId = token.setupId,
                     currentMediaId = player.currentMediaItem?.mediaId,
                 ) ?: return
+                playbackRuntimeMeasurementState.onFirstFrame(
+                    generation = runtimeGeneration,
+                    latencyMillis = firstFrameEvent.activationElapsedMillis,
+                )
                 MuxTvTrace.global.section(MuxTvTraceSection.FIRST_FRAME) {
                     val action = recovery.onRenderedFirstFrame(token.generation, token.candidate)
                     if (action is PlaybackRecoveryAction.Succeeded) {
@@ -625,6 +670,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     }
 
     private fun clearInstalled() {
+        playbackRuntimeMeasurementState.clear()
         removeActivePlayerListener()
         callbackGate.clear()
         firstFrameTracker.clearActive()
