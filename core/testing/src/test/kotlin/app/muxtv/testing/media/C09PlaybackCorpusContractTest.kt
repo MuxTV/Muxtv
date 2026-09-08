@@ -28,7 +28,10 @@ class C09PlaybackCorpusContractTest {
         assertThat(C09PlaybackCorpus.fixtures.maxOf { it.framesPerSecond }).isEqualTo(50)
 
         val integrityIssues = C09PlaybackCorpus.verifyIntegrity()
-        println("C09 corpus integrity issues: $integrityIssues")
-        assertThat(integrityIssues).isEmpty()
+        if (integrityIssues.isNotEmpty()) {
+            throw AssertionError(
+                "C09 playback corpus integrity failed: ${integrityIssues.joinToString(",")}",
+            )
+        }
     }
 }
