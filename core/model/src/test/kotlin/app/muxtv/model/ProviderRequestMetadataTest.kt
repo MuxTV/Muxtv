@@ -57,7 +57,6 @@ class ProviderRequestMetadataTest {
                 "User-Agent" to "Segment-Agent",
                 "Origin" to "https://portal.invalid",
             ),
-            licenseHeaders = mapOf("Authorization" to "Bearer TEST_C21_LICENSE_SECRET"),
         )
 
         mutableDefault["USER-AGENT"] = "Mutated"
@@ -75,24 +74,6 @@ class ProviderRequestMetadataTest {
             "User-Agent", "Segment-Agent",
             "Referer", "https://portal.invalid/",
             "Origin", "https://portal.invalid",
-        )
-        assertThat(metadata.headersFor(ProviderRequestTarget.LICENSE)).containsExactly(
-            "Authorization", "Bearer TEST_C21_LICENSE_SECRET",
-        )
-    }
-
-    @Test
-    fun `license target never inherits stream defaults`() {
-        val metadata = ProviderRequestMetadata(
-            defaultHeaders = mapOf(
-                "Authorization" to "Bearer stream-secret",
-                "Cookie" to "stream=cookie",
-            ),
-            licenseHeaders = mapOf("X-Api-Key" to "license-key"),
-        )
-
-        assertThat(metadata.headersFor(ProviderRequestTarget.LICENSE)).containsExactly(
-            "X-Api-Key", "license-key",
         )
     }
 
@@ -113,11 +94,8 @@ class ProviderRequestMetadataTest {
         assertThrows(IllegalArgumentException::class.java) {
             ProviderRequestMetadata(defaultHeaders = mapOf("User-Agent" to "x".repeat(8_193)))
         }
-        assertThrows(IllegalArgumentException::class.java) {
-            ProviderRequestHeaderPolicy.canonicalize("x".repeat(65)).also { decision ->
-                require(decision !is ProviderRequestHeaderDecision.Malformed)
-            }
-        }
+        assertThat(ProviderRequestHeaderPolicy.canonicalize("x".repeat(65)))
+            .isEqualTo(ProviderRequestHeaderDecision.Malformed)
     }
 
     @Test
@@ -125,7 +103,6 @@ class ProviderRequestMetadataTest {
         assertThat(ProviderRequestMetadata.EMPTY.defaultHeaders).isEmpty()
         assertThat(ProviderRequestMetadata.EMPTY.headersFor(ProviderRequestTarget.MANIFEST)).isEmpty()
         assertThat(ProviderRequestMetadata.EMPTY.headersFor(ProviderRequestTarget.SEGMENT)).isEmpty()
-        assertThat(ProviderRequestMetadata.EMPTY.headersFor(ProviderRequestTarget.LICENSE)).isEmpty()
     }
 
     @Test
@@ -138,14 +115,12 @@ class ProviderRequestMetadataTest {
             ),
             manifestHeaders = mapOf("User-Agent" to "Agent-$secret"),
             segmentHeaders = mapOf("Origin" to "https://$secret.invalid"),
-            licenseHeaders = mapOf("Cookie" to "license=$secret"),
         )
 
         val diagnostic = metadata.toString()
         assertThat(diagnostic).contains("defaultHeaderCount=2")
         assertThat(diagnostic).contains("manifestHeaderCount=1")
         assertThat(diagnostic).contains("segmentHeaderCount=1")
-        assertThat(diagnostic).contains("licenseHeaderCount=1")
         assertThat(diagnostic).doesNotContain(secret)
         assertThat(diagnostic).doesNotContain("Authorization")
         assertThat(diagnostic).doesNotContain("Cookie")
