@@ -11,16 +11,17 @@ permissions:
 
 jobs:
   measure:
-    name: C03 candidate audit GREEN executor
+    name: C03 evidence transport GREEN executor
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      C03_EXPECTED_HEAD: 874b0c56848c74e85285712a12c5b09600e4f2aa
+      C03_EXPECTED_HEAD: 59937492475f3119a166355c30ce52281924284c
       C03_BRANCH: feature/c03-refresh-delta
       MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
       MUXTV_EVIDENCE_DIR: .work/evidence/c03-room
+      C03_RESULT_KEY: c03RefreshDeltaDatabaseMeasurementReportBase64
     steps:
-      - name: Checkout C03 branch
+      - name: Checkout exact C03 branch head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.C03_BRANCH }}
@@ -30,29 +31,30 @@ jobs:
       - name: Set up MuxTV JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Assert expected RED head
+      - name: Assert expected audit head
         shell: bash
         run: |
           set -euo pipefail
           actual="$(git rev-parse HEAD)"
           test "$actual" = "$C03_EXPECTED_HEAD"
           mkdir -p "$MUXTV_EVIDENCE_DIR"
-          printf 'preFixHead=%s\nworkflowCommit=%s\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
+          printf 'sourceHead=%s\nworkflowCommit=%s\ntransport=instrumentation-result-base64\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
 
-      - name: Fetch patch executor from evidence branch
+      - name: Fetch transport patch helper from evidence branch
         shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags origin evidence/c03-room-874b0c:refs/remotes/origin/evidence/c03-room-874b0c
-          git show "origin/evidence/c03-room-874b0c:tools/ci/Patch-C03CandidateAudit.py" > /tmp/Patch-C03CandidateAudit.py
-          test -s /tmp/Patch-C03CandidateAudit.py
+          git show "origin/evidence/c03-room-874b0c:tools/ci/Patch-C03EvidenceTransport.py" > /tmp/Patch-C03EvidenceTransport.py
+          test -s /tmp/Patch-C03EvidenceTransport.py
 
-      - name: Apply measurement-only candidate audit fix
+      - name: Apply test-only evidence transport patch
         shell: bash
         run: |
           set -euo pipefail
-          python3 /tmp/Patch-C03CandidateAudit.py
+          python3 /tmp/Patch-C03EvidenceTransport.py
           git diff --check
+          git diff -- core/database/src/androidTest/kotlin/app/muxtv/database/RefreshDeltaDatabaseMeasurementTest.kt
 
       - name: Enable KVM for Android Emulator
         shell: bash
@@ -60,7 +62,7 @@ jobs:
           MUXTV_KVM_EVIDENCE: .work/evidence/c03-room/kvm
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Verify GREEN before commit
+      - name: Run API36 C03 measurement test
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         with:
           api-level: 36
@@ -83,25 +85,125 @@ jobs:
             rm -rf core/database/build/outputs/androidTest-results/connected/debug
             ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_EXPECTED_HEAD -Pandroid.testInstrumentationRunnerArguments.c03Warmups=0 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=1
 
-      - name: Commit verified measurement fix to C03 branch
+      - name: Extract and validate C03 JSON contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path("core/database/build/outputs/androidTest-results/connected/debug")
+          logs = sorted(root.rglob("test-results.log"))
+          if len(logs) != 1:
+              raise SystemExit(f"expected one test-results.log, found {len(logs)}")
+          text = logs[0].read_text(encoding="utf-8")
+          key = os.environ["C03_RESULT_KEY"]
+          match = re.search(rf"(?m)^INSTRUMENTATION_RESULT: {re.escape(key)}=(?P<value>[A-Za-z0-9+/=]+)\s*$", text)
+          if match is None:
+              raise SystemExit("C03 instrumentation result payload is missing")
+          try:
+              payload = base64.b64decode(match.group("value"), validate=True)
+              report = json.loads(payload.decode("utf-8"))
+          except Exception as exc:
+              raise SystemExit(f"C03 instrumentation result payload is invalid: {type(exc).__name__}") from exc
+
+          expected_head = os.environ["C03_EXPECTED_HEAD"]
+          expected_scenarios = ["delta-0", "delta-1", "delta-10", "delta-100", "reorder", "remove-10"]
+          expected_variants = ["A_CURRENT_MUXTV", "B_IMMUTABLE_COW"]
+          if report.get("schemaVersion") != 1:
+              raise SystemExit("unexpected C03 schemaVersion")
+          if report.get("methodVersion") != "c03-room-delta-v1":
+              raise SystemExit("unexpected C03 methodVersion")
+          if report.get("thresholdApplied") is not False:
+              raise SystemExit("C03 thresholdApplied must be false")
+          if report.get("sourceCommit") != expected_head:
+              raise SystemExit("C03 sourceCommit does not match exact head")
+          if report.get("entryCount") != 10_000 or report.get("batchSize") != 250:
+              raise SystemExit("unexpected C03 workload contract")
+          if report.get("redactionPassed") is not True:
+              raise SystemExit("C03 redaction contract failed")
+
+          scenarios = report.get("scenarios")
+          if not isinstance(scenarios, list) or [item.get("scenarioId") for item in scenarios] != expected_scenarios:
+              raise SystemExit("C03 scenario matrix changed")
+          for scenario in scenarios:
+              expected_digest = scenario.get("expectedActiveDigestSha256")
+              expected_count = scenario.get("expectedActiveCount")
+              if not isinstance(expected_digest, str) or re.fullmatch(r"[0-9a-f]{64}", expected_digest) is None:
+                  raise SystemExit("invalid expected active digest")
+              variants = scenario.get("variants")
+              if not isinstance(variants, list) or [item.get("variant") for item in variants] != expected_variants:
+                  raise SystemExit("C03 variant matrix changed")
+              for variant in variants:
+                  if variant.get("correctnessDigestSha256") != expected_digest:
+                      raise SystemExit("C03 correctness digest mismatch")
+                  if variant.get("correctnessCount") != expected_count:
+                      raise SystemExit("C03 correctness count mismatch")
+                  if variant.get("previousGoodCount") != 10_000:
+                      raise SystemExit("C03 previous-good retention mismatch")
+                  breakdown = variant.get("rowMutationBreakdown")
+                  if not isinstance(breakdown, dict) or not breakdown:
+                      raise SystemExit("C03 row mutation breakdown missing")
+                  if "sqlite.total_changes" in breakdown:
+                      raise SystemExit("deprecated sqlite total_changes oracle returned")
+                  if any(not isinstance(value, int) or value < 0 for value in breakdown.values()):
+                      raise SystemExit("invalid row mutation breakdown")
+                  if sum(breakdown.values()) != variant.get("actualRowMutations") or variant.get("actualRowMutations", 0) <= 0:
+                      raise SystemExit("C03 row mutation total mismatch")
+                  samples = variant.get("samples")
+                  if not isinstance(samples, list) or len(samples) != 1:
+                      raise SystemExit("unexpected C03 sample count")
+                  sample = samples[0]
+                  for field in ("refreshWallNanos", "stageTotalNanos", "maxStageTransactionNanos", "activationTransactionNanos"):
+                      if not isinstance(sample.get(field), int) or sample[field] <= 0:
+                          raise SystemExit(f"invalid C03 timing field: {field}")
+                  for field in ("walPeakBytes", "checkpointDatabaseGrowthBytes", "checkpointDiskGrowthBytes"):
+                      if not isinstance(sample.get(field), int) or sample[field] < 0:
+                          raise SystemExit(f"invalid C03 storage field: {field}")
+
+          raw = payload.decode("utf-8")
+          for forbidden in ("fixture.invalid", "session=", "Authorization", "Cookie"):
+              if forbidden in raw:
+                  raise SystemExit(f"C03 evidence leaked forbidden raw data marker: {forbidden}")
+
+          evidence = Path(os.environ["MUXTV_EVIDENCE_DIR"])
+          evidence.mkdir(parents=True, exist_ok=True)
+          (evidence / "c03-refresh-delta.json").write_bytes(payload)
+          (evidence / "transport-validation.txt").write_text(
+              "status=passed\n"
+              f"sourceHead={expected_head}\n"
+              f"scenarioCount={len(scenarios)}\n"
+              "variants=A_CURRENT_MUXTV,B_IMMUTABLE_COW\n"
+              "rowOracle=untimed-trigger-audit\n"
+              "jsonTransport=instrumentation-result-base64\n",
+              encoding="utf-8",
+          )
+          PY
+          test -s "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
+          grep -q '^status=passed$' "$MUXTV_EVIDENCE_DIR/transport-validation.txt"
+
+      - name: Upload validated C03 JSON evidence
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c03-room-transport-${{ env.C03_EXPECTED_HEAD }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c03-room/**
+            core/database/build/outputs/androidTest-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+      - name: Commit qualified evidence transport to C03 branch
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
-          git commit -m "fix(c03): audit candidate physical row mutations"
+          git add core/database/src/androidTest/kotlin/app/muxtv/database/RefreshDeltaDatabaseMeasurementTest.kt
+          git commit -m "fix(c03): export Room evidence through instrumentation result"
           git push origin HEAD:${C03_BRANCH}
-          printf 'committedHead=%s\n' "$(git rev-parse HEAD)" >> "$MUXTV_EVIDENCE_DIR/provenance.txt"
-
-      - name: Upload GREEN test evidence
-        if: always()
-        uses: ./.github/actions/upload-evidence-with-retry
-        with:
-          name-prefix: c03-room-fix-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .work/evidence/c03-room/**
-            core/database/build/outputs/androidTest-results/**
-          retention-days: 7
-          github-token: ${{ github.token }}
+          printf 'qualifiedTransportHead=%s\n' "$(git rev-parse HEAD)" >> "$MUXTV_EVIDENCE_DIR/provenance.txt"
