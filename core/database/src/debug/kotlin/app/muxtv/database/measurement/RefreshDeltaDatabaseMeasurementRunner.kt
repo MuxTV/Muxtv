@@ -349,7 +349,7 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
         candidateTransaction(database) {
             database.execSQL(
                 "INSERT INTO c03_b_revisions(source_id, revision_number, status) VALUES(?, ?, 'STAGING')",
-                arrayOf(SOURCE_ID, REFRESH_REVISION),
+                arrayOf<Any?>(SOURCE_ID, REFRESH_REVISION),
             )
         }
         val beginNanos = elapsed(beginStarted)
@@ -378,11 +378,11 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
             )
             database.execSQL(
                 "UPDATE c03_b_revisions SET status='ACTIVE' WHERE source_id=? AND revision_number=? AND status='STAGING'",
-                arrayOf(SOURCE_ID, REFRESH_REVISION),
+                arrayOf<Any?>(SOURCE_ID, REFRESH_REVISION),
             )
             database.execSQL(
                 "UPDATE c03_b_sources SET retained_revision=active_revision, active_revision=? WHERE id=?",
-                arrayOf(REFRESH_REVISION, SOURCE_ID),
+                arrayOf<Any?>(REFRESH_REVISION, SOURCE_ID),
             )
         }
         val activationNanos = elapsed(activationStarted)
@@ -489,7 +489,7 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
         candidateTransaction(database) {
             database.execSQL(
                 "INSERT INTO c03_b_revisions(source_id, revision_number, status) VALUES(?, ?, 'STAGING')",
-                arrayOf(SOURCE_ID, BASELINE_REVISION),
+                arrayOf<Any?>(SOURCE_ID, BASELINE_REVISION),
             )
         }
         val statements = CandidateStatements(database)
@@ -505,11 +505,11 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
         candidateTransaction(database) {
             database.execSQL(
                 "UPDATE c03_b_revisions SET status='ACTIVE' WHERE source_id=? AND revision_number=?",
-                arrayOf(SOURCE_ID, BASELINE_REVISION),
+                arrayOf<Any?>(SOURCE_ID, BASELINE_REVISION),
             )
             database.execSQL(
                 "UPDATE c03_b_sources SET active_revision=? WHERE id=?",
-                arrayOf(BASELINE_REVISION, SOURCE_ID),
+                arrayOf<Any?>(BASELINE_REVISION, SOURCE_ID),
             )
         }
     }
@@ -805,7 +805,7 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
         val digestSha256: String,
     )
 
-    private class CandidateStatements(database: SQLiteDatabase) : AutoCloseable {
+    private inner class CandidateStatements(database: SQLiteDatabase) : AutoCloseable {
         private val canonical = database.compileStatement(
             "INSERT OR IGNORE INTO c03_b_canonical_channels(id, display_name) VALUES(?, ?)",
         )
@@ -1201,18 +1201,18 @@ internal object RefreshDeltaDatabaseMeasurementJsonWriter {
 
 private fun MessageDigest.updateField(value: String) {
     val bytes = value.toByteArray(StandardCharsets.UTF_8)
-    update(bytes.size ushr 24)
-    update(bytes.size ushr 16)
-    update(bytes.size ushr 8)
-    update(bytes.size)
+    update((bytes.size ushr 24).toByte())
+    update((bytes.size ushr 16).toByte())
+    update((bytes.size ushr 8).toByte())
+    update(bytes.size.toByte())
     update(bytes)
 }
 
 private fun MessageDigest.updateNullableField(value: String?) {
     if (value == null) {
-        update(0)
+        update(0.toByte())
     } else {
-        update(1)
+        update(1.toByte())
         updateField(value)
     }
 }
