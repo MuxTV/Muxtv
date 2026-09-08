@@ -64,24 +64,12 @@ jobs:
             set -eu
             chmod +x ./gradlew
             rm -rf core/database/build/outputs/androidTest-results/connected/debug
-            ./gradlew \
-              :core:database:connectedDebugAndroidTest \
-              --no-daemon \
-              --stacktrace \
-              --console=plain \
-              --no-problems-report \
-              -PcatalogMeasurements=true \
-              -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest \
-              -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_SOURCE_SHA \
-              -Pandroid.testInstrumentationRunnerArguments.c03Warmups=1 \
-              -Pandroid.testInstrumentationRunnerArguments.c03Iterations=5
+            ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_SOURCE_SHA -Pandroid.testInstrumentationRunnerArguments.c03Warmups=1 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=5
             mkdir -p "$MUXTV_EVIDENCE_DIR"
             remote=/sdcard/Android/data/app.muxtv.database.test/files/c03-room/c03-refresh-delta.json
             adb shell "test -f '$remote'"
             adb pull "$remote" "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
-            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
-              -ModulePaths core/database \
-              -OutputPath "$MUXTV_EVIDENCE_DIR/android-test-results-core-database.json"
+            pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 -ModulePaths core/database -OutputPath "$MUXTV_EVIDENCE_DIR/android-test-results-core-database.json"
             test -s "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
 
       - name: Upload C03 Room evidence
