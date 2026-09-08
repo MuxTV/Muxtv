@@ -1,5 +1,6 @@
 name: C03 refresh delta evidence
 
+# Trusted retrigger after bot-authored evidence transport commit; no benchmark semantics changed.
 on:
   pull_request:
     branches:
