@@ -7,7 +7,6 @@ import java.util.Locale
 enum class ProviderRequestTarget {
     MANIFEST,
     SEGMENT,
-    LICENSE,
 }
 
 sealed interface ProviderRequestHeaderDecision {
@@ -73,12 +72,10 @@ class ProviderRequestMetadata(
     defaultHeaders: Map<String, String> = emptyMap(),
     manifestHeaders: Map<String, String> = emptyMap(),
     segmentHeaders: Map<String, String> = emptyMap(),
-    licenseHeaders: Map<String, String> = emptyMap(),
 ) {
     val defaultHeaders: Map<String, String> = normalizeScope(defaultHeaders)
     val manifestHeaders: Map<String, String> = normalizeScope(manifestHeaders)
     val segmentHeaders: Map<String, String> = normalizeScope(segmentHeaders)
-    val licenseHeaders: Map<String, String> = normalizeScope(licenseHeaders)
 
     private val resolvedManifestHeaders: Map<String, String> = mergeScopes(
         defaultHeaders = this.defaultHeaders,
@@ -92,8 +89,7 @@ class ProviderRequestMetadata(
     init {
         val acceptedHeaderCount = this.defaultHeaders.size +
             this.manifestHeaders.size +
-            this.segmentHeaders.size +
-            this.licenseHeaders.size
+            this.segmentHeaders.size
         require(acceptedHeaderCount <= MAX_ACCEPTED_HEADERS) {
             "Provider request metadata exceeds the accepted header count."
         }
@@ -102,7 +98,6 @@ class ProviderRequestMetadata(
     fun headersFor(target: ProviderRequestTarget): Map<String, String> = when (target) {
         ProviderRequestTarget.MANIFEST -> resolvedManifestHeaders
         ProviderRequestTarget.SEGMENT -> resolvedSegmentHeaders
-        ProviderRequestTarget.LICENSE -> licenseHeaders
     }
 
     override fun equals(other: Any?): Boolean {
@@ -110,23 +105,20 @@ class ProviderRequestMetadata(
         if (other !is ProviderRequestMetadata) return false
         return defaultHeaders == other.defaultHeaders &&
             manifestHeaders == other.manifestHeaders &&
-            segmentHeaders == other.segmentHeaders &&
-            licenseHeaders == other.licenseHeaders
+            segmentHeaders == other.segmentHeaders
     }
 
     override fun hashCode(): Int {
         var result = defaultHeaders.hashCode()
         result = 31 * result + manifestHeaders.hashCode()
         result = 31 * result + segmentHeaders.hashCode()
-        result = 31 * result + licenseHeaders.hashCode()
         return result
     }
 
     override fun toString(): String =
         "ProviderRequestMetadata(defaultHeaderCount=${defaultHeaders.size}, " +
             "manifestHeaderCount=${manifestHeaders.size}, " +
-            "segmentHeaderCount=${segmentHeaders.size}, " +
-            "licenseHeaderCount=${licenseHeaders.size})"
+            "segmentHeaderCount=${segmentHeaders.size})"
 
     companion object {
         const val MAX_ACCEPTED_HEADERS: Int = 32
