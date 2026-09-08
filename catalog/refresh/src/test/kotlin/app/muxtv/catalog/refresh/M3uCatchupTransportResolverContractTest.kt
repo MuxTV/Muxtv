@@ -53,6 +53,29 @@ class M3uCatchupTransportResolverContractTest {
     }
 
     @Test
+    fun ampersandAppendOnLocatorWithoutQueryStartsCanonicalQuery() {
+        val nowEpochMillis = 1_800_000_000_000L
+        val positionEpochMillis = nowEpochMillis - (3 * HOUR_MILLIS)
+        val result = M3uCatchupTransportResolver(nowEpochMillis = { nowEpochMillis }).resolve(
+            intent = PlaybackIntent.CatchupPosition(
+                channelId = "channel-catchup",
+                positionEpochMillis = positionEpochMillis,
+            ),
+            liveLocator = "https://streams.invalid/live/catchup.m3u8",
+            metadata = M3uCatchupMetadata(
+                mode = "append",
+                source = "&utc={utc}",
+                days = 7,
+                correction = "0",
+            ),
+        )
+
+        val ready = result as M3uCatchupTransportResolution.Ready
+        assertThat(ready.locator)
+            .isEqualTo("https://streams.invalid/live/catchup.m3u8?utc=${positionEpochMillis / SECOND_MILLIS}")
+    }
+
+    @Test
     fun correctionCannotMoveMaterializedStartOutsideRetention() {
         val nowEpochMillis = 1_800_000_000_000L
         val windowStart = nowEpochMillis - (7 * DAY_MILLIS)

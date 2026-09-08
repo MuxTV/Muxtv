@@ -53,7 +53,7 @@ class PlaybackArchiveBindingTest {
             .startsWith("muxtv-provider://xtream/archive/707/")
         assertThat(m3u).isInstanceOf(PlaybackArchiveResolution.Ready::class.java)
         assertThat((m3u as PlaybackArchiveResolution.Ready).locator)
-            .isEqualTo("$LIVE_LOCATOR&utc=${m3uPosition / SECOND_MILLIS}")
+            .isEqualTo("$LIVE_LOCATOR?utc=${m3uPosition / SECOND_MILLIS}")
     }
 
     private companion object {
