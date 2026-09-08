@@ -475,20 +475,26 @@ class StreamingM3uParser {
             return LocatorNormalizationResult(locator = locator)
         }
 
-        val parsed = parseAmpersandHeaderAssignments(locator.substring(pipe + 1))
-        val recognized = parsed.assignments.any { assignment ->
-            when (ProviderRequestHeaderPolicy.canonicalize(assignment.rawName)) {
-                is ProviderRequestHeaderDecision.Accepted -> true
-                ProviderRequestHeaderDecision.Forbidden -> true
-                ProviderRequestHeaderDecision.Malformed,
-                ProviderRequestHeaderDecision.Unsupported,
-                -> false
+        val rawAssignments = locator.substring(pipe + 1)
+        val recognized = rawAssignments.split('&').any { pair ->
+            val separator = pair.indexOf('=')
+            if (separator <= 0) {
+                false
+            } else {
+                when (ProviderRequestHeaderPolicy.canonicalize(pair.substring(0, separator).trim())) {
+                    is ProviderRequestHeaderDecision.Accepted -> true
+                    ProviderRequestHeaderDecision.Forbidden -> true
+                    ProviderRequestHeaderDecision.Malformed,
+                    ProviderRequestHeaderDecision.Unsupported,
+                    -> false
+                }
             }
         }
         if (!recognized) {
             return LocatorNormalizationResult(locator = locator)
         }
 
+        val parsed = parseAmpersandHeaderAssignments(rawAssignments)
         val applied = applyAssignments(
             pending = pending,
             scope = RequestHeaderScope.DEFAULT,
