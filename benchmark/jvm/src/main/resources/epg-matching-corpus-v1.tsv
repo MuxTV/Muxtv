@@ -1,0 +1,65 @@
+scenario_id	tags	provider_source	epg_external_id	epg_display_name	candidate_source	candidate_id	tvg_id	tvg_name	raw_name	expected_ids	auto_allowed	review_expected	note
+trusted-id-wins	latin,exact	p1	bbc.one	Wrong Display	p1	p1-bbc-one	bbc.one	BBC One	BBC One	p1-bbc-one	true	false	trusted ID wins over misleading name
+trusted-id-wins	latin,exact	p1	bbc.one	Wrong Display	p1	p1-wrong	wrong.id	Wrong Display	Wrong Display	p1-bbc-one	true	false	trusted ID wins over misleading name
+exact-tvg-name	latin,exact	p1	missing	  NEWS  HD  	p1	p1-news	-	news hd	news hd	p1-news	true	false	NFC whitespace exact name
+exact-tvg-name	latin,exact	p1	missing	  NEWS  HD  	p1	p1-sport	-	Sport	Sport	p1-news	true	false	-
+exact-raw-name	latin,exact	p1	missing	Local 7	p1	p1-local	-	-	LOCAL 7	p1-local	true	false	exact raw-name tier
+exact-raw-name	latin,exact	p1	missing	Local 7	p1	p1-other	-	-	Other	p1-local	true	false	-
+duplicate-world-news	latin,ambiguous	p1	missing	World News	p1	p1-world-a	-	World News	World News	p1-world-a,p1-world-b	false	true	duplicate exact candidates must not auto select
+duplicate-world-news	latin,ambiguous	p1	missing	World News	p1	p1-world-b	-	World News	World News	p1-world-a,p1-world-b	false	true	duplicate exact candidates must not auto select
+provider-isolation	latin,unicode,isolation	p1	missing	Café TV	p2	p2-cafe-tv	-	Café TV	Café TV	p1-cafe-tv	true	false	cross-provider exact decoy ignored
+provider-isolation	latin,unicode,isolation	p1	missing	Café TV	p1	p1-cafe-tv	-	Café TV	Café TV	p1-cafe-tv	true	false	NFC exact match stays provider-local
+cyrillic-quality-noise	cyrillic,quality	p1	missing	КИНОПРЕМЬЕРА HD	p1	p1-kinopremiera	-	КИНОПРЕМЬЕРА	КИНОПРЕМЬЕРА	p1-kinopremiera	true	false	quality suffix cleanup
+cyrillic-quality-noise	cyrillic,quality	p1	missing	КИНОПРЕМЬЕРА HD	p1	p1-sts	-	СТС	СТС	p1-kinopremiera	true	false	-
+cyrillic-spacing	cyrillic,fuzzy	p1	missing	Кино Премьера	p1	p1-kino-joined	-	Кинопремьера	Кинопремьера	p1-kino-joined	true	false	spacing variation
+cyrillic-spacing	cyrillic,fuzzy	p1	missing	Кино Премьера	p1	p1-kino-comedy	-	Кино Комедия	Кино Комедия	p1-kino-joined	true	false	-
+greek-quality-noise	greek,quality,numeric	p1	missing	ΕΡΤ 1 HD	p1	p1-ert-1	-	ΕΡΤ 1	ΕΡΤ 1	p1-ert-1	true	false	quality suffix with numeric guard
+greek-quality-noise	greek,quality,numeric	p1	missing	ΕΡΤ 1 HD	p1	p1-ert-2	-	ΕΡΤ 2	ΕΡΤ 2	p1-ert-1	true	false	-
+cjk-quality-noise	cjk,quality	p1	missing	中央电视台 4K	p1	p1-cctv	-	中央电视台	中央电视台	p1-cctv	true	false	CJK quality suffix cleanup
+cjk-quality-noise	cjk,quality	p1	missing	中央电视台 4K	p1	p1-phoenix	-	凤凰卫视	凤凰卫视	p1-cctv	true	false	-
+katakana-nfkc	cjk,unicode,nfkc	p1	missing	ｽｶﾊﾟｰ HD	p1	p1-sky-jp	-	スカパー	スカパー	p1-sky-jp	true	false	NFKC compatibility form
+katakana-nfkc	cjk,unicode,nfkc	p1	missing	ｽｶﾊﾟｰ HD	p1	p1-nhk	-	NHK	NHK	p1-sky-jp	true	false	-
+unicode-arabic-indic-digit	arabic,unicode-digits,numeric	p1	missing	قناة ٢ HD	p1	p1-arabic-2	-	قناة 2	قناة 2	p1-arabic-2	true	false	Arabic-Indic decimal digit equals ASCII 2
+unicode-arabic-indic-digit	arabic,unicode-digits,numeric	p1	missing	قناة ٢ HD	p1	p1-arabic-3	-	قناة 3	قناة 3	p1-arabic-2	true	false	-
+unicode-arabic-indic-mismatch	arabic,unicode-digits,numeric,hard-negative	p1	missing	قناة ٢ HD	p1	p1-arabic-3	-	قناة ٣	قناة ٣	-	false	false	different Unicode decimal digits must not auto match
+sky-sports-2-vs-3	latin,numeric,safety	p1	missing	Sky Sports 2 HD	p1	p1-sky-sports-2	-	Sky Sports 2	Sky Sports 2	p1-sky-sports-2	true	false	Sky Sports 2 must not drift to 3
+sky-sports-2-vs-3	latin,numeric,safety	p1	missing	Sky Sports 2 HD	p1	p1-sky-sports-3	-	Sky Sports 3	Sky Sports 3	p1-sky-sports-2	true	false	Sky Sports 2 must not drift to 3
+sky-sports-4-negative	latin,numeric,hard-negative	p1	missing	Sky Sports 4 HD	p1	p1-sky-sports-2	-	Sky Sports 2	Sky Sports 2	-	false	false	unseen channel number must remain unresolved/review
+sky-sports-4-negative	latin,numeric,hard-negative	p1	missing	Sky Sports 4 HD	p1	p1-sky-sports-3	-	Sky Sports 3	Sky Sports 3	-	false	false	-
+mtv-vs-mtv-2	latin,numeric,safety	p1	missing	MTV HD	p1	p1-mtv	-	MTV	MTV	p1-mtv	true	false	MTV must not become MTV 2
+mtv-vs-mtv-2	latin,numeric,safety	p1	missing	MTV HD	p1	p1-mtv-2	-	MTV 2	MTV 2	p1-mtv	true	false	missing-number guard
+mtv-2	latin,numeric,safety	p1	missing	MTV 2 FHD	p1	p1-mtv	-	MTV	MTV	p1-mtv-2	true	false	MTV 2 remains distinct
+mtv-2	latin,numeric,safety	p1	missing	MTV 2 FHD	p1	p1-mtv-2	-	MTV 2	MTV 2	p1-mtv-2	true	false	-
+bbc-one-vs-1	latin,number-word,numeric	p1	missing	BBC One HD	p1	p1-bbc-one	-	BBC 1	BBC 1	p1-bbc-one	true	false	number word normalization is recoverable
+bbc-one-vs-1	latin,number-word,numeric	p1	missing	BBC One HD	p1	p1-bbc-two	-	BBC 2	BBC 2	p1-bbc-one	true	false	numeric guard separates BBC 2
+fullwidth-digit	latin,unicode-digits,numeric,nfkc	p1	missing	TV ３ HD	p1	p1-tv-3	-	TV 3	TV 3	p1-tv-3	true	false	fullwidth decimal digit normalization
+fullwidth-digit	latin,unicode-digits,numeric,nfkc	p1	missing	TV ３ HD	p1	p1-tv-2	-	TV 2	TV 2	p1-tv-3	true	false	-
+leading-zero-digit	latin,unicode-digits,numeric	p1	missing	Channel 02 HD	p1	p1-channel-2	-	Channel 2	Channel 2	p1-channel-2	true	false	digit-run equivalence permits leading zero
+leading-zero-digit	latin,unicode-digits,numeric	p1	missing	Channel 02 HD	p1	p1-channel-3	-	Channel 3	Channel 3	p1-channel-2	true	false	-
+regional-fr-mtv	latin,regional,country	p1	missing	FR| MTV HD	p1	p1-mtv-fr	-	MTV France	MTV France	p1-mtv-fr	true	false	country aliases may reorder without losing region
+regional-fr-mtv	latin,regional,country	p1	missing	FR| MTV HD	p1	p1-mtv-de	-	MTV Germany	MTV Germany	p1-mtv-fr	true	false	-
+regional-unknown-mtv	latin,regional,hard-negative	p1	missing	IT| MTV HD	p1	p1-mtv-fr	-	MTV France	MTV France	-	false	false	unknown region must not auto-select another region
+regional-unknown-mtv	latin,regional,hard-negative	p1	missing	IT| MTV HD	p1	p1-mtv-de	-	MTV Germany	MTV Germany	-	false	false	-
+timeshift-plus-1	latin,timeshift,numeric	p1	missing	Discovery +1 HD	p1	p1-discovery-plus-1	-	Discovery +1	Discovery +1	p1-discovery-plus-1	true	false	+1 remains part of numeric identity
+timeshift-plus-1	latin,timeshift,numeric	p1	missing	Discovery +1 HD	p1	p1-discovery	-	Discovery	Discovery	p1-discovery-plus-1	true	false	missing-number guard
+timeshift-plus-2-negative	latin,timeshift,numeric,hard-negative	p1	missing	Discovery +2 HD	p1	p1-discovery-plus-1	-	Discovery +1	Discovery +1	-	false	false	different timeshift must not auto match
+timeshift-plus-2-negative	latin,timeshift,numeric,hard-negative	p1	missing	Discovery +2 HD	p1	p1-discovery	-	Discovery	Discovery	-	false	false	-
+quality-uhd-hevc	latin,quality	p1	missing	Sky Cinema UHD HEVC	p1	p1-sky-cinema	-	Sky Cinema	Sky Cinema	p1-sky-cinema	true	false	quality/codec cleanup
+quality-uhd-hevc	latin,quality	p1	missing	Sky Cinema UHD HEVC	p1	p1-sky-action	-	Sky Cinema Action	Sky Cinema Action	p1-sky-cinema	true	false	-
+codec-h265	latin,quality	p1	missing	Nature TV H.265 1080p	p1	p1-nature	-	Nature TV	Nature TV	p1-nature	true	false	codec cleanup
+codec-h265	latin,quality	p1	missing	Nature TV H.265 1080p	p1	p1-history	-	History TV	History TV	p1-nature	true	false	-
+decorative-hd	latin,unicode,quality,nfkc	p1	missing	CNN ᴴᴰ	p1	p1-cnn	-	CNN	CNN	p1-cnn	true	false	NFKC decorative quality suffix
+nfc-diacritic	latin,unicode,exact	p1	missing	Café TV	p1	p1-cafe	-	Café TV	Café TV	p1-cafe	true	false	NFC combining-mark equality
+nfc-diacritic	latin,unicode,exact	p1	missing	Café TV	p1	p1-cafe-extra	-	Cafe TV Extra	Cafe TV Extra	p1-cafe	true	false	-
+token-reorder	latin,reorder	p1	missing	Discovery Science HD	p1	p1-discovery-science	-	Science Discovery	Science Discovery	p1-discovery-science	true	false	token Dice recovers order variants
+token-reorder	latin,reorder	p1	missing	Discovery Science HD	p1	p1-discovery-history	-	Discovery History	Discovery History	p1-discovery-science	true	false	-
+typo-geographic	latin,fuzzy,typo	p1	missing	National Geografic	p1	p1-natgeo	-	National Geographic	National Geographic	p1-natgeo	true	false	fuzzy positive requiring score threshold
+typo-geographic	latin,fuzzy,typo	p1	missing	National Geografic	p1	p1-natgeo-wild	-	National Geographic Wild	National Geographic Wild	p1-natgeo	true	false	-
+fuzzy-ambiguous-pair	latin,ambiguous,fuzzy	p1	missing	Movie Action	p1	p1-movie-a	-	Movies Action	Movies Action	p1-movie-a,p1-movie-b	false	true	close alternatives must go to review/ambiguity
+fuzzy-ambiguous-pair	latin,ambiguous,fuzzy	p1	missing	Movie Action	p1	p1-movie-b	-	Movie Actions	Movie Actions	p1-movie-a,p1-movie-b	false	true	-
+unrelated-negative	latin,hard-negative	p1	missing	Discovery Channel	p1	p1-cnn-intl	-	CNN International	CNN International	-	false	false	unrelated channel
+unrelated-negative	latin,hard-negative	p1	missing	Discovery Channel	p1	p1-mtv-hits	-	MTV Hits	MTV Hits	-	false	false	-
+generic-vs-wild	latin,hard-negative,safety	p1	missing	National Geographic	p1	p1-wild	-	National Geographic Wild	National Geographic Wild	-	false	false	generic channel must not auto-select a variant
+generic-vs-junior	latin,hard-negative,safety	p1	missing	Nickelodeon	p1	p1-junior	-	Nickelodeon Junior	Nickelodeon Junior	-	false	false	generic channel must not auto-select a variant
+generic-vs-science	latin,hard-negative,safety	p1	missing	Discovery	p1	p1-science	-	Discovery Science	Discovery Science	-	false	false	generic channel must not auto-select a variant
+generic-vs-international	latin,hard-negative,safety	p1	missing	CNN	p1	p1-intl	-	CNN International	CNN International	-	false	false	generic channel must not auto-select a variant

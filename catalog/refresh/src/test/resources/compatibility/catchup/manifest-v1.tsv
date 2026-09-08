@@ -1,0 +1,22 @@
+# schema_version=1
+id	path	category	disposition	expected_a	expected_b	expected_c	safe_expectation	reference
+append-utc-baseline	append/append-utc-baseline.case	append	SUPPORTED	READY_CORRECT	READY	READY	append query; exact programme bounds; second granularity	MuxTV baseline + OwnTV_Core CatchupUrl
+append-start-dollar	tokens/append-start-dollar.case	tokens	SUPPORTED	INVALID_METADATA	READY	READY	${start} alias materializes corrected epoch seconds	OwnTV_Core CatchupUrl
+append-lutc-duration-offset	tokens/append-lutc-duration-offset.case	tokens	SUPPORTED	READY_UNRESOLVED	READY	READY	lutc duration offset resolve without placeholders	OwnTV_Core CatchupUrl
+append-date-tokens	tokens/append-date-tokens.case	tokens	SUPPORTED	INVALID_METADATA	READY	READY	UTC Y m d H M S tokens resolve deterministically	OwnTV_Core CatchupUrl
+append-existing-query	append/append-existing-query.case	append	SUPPORTED	READY_WRONG_QUERY	READY	READY	existing live query is joined with ampersand	OwnTV_Core CatchupUrl
+shift-standard	shift/shift-standard.case	shift	SUPPORTED	UNSUPPORTED_MODE	READY	READY	shift emits utc+lutc query	OwnTV_Core CatchupUrl
+legacy-timeshift-standard	shift/legacy-timeshift-standard.case	shift	SUPPORTED	UNSUPPORTED_MODE	READY	READY	legacy timeshift aliases shift	OwnTV_Core CatchupUrl
+flussonic-hls	flussonic/flussonic-hls.case	flussonic	SUPPORTED	UNSUPPORTED_MODE	READY	READY	HLS sibling timeshift_abs path; query preserved	OwnTV_Core CatchupUrl
+flussonic-ts	flussonic/flussonic-ts.case	flussonic	SUPPORTED	UNSUPPORTED_MODE	READY	READY	TS sibling archive-start-duration path; query preserved	OwnTV_Core CatchupUrl
+m3u-xc-php	xtream/m3u-xc-php.case	xtream	SUPPORTED	UNSUPPORTED_MODE	READY	READY	xc M3U live path maps to PHP timeshift shape	OwnTV_Core CatchupUrl
+m3u-xtream-php	xtream/m3u-xtream-php.case	xtream	SUPPORTED	UNSUPPORTED_MODE	READY	READY	xtream alias maps to PHP timeshift shape	OwnTV_Core CatchupUrl
+positive-correction	correction/positive-correction.case	correction	SUPPORTED	READY_CORRECT	READY	NON_COMPARABLE	provider absolute clock applies catchup correction	MuxTV #184 contract
+outside-retention	retention/outside-retention.case	retention	SUPPORTED	OUTSIDE_RETENTION	OUTSIDE_RETENTION	NON_COMPARABLE	programme wholly outside archive window is rejected	MuxTV #184 contract
+correction-outside-retention	retention/correction-outside-retention.case	retention	SUPPORTED	OUTSIDE_RETENTION	OUTSIDE_RETENTION	NON_COMPARABLE	corrected transport start cannot escape retention	MuxTV baseline contract
+unknown-token	safety/unknown-token.case	safety	SUPPORTED	READY_UNRESOLVED	INVALID_METADATA	READY_UNRESOLVED	unknown placeholder fails catch-up closed only	MuxTV M3U spec + OwnTV_Core oracle contrast
+malformed-template	safety/malformed-template.case	safety	SUPPORTED	READY_MALFORMED	INVALID_METADATA	READY_MALFORMED	unbalanced placeholder is rejected by candidate	MuxTV M3U spec + OwnTV_Core oracle contrast
+position-near-live-edge	live-edge/position-near-live-edge.case	live-edge	SUPPORTED	READY_CORRECT	READY	NON_COMPARABLE	position one millisecond behind live remains bounded	MuxTV PlaybackIntent contract
+position-at-live-edge	live-edge/position-at-live-edge.case	live-edge	SUPPORTED	OUTSIDE_RETENTION	OUTSIDE_RETENTION	NON_COMPARABLE	archive position at live edge does not create catch-up	MuxTV PlaybackIntent contract
+xtream-native-path	xtream/xtream-native-path.case	xtream	SUPPORTED	READY_CORRECT	READY	READY	native Xtream stays opaque then materializes path timeshift	MuxTV + OwnTV_Core XtreamClient
+xtream-php-alternate	xtream/xtream-php-alternate.case	xtream	NOT_IMPLEMENTED	NOT_IMPLEMENTED	DEFER	READY_REFERENCE	PHP alternate is reference evidence; no resolver-local retry owner	OwnTV_Core CatchupUrl.timeshiftPhpAlternate
