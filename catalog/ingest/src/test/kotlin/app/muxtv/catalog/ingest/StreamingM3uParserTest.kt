@@ -133,6 +133,38 @@ class StreamingM3uParserTest {
     }
 
     @Test
+    fun `recognized pipe header with malformed percent encoding is stripped and redacted`() = runTest {
+        val secret = "TEST_C21_BAD_PERCENT"
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1,C21 Malformed Pipe
+            https://streams.invalid/live/malformed.ts|Host=$secret%ZZ
+        """.trimIndent()
+
+        val sink = RecordingSink()
+        val report = StreamingM3uParser().parse(
+            input = ByteArrayInputStream(playlist.toByteArray()),
+            sink = sink,
+        )
+
+        val entry = sink.entries.single()
+        assertThat(entry.locator).isEqualTo("https://streams.invalid/live/malformed.ts")
+        assertThat(entry.requestMetadata.defaultHeaders).isEmpty()
+        assertThat(sink.warnings.map { it.kind }).containsExactly(
+            M3uWarningKind.MalformedRequestMetadata,
+        )
+
+        val diagnostics = buildString {
+            append(report).append('\n')
+            append(entry).append('\n')
+            append(entry.requestMetadata).append('\n')
+            sink.warnings.forEach { warning -> append(warning).append('\n') }
+        }
+        assertThat(diagnostics).doesNotContain(secret)
+        assertThat(diagnostics).doesNotContain("Host")
+    }
+
+    @Test
     fun `unsupported url pipe assignment remains a literal locator suffix`() = runTest {
         val locator = "https://streams.invalid/live/literal.ts|X-Unbounded-Custom=value"
         val playlist = """
