@@ -46,4 +46,5 @@ include(
     ":feature:settings",
     ":benchmark:macrobenchmark",
     ":benchmark:jvm",
+    ":benchmark:competitive",
 )
