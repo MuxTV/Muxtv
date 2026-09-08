@@ -1,0 +1,109 @@
+name: C09 canonical corpus materializer
+
+on:
+  push:
+    branches:
+      - c09-media3-renderer-decoder-policy
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.event.head_commit.message == 'ci(c09): materialize canonical playback corpus'
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    timeout-minutes: 20
+
+    steps:
+      - name: Install exact corpus generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates ffmpeg git
+          ffmpeg -version | head -n 1 | grep -F 'ffmpeg version 7.1.5-0+deb13u1'
+
+      - name: Checkout exact source with write credential
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Reconstruct and verify canonical corpus bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='core/testing/src/main/resources/app/muxtv/testing/media/c09'
+          cd "$root"
+
+          test ! -e avc-360p30.ts
+          test ! -e avc-720p50.ts
+          test ! -e hevc-360p30.ts
+          test ! -e hevc-720p50.ts
+
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=640x360:rate=30:duration=1' -an -c:v libx264 -threads 1 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 -b:v 220k -maxrate 220k -bufsize 440k -mpegts_flags +resend_headers -f mpegts avc-360p30.ts
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=1280x720:rate=50:duration=1' -an -c:v libx264 -threads 1 -preset veryfast -tune zerolatency -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 -bf 0 -b:v 450k -maxrate 450k -bufsize 900k -mpegts_flags +resend_headers -f mpegts avc-720p50.ts
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=640x360:rate=30:duration=1' -an -c:v libx265 -threads 1 -preset ultrafast -pix_fmt yuv420p -x265-params 'log-level=error:pools=none:frame-threads=1:wpp=0:keyint=30:min-keyint=30:scenecut=0:bframes=0:repeat-headers=1' -b:v 180k -maxrate 180k -bufsize 360k -mpegts_flags +resend_headers -f mpegts hevc-360p30.ts
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=1280x720:rate=50:duration=1' -an -c:v libx265 -threads 1 -preset ultrafast -pix_fmt yuv420p -x265-params 'log-level=error:pools=none:frame-threads=1:wpp=0:keyint=50:min-keyint=50:scenecut=0:bframes=0:repeat-headers=1' -b:v 380k -maxrate 380k -bufsize 760k -mpegts_flags +resend_headers -f mpegts hevc-720p50.ts
+
+          cat > /tmp/c09.sha256 <<'EOF'
+          f18f019088523bdd9a8cf9521d316fdfa140c84563336ca15f9cd41bc9c038fd  avc-360p30.ts
+          39759e22e38ce40a6c046e33b1780079d9cb4bd2bec297395731d94b43a5738f  avc-720p50.ts
+          80a2bbcdce538eab68d4e5ef51031ceaab8e5d2c0ef958b6fd2f256d5411c327  avc-hls.m3u8
+          9276b5b278de9dbb90ba1fcdadb6af3748f35d1345ab8339f4de2feac5052142  hevc-360p30.ts
+          8c9855b58fb653d554298c6263edf2b1e608cb411f8913273786873bf06d29dc  hevc-720p50.ts
+          648128b2140128e651ee18bd32824323a6872e341b051f9cbab06e548fec6f78  hevc-hls.m3u8
+          EOF
+          sed -i 's/^          //' /tmp/c09.sha256
+          sha256sum --check /tmp/c09.sha256
+
+          test "$(stat -c '%s' avc-360p30.ts)" = '41924'
+          test "$(stat -c '%s' avc-720p50.ts)" = '65048'
+          test "$(stat -c '%s' avc-hls.m3u8)" = '117'
+          test "$(stat -c '%s' hevc-360p30.ts)" = '32148'
+          test "$(stat -c '%s' hevc-720p50.ts)" = '54708'
+          test "$(stat -c '%s' hevc-hls.m3u8)" = '118'
+          printf '%s  %s\n' 'c0a7c7a9b8f09f5c33b85519d82e2996e1d2cbc62ad8339767f44fa7dc71fc3c' 'manifest-v1.tsv' | sha256sum --check
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import struct
+
+          root = Path('.')
+          files = [
+              'avc-360p30.ts',
+              'avc-720p50.ts',
+              'avc-hls.m3u8',
+              'hevc-360p30.ts',
+              'hevc-720p50.ts',
+              'hevc-hls.m3u8',
+          ]
+          digest = hashlib.sha256()
+          for name in sorted(files):
+              payload = (root / name).read_bytes()
+              digest.update(name.encode('utf-8'))
+              digest.update(b'\0')
+              digest.update(struct.pack('>Q', len(payload)))
+              digest.update(payload)
+          actual = digest.hexdigest()
+          expected = '10c41a6ef0de1834fcf6658d5c8edddf1abb9e52d933553fb3c108220ccb36b5'
+          if actual != expected:
+              raise SystemExit(f'aggregate content hash mismatch: {actual}')
+          print(f'canonical aggregate content hash verified: {actual}')
+          PY
+
+      - name: Commit exact canonical resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add core/testing/src/main/resources/app/muxtv/testing/media/c09/*.ts
+          git diff --cached --stat
+          test "$(git diff --cached --name-only | wc -l)" = '4'
+          git commit -m 'test(c09): package canonical playback corpus bytes'
+          git push origin HEAD:c09-media3-renderer-decoder-policy
