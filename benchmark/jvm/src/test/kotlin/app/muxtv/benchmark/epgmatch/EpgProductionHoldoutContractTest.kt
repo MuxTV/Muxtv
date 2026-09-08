@@ -71,8 +71,11 @@ class EpgProductionHoldoutContractTest {
 
         assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(0)
         assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(0)
+        assertThat(gate.holdoutFalseAutoByRiskBucket.values).containsExactly(0)
         assertThat(gate.holdoutExactMissRecovery).isAtLeast(EpgProductionPolicyContract.MIN_HOLDOUT_EXACT_MISS_RECOVERY)
         assertThat(gate.automaticDecisionExposure).isAtLeast(EpgProductionPolicyContract.MIN_AUTOMATIC_DECISION_EXPOSURE)
+        assertThat(gate.fuzzyAutomaticDecisionExposure)
+            .isAtLeast(EpgProductionPolicyContract.MIN_FUZZY_AUTOMATIC_DECISION_EXPOSURE)
         assertThat(gate.passed).isTrue()
     }
 
