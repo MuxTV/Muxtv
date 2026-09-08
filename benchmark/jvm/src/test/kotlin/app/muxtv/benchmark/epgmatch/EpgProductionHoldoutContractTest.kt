@@ -77,7 +77,7 @@ class EpgProductionHoldoutContractTest {
     }
 
     @Test
-    fun selectedPolicyMustPassFrozenC06AndIndependentHoldoutWithoutFalseAuto() {
+    fun observedHoldoutFalseAutosRejectAutomaticFuzzyAdmission() {
         val calibration = EpgProductionThresholdCalibration.calibrate(EpgProductionValidationCorpora.calibration)
         val gate = EpgProductionHoldoutGate.validate(
             calibration = calibration,
@@ -86,16 +86,16 @@ class EpgProductionHoldoutContractTest {
         )
 
         assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(0)
-        assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(0)
-        assertThat(gate.holdoutFalseAutoByRiskBucket.values.toSet()).containsExactly(0)
-        assertThat(gate.holdoutExactMissRecovery).isAtLeast(EpgProductionPolicyContract.MIN_HOLDOUT_EXACT_MISS_RECOVERY)
+        assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(3)
+        assertThat(gate.holdoutFalseAutoByRiskBucket.values.any { it > 0 }).isTrue()
         assertThat(gate.automaticDecisionExposure).isAtLeast(EpgProductionPolicyContract.MIN_AUTOMATIC_DECISION_EXPOSURE)
         assertThat(gate.fuzzyAutomaticDecisionExposure)
             .isAtLeast(EpgProductionPolicyContract.MIN_FUZZY_AUTOMATIC_DECISION_EXPOSURE)
         assertThat(gate.exactSemanticRegressions).isEqualTo(0)
         assertThat(gate.manualOverridePrecedencePreserved).isTrue()
-        assertThat(gate.passed).isTrue()
-        assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.PASS)
+        assertThat(EpgProductionPolicyContract.FUZZY_CAN_CROSS_PROVIDER_BOUNDARY).isFalse()
+        assertThat(gate.passed).isFalse()
+        assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.REJECT_AUTOMATIC_FUZZY)
     }
 
     @Test

@@ -18,7 +18,10 @@ class EpgProductionHoldoutEvidenceReportTest {
             ?.takeIf { it.matches(Regex("[0-9a-f]{40}")) }
             ?: "0000000000000000000000000000000000000000"
 
-        assertThat(gate.passed).isTrue()
+        assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(0)
+        assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(3)
+        assertThat(gate.passed).isFalse()
+        assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.REJECT_AUTOMATIC_FUZZY)
 
         val report = buildString {
             appendLine("# C359 EPG production holdout evidence")
@@ -38,12 +41,15 @@ class EpgProductionHoldoutEvidenceReportTest {
             appendLine("- evaluated_configurations: `${calibration.evaluatedConfigurations}`")
             appendLine("- frozen_c06_false_auto: `${gate.frozenC06.metrics.falseAutomaticMatches}`")
             appendLine("- holdout_false_auto: `${gate.holdout.metrics.falseAutomaticMatches}`")
+            appendLine("- automatic_fuzzy_admission: `REJECTED`")
+            appendLine("- production_adoption: `REVIEW_ONLY_DEFERRED`")
             appendLine("- holdout_exact_miss_recovery: `${gate.holdoutExactMissRecovery.f6()}`")
             appendLine("- automatic_decision_exposure: `${gate.automaticDecisionExposure}`")
             appendLine("- fuzzy_automatic_decision_exposure: `${gate.fuzzyAutomaticDecisionExposure}`")
             appendLine("- zero_failure_upper_bound_95_diagnostic: `${gate.zeroFailureUpperBound95Diagnostic.f6()}`")
             appendLine("- exact_semantic_regressions: `${gate.exactSemanticRegressions}`")
             appendLine("- manual_override_precedence_preserved: `${gate.manualOverridePrecedencePreserved}`")
+            appendLine("- provider_isolation_preserved: `${!EpgProductionPolicyContract.FUZZY_CAN_CROSS_PROVIDER_BOUNDARY}`")
             appendLine("- disposition: `${gate.disposition}`")
             appendLine("- holdout_compatibility_key_sha256: `${gate.holdoutCompatibilityKeySha256}`")
             appendLine()
@@ -53,6 +59,10 @@ class EpgProductionHoldoutEvidenceReportTest {
             }
         }
 
+        assertThat(report).contains("- holdout_false_auto: `3`")
+        assertThat(report).contains("- automatic_fuzzy_admission: `REJECTED`")
+        assertThat(report).contains("- production_adoption: `REVIEW_ONLY_DEFERRED`")
+        assertThat(report).contains("- disposition: `REJECT_AUTOMATIC_FUZZY`")
         assertThat(report).doesNotContain("http://")
         assertThat(report).doesNotContain("https://")
         assertThat(report).doesNotContain("Authorization")
