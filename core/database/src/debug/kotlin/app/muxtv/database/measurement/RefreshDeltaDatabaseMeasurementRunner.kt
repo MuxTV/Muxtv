@@ -1013,7 +1013,8 @@ private enum class RefreshDeltaDatabaseScenario(val id: String) {
     DELTA_10("delta-10"),
     DELTA_100("delta-100"),
     REORDER("reorder"),
-    REMOVE_10("remove-10");
+    REMOVE_10("remove-10"),
+    TOKEN_CHURN("token-churn");
 
     fun apply(previous: List<RefreshDeltaDatabaseItem>): List<RefreshDeltaDatabaseItem> = when (this) {
         DELTA_0 -> previous
@@ -1022,6 +1023,7 @@ private enum class RefreshDeltaDatabaseScenario(val id: String) {
         DELTA_100 -> RefreshDeltaDatabaseFixture.contentDelta(previous, 100)
         REORDER -> previous.asReversed().mapIndexed { order, item -> item.copy(order = order) }
         REMOVE_10 -> previous.dropLast(previous.size / 10)
+        TOKEN_CHURN -> RefreshDeltaDatabaseFixture.tokenizedLocatorChurn(previous)
     }
 }
 
@@ -1067,6 +1069,12 @@ private object RefreshDeltaDatabaseFixture {
                 item
             }
         }
+    }
+
+    fun tokenizedLocatorChurn(
+        previous: List<RefreshDeltaDatabaseItem>,
+    ): List<RefreshDeltaDatabaseItem> = previous.mapIndexed { index, item ->
+        item.withLocator("${item.locator}&token=rotated-$SEED-$index")
     }
 
     fun activeDigest(items: List<RefreshDeltaDatabaseItem>): String =
