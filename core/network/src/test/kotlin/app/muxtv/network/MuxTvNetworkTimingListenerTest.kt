@@ -5,8 +5,8 @@ import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
-import okhttp3.Request
 import okhttp3.Headers.Companion.headersOf
+import okhttp3.Request
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -64,6 +64,10 @@ class MuxTvNetworkTimingListenerTest {
             clients.source.newCall(
                 Request.Builder()
                     .url(server.url("/redirect.m3u"))
+                    .tag(
+                        SourceRequestContext::class,
+                        SourceRequestContext(insecureHttpApproved = true),
+                    )
                     .build(),
             ).execute().use { response ->
                 assertThat(response.code).isEqualTo(200)
