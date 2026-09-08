@@ -43,6 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch --no-tags origin evidence/c03-room-874b0c:refs/remotes/origin/evidence/c03-room-874b0c
           git show "origin/evidence/c03-room-874b0c:tools/ci/Patch-C03CandidateAudit.py" > /tmp/Patch-C03CandidateAudit.py
           test -s /tmp/Patch-C03CandidateAudit.py
 
