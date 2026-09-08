@@ -71,7 +71,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     lateinit var devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader
 
     @Inject
-    lateinit var playbackRuntimeMeasurementState: PlaybackRuntimeMeasurementState
+    internal lateinit var playbackRuntimeMeasurementState: PlaybackRuntimeMeasurementState
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var mediaSourceFactory: PlaybackMediaSourceFactory
