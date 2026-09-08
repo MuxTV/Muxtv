@@ -48,7 +48,7 @@ jobs:
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: c359-holdout-${{ env:MUXTV_EVIDENCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: c359-holdout-${{ env.MUXTV_EVIDENCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             benchmark/jvm/build/reports/tests/**
             benchmark/jvm/build/test-results/**
