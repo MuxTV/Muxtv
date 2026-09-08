@@ -68,7 +68,7 @@ class RefreshDeltaPrototypeTest {
     }
 
     @Test
-    fun successfulRemovalPublishesSmallerCatalogButFailedUnchangedPrefixDoesNotPrune() {
+    fun successfulRemovalPublishesSmallerCatalogButFailedPrefixBeforeFirstOwnTvFlushDoesNotPrune() {
         val previous = RefreshDeltaCorpus.baseline(size = 1_000, seed = 17L)
         val incoming = RefreshDeltaCorpus.removeTail(previous, count = 100)
 
@@ -85,13 +85,14 @@ class RefreshDeltaPrototypeTest {
         RefreshDeltaVariant.entries.forEach { variant ->
             assertThat(failed[variant].previousGoodPreserved).isTrue()
             assertThat(failed[variant].activeDigestSha256).isEqualTo(RefreshDeltaDigest.activeCatalog(previous))
+            assertThat(failed[variant].writes.rowWrites).isEqualTo(0)
         }
     }
 
     @Test
-    fun failedChangedPrefixPreservesMuxTvPreviousGoodButOwnTvReferenceCanBePartiallyUpdated() {
-        val previous = RefreshDeltaCorpus.baseline(size = 1_000, seed = 18L)
-        val changedPrefix = RefreshDeltaCorpus.contentDelta(previous, changedPercent = 10).take(300)
+    fun failedAfterOwnTvChunkFlushPreservesMuxTvPreviousGoodButLeavesReferencePartiallyUpdated() {
+        val previous = RefreshDeltaCorpus.baseline(size = 10_000, seed = 18L)
+        val changedPrefix = RefreshDeltaCorpus.contentDelta(previous, changedPercent = 10).take(6_000)
         val previousDigest = RefreshDeltaDigest.activeCatalog(previous)
 
         listOf(
@@ -116,9 +117,10 @@ class RefreshDeltaPrototypeTest {
             disposition = RefreshPublicationDisposition.FAILED,
         )
         assertThat(reference.previousGoodPreserved).isFalse()
-        assertThat(reference.activeCount).isEqualTo(1_000)
+        assertThat(reference.activeCount).isEqualTo(10_000)
         assertThat(reference.activeDigestSha256).isNotEqualTo(previousDigest)
-        assertThat(reference.writes.updatedRows).isEqualTo(100)
+        assertThat(reference.writes.updatedRows).isEqualTo(1_000)
+        assertThat(reference.writes.insertedRows).isEqualTo(0)
         assertThat(reference.writes.deletedRows).isEqualTo(0)
     }
 
