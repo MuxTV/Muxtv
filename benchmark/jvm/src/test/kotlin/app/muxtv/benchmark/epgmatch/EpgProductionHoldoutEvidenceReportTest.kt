@@ -8,6 +8,7 @@ import org.junit.Test
 class EpgProductionHoldoutEvidenceReportTest {
     @Test
     fun writeIndependentHoldoutEvidence() {
+        val c06Reference = EpgMatchThresholdSweep.run(EpgMatchAdversarialCorpus).selectedEvaluation
         val calibration = EpgProductionThresholdCalibration.calibrate(EpgProductionValidationCorpora.calibration)
         val gate = EpgProductionHoldoutGate.validate(
             calibration = calibration,
@@ -18,8 +19,9 @@ class EpgProductionHoldoutEvidenceReportTest {
             ?.takeIf { it.matches(Regex("[0-9a-f]{40}")) }
             ?: "0000000000000000000000000000000000000000"
 
-        assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(0)
+        assertThat(c06Reference.metrics.falseAutomaticMatches).isEqualTo(0)
         assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(3)
+        assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(3)
         assertThat(gate.passed).isFalse()
         assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.REJECT_AUTOMATIC_FUZZY)
 
@@ -39,7 +41,8 @@ class EpgProductionHoldoutEvidenceReportTest {
             appendLine("- selected_review_threshold: `${calibration.selectedThresholds.reviewThreshold.f6()}`")
             appendLine("- selected_auto_margin: `${calibration.selectedThresholds.autoMargin.f6()}`")
             appendLine("- evaluated_configurations: `${calibration.evaluatedConfigurations}`")
-            appendLine("- frozen_c06_false_auto: `${gate.frozenC06.metrics.falseAutomaticMatches}`")
+            appendLine("- frozen_c06_reference_false_auto: `${c06Reference.metrics.falseAutomaticMatches}`")
+            appendLine("- production_policy_on_frozen_c06_false_auto: `${gate.frozenC06.metrics.falseAutomaticMatches}`")
             appendLine("- holdout_false_auto: `${gate.holdout.metrics.falseAutomaticMatches}`")
             appendLine("- automatic_fuzzy_admission: `REJECTED`")
             appendLine("- production_adoption: `REVIEW_ONLY_DEFERRED`")
@@ -59,6 +62,8 @@ class EpgProductionHoldoutEvidenceReportTest {
             }
         }
 
+        assertThat(report).contains("- frozen_c06_reference_false_auto: `0`")
+        assertThat(report).contains("- production_policy_on_frozen_c06_false_auto: `3`")
         assertThat(report).contains("- holdout_false_auto: `3`")
         assertThat(report).contains("- automatic_fuzzy_admission: `REJECTED`")
         assertThat(report).contains("- production_adoption: `REVIEW_ONLY_DEFERRED`")
@@ -73,7 +78,8 @@ class EpgProductionHoldoutEvidenceReportTest {
         output.writeText(report)
         println(
             "C359_EPG_HOLDOUT disposition=${gate.disposition} " +
-                "c06_false_auto=${gate.frozenC06.metrics.falseAutomaticMatches} " +
+                "c06_reference_false_auto=${c06Reference.metrics.falseAutomaticMatches} " +
+                "production_c06_false_auto=${gate.frozenC06.metrics.falseAutomaticMatches} " +
                 "holdout_false_auto=${gate.holdout.metrics.falseAutomaticMatches} " +
                 "auto=${calibration.selectedThresholds.autoThreshold.f6()} " +
                 "review=${calibration.selectedThresholds.reviewThreshold.f6()} " +

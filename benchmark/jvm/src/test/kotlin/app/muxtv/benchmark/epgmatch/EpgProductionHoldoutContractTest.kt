@@ -77,7 +77,8 @@ class EpgProductionHoldoutContractTest {
     }
 
     @Test
-    fun observedHoldoutFalseAutosRejectAutomaticFuzzyAdmission() {
+    fun observedSafetyFailuresRejectAutomaticFuzzyAdmission() {
+        val c06Reference = EpgMatchThresholdSweep.run(EpgMatchAdversarialCorpus).selectedEvaluation
         val calibration = EpgProductionThresholdCalibration.calibrate(EpgProductionValidationCorpora.calibration)
         val gate = EpgProductionHoldoutGate.validate(
             calibration = calibration,
@@ -85,14 +86,19 @@ class EpgProductionHoldoutContractTest {
             holdout = EpgProductionValidationCorpora.holdout,
         )
 
-        assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(0)
+        // Historical C06 evidence remains frozen and is not an input to production calibration.
+        assertThat(c06Reference.metrics.falseAutomaticMatches).isEqualTo(0)
+        // The burned independent holdout remains observed-only: never tune against this value.
         assertThat(gate.holdout.metrics.falseAutomaticMatches).isEqualTo(3)
+        // Independently calibrated production thresholds also fail the frozen-C06 regression application.
+        assertThat(gate.frozenC06.metrics.falseAutomaticMatches).isEqualTo(3)
         assertThat(gate.holdoutFalseAutoByRiskBucket.values.any { it > 0 }).isTrue()
         assertThat(gate.automaticDecisionExposure).isAtLeast(EpgProductionPolicyContract.MIN_AUTOMATIC_DECISION_EXPOSURE)
         assertThat(gate.fuzzyAutomaticDecisionExposure)
             .isAtLeast(EpgProductionPolicyContract.MIN_FUZZY_AUTOMATIC_DECISION_EXPOSURE)
         assertThat(gate.exactSemanticRegressions).isEqualTo(0)
         assertThat(gate.manualOverridePrecedencePreserved).isTrue()
+        assertThat(EpgProductionPolicyContract.FUZZY_CAN_OVERRIDE_MANUAL_BINDING).isFalse()
         assertThat(EpgProductionPolicyContract.FUZZY_CAN_CROSS_PROVIDER_BOUNDARY).isFalse()
         assertThat(gate.passed).isFalse()
         assertThat(gate.disposition).isEqualTo(EpgProductionHoldoutDisposition.REJECT_AUTOMATIC_FUZZY)
