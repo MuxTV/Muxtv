@@ -25,6 +25,7 @@ internal sealed interface M3uCatchupResolution {
 
     data class Ready(
         val timeline: ResolvedPlaybackTimeline,
+        val dialect: M3uCatchupDialect,
     ) : M3uCatchupResolution
 
     data class Unavailable(
@@ -42,11 +43,10 @@ internal class M3uCatchupResolver(
         if (intent is PlaybackIntent.Live) {
             return M3uCatchupResolution.NotApplicable
         }
-        if (metadata.mode != MODE_APPEND) {
-            return unavailable(M3uCatchupUnavailableReason.UNSUPPORTED_MODE)
-        }
-        if (metadata.source?.contains(UTC_TOKEN) != true) {
-            return unavailable(M3uCatchupUnavailableReason.INVALID_METADATA)
+
+        val dialect = when (val selection = selectM3uCatchupDialect(intent, metadata)) {
+            is M3uCatchupDialectSelection.Supported -> selection.dialect
+            is M3uCatchupDialectSelection.Unavailable -> return unavailable(selection.reason)
         }
 
         val days = metadata.days?.takeIf { it > 0 }
@@ -68,12 +68,14 @@ internal class M3uCatchupResolver(
                 windowStart = windowStart,
                 now = now,
                 correctionMillis = correctionMillis,
+                dialect = dialect,
             )
             is PlaybackIntent.CatchupPosition -> resolvePosition(
                 intent = intent,
                 windowStart = windowStart,
                 now = now,
                 correctionMillis = correctionMillis,
+                dialect = dialect,
             )
         }
     }
@@ -83,6 +85,7 @@ internal class M3uCatchupResolver(
         windowStart: Long,
         now: Long,
         correctionMillis: Long,
+        dialect: M3uCatchupDialect,
     ): M3uCatchupResolution {
         if (intent.startEpochMillis < windowStart || intent.endEpochMillis > now) {
             return unavailable(M3uCatchupUnavailableReason.OUTSIDE_RETENTION)
@@ -95,9 +98,10 @@ internal class M3uCatchupResolver(
                 programmeEndEpochMillis = intent.endEpochMillis,
                 initialPositionEpochMillis = intent.startEpochMillis,
                 correctionMillis = correctionMillis,
-                granularityMillis = SECOND_MILLIS,
+                granularityMillis = dialect.granularityMillis,
                 playAsLive = false,
             ),
+            dialect = dialect,
         )
     }
 
@@ -106,6 +110,7 @@ internal class M3uCatchupResolver(
         windowStart: Long,
         now: Long,
         correctionMillis: Long,
+        dialect: M3uCatchupDialect,
     ): M3uCatchupResolution {
         if (intent.positionEpochMillis < windowStart || intent.positionEpochMillis >= now) {
             return unavailable(M3uCatchupUnavailableReason.OUTSIDE_RETENTION)
@@ -118,9 +123,10 @@ internal class M3uCatchupResolver(
                 programmeEndEpochMillis = null,
                 initialPositionEpochMillis = intent.positionEpochMillis,
                 correctionMillis = correctionMillis,
-                granularityMillis = SECOND_MILLIS,
+                granularityMillis = dialect.granularityMillis,
                 playAsLive = false,
             ),
+            dialect = dialect,
         )
     }
 
@@ -140,9 +146,6 @@ private fun String?.toCorrectionMillisOrNull(): Long? {
     }
 }
 
-private const val MODE_APPEND = "append"
-private const val UTC_TOKEN = "{utc}"
-private const val SECOND_MILLIS = 1_000L
 private const val HOUR_MILLIS = 60 * 60 * SECOND_MILLIS
 private const val DAY_MILLIS = 24 * HOUR_MILLIS
 private const val MIN_CORRECTION_MILLIS = -12 * HOUR_MILLIS

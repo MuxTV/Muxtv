@@ -91,7 +91,7 @@ class M3uCatchupResolverContractTest {
     @Test
     fun unsupportedModeReturnsTypedUnavailableWithoutEchoingSourceTemplate() {
         val metadata = M3uCatchupMetadata(
-            mode = "xc",
+            mode = "provider-specific-v2",
             source = "?utc={utc}&token=TEST_CATCHUP_SECRET",
             days = 7,
             correction = "+2.0",
