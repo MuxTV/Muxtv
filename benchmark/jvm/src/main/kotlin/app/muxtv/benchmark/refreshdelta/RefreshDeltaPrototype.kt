@@ -137,16 +137,41 @@ class RefreshDeltaPrototype {
         require(incomingGeneration > 0)
         require(authoritativeGeneration > 0)
 
+        return when (variant) {
+            RefreshDeltaVariant.C_OWNTV_REFERENCE -> evaluateOwnTvReference(
+                previous = previous,
+                incoming = incoming,
+                disposition = disposition,
+            )
+
+            RefreshDeltaVariant.A_CURRENT_MUXTV,
+            RefreshDeltaVariant.B_IMMUTABLE_COW,
+            -> evaluateMuxTvRevisionVariant(
+                variant = variant,
+                previous = previous,
+                incoming = incoming,
+                disposition = disposition,
+                incomingGeneration = incomingGeneration,
+                authoritativeGeneration = authoritativeGeneration,
+            )
+        }
+    }
+
+    private fun evaluateMuxTvRevisionVariant(
+        variant: RefreshDeltaVariant,
+        previous: List<RefreshDeltaItem>,
+        incoming: List<RefreshDeltaItem>,
+        disposition: RefreshPublicationDisposition,
+        incomingGeneration: Long,
+        authoritativeGeneration: Long,
+    ): RefreshDeltaResult {
         val staleGeneration = incomingGeneration < authoritativeGeneration
         val publishes = disposition == RefreshPublicationDisposition.SUCCESS && !staleGeneration
         val active = if (publishes) incoming else previous
         val previousByKey = previous.associateBy(RefreshDeltaItem::stableKey)
-        val incomingKeys = incoming.asSequence().map(RefreshDeltaItem::stableKey).toHashSet()
-        val preservedIdentityCount = incoming.count { it.stableKey in previousByKey }
-
         val writes = if (!publishes) {
-            // This pure model counts accepted/committed writes. Attempted staging I/O and cancellation
-            // latency are measured separately by the Android file-backed database runner.
+            // The pure model reports accepted revision writes only. Attempted staging I/O for a
+            // failed/cancelled refresh is measured by the Android file-backed C03 runner.
             RefreshDeltaWrites()
         } else {
             when (variant) {
@@ -167,29 +192,7 @@ class RefreshDeltaPrototype {
                     )
                 }
 
-                RefreshDeltaVariant.C_OWNTV_REFERENCE -> {
-                    var inserted = 0
-                    var updated = 0
-                    var moved = 0
-                    incoming.forEach { item ->
-                        val existing = previousByKey[item.stableKey]
-                        when {
-                            existing == null -> inserted++
-                            existing.contentDigestSha256 != item.contentDigestSha256 -> updated++
-                            existing.order != item.order -> {
-                                updated++
-                                moved++
-                            }
-                        }
-                    }
-                    val deleted = previous.count { it.stableKey !in incomingKeys }
-                    RefreshDeltaWrites(
-                        insertedRows = inserted,
-                        updatedRows = updated,
-                        movedRows = moved,
-                        deletedRows = deleted,
-                    )
-                }
+                RefreshDeltaVariant.C_OWNTV_REFERENCE -> error("OwnTV reference is evaluated separately.")
             }
         }
 
@@ -198,10 +201,105 @@ class RefreshDeltaPrototype {
             activeCount = active.size,
             activeDigestSha256 = RefreshDeltaDigest.activeCatalog(active),
             writes = writes,
-            preservedLogicalIdentityCount = preservedIdentityCount,
-            previousGoodPreserved = !publishes || variant != RefreshDeltaVariant.C_OWNTV_REFERENCE,
+            preservedLogicalIdentityCount = active.count { it.stableKey in previousByKey },
+            // MuxTV retains the prior active revision after a successful publication and never makes
+            // failed/cancelled/stale staging active.
+            previousGoodPreserved = true,
             staleGenerationRejected = staleGeneration,
         )
+    }
+
+    private fun evaluateOwnTvReference(
+        previous: List<RefreshDeltaItem>,
+        incoming: List<RefreshDeltaItem>,
+        disposition: RefreshPublicationDisposition,
+    ): RefreshDeltaResult {
+        val previousByKey = previous.associateBy(RefreshDeltaItem::stableKey)
+        val successful = disposition == RefreshPublicationDisposition.SUCCESS
+
+        // Pinned OwnTV_Core M3uSyncer resync uses BulkInsertHelper.CHUNK = 5_000. During parsing,
+        // complete live chunks call flushChannels() and upsertStable() immediately. If parsing throws,
+        // already-flushed chunks remain committed, the residual buffer is never flushed, and the
+        // post-parse stale prune is skipped. There is no one transaction around the entire M3U sync.
+        // This benchmark model is intentionally scoped to the live-channel corpus used by C03.
+        val appliedRows = if (successful) {
+            incoming
+        } else {
+            incoming.take((incoming.size / OWNTV_REFERENCE_RESYNC_CHUNK_SIZE) * OWNTV_REFERENCE_RESYNC_CHUNK_SIZE)
+        }
+
+        val writes = ownTvReferenceWrites(
+            previous = previous,
+            previousByKey = previousByKey,
+            appliedRows = appliedRows,
+            pruneAfterSuccessfulParse = successful,
+            successfulIncoming = incoming,
+        )
+        val active = if (successful) {
+            // Stable upsert followed by successful stale pruning is projection-equivalent to incoming.
+            incoming
+        } else {
+            applyOwnTvPartialUpsert(previous, appliedRows)
+        }
+        val previousDigest = RefreshDeltaDigest.activeCatalog(previous)
+        val activeDigest = RefreshDeltaDigest.activeCatalog(active)
+
+        return RefreshDeltaResult(
+            variant = RefreshDeltaVariant.C_OWNTV_REFERENCE,
+            activeCount = active.size,
+            activeDigestSha256 = activeDigest,
+            writes = writes,
+            preservedLogicalIdentityCount = active.count { it.stableKey in previousByKey },
+            previousGoodPreserved = activeDigest == previousDigest,
+            // This oracle models OwnTV's mutable stable-upsert behavior, not MuxTV refresh generations.
+            staleGenerationRejected = false,
+        )
+    }
+
+    private fun ownTvReferenceWrites(
+        previous: List<RefreshDeltaItem>,
+        previousByKey: Map<String, RefreshDeltaItem>,
+        appliedRows: List<RefreshDeltaItem>,
+        pruneAfterSuccessfulParse: Boolean,
+        successfulIncoming: List<RefreshDeltaItem>,
+    ): RefreshDeltaWrites {
+        var inserted = 0
+        var updated = 0
+        var moved = 0
+        appliedRows.forEach { item ->
+            val existing = previousByKey[item.stableKey]
+            when {
+                existing == null -> inserted++
+                existing.contentDigestSha256 != item.contentDigestSha256 -> updated++
+                existing.order != item.order -> {
+                    updated++
+                    moved++
+                }
+            }
+        }
+        val deleted = if (pruneAfterSuccessfulParse) {
+            val incomingKeys = successfulIncoming.asSequence().map(RefreshDeltaItem::stableKey).toHashSet()
+            previous.count { it.stableKey !in incomingKeys }
+        } else {
+            0
+        }
+        return RefreshDeltaWrites(
+            insertedRows = inserted,
+            updatedRows = updated,
+            movedRows = moved,
+            deletedRows = deleted,
+        )
+    }
+
+    private fun applyOwnTvPartialUpsert(
+        previous: List<RefreshDeltaItem>,
+        appliedRows: List<RefreshDeltaItem>,
+    ): List<RefreshDeltaItem> {
+        if (appliedRows.isEmpty()) return previous
+        val rowsByKey = LinkedHashMap<String, RefreshDeltaItem>(previous.size + appliedRows.size)
+        previous.forEach { item -> rowsByKey[item.stableKey] = item }
+        appliedRows.forEach { item -> rowsByKey[item.stableKey] = item }
+        return rowsByKey.values.toList()
     }
 
     private fun validateCatalog(items: List<RefreshDeltaItem>, label: String) {
@@ -313,6 +411,7 @@ private fun ByteArray.toHex(): String {
     return output.concatToString().lowercase(Locale.ROOT)
 }
 
+private const val OWNTV_REFERENCE_RESYNC_CHUNK_SIZE = 5_000
 private const val SHA_256 = "SHA-256"
 private val SHA256_HEX = Regex("[0-9a-f]{64}")
 private val HEX = "0123456789abcdef".toCharArray()
