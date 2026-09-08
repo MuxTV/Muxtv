@@ -55,6 +55,38 @@ class PlaybackRuntimeMedia3ProjectionTest {
     }
 
     @Test
+    fun `known SDR and HLG transfers are explicit while unset remains unknown`() {
+        val sdr = Format.Builder()
+            .setColorInfo(
+                ColorInfo.Builder()
+                    .setColorTransfer(C.COLOR_TRANSFER_SDR)
+                    .build(),
+            )
+            .build()
+            .toPlaybackRuntimeVideoFormatEvidence()
+        val hlg = Format.Builder()
+            .setColorInfo(
+                ColorInfo.Builder()
+                    .setColorTransfer(C.COLOR_TRANSFER_HLG)
+                    .build(),
+            )
+            .build()
+            .toPlaybackRuntimeVideoFormatEvidence()
+        val unset = Format.Builder()
+            .setColorInfo(
+                ColorInfo.Builder()
+                    .setColorTransfer(Format.NO_VALUE)
+                    .build(),
+            )
+            .build()
+            .toPlaybackRuntimeVideoFormatEvidence()
+
+        assertThat(sdr.hdr).isEqualTo(PlaybackRuntimeHdr.SDR)
+        assertThat(hlg.hdr).isEqualTo(PlaybackRuntimeHdr.HLG)
+        assertThat(unset.hdr).isEqualTo(PlaybackRuntimeHdr.UNKNOWN)
+    }
+
+    @Test
     fun `dolby vision is not collapsed into a guessed base codec`() {
         val evidence = Format.Builder()
             .setSampleMimeType(MimeTypes.VIDEO_DOLBY_VISION)
