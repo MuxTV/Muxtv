@@ -18,6 +18,7 @@ import app.muxtv.catalog.MAX_PLAYBACK_CANDIDATES
 import app.muxtv.common.tracing.MuxTvTrace
 import app.muxtv.common.tracing.MuxTvTraceSection
 import app.muxtv.network.MuxTvHttpClients
+import app.muxtv.player.DevicePlaybackProfileSummary
 import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.ExternalPlaybackClaimResult
 import app.muxtv.player.ExternalPlaybackDescriptor
@@ -45,6 +46,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 @AndroidXOptIn(UnstableApi::class)
@@ -90,6 +92,7 @@ class MuxTvPlaybackService : MediaSessionService() {
     private var activeExternal: ActiveExternalSetup? = null
     private var activeAttemptNumber = 0
     private var lastFailure: Media3Failure? = null
+    private var cachedDevicePlaybackProfileSummary: DevicePlaybackProfileSummary? = null
     private val callbackGate = PlaybackCallbackGate()
     private var activePlayerListener: Player.Listener? = null
     private var activeFuture: SettableFuture<SessionResult>? = null
@@ -118,6 +121,17 @@ class MuxTvPlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceScope.launch(Dispatchers.Default) {
+            val summary = runCatching { devicePlaybackProfileSummaryReader.snapshot() }
+                .getOrNull()
+                ?: return@launch
+            withContext(Dispatchers.Main.immediate) {
+                cachedDevicePlaybackProfileSummary = summary
+                activeSeekGeneration?.let { generation ->
+                    playbackRuntimeMeasurementState.onDeviceSummary(generation, summary)
+                }
+            }
+        }
         mediaSourceFactory = PlaybackMediaSourceFactory(this, httpClients)
         firstFrameTracker = PlaybackFirstFrameTracker(
             elapsedRealtimeNanos = SystemClock::elapsedRealtimeNanos,
@@ -545,8 +559,7 @@ class MuxTvPlaybackService : MediaSessionService() {
                 transport = PlaybackTransportClassifier.classify(sessionRequest.locator)
                     .transport
                     .toPlaybackRuntimeTransport(),
-                deviceSummary = runCatching { devicePlaybackProfileSummaryReader.snapshot() }
-                    .getOrNull(),
+                deviceSummary = cachedDevicePlaybackProfileSummary,
             )
             callbackGate.activate(token)
             activePlayerListener = createPlayerListener(token, seekGeneration)
