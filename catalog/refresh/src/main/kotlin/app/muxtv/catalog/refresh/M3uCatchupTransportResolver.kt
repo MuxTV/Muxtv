@@ -226,13 +226,15 @@ internal class M3uCatchupTransportResolver(
         correctedProgrammeEndMillis: Long?,
     ): String? {
         val segments = liveUrl.encodedPathSegments
-        if (segments.size != XTREAM_LIVE_SEGMENT_COUNT || segments[0] != XTREAM_LIVE_PREFIX) {
-            return null
+        val credentialOffset = when {
+            segments.size == XTREAM_LIVE_SEGMENT_COUNT && segments[0] == XTREAM_LIVE_PREFIX -> 1
+            segments.size == XTREAM_ROOT_SEGMENT_COUNT -> 0
+            else -> return null
         }
 
-        val username = segments[1].takeIf(String::isNotBlank) ?: return null
-        val password = segments[2].takeIf(String::isNotBlank) ?: return null
-        val streamMatch = XTREAM_STREAM_SEGMENT.matchEntire(segments[3]) ?: return null
+        val username = segments[credentialOffset].takeIf(String::isNotBlank) ?: return null
+        val password = segments[credentialOffset + 1].takeIf(String::isNotBlank) ?: return null
+        val streamMatch = XTREAM_STREAM_SEGMENT.matchEntire(segments[credentialOffset + 2]) ?: return null
         val streamId = streamMatch.groupValues[1]
 
         val endMillis = correctedProgrammeEndMillis ?: return null
@@ -267,6 +269,7 @@ internal class M3uCatchupTransportResolver(
             DateTimeFormatter.ofPattern("yyyy-MM-dd:HH-mm", Locale.ROOT)
         val XTREAM_STREAM_SEGMENT = Regex("^([1-9][0-9]{0,18})\\.(?:ts|m3u8)$")
 
+        const val XTREAM_ROOT_SEGMENT_COUNT = 3
         const val XTREAM_LIVE_SEGMENT_COUNT = 4
         const val XTREAM_LIVE_PREFIX = "live"
         const val XTREAM_TIMESHIFT_PATH = "/streaming/timeshift.php"
