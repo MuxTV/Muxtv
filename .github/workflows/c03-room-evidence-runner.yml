@@ -61,7 +61,7 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
           script: |
-            set -euo pipefail
+            set -eu
             chmod +x ./gradlew
             rm -rf core/database/build/outputs/androidTest-results/connected/debug
             ./gradlew \
