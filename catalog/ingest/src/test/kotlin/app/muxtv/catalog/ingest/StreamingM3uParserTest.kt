@@ -81,6 +81,108 @@ class StreamingM3uParserTest {
         assertThat(error.reason).isEqualTo(M3uLimitReason.LineTooLong)
         assertThat(error.lineNumber).isEqualTo(1)
     }
+
+    @Test
+    fun `forbidden transport headers cannot be smuggled through supported request syntaxes`() = runTest {
+        val secret = "TEST_C21_FORBIDDEN_TRANSPORT"
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1,C21 VLC Forbidden
+            #EXTVLCOPT:http-host=$secret.invalid
+            https://streams.invalid/live/vlc.ts
+            #EXTINF:-1,C21 EXTHTTP Forbidden
+            #EXTHTTP:{"Host":"$secret.invalid"}
+            https://streams.invalid/live/ext-http.ts
+            #EXTINF:-1,C21 Kodi Forbidden
+            #KODIPROP:inputstream.adaptive.stream_headers=Host=$secret.invalid
+            https://streams.invalid/live/kodi.ts
+            #EXTINF:-1,C21 Pipe Forbidden
+            https://streams.invalid/live/pipe.ts|Host=$secret.invalid
+        """.trimIndent()
+
+        val sink = RecordingSink()
+        val report = StreamingM3uParser().parse(
+            input = ByteArrayInputStream(playlist.toByteArray()),
+            sink = sink,
+        )
+
+        assertThat(sink.entries).hasSize(4)
+        sink.entries.forEach { entry ->
+            assertThat(entry.requestMetadata.defaultHeaders).isEmpty()
+            assertThat(entry.requestMetadata.manifestHeaders).isEmpty()
+            assertThat(entry.requestMetadata.segmentHeaders).isEmpty()
+        }
+        assertThat(sink.entries.last().locator).isEqualTo("https://streams.invalid/live/pipe.ts")
+        assertThat(sink.warnings.map { it.kind }).containsExactly(
+            M3uWarningKind.ForbiddenRequestHeader,
+            M3uWarningKind.ForbiddenRequestHeader,
+            M3uWarningKind.ForbiddenRequestHeader,
+            M3uWarningKind.ForbiddenRequestHeader,
+        ).inOrder()
+
+        val diagnostics = buildString {
+            append(report).append('\n')
+            sink.entries.forEach { entry ->
+                append(entry).append('\n')
+                append(entry.requestMetadata).append('\n')
+            }
+            sink.warnings.forEach { warning -> append(warning).append('\n') }
+        }
+        assertThat(diagnostics).doesNotContain(secret)
+        assertThat(diagnostics).doesNotContain("Host")
+    }
+
+    @Test
+    fun `recognized pipe header with malformed percent encoding is stripped and redacted`() = runTest {
+        val secret = "TEST_C21_BAD_PERCENT"
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1,C21 Malformed Pipe
+            https://streams.invalid/live/malformed.ts|Host=$secret%ZZ
+        """.trimIndent()
+
+        val sink = RecordingSink()
+        val report = StreamingM3uParser().parse(
+            input = ByteArrayInputStream(playlist.toByteArray()),
+            sink = sink,
+        )
+
+        val entry = sink.entries.single()
+        assertThat(entry.locator).isEqualTo("https://streams.invalid/live/malformed.ts")
+        assertThat(entry.requestMetadata.defaultHeaders).isEmpty()
+        assertThat(sink.warnings.map { it.kind }).containsExactly(
+            M3uWarningKind.MalformedRequestMetadata,
+        )
+
+        val diagnostics = buildString {
+            append(report).append('\n')
+            append(entry).append('\n')
+            append(entry.requestMetadata).append('\n')
+            sink.warnings.forEach { warning -> append(warning).append('\n') }
+        }
+        assertThat(diagnostics).doesNotContain(secret)
+        assertThat(diagnostics).doesNotContain("Host")
+    }
+
+    @Test
+    fun `unsupported url pipe assignment remains a literal locator suffix`() = runTest {
+        val locator = "https://streams.invalid/live/literal.ts|X-Unbounded-Custom=value"
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1,C21 Literal Unsupported Pipe
+            $locator
+        """.trimIndent()
+
+        val sink = RecordingSink()
+        val report = StreamingM3uParser().parse(
+            input = ByteArrayInputStream(playlist.toByteArray()),
+            sink = sink,
+        )
+
+        assertThat(report.warningCount).isEqualTo(0)
+        assertThat(sink.entries.single().locator).isEqualTo(locator)
+        assertThat(sink.entries.single().requestMetadata.defaultHeaders).isEmpty()
+    }
 }
 
 private class RecordingSink : M3uParseSink {
