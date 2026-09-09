@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      C03_EXPECTED_HEAD: fc9348f8db3aa7b629e4d42933deb66d78c34d14
+      C03_EXPECTED_HEAD: 948de6fa95c6857333cea062fd60891dd974917e
       MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
       MUXTV_EVIDENCE_DIR: .work/evidence/c03-room-final
       C03_RESULT_KEY: c03RefreshDeltaDatabaseMeasurementReportBase64
