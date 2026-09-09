@@ -224,7 +224,7 @@ class C09Media3EvidenceInstrumentedTest {
             }
         }
 
-        assertThat(failures).named("C09 evidence failures").isEmpty()
+        assertThat(failures).isEmpty()
     }
 
     private fun scenario(
