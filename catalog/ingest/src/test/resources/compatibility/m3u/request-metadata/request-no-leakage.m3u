@@ -1,0 +1,6 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.isolation.a",C21 Isolation A
+#EXTHTTP:{"Cookie":"session=TEST_C21_ISOLATION"}
+https://streams.invalid/live/isolation-a.ts?token=TEST_C21_ISOLATION
+#EXTINF:-1 tvg-id="c21.isolation.b",C21 Isolation B
+https://streams.invalid/live/isolation-b.ts

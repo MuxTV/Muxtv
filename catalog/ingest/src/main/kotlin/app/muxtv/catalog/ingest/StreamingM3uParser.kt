@@ -1,8 +1,12 @@
 package app.muxtv.catalog.ingest
 
+import app.muxtv.model.ProviderRequestHeaderDecision
+import app.muxtv.model.ProviderRequestHeaderPolicy
+import app.muxtv.model.ProviderRequestMetadata
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.net.URLDecoder
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
@@ -10,6 +14,9 @@ import java.nio.charset.CodingErrorAction
 import java.util.Locale
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Hard bounds applied before untrusted playlist content can accumulate in memory. */
 data class M3uParseLimits(
@@ -60,6 +67,7 @@ class M3uEntry(
     val userAgent: String?,
     val referrer: String?,
     attributes: Map<String, String>,
+    val requestMetadata: ProviderRequestMetadata = ProviderRequestMetadata.EMPTY,
 ) {
     val attributes: Map<String, String> = attributes.toMap()
 
@@ -81,6 +89,9 @@ enum class M3uWarningKind {
     MissingLocatorAtEnd,
     BareLocator,
     DirectiveWithoutExtInf,
+    ForbiddenRequestHeader,
+    UnsupportedRequestHeader,
+    MalformedRequestMetadata,
 }
 
 data class M3uWarning(
@@ -109,6 +120,8 @@ enum class M3uLimitReason {
     EntryCountExceeded,
     AttributeCountExceeded,
     AttributeCharactersExceeded,
+    RequestMetadataCountExceeded,
+    RequestMetadataValueExceeded,
 }
 
 class M3uLimitExceededException(
@@ -214,12 +227,17 @@ class StreamingM3uParser {
                 }
 
                 trimmed.startsWith(EXTVLCOPT_PREFIX, ignoreCase = true) ||
+                    trimmed.startsWith(EXTHTTP_PREFIX, ignoreCase = true) ||
                     trimmed.startsWith(KODIPROP_PREFIX, ignoreCase = true) -> {
                     val current = pending
                     if (current == null) {
                         warn(M3uWarningKind.DirectiveWithoutExtInf, lineNumber)
                     } else {
-                        applyOptionDirective(current, trimmed)
+                        applyRequestDirective(
+                            pending = current,
+                            line = trimmed,
+                            lineNumber = lineNumber,
+                        ).forEach { kind -> warn(kind, lineNumber) }
                     }
                 }
 
@@ -243,7 +261,15 @@ class StreamingM3uParser {
                         warn(M3uWarningKind.BareLocator, lineNumber)
                     }
 
-                    val entry = (current ?: PendingEntry()).toEntry(trimmed)
+                    val entryState = current ?: PendingEntry()
+                    val normalizedLocator = normalizeLocator(
+                        pending = entryState,
+                        locator = trimmed,
+                        lineNumber = lineNumber,
+                    )
+                    normalizedLocator.warnings.forEach { kind -> warn(kind, lineNumber) }
+
+                    val entry = entryState.toEntry(normalizedLocator.locator)
                     sink.onEntry(entry)
                     parsedEntries += 1
                     pending = null
@@ -285,34 +311,260 @@ class StreamingM3uParser {
             else -> metadata
         }
         val attributes = parseAttributes(attributeText, limits, lineNumber)
-
-        return PendingEntry(
+        val pending = PendingEntry(
             declaredName = declaredName.ifEmpty { null },
             durationSeconds = duration,
             attributes = attributes,
         )
+
+        firstNonBlank(attributes["http-user-agent"], attributes["user-agent"])
+            ?.let { value ->
+                pending.requestMetadata.admit(
+                    scope = RequestHeaderScope.DEFAULT,
+                    rawName = "User-Agent",
+                    rawValue = value,
+                    lineNumber = lineNumber,
+                )
+            }
+        firstNonBlank(
+            attributes["http-referrer"],
+            attributes["http-referer"],
+            attributes["referrer"],
+            attributes["referer"],
+        )?.let { value ->
+            pending.requestMetadata.admit(
+                scope = RequestHeaderScope.DEFAULT,
+                rawName = "Referer",
+                rawValue = value,
+                lineNumber = lineNumber,
+            )
+        }
+
+        return pending
     }
 
-    private fun applyOptionDirective(
+    private fun applyRequestDirective(
         pending: PendingEntry,
         line: String,
-    ) {
-        val body = line.substringAfter(':', "").trim()
-        val separator = body.indexOf('=')
-        if (separator <= 0) return
+        lineNumber: Long,
+    ): List<M3uWarningKind> = when {
+        line.startsWith(EXTHTTP_PREFIX, ignoreCase = true) ->
+            applyExtHttpDirective(pending, line, lineNumber)
 
-        val key = body.substring(0, separator)
-            .trim()
-            .lowercase(Locale.ROOT)
-        val value = body.substring(separator + 1).trim()
-        if (value.isEmpty()) return
+        line.startsWith(EXTVLCOPT_PREFIX, ignoreCase = true) ->
+            applyVlcDirective(pending, line, lineNumber)
 
-        when (key) {
-            "http-user-agent", "user-agent" -> pending.userAgentOverride = value
-            "http-referrer", "http-referer", "referer", "referrer" ->
-                pending.referrerOverride = value
-        }
+        line.startsWith(KODIPROP_PREFIX, ignoreCase = true) ->
+            applyKodiDirective(pending, line, lineNumber)
+
+        else -> emptyList()
     }
+
+    private fun applyVlcDirective(
+        pending: PendingEntry,
+        line: String,
+        lineNumber: Long,
+    ): List<M3uWarningKind> {
+        val body = line.substring(EXTVLCOPT_PREFIX.length).trim()
+        val separator = body.indexOf('=')
+        if (separator <= 0) return emptyList()
+
+        val rawKey = body.substring(0, separator).trim()
+        val key = rawKey.lowercase(Locale.ROOT)
+        val rawValue = body.substring(separator + 1).trim()
+
+        val rawHeaderName = when {
+            key.startsWith("http-") -> rawKey.substring(5)
+            key in LEGACY_DIRECT_HEADER_KEYS -> rawKey
+            else -> return emptyList()
+        }
+
+        return listOfNotNull(
+            pending.requestMetadata.admit(
+                scope = RequestHeaderScope.DEFAULT,
+                rawName = rawHeaderName,
+                rawValue = rawValue,
+                lineNumber = lineNumber,
+            ),
+        )
+    }
+
+    private fun applyExtHttpDirective(
+        pending: PendingEntry,
+        line: String,
+        lineNumber: Long,
+    ): List<M3uWarningKind> {
+        val body = line.substring(EXTHTTP_PREFIX.length).trim()
+        val jsonObject = runCatching { Json.parseToJsonElement(body) as? JsonObject }
+            .getOrNull()
+            ?: return listOf(M3uWarningKind.MalformedRequestMetadata)
+
+        val warnings = mutableListOf<M3uWarningKind>()
+        jsonObject.forEach { (rawName, element) ->
+            val primitive = element as? JsonPrimitive
+            if (primitive == null || !primitive.isString) {
+                warnings += M3uWarningKind.MalformedRequestMetadata
+                return@forEach
+            }
+            pending.requestMetadata.admit(
+                scope = RequestHeaderScope.DEFAULT,
+                rawName = rawName,
+                rawValue = primitive.content,
+                lineNumber = lineNumber,
+            )?.let(warnings::add)
+        }
+        return warnings
+    }
+
+    private fun applyKodiDirective(
+        pending: PendingEntry,
+        line: String,
+        lineNumber: Long,
+    ): List<M3uWarningKind> {
+        val body = line.substring(KODIPROP_PREFIX.length).trim()
+        val separator = body.indexOf('=')
+        if (separator <= 0) return emptyList()
+
+        val rawKey = body.substring(0, separator).trim()
+        val key = rawKey.lowercase(Locale.ROOT)
+        val rawValue = body.substring(separator + 1).trim()
+
+        if (key.startsWith("http-")) {
+            return listOfNotNull(
+                pending.requestMetadata.admit(
+                    scope = RequestHeaderScope.DEFAULT,
+                    rawName = rawKey.substring(5),
+                    rawValue = rawValue,
+                    lineNumber = lineNumber,
+                ),
+            )
+        }
+        if (key in LEGACY_DIRECT_HEADER_KEYS) {
+            return listOfNotNull(
+                pending.requestMetadata.admit(
+                    scope = RequestHeaderScope.DEFAULT,
+                    rawName = rawKey,
+                    rawValue = rawValue,
+                    lineNumber = lineNumber,
+                ),
+            )
+        }
+
+        val scope = when {
+            key.endsWith(".manifest_headers") -> RequestHeaderScope.MANIFEST
+            key.endsWith(".stream_headers") || key.endsWith(".stream_header") ->
+                RequestHeaderScope.SEGMENT
+            else -> return emptyList()
+        }
+        val parsed = parseAmpersandHeaderAssignments(rawValue)
+        return applyAssignments(
+            pending = pending,
+            scope = scope,
+            parsed = parsed,
+            lineNumber = lineNumber,
+        ).warnings
+    }
+
+    private fun normalizeLocator(
+        pending: PendingEntry,
+        locator: String,
+        lineNumber: Long,
+    ): LocatorNormalizationResult {
+        val pipe = locator.lastIndexOf('|')
+        if (pipe <= 0 || pipe == locator.lastIndex) {
+            return LocatorNormalizationResult(locator = locator)
+        }
+
+        val rawAssignments = locator.substring(pipe + 1)
+        val recognized = rawAssignments.split('&').any { pair ->
+            val separator = pair.indexOf('=')
+            if (separator <= 0) {
+                false
+            } else {
+                when (ProviderRequestHeaderPolicy.canonicalize(pair.substring(0, separator).trim())) {
+                    is ProviderRequestHeaderDecision.Accepted -> true
+                    ProviderRequestHeaderDecision.Forbidden -> true
+                    ProviderRequestHeaderDecision.Malformed,
+                    ProviderRequestHeaderDecision.Unsupported,
+                    -> false
+                }
+            }
+        }
+        if (!recognized) {
+            return LocatorNormalizationResult(locator = locator)
+        }
+
+        val parsed = parseAmpersandHeaderAssignments(rawAssignments)
+        val applied = applyAssignments(
+            pending = pending,
+            scope = RequestHeaderScope.DEFAULT,
+            parsed = parsed,
+            lineNumber = lineNumber,
+        )
+        return LocatorNormalizationResult(
+            locator = locator.substring(0, pipe),
+            warnings = applied.warnings,
+        )
+    }
+
+    private fun applyAssignments(
+        pending: PendingEntry,
+        scope: RequestHeaderScope,
+        parsed: ParsedAssignments,
+        lineNumber: Long,
+    ): AppliedAssignments {
+        val warnings = ArrayList<M3uWarningKind>(parsed.malformedCount + parsed.assignments.size)
+        repeat(parsed.malformedCount) {
+            warnings += M3uWarningKind.MalformedRequestMetadata
+        }
+        parsed.assignments.forEach { assignment ->
+            val warning = pending.requestMetadata.admit(
+                scope = scope,
+                rawName = assignment.rawName,
+                rawValue = assignment.value,
+                lineNumber = lineNumber,
+            )
+            if (warning == null) {
+            } else {
+                warnings += warning
+            }
+        }
+        return AppliedAssignments(warnings = warnings)
+    }
+
+    private fun parseAmpersandHeaderAssignments(raw: String): ParsedAssignments {
+        val assignments = mutableListOf<HeaderAssignment>()
+        var malformedCount = 0
+        raw.split('&').forEach { pair ->
+            val separator = pair.indexOf('=')
+            if (separator <= 0) {
+                if (pair.isNotBlank()) malformedCount += 1
+                return@forEach
+            }
+            val rawName = pair.substring(0, separator).trim()
+            val encodedValue = pair.substring(separator + 1)
+            val decodedValue = decodeUrlComponent(encodedValue)
+            if (rawName.isEmpty() || decodedValue == null) {
+                malformedCount += 1
+                return@forEach
+            }
+            assignments += HeaderAssignment(
+                rawName = rawName,
+                value = decodedValue.trim(),
+            )
+        }
+        return ParsedAssignments(
+            assignments = assignments,
+            malformedCount = malformedCount,
+        )
+    }
+
+    private fun decodeUrlComponent(value: String): String? =
+        if ('%' !in value && '+' !in value) {
+            value
+        } else {
+            runCatching { URLDecoder.decode(value, Charsets.UTF_8) }.getOrNull()
+        }
 
     private fun parseAttributes(
         input: String,
@@ -414,14 +666,14 @@ class StreamingM3uParser {
         val attributes: Map<String, String> = emptyMap(),
     ) {
         var groupOverride: String? = null
-        var userAgentOverride: String? = null
-        var referrerOverride: String? = null
+        val requestMetadata: PendingRequestMetadata = PendingRequestMetadata()
 
         fun toEntry(locator: String): M3uEntry {
             val tvgName = attributes["tvg-name"].nullIfBlank()
             val name = declaredName.nullIfBlank()
                 ?: tvgName
                 ?: inferName(locator)
+            val metadata = requestMetadata.toMetadata()
 
             return M3uEntry(
                 displayName = name,
@@ -441,16 +693,10 @@ class StreamingM3uParser {
                 catchupSource = attributes["catchup-source"].nullIfBlank(),
                 catchupDays = attributes["catchup-days"]?.toIntOrNull(),
                 catchupCorrection = attributes["catchup-correction"].nullIfBlank(),
-                userAgent = userAgentOverride
-                    ?: firstNonBlank(attributes["http-user-agent"], attributes["user-agent"]),
-                referrer = referrerOverride
-                    ?: firstNonBlank(
-                        attributes["http-referrer"],
-                        attributes["http-referer"],
-                        attributes["referrer"],
-                        attributes["referer"],
-                    ),
+                userAgent = metadata.defaultHeaders["User-Agent"],
+                referrer = metadata.defaultHeaders["Referer"],
                 attributes = attributes,
+                requestMetadata = metadata,
             )
         }
 
@@ -461,11 +707,74 @@ class StreamingM3uParser {
                 .trim()
                 .ifEmpty { "Unnamed channel" }
         }
+    }
 
-        private fun firstNonBlank(vararg values: String?): String? =
-            values.firstNotNullOfOrNull { it.nullIfBlank() }
+    private class PendingRequestMetadata {
+        private val defaultHeaders = linkedMapOf<String, String>()
+        private val manifestHeaders = linkedMapOf<String, String>()
+        private val segmentHeaders = linkedMapOf<String, String>()
 
-        private fun String?.nullIfBlank(): String? = this?.trim()?.takeIf(String::isNotEmpty)
+        fun admit(
+            scope: RequestHeaderScope,
+            rawName: String,
+            rawValue: String,
+            lineNumber: Long,
+        ): M3uWarningKind? {
+            val canonicalName = when (
+                val decision = ProviderRequestHeaderPolicy.canonicalize(rawName)
+            ) {
+                is ProviderRequestHeaderDecision.Accepted -> decision.canonicalName
+                ProviderRequestHeaderDecision.Forbidden -> return M3uWarningKind.ForbiddenRequestHeader
+                ProviderRequestHeaderDecision.Unsupported -> return M3uWarningKind.UnsupportedRequestHeader
+                ProviderRequestHeaderDecision.Malformed -> return M3uWarningKind.MalformedRequestMetadata
+            }
+
+            val value = rawValue.trim()
+            if (value.isEmpty() || value.any { character ->
+                    character == '\r' || character == '\n' || character == '\u0000'
+                }
+            ) {
+                return M3uWarningKind.MalformedRequestMetadata
+            }
+            if (value.length > ProviderRequestHeaderPolicy.MAX_HEADER_VALUE_CHARACTERS) {
+                throw M3uLimitExceededException(
+                    reason = M3uLimitReason.RequestMetadataValueExceeded,
+                    lineNumber = lineNumber,
+                    limit = ProviderRequestHeaderPolicy.MAX_HEADER_VALUE_CHARACTERS,
+                )
+            }
+
+            val target = mapFor(scope)
+            if (canonicalName !in target && totalHeaderCount() >= ProviderRequestMetadata.MAX_ACCEPTED_HEADERS) {
+                throw M3uLimitExceededException(
+                    reason = M3uLimitReason.RequestMetadataCountExceeded,
+                    lineNumber = lineNumber,
+                    limit = ProviderRequestMetadata.MAX_ACCEPTED_HEADERS,
+                )
+            }
+            target[canonicalName] = value
+            return null
+        }
+
+        fun toMetadata(): ProviderRequestMetadata =
+            if (defaultHeaders.isEmpty() && manifestHeaders.isEmpty() && segmentHeaders.isEmpty()) {
+                ProviderRequestMetadata.EMPTY
+            } else {
+                ProviderRequestMetadata(
+                    defaultHeaders = defaultHeaders,
+                    manifestHeaders = manifestHeaders,
+                    segmentHeaders = segmentHeaders,
+                )
+            }
+
+        private fun mapFor(scope: RequestHeaderScope): LinkedHashMap<String, String> = when (scope) {
+            RequestHeaderScope.DEFAULT -> defaultHeaders
+            RequestHeaderScope.MANIFEST -> manifestHeaders
+            RequestHeaderScope.SEGMENT -> segmentHeaders
+        }
+
+        private fun totalHeaderCount(): Int =
+            defaultHeaders.size + manifestHeaders.size + segmentHeaders.size
     }
 
     private class BoundedTextLineReader(
@@ -510,15 +819,49 @@ class StreamingM3uParser {
         }
     }
 
+    private data class HeaderAssignment(
+        val rawName: String,
+        val value: String,
+    )
+
+    private data class ParsedAssignments(
+        val assignments: List<HeaderAssignment>,
+        val malformedCount: Int,
+    )
+
+    private data class AppliedAssignments(
+        val warnings: List<M3uWarningKind>,
+    )
+
+    private data class LocatorNormalizationResult(
+        val locator: String,
+        val warnings: List<M3uWarningKind> = emptyList(),
+    )
+
+    private enum class RequestHeaderScope {
+        DEFAULT,
+        MANIFEST,
+        SEGMENT,
+    }
+
     private companion object {
         const val EXTENDED_HEADER = "#EXTM3U"
         const val EXTINF_PREFIX = "#EXTINF:"
         const val EXTGRP_PREFIX = "#EXTGRP:"
         const val EXTVLCOPT_PREFIX = "#EXTVLCOPT:"
+        const val EXTHTTP_PREFIX = "#EXTHTTP:"
         const val KODIPROP_PREFIX = "#KODIPROP:"
 
         val EPG_ATTRIBUTE_KEYS = listOf("url-tvg", "x-tvg-url", "tvg-url")
+        val LEGACY_DIRECT_HEADER_KEYS = setOf(
+            "user-agent",
+            "referer",
+            "referrer",
+        )
     }
 }
+
+private fun firstNonBlank(vararg values: String?): String? =
+    values.firstNotNullOfOrNull { it.nullIfBlank() }
 
 private fun String?.nullIfBlank(): String? = this?.trim()?.takeIf(String::isNotEmpty)

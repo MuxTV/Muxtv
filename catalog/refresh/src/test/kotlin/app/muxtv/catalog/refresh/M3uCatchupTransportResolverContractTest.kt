@@ -24,7 +24,7 @@ class M3uCatchupTransportResolverContractTest {
         val ready = result as M3uCatchupTransportResolution.Ready
         val expectedUtcSeconds = (programmeStart - (2 * HOUR_MILLIS)) / SECOND_MILLIS
         assertThat(ready.locator)
-            .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
+            .isEqualTo("$LIVE_LOCATOR&utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(programmeStart)
         assertThat(ready.timeline.correctionMillis).isEqualTo(2 * HOUR_MILLIS)
         assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
@@ -47,9 +47,32 @@ class M3uCatchupTransportResolverContractTest {
         val ready = result as M3uCatchupTransportResolution.Ready
         val expectedUtcSeconds = positionEpochMillis / SECOND_MILLIS
         assertThat(ready.locator)
-            .isEqualTo("$LIVE_LOCATOR?utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
+            .isEqualTo("$LIVE_LOCATOR&utc=$expectedUtcSeconds&token=TEST_CATCHUP_SECRET")
         assertThat(ready.timeline.initialPositionEpochMillis).isEqualTo(positionEpochMillis)
         assertThat(initialMediaPositionMillisOrNull(ready)).isEqualTo(999L)
+    }
+
+    @Test
+    fun ampersandAppendOnLocatorWithoutQueryStartsCanonicalQuery() {
+        val nowEpochMillis = 1_800_000_000_000L
+        val positionEpochMillis = nowEpochMillis - (3 * HOUR_MILLIS)
+        val result = M3uCatchupTransportResolver(nowEpochMillis = { nowEpochMillis }).resolve(
+            intent = PlaybackIntent.CatchupPosition(
+                channelId = "channel-catchup",
+                positionEpochMillis = positionEpochMillis,
+            ),
+            liveLocator = "https://streams.invalid/live/catchup.m3u8",
+            metadata = M3uCatchupMetadata(
+                mode = "append",
+                source = "&utc={utc}",
+                days = 7,
+                correction = "0",
+            ),
+        )
+
+        val ready = result as M3uCatchupTransportResolution.Ready
+        assertThat(ready.locator)
+            .isEqualTo("https://streams.invalid/live/catchup.m3u8?utc=${positionEpochMillis / SECOND_MILLIS}")
     }
 
     @Test
