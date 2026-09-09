@@ -482,7 +482,9 @@ abstract class C03ProductionCandidateDao {
             return C03ProductionCandidateActivationResult.EmptyRevisionRejected
         }
 
-        val previousRevision = source.activeRevision
+        val previousRevision = checkNotNull(source) {
+            "C03 candidate owned source is missing."
+        }.activeRevision
         if (previousRevision > 0) {
             retainRevision(sourceId, previousRevision)
         }
@@ -618,6 +620,8 @@ private object C03ProductionCandidateContentAddress {
             digest.update(bytes.size.toByte())
             digest.update(bytes)
         }
-        return digest.digest().joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return digest.digest().joinToString(separator = "") { byte ->
+            "%02x".format(byte.toInt() and 0xff)
+        }
     }
 }
