@@ -142,7 +142,10 @@ class MuxTvPlaybackService : MediaSessionService() {
             maxAttempts = MAX_ATTEMPTS,
             maxRecoveryDurationMillis = MAX_RECOVERY_DURATION_MILLIS,
         )
-        player = ExoPlayer.Builder(this).build()
+        player = ExoPlayer.Builder(
+            this,
+            createMedia3RenderersFactory(this),
+        ).build()
         runtimeAnalyticsListener = PlaybackRuntimeAnalyticsListener(
             state = playbackRuntimeMeasurementState,
             eventGeneration = { eventTime -> eventTime.playbackRuntimeGeneration() },

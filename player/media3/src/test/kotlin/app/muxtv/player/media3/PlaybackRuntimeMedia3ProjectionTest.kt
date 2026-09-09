@@ -155,6 +155,43 @@ class PlaybackRuntimeMedia3ProjectionTest {
         assertThat(afterStale.videoCodec).isEqualTo(PlaybackRuntimeVideoCodec.AV1)
     }
 
+    @Test
+    fun `decoder analytics callbacks stay generation gated and separate codec errors from drops`() {
+        val state = PlaybackRuntimeMeasurementState()
+        state.activate(12L, PlaybackRuntimeTransport.MPEG_TS_LIVE, null)
+        var resolvedGeneration = 12L
+        val listener = PlaybackRuntimeAnalyticsListener(
+            state = state,
+            eventGeneration = { resolvedGeneration },
+        )
+
+        listener.onVideoDecoderInitialized(
+            eventTime = eventTime(100L),
+            decoderName = "c2.android.hevc.decoder",
+            initializedTimestampMs = 90L,
+            initializationDurationMs = 10L,
+        )
+        listener.onDroppedVideoFrames(eventTime(200L), 4, 100L)
+        listener.onVideoCodecError(eventTime(250L), IllegalStateException("diagnostic"))
+
+        val accepted = state.snapshot()!!
+        assertThat(accepted.videoDecoderName).isEqualTo("c2.android.hevc.decoder")
+        assertThat(accepted.videoDecoderInitializationDurationMillis).isEqualTo(10L)
+        assertThat(accepted.droppedVideoFrameCount).isEqualTo(4)
+        assertThat(accepted.videoCodecErrorCount).isEqualTo(1)
+        assertThat(accepted.decoderInitializationFailureCount).isEqualTo(0)
+
+        resolvedGeneration = 11L
+        listener.onVideoDecoderInitialized(eventTime(300L), "decoder.stale", 290L, 99L)
+        listener.onDroppedVideoFrames(eventTime(310L), 7, 10L)
+        listener.onVideoCodecError(eventTime(320L), IllegalStateException("stale"))
+
+        val afterStale = state.snapshot()!!
+        assertThat(afterStale.videoDecoderName).isEqualTo("c2.android.hevc.decoder")
+        assertThat(afterStale.droppedVideoFrameCount).isEqualTo(4)
+        assertThat(afterStale.videoCodecErrorCount).isEqualTo(1)
+    }
+
     private fun eventTime(realtimeMs: Long): AnalyticsListener.EventTime =
         AnalyticsListener.EventTime(
             realtimeMs,
