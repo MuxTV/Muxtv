@@ -6,6 +6,7 @@ import java.util.Locale
 
 internal data class CatalogEntryIdentity(
     val providerKey: String,
+    val logicalChannelId: String,
     val providerChannelId: String,
     val canonicalChannelId: String,
     val streamVariantId: String,
@@ -35,31 +36,58 @@ internal class CatalogEntryIdentityFactory(
 
         return CatalogEntryIdentity(
             providerKey = providerKey,
+            logicalChannelId = framedStableId(
+                domain = LOGICAL_CHANNEL_ID_DOMAIN,
+                sourceId,
+                providerKey,
+            ),
             providerChannelId = stableId("provider|$sourceId|$revisionNumber|$ordinal"),
             canonicalChannelId = stableId("canonical|$canonicalScope"),
             streamVariantId = stableId("stream|$sourceId|$revisionNumber|$ordinal"),
         )
     }
 
+    private fun framedStableId(
+        domain: String,
+        vararg values: String,
+    ): String {
+        messageDigest.reset()
+        messageDigest.updateFrame(domain)
+        values.forEach(messageDigest::updateFrame)
+        return messageDigest.digest().toHex()
+    }
+
     private fun stableId(value: String): String {
         messageDigest.reset()
-        val digest = messageDigest.digest(value.toByteArray(StandardCharsets.UTF_8))
-        val output = CharArray(digest.size * 2)
-        var outputIndex = 0
-
-        digest.forEach { byte ->
-            val unsigned = byte.toInt() and 0xff
-            output[outputIndex++] = HEX[unsigned ushr 4]
-            output[outputIndex++] = HEX[unsigned and 0x0f]
-        }
-
-        return output.concatToString()
+        return messageDigest.digest(value.toByteArray(StandardCharsets.UTF_8)).toHex()
     }
 
     private companion object {
         const val SHA_256 = "SHA-256"
-        val HEX = "0123456789abcdef".toCharArray()
+        const val LOGICAL_CHANNEL_ID_DOMAIN = "catalog-logical-v1"
     }
+}
+
+private fun MessageDigest.updateFrame(value: String) {
+    val bytes = value.toByteArray(StandardCharsets.UTF_8)
+    update((bytes.size ushr 24).toByte())
+    update((bytes.size ushr 16).toByte())
+    update((bytes.size ushr 8).toByte())
+    update(bytes.size.toByte())
+    update(bytes)
+}
+
+internal fun ByteArray.toHex(): String {
+    val output = CharArray(size * 2)
+    var outputIndex = 0
+
+    forEach { byte ->
+        val unsigned = byte.toInt() and 0xff
+        output[outputIndex++] = HEX[unsigned ushr 4]
+        output[outputIndex++] = HEX[unsigned and 0x0f]
+    }
+
+    return output.concatToString()
 }
 
 private fun CatalogImportEntry.providerKey(): String {
@@ -84,4 +112,5 @@ private fun String.normalizeIdentityPart(): String =
         .lowercase(Locale.ROOT)
         .replace(WHITESPACE, " ")
 
+private val HEX = "0123456789abcdef".toCharArray()
 private val WHITESPACE = Regex("\\s+")
