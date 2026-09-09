@@ -6,56 +6,46 @@ on:
       - evidence/c03-room-874b0c
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
   measure:
-    name: C03 token-churn GREEN executor
+    name: C03 final seven-cell physical A/B evidence
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
-      C03_EXPECTED_HEAD: 7546738fe00ae746a7e67389bbe7a4519102495b
-      C03_BRANCH: feature/c03-refresh-delta
+      C03_EXPECTED_HEAD: 0777b3b3aef86b24d63f22a0c0c335d9c63df814
       MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+      MUXTV_EVIDENCE_DIR: .work/evidence/c03-room-final
+      C03_RESULT_KEY: c03RefreshDeltaDatabaseMeasurementReportBase64
     steps:
-      - name: Checkout exact C03 branch head
+      - name: Checkout exact C03 source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.C03_BRANCH }}
-          persist-credentials: true
+          ref: ${{ env.C03_EXPECTED_HEAD }}
+          persist-credentials: false
           fetch-depth: 1
 
       - name: Set up MuxTV JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Assert expected RED head
+      - name: Assert exact source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$C03_EXPECTED_HEAD"
-
-      - name: Fetch token-churn patch helper
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin evidence/c03-room-874b0c:refs/remotes/origin/evidence/c03-room-874b0c
-          git show "origin/evidence/c03-room-874b0c:tools/ci/Patch-C03TokenChurn.py" > /tmp/Patch-C03TokenChurn.py
-          test -s /tmp/Patch-C03TokenChurn.py
-
-      - name: Apply debug-only token-churn scenario
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 /tmp/Patch-C03TokenChurn.py
-          git diff --check
-          git diff -- core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$C03_EXPECTED_HEAD"
+          mkdir -p "$MUXTV_EVIDENCE_DIR"
+          printf 'sourceHead=%s\nworkflowCommit=%s\nwarmups=1\niterations=5\nentryCount=10000\nscenarios=delta-0,delta-1,delta-10,delta-100,reorder,remove-10,token-churn\ntransport=instrumentation-result-base64\nrowOracle=untimed-trigger-audit\n' "$actual" "${{ github.sha }}" > "$MUXTV_EVIDENCE_DIR/provenance.txt"
 
       - name: Enable KVM for Android Emulator
         shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/c03-room-final/kvm
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Verify token-churn GREEN on API36
+      - name: Run API36 final C03 measurement matrix
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         with:
           api-level: 36
@@ -75,15 +65,78 @@ jobs:
           script: |
             set -eu
             chmod +x ./gradlew
-            ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_EXPECTED_HEAD -Pandroid.testInstrumentationRunnerArguments.c03Warmups=0 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=1
+            rm -rf core/database/build/outputs/androidTest-results/connected/debug
+            ./gradlew :core:database:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain --no-problems-report -PcatalogMeasurements=true -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit=$C03_EXPECTED_HEAD -Pandroid.testInstrumentationRunnerArguments.c03Warmups=1 -Pandroid.testInstrumentationRunnerArguments.c03Iterations=5
 
-      - name: Commit verified token-churn scenario
+      - name: Extract and validate final C03 evidence
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt
-          git commit -m "feat(c03): add physical token churn scenario"
-          git push origin HEAD:${C03_BRANCH}
+          python3 - <<'PY'
+          import base64, json, os, re
+          from pathlib import Path
+
+          root = Path("core/database/build/outputs/androidTest-results/connected/debug")
+          logs = sorted(root.rglob("test-results.log"))
+          if len(logs) != 1:
+              raise SystemExit(f"expected one test-results.log, found {len(logs)}")
+          text = logs[0].read_text(encoding="utf-8")
+          key = os.environ["C03_RESULT_KEY"]
+          match = re.search(rf"(?m)^INSTRUMENTATION_RESULT: {re.escape(key)}=(?P<value>[A-Za-z0-9+/=]+)\s*$", text)
+          if match is None:
+              raise SystemExit("C03 instrumentation result payload is missing")
+          payload = base64.b64decode(match.group("value"), validate=True)
+          report = json.loads(payload.decode("utf-8"))
+
+          expected_scenarios = ["delta-0", "delta-1", "delta-10", "delta-100", "reorder", "remove-10", "token-churn"]
+          expected_variants = ["A_CURRENT_MUXTV", "B_IMMUTABLE_COW"]
+          if report.get("sourceCommit") != os.environ["C03_EXPECTED_HEAD"]:
+              raise SystemExit("C03 sourceCommit mismatch")
+          if report.get("entryCount") != 10_000 or report.get("batchSize") != 250:
+              raise SystemExit("C03 workload changed")
+          if report.get("thresholdApplied") is not False or report.get("redactionPassed") is not True:
+              raise SystemExit("C03 threshold/redaction contract failed")
+          scenarios = report.get("scenarios")
+          if [s.get("scenarioId") for s in scenarios] != expected_scenarios:
+              raise SystemExit("C03 physical scenario matrix changed")
+          for scenario in scenarios:
+              variants = scenario.get("variants")
+              if [v.get("variant") for v in variants] != expected_variants:
+                  raise SystemExit("C03 physical variant matrix changed")
+              for variant in variants:
+                  if variant.get("correctnessDigestSha256") != scenario.get("expectedActiveDigestSha256"):
+                      raise SystemExit("C03 active catalog digest mismatch")
+                  if variant.get("correctnessCount") != scenario.get("expectedActiveCount"):
+                      raise SystemExit("C03 active catalog count mismatch")
+                  if variant.get("previousGoodCount") != 10_000:
+                      raise SystemExit("C03 previous-good retention mismatch")
+                  if len(variant.get("samples", [])) != 5:
+                      raise SystemExit("C03 physical sample count must be 5")
+                  breakdown = variant.get("rowMutationBreakdown")
+                  if not isinstance(breakdown, dict) or not breakdown:
+                      raise SystemExit("C03 physical row mutation breakdown missing")
+                  if sum(breakdown.values()) != variant.get("actualRowMutations"):
+                      raise SystemExit("C03 physical row mutation total mismatch")
+
+          raw = payload.decode("utf-8")
+          for forbidden in ("fixture.invalid", "session=", "Authorization", "Cookie"):
+              if forbidden in raw:
+                  raise SystemExit(f"C03 evidence leaked forbidden marker: {forbidden}")
+
+          evidence = Path(os.environ["MUXTV_EVIDENCE_DIR"])
+          evidence.mkdir(parents=True, exist_ok=True)
+          (evidence / "c03-refresh-delta.json").write_bytes(payload)
+          (evidence / "validated.txt").write_text("status=passed\n", encoding="utf-8")
+          PY
+          test -s "$MUXTV_EVIDENCE_DIR/c03-refresh-delta.json"
+          grep -q '^status=passed$' "$MUXTV_EVIDENCE_DIR/validated.txt"
+
+      - name: Upload final C03 physical evidence
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c03-room-final-${{ env.C03_EXPECTED_HEAD }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c03-room-final/**
+            core/database/build/outputs/androidTest-results/**
+          retention-days: 14
+          github-token: ${{ github.token }}
