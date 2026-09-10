@@ -17,14 +17,43 @@ val playerProxyMeasurementsEnabled = providers.gradleProperty("playerProxyMeasur
         }
     }
 
+val c09Media3EvidenceEnabled = providers.gradleProperty("c09Media3Evidence")
+    .orElse("false")
+    .map { rawValue ->
+        when (rawValue.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> throw GradleException("c09Media3Evidence must be true or false.")
+        }
+    }
+val c09SourceSha = providers.gradleProperty("c09SourceSha")
+
 android {
     namespace = "app.muxtv.player.media3"
     buildFeatures { compose = true }
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val excludedAnnotations = mutableListOf<String>()
         if (!playerProxyMeasurementsEnabled.get()) {
-            testInstrumentationRunnerArguments["notAnnotation"] =
-                "app.muxtv.player.media3.PlayerProxyMeasurement"
+            excludedAnnotations += "app.muxtv.player.media3.PlayerProxyMeasurement"
+        }
+        if (!c09Media3EvidenceEnabled.get()) {
+            excludedAnnotations += "app.muxtv.player.media3.C09Media3Evidence"
+        }
+        if (excludedAnnotations.isNotEmpty()) {
+            testInstrumentationRunnerArguments["notAnnotation"] = excludedAnnotations.joinToString(",")
+        }
+
+        if (c09Media3EvidenceEnabled.get()) {
+            val sourceSha = c09SourceSha.orNull
+                ?: throw GradleException("c09SourceSha is required when c09Media3Evidence=true.")
+            if (!sourceSha.matches(Regex("[0-9a-f]{40}"))) {
+                throw GradleException("c09SourceSha must be an exact lowercase 40-hex commit.")
+            }
+            testInstrumentationRunnerArguments["annotation"] =
+                "app.muxtv.player.media3.C09Media3Evidence"
+            testInstrumentationRunnerArguments["c09SourceSha"] = sourceSha
         }
     }
     testOptions {
@@ -66,5 +95,6 @@ dependencies {
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.mockwebserver3)
     androidTestImplementation(project(":core:testing"))
+    androidTestImplementation(project(":benchmark:competitive"))
     androidTestImplementation(libs.truth)
 }
