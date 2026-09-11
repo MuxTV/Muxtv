@@ -40,11 +40,11 @@ jobs:
         include:
           - api: 26
             arch: x86
-            avd: MuxTV_C10_API26
+            avd: MuxTV_TV_OLD_API26
             ram: 1536M
           - api: 36
             arch: x86_64
-            avd: MuxTV_C10_API36
+            avd: MuxTV_TV_CURRENT_API36
             ram: 2048M
 
     steps:
