@@ -1,0 +1,136 @@
+name: C10 Media3 LoadControl A/B/C evidence
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/c10-media3-load-control-evidence.yml'
+      - '.work/quality/c10-media3-load-control-policy.md'
+      - 'benchmark/competitive/**'
+      - 'core/testing/src/main/kotlin/app/muxtv/testing/media/C09PlaybackCorpus.kt'
+      - 'core/testing/src/main/resources/app/muxtv/testing/media/c09/**'
+      - 'player/media3/build.gradle.kts'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/Media3LoadControlPolicy.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/Media3RendererPolicy.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackRuntimeMeasurementState.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackRuntimeMedia3Projection.kt'
+      - 'player/media3/src/debug/**'
+      - 'player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C10Media3LoadControlEvidence.kt'
+      - 'player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C10Media3LoadControlEvidenceInstrumentedTest.kt'
+      - 'tools/ci/Run-C10Media3LoadControlEvidence.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: c10-media3-load-control-evidence-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  device:
+    name: C10 LoadControl evidence API${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            arch: x86
+            avd: MuxTV_C10_API26
+            ram: 1536M
+          - api: 36
+            arch: x86_64
+            avd: MuxTV_C10_API36
+            ram: 2048M
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [[ "$actual" != "$EXPECTED_SHA" ]]; then
+            echo "Expected exact source $EXPECTED_SHA, got $actual" >&2
+            exit 1
+          fi
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/c10-load-control/api-${{ matrix.api }}/kvm
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Install bounded hosted ADB retry shim
+        shell: bash
+        run: bash ./tools/ci/Install-HostedAdbRetryShim.sh
+
+      - name: Run C10 Media3 LoadControl A/B/C evidence
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
+          MUXTV_C10_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          MUXTV_C10_EVIDENCE_DIR: .work/evidence/c10-load-control/api-${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: android-tv
+          arch: ${{ matrix.arch }}
+          profile: tv_1080p
+          avd-name: ${{ matrix.avd }}
+          force-avd-creation: true
+          cores: 2
+          ram-size: ${{ matrix.ram }}
+          heap-size: 256M
+          disk-size: 4G
+          enable-hw-keyboard: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-C10Media3LoadControlEvidence.sh
+
+      - name: Upload API${{ matrix.api }} C10 evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c10-load-control-api${{ matrix.api }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c10-load-control/api-${{ matrix.api }}/**
+            player/media3/build/outputs/androidTest-results/**
+            player/media3/build/reports/androidTests/**
+          retention-days: 14
+          github-token: ${{ github.token }}
+
+  gate:
+    name: C10 Media3 LoadControl A/B/C evidence
+    if: always()
+    needs:
+      - device
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require canonical emulator evidence success
+        shell: bash
+        env:
+          DEVICE_RESULT: ${{ needs.device.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEVICE_RESULT" != "success" ]]; then
+            echo "C10 Media3 LoadControl emulator evidence result: $DEVICE_RESULT" >&2
+            exit 1
+          fi
+          echo "C10 LoadControl A/B/C emulator evidence passed for API26 and API36."
