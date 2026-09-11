@@ -52,3 +52,26 @@ internal fun media3LoadControlSettings(
             )
     }
 }
+
+/**
+ * Builds the evidence-only LoadControl for a preregistered C10 variant.
+ *
+ * Only the streaming duration thresholds are written. Every other setting intentionally remains on
+ * the Media3 1.11.0 builder default captured by [media3LoadControlSettings]. Production playback
+ * does not call this factory while C10 is evidence-only, so the service keeps its current implicit
+ * Media3 default construction until an evidence disposition explicitly changes that policy.
+ */
+@AndroidXOptIn(UnstableApi::class)
+internal fun createMedia3LoadControl(
+    variant: Media3LoadControlVariant,
+): DefaultLoadControl {
+    val settings = media3LoadControlSettings(variant)
+    return DefaultLoadControl.Builder()
+        .setBufferDurationsMsForStreaming(
+            settings.minBufferMs,
+            settings.maxBufferMs,
+            settings.bufferForPlaybackMs,
+            settings.bufferForPlaybackAfterRebufferMs,
+        )
+        .build()
+}
