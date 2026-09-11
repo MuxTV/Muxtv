@@ -366,7 +366,7 @@ class C10Media3LoadControlEvidenceInstrumentedTest {
         )
     }
 
-    private class PlayerRunner(
+    private inner class PlayerRunner(
         private val context: Context,
         private val surface: Surface,
         private val avcTs: ByteArray,
