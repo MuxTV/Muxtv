@@ -10,7 +10,6 @@ internal enum class PlaybackRecoveryFailure {
     AccessUnavailable,
     CandidatesExhausted,
     DeadlineExceeded,
-    TerminalFailure,
 }
 
 internal enum class PlaybackRecoveryDisposition {
@@ -167,7 +166,7 @@ internal class PlaybackRecoveryOrchestrator(
             PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE ->
                 advance(state, PlaybackRecoveryFailure.CandidatesExhausted)
             PlaybackRecoveryDisposition.STOP_RECOVERY ->
-                fail(state, PlaybackRecoveryFailure.TerminalFailure)
+                fail(state, PlaybackRecoveryFailure.CandidatesExhausted)
         }
     }
 
