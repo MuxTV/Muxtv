@@ -13,5 +13,10 @@
             android:name=".C09Media3EvidenceActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+        <activity
+            android:name=".C10Media3EvidenceActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
     </application>
 </manifest>

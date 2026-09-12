@@ -28,11 +28,26 @@ val c09Media3EvidenceEnabled = providers.gradleProperty("c09Media3Evidence")
     }
 val c09SourceSha = providers.gradleProperty("c09SourceSha")
 
+val c10Media3LoadControlEvidenceEnabled = providers.gradleProperty("c10Media3LoadControlEvidence")
+    .orElse("false")
+    .map { rawValue ->
+        when (rawValue.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> throw GradleException("c10Media3LoadControlEvidence must be true or false.")
+        }
+    }
+val c10SourceSha = providers.gradleProperty("c10SourceSha")
+
 android {
     namespace = "app.muxtv.player.media3"
     buildFeatures { compose = true }
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        if (c09Media3EvidenceEnabled.get() && c10Media3LoadControlEvidenceEnabled.get()) {
+            throw GradleException("C09 and C10 evidence selectors are mutually exclusive.")
+        }
 
         val excludedAnnotations = mutableListOf<String>()
         if (!playerProxyMeasurementsEnabled.get()) {
@@ -40,6 +55,9 @@ android {
         }
         if (!c09Media3EvidenceEnabled.get()) {
             excludedAnnotations += "app.muxtv.player.media3.C09Media3Evidence"
+        }
+        if (!c10Media3LoadControlEvidenceEnabled.get()) {
+            excludedAnnotations += "app.muxtv.player.media3.C10Media3LoadControlEvidence"
         }
         if (excludedAnnotations.isNotEmpty()) {
             testInstrumentationRunnerArguments["notAnnotation"] = excludedAnnotations.joinToString(",")
@@ -54,6 +72,19 @@ android {
             testInstrumentationRunnerArguments["annotation"] =
                 "app.muxtv.player.media3.C09Media3Evidence"
             testInstrumentationRunnerArguments["c09SourceSha"] = sourceSha
+        }
+
+        if (c10Media3LoadControlEvidenceEnabled.get()) {
+            val sourceSha = c10SourceSha.orNull
+                ?: throw GradleException(
+                    "c10SourceSha is required when c10Media3LoadControlEvidence=true.",
+                )
+            if (!sourceSha.matches(Regex("[0-9a-f]{40}"))) {
+                throw GradleException("c10SourceSha must be an exact lowercase 40-hex commit.")
+            }
+            testInstrumentationRunnerArguments["annotation"] =
+                "app.muxtv.player.media3.C10Media3LoadControlEvidence"
+            testInstrumentationRunnerArguments["c10SourceSha"] = sourceSha
         }
     }
     testOptions {
