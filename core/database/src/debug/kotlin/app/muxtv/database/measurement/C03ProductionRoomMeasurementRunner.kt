@@ -63,7 +63,7 @@ internal class C03ProductionRoomMeasurementRunner(
             val baseline = Fixture.baseline(spec.entryCount)
             val scenarios = spec.scenarios.map { scenario ->
                 val incoming = scenario.applyTo(baseline)
-                val expectedDigest = activeDigest(incoming)
+                val expectedDigest = fixtureActiveDigest(incoming)
                 val expectedCount = incoming.size
                 val variants = C03ProductionMeasurementVariant.entries.map { variant ->
                     repeat(spec.warmupIterations) { warmupIndex ->
@@ -102,7 +102,7 @@ internal class C03ProductionRoomMeasurementRunner(
                     variantMeasurement(variant, measured)
                 }
                 C03ProductionRoomScenarioMeasurement(
-                    scenarioId = scenario.id,
+                    scenarioId = scenarioId(scenario),
                     expectedCorrectnessDigestSha256 = expectedDigest,
                     expectedCorrectnessCount = expectedCount,
                     variants = variants,
@@ -154,7 +154,7 @@ internal class C03ProductionRoomMeasurementRunner(
         incoming: List<FixtureItem>,
         iterationLabel: String,
     ): MeasuredVariant {
-        val name = nextDatabaseName("a", scenario.id, iterationLabel)
+        val name = nextDatabaseName("a", scenarioId(scenario), iterationLabel)
         cleanupDatabase(name)
         prepareProductionBaseline(name, baseline)
         checkpoint(name)
@@ -219,14 +219,14 @@ internal class C03ProductionRoomMeasurementRunner(
                 previousGoodDigestSha256 = activeDigest(previousRows),
                 writes = C03ProductionRoomWriteCounts(
                     providerOrPayloadWrites =
-                        (afterCounts.providerRows - beforeCounts.providerRows).coerceAtLeast(0) +
-                            (afterCounts.streamRows - beforeCounts.streamRows).coerceAtLeast(0),
+                        (afterCounts.providerRows - beforeCounts.providerRows).coerceAtLeast(0L) +
+                            (afterCounts.streamRows - beforeCounts.streamRows).coerceAtLeast(0L),
                     searchPayloadWrites = 0,
                     searchDocumentWrites =
-                        (afterCounts.searchDocumentRows - beforeCounts.searchDocumentRows).coerceAtLeast(0),
+                        (afterCounts.searchDocumentRows - beforeCounts.searchDocumentRows).coerceAtLeast(0L),
                     membershipWrites = 0,
                     revisionMetadataWrites =
-                        (afterCounts.revisionRows - beforeCounts.revisionRows).coerceAtLeast(0),
+                        (afterCounts.revisionRows - beforeCounts.revisionRows).coerceAtLeast(0L),
                     sourceMetadataWrites = 0,
                     cleanupDeletes = 0,
                 ),
@@ -256,7 +256,7 @@ internal class C03ProductionRoomMeasurementRunner(
         incoming: List<FixtureItem>,
         iterationLabel: String,
     ): MeasuredVariant {
-        val name = nextDatabaseName("b", scenario.id, iterationLabel)
+        val name = nextDatabaseName("b", scenarioId(scenario), iterationLabel)
         cleanupDatabase(name)
         prepareCandidateBaseline(name, baseline)
         checkpoint(name)
@@ -324,7 +324,7 @@ internal class C03ProductionRoomMeasurementRunner(
                     membershipWrites =
                         (afterCounts.membershipRows - beforeCounts.membershipRows).coerceAtLeast(0).toLong(),
                     revisionMetadataWrites =
-                        (afterRevisionRows - beforeRevisionRows).coerceAtLeast(0).toLong(),
+                        (afterRevisionRows - beforeRevisionRows).coerceAtLeast(0L),
                     sourceMetadataWrites = 0,
                     cleanupDeletes = 0,
                 ),
@@ -807,7 +807,7 @@ internal class C03ProductionRoomMeasurementRunner(
         val sample: C03ProductionRoomTimingSample,
     )
 
-    private fun activeDigest(items: List<FixtureItem>): String = activeDigest(
+    private fun fixtureActiveDigest(items: List<FixtureItem>): String = activeDigest(
         items.map { NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal) },
     )
 
@@ -851,7 +851,7 @@ internal class C03ProductionRoomMeasurementRunner(
         const val LOGICAL_DIGEST_DOMAIN = "c03-logical-digest-v1"
         val CONTROL_CHARACTERS = Regex("[\\u0000-\\u001f]")
 
-        fun C03ProductionScenario.id(): String = when (this) {
+        fun scenarioId(scenario: C03ProductionScenario): String = when (scenario) {
             C03ProductionScenario.DELTA_0 -> "delta-0"
             C03ProductionScenario.DELTA_1 -> "delta-1"
             C03ProductionScenario.DELTA_10 -> "delta-10"
@@ -860,8 +860,6 @@ internal class C03ProductionRoomMeasurementRunner(
             C03ProductionScenario.REMOVE_10 -> "remove-10"
             C03ProductionScenario.TOKEN_CHURN -> "token-churn"
         }
-
-        val C03ProductionScenario.id: String get() = id()
 
         fun logicalChannelId(sourceId: String, providerKey: String): String =
             digestFrames(LOGICAL_ID_DOMAIN, listOf(sourceId, providerKey))
