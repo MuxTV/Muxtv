@@ -415,7 +415,7 @@ internal class C03ProductionRoomMeasurementRunner(
     ).setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING).build()
 
     private suspend fun MuxTvDatabase.productionCounts(): ProductionCounts = useReaderConnection { connection ->
-        fun count(table: String): Long = connection.usePrepared("SELECT COUNT(*) FROM $table") { statement ->
+        suspend fun count(table: String): Long = connection.usePrepared("SELECT COUNT(*) FROM $table") { statement ->
             check(statement.step())
             statement.getLong(0)
         }
