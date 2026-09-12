@@ -10,6 +10,12 @@ internal enum class PlaybackRecoveryFailure {
     AccessUnavailable,
     CandidatesExhausted,
     DeadlineExceeded,
+    TerminalFailure,
+}
+
+internal enum class PlaybackRecoveryDisposition {
+    TRY_NEXT_CANDIDATE,
+    STOP_RECOVERY,
 }
 
 internal sealed interface PlaybackRecoveryAction {
@@ -151,10 +157,18 @@ internal class PlaybackRecoveryOrchestrator(
     fun onPlayerError(
         generation: Long,
         candidate: PlaybackCandidateIdentity,
+        disposition: PlaybackRecoveryDisposition =
+            PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE,
     ): PlaybackRecoveryAction {
         val state = current(generation, candidate, Phase.Installed)
             ?: return PlaybackRecoveryAction.Ignored
-        return advance(state, PlaybackRecoveryFailure.CandidatesExhausted)
+        if (isExpired(state)) return fail(state, PlaybackRecoveryFailure.DeadlineExceeded)
+        return when (disposition) {
+            PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE ->
+                advance(state, PlaybackRecoveryFailure.CandidatesExhausted)
+            PlaybackRecoveryDisposition.STOP_RECOVERY ->
+                fail(state, PlaybackRecoveryFailure.TerminalFailure)
+        }
     }
 
     fun onRenderedFirstFrame(
