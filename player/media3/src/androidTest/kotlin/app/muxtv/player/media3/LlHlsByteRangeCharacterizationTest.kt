@@ -29,9 +29,10 @@ import org.junit.runner.RunWith
 /**
  * Characterization evidence for androidx/media#3350 through MuxTV's production HLS construction.
  *
- * The origin is fully local and contains no provider data. The init fragment and bounded media
- * bytes come from AndroidX Media3's Apache-2.0 CMAF test corpus (`audio_init.mp4` and the first
- * 512 bytes of `audio_2.m4s`). The playlist exposes those 512 bytes as a trailing LL-HLS part.
+ * This is specifically a byte-range LL-HLS delivery failure over CMAF/fMP4 media, not a choice of
+ * LL-HLS instead of CMAF. The local playlist carries CMAF init/media fragments (`audio_init.mp4`
+ * and the first 512 bytes of `audio_2.m4s`) from AndroidX Media3's Apache-2.0 test corpus and
+ * exposes the bounded media bytes as an `EXT-X-PART` with `BYTERANGE`.
  *
  * On Media3 versions affected by #3350, FragmentedMp4Extractor consumes the complete bounded
  * DataSpec and asks for more input. HlsMediaChunk stores nextLoadPosition == DataSpec.length and
@@ -41,11 +42,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 @AndroidXOptIn(UnstableApi::class)
-class LlHlsByteRangeCharacterizationTest {
+class LlHlsCmafByteRangeCharacterizationTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun byteRangeLlHlsPart_retriesIntoIllegalZeroLengthSubrange() {
+    fun byteRangeLlHlsCmafPart_retriesIntoIllegalZeroLengthSubrange() {
         LlHlsOrigin.start().use { origin ->
             PlayerHarness(context).use { harness ->
                 harness.post {
@@ -157,7 +158,7 @@ class LlHlsByteRangeCharacterizationTest {
                 Thread.sleep(POLL_INTERVAL_MILLIS)
             }
             throw AssertionError(
-                "LL-HLS fixture did not produce a player error within the deadline; ${diagnostics()}",
+                "LL-HLS-over-CMAF fixture did not produce a player error within the deadline; ${diagnostics()}",
             )
         }
 
