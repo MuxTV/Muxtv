@@ -3,7 +3,7 @@ package app.muxtv.database
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.database.measurement.C03ProductionMeasurementVariant
-import app.muxtv.database.measurement.C03ProductionRoomMeasurementRunner
+import app.muxtv.database.measurement.C03ProductionRoomEvidenceRunner
 import app.muxtv.database.measurement.C03ProductionRoomMeasurementSpec
 import app.muxtv.database.measurement.C03ProductionScenario
 import com.google.common.truth.Truth.assertThat
@@ -28,10 +28,10 @@ class C03ProductionRoomMeasurementTest {
             ),
         )
 
-        val report = C03ProductionRoomMeasurementRunner(context).run(spec)
+        val report = C03ProductionRoomEvidenceRunner(context).run(spec)
 
         assertThat(report.schemaVersion).isEqualTo(1)
-        assertThat(report.methodVersion).isNotEmpty()
+        assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(spec.sourceCommit)
         assertThat(report.warmupIterations).isEqualTo(0)
         assertThat(report.measuredIterations).isEqualTo(1)
