@@ -50,7 +50,6 @@
 **Interfaces:**
 - `PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE`
 - `PlaybackRecoveryDisposition.STOP_RECOVERY`
-- `PlaybackRecoveryFailure.TerminalFailure`
 - `onPlayerError(generation, candidate, disposition = TRY_NEXT_CANDIDATE)`
 
 - [ ] Implement only the two dispositions in the orchestrator.
@@ -68,7 +67,7 @@
 
 **Interfaces:**
 - Consumes: secret-safe `Media3Failure` from `Media3FailureClassifier`.
-- Produces: `media3RecoveryDisposition(variant, failure): PlaybackRecoveryDisposition`.
+- Produces: `Media3RecoveryDispositionPolicy.disposition(variant, failure): PlaybackRecoveryDisposition`.
 - Variant A: `A_CURRENT_GENERIC_NEXT`.
 - Variant B: `B_NARROW_TYPED_STOP`.
 - Variant C: `C_BROAD_RENDER_STOP`.
