@@ -53,6 +53,7 @@ class C03ProductionRoomMeasurementTest {
             assertThat(scenario.variants.all {
                 it.correctnessDigestSha256 == scenario.expectedCorrectnessDigestSha256
             }).isTrue()
+            assertThat(scenario.variants.all { it.writes.sourceMetadataWrites > 0L }).isTrue()
         }
     }
 }
