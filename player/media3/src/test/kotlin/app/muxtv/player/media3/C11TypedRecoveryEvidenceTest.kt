@@ -292,6 +292,18 @@ class C11TypedRecoveryEvidenceTest {
         const val CHANNEL_ID = "channel-c11"
         const val DEADLINE_MILLIS = 20_000L
 
+        fun failure(
+            category: PlaybackFailureCategory,
+            media3ErrorCode: Int = PlaybackException.ERROR_CODE_UNSPECIFIED,
+            httpStatusCode: Int? = null,
+        ) = CandidateOutcome.Failure(
+            Media3Failure(
+                category = category,
+                httpStatusCode = httpStatusCode,
+                media3ErrorCode = media3ErrorCode,
+            ),
+        )
+
         fun recoverable(
             id: String,
             failure: CandidateOutcome.Failure,
