@@ -11,6 +11,9 @@ internal enum class Media3RecoveryPolicyVariant {
     C_BROAD_RENDER_STOP,
 }
 
+internal val PRODUCTION_MEDIA3_RECOVERY_POLICY_VARIANT =
+    Media3RecoveryPolicyVariant.B_NARROW_TYPED_STOP
+
 @AndroidXOptIn(UnstableApi::class)
 internal object Media3RecoveryDispositionPolicy {
     fun disposition(
@@ -34,4 +37,7 @@ internal object Media3RecoveryDispositionPolicy {
                 PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE
             }
     }
+
+    fun productionDisposition(failure: Media3Failure): PlaybackRecoveryDisposition =
+        disposition(PRODUCTION_MEDIA3_RECOVERY_POLICY_VARIANT, failure)
 }
