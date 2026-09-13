@@ -211,9 +211,11 @@ class C12Media3NoFirstFrameFaultInstrumentedTest {
 
                     override fun onRenderedFirstFrame() {
                         // Fault injection: prove Media3 physically rendered, but deliberately do not
-                        // forward this callback to the watchdog. This models the missing completion
-                        // signal while preserving real READY/video/surface event mapping.
+                        // forward this callback to the watchdog. Pause on the player looper so
+                        // READY/video/surface eligibility remains continuous instead of being broken
+                        // by EOF/repeat transitions before both watchdog timers can expire.
                         physicalFirstFrameSeen.set(true)
+                        player.pause()
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
@@ -227,7 +229,6 @@ class C12Media3NoFirstFrameFaultInstrumentedTest {
                     .setLooper(thread.looper)
                     .build()
                 player.addListener(listener)
-                player.repeatMode = Player.REPEAT_MODE_ONE
                 player.setVideoSurfaceHolder(holder)
                 player.setMediaItem(MediaItem.fromUri(url))
                 player.prepare()
