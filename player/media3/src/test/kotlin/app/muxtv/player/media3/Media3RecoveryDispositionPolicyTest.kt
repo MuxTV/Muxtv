@@ -85,6 +85,29 @@ class Media3RecoveryDispositionPolicyTest {
         }
     }
 
+    @Test
+    fun `production selects evidence backed narrow B`() {
+        assertThat(PRODUCTION_MEDIA3_RECOVERY_POLICY_VARIANT)
+            .isEqualTo(Media3RecoveryPolicyVariant.B_NARROW_TYPED_STOP)
+
+        assertThat(
+            Media3RecoveryDispositionPolicy.productionDisposition(
+                failure(
+                    PlaybackFailureCategory.PLAYER_RENDER,
+                    PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK,
+                ),
+            ),
+        ).isEqualTo(PlaybackRecoveryDisposition.STOP_RECOVERY)
+        assertThat(
+            Media3RecoveryDispositionPolicy.productionDisposition(
+                failure(
+                    PlaybackFailureCategory.PLAYER_RENDER,
+                    PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+                ),
+            ),
+        ).isEqualTo(PlaybackRecoveryDisposition.TRY_NEXT_CANDIDATE)
+    }
+
     private fun failure(
         category: PlaybackFailureCategory,
         media3ErrorCode: Int,
