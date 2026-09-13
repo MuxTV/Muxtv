@@ -2,144 +2,110 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove whether MuxTV should add a READY/video/surface-gated per-attempt no-first-frame watchdog that hands a stuck attempt to the existing bounded candidate recovery ladder before the total 20 second recovery deadline.
+**Goal:** Prove whether MuxTV should add a READY/video/surface-gated per-attempt no-first-frame watchdog before the existing 20 second total recovery deadline, without changing production playback unless evidence is strong enough.
 
-**Architecture:** Keep `PlaybackRecoveryOrchestrator` as the only candidate-switching authority and keep the existing 20 second setup deadline as the only total recovery budget. Add a small platform-neutral `PlaybackNoFirstFrameWatchdog` state machine that owns eligibility and one-shot expiry for one `PlaybackAttemptToken`; Media3/service code only translates READY/video/surface/frame/error events into that state machine and schedules/cancels one per-attempt coroutine job. Compare current A against 10 second and 5 second READY-relative candidates before any production selection.
+**Architecture:** `PlaybackRecoveryOrchestrator` remains the only candidate-switching authority and the existing 20 second deadline remains the only total recovery budget. C12 adds a small platform-neutral watchdog state machine plus production-neutral JVM/Android evidence. Production `MuxTvPlaybackService` integration is intentionally withheld unless the decision gate is met.
 
-**Tech Stack:** Kotlin, JUnit4, Truth, AndroidX Media3 1.11.0, coroutines already used by `MuxTvPlaybackService`, existing API26/API36 Android TV evidence infrastructure.
+**Tech Stack:** Kotlin, JUnit4, Truth, AndroidX Media3 1.11.0, existing API26/API36 Android TV emulator evidence infrastructure.
 
-**Spec:** GitHub issue #382 — C12 no-first-frame watchdog A/B/C.
+**Spec:** GitHub issue #382.
 
 ## Global Constraints
 
-- Exact baseline is `main@7b35040e1c08d484548619b2b75a573790b5880c`.
+- Exact starting baseline: `main@7b35040e1c08d484548619b2b75a573790b5880c`.
 - Preserve one `MuxTvPlaybackService`-owned player/session.
-- Preserve `PlaybackRecoveryOrchestrator` candidate order, max attempts, generation ownership and absolute recovery deadline.
-- C11 production policy remains `B_NARROW_TYPED_STOP`; C12 expiry is not a synthetic Media3 error.
-- Do not change C09 renderer policy, C10 LoadControl policy, C13 freeze recovery, C14 audio rescue, #132 seek ownership, or external-player architecture.
-- A watchdog may count only continuous `READY + video expected + surface available + first frame absent` time for the current attempt token.
-- BUFFERING/IDLE/ENDED, surface loss, first frame, player error, attempt replacement and cancellation disarm the per-attempt clock.
-- Audio-only/no-video-track content never arms.
-- Existing 20,000 ms total deadline remains authoritative.
-- B timeout = 10,000 ms; C timeout = 5,000 ms. These are 50%/25% of MuxTV's existing total recovery budget, not imported reference constants.
-- No raw URL/header/credential/exception text may enter watchdog state or evidence.
+- Preserve candidate ordering, max attempts, generation ownership and the absolute 20,000 ms recovery deadline.
+- C11 `B_NARROW_TYPED_STOP` remains unchanged; C12 expiry is not a synthetic `PlaybackException`.
+- Eligibility requires continuous `READY + selected/expected video + rendering surface available + first frame absent` for the same attempt token.
+- BUFFERING/IDLE/ENDED, surface loss, first frame, attempt replacement and cancellation make an armed deadline ineligible/stale.
+- Audio-only/no-selected-video never arms.
+- B timeout is 10,000 ms; C timeout is 5,000 ms. These are MuxTV experiment values, not copied reference constants.
+- No external IPTV, raw URL/header/credential logging, alternate engine, C09 renderer change, C10 LoadControl change, C13 freeze recovery, C14 audio rescue or #132 seek changes.
 
 ---
 
-### Task 1: TEST-ONLY RED for eligibility and one-shot ownership
+### Task 1: TEST-ONLY RED
 
 **Files:**
-- Create: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdogTest.kt`
-- Production target after RED: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdog.kt`
+- `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdogTest.kt`
 
-**Interfaces:**
-- Consumes: existing `PlaybackAttemptToken`.
-- Produces after GREEN:
-  - `PlaybackNoFirstFrameWatchdogVariant { A_CURRENT_GLOBAL_ONLY, B_READY_GATED_10S, C_READY_GATED_5S }`;
-  - `PlaybackNoFirstFrameWatchdogAction { None, Arm(token, timeoutMillis), Disarm, Expired(token) }`;
-  - `PlaybackNoFirstFrameWatchdog.activate(token)`;
-  - `onReadyChanged(token, ready)`;
-  - `onVideoExpectedChanged(token, expected)`;
-  - `onSurfaceAvailabilityChanged(token, available)`;
-  - `onRenderedFirstFrame(token)`;
-  - `onPlayerError(token)`;
-  - `onTimerFired(token)`;
-  - `cancel()`.
-
-- [ ] **Step 1: Write failing gate tests.** Assert B does not arm after READY alone, arms only once all READY/video/surface gates are true, disarms on BUFFERING, and re-arms only on a new continuous READY interval.
-- [ ] **Step 2: Write first-frame-before-READY test.** Call `onRenderedFirstFrame(token)` before READY; later READY/video/surface events must never arm that attempt.
-- [ ] **Step 3: Write stale/one-shot expiry test.** After `Expired(token)`, repeated timer callbacks are `None`; after `activate(newToken)`, the old token timer is `None`.
-- [ ] **Step 4: Run RED.** Run `./gradlew :player:media3:testDebugUnitTest --tests '*PlaybackNoFirstFrameWatchdogTest*'`. Expected failure: missing watchdog variant/action/class symbols.
-- [ ] **Step 5: Commit only the tests after the expected RED is observed.**
+- [x] Define the missing variant/action/watchdog contract in tests before production code.
+- [x] Cover READY/video/surface eligibility, BUFFERING reset, first-frame-before-READY and stale/one-shot expiry.
+- [x] Observe exact RED at `2962fb14245ce12997c9e45276ec2b3e554f9b73`, workflow run `34750168069`, job `103705167151`.
+- [x] Confirm failure is missing C12 symbols in `compileDebugUnitTestKotlin`, not infrastructure failure.
 
 ### Task 2: Minimal pure GREEN state machine
 
 **Files:**
-- Create: `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdog.kt`
-- Test: `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdogTest.kt`
+- `player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdog.kt`
+- `player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdogTest.kt`
 
-**Interfaces:**
-- `activate(token)` replaces all prior attempt state and returns `Disarm` if an old timer could exist, otherwise `None`.
-- B/C `Arm` only on transition from ineligible to eligible.
-- Any eligibility loss while armed returns `Disarm`.
-- `onTimerFired(token)` returns `Expired(token)` at most once and only while the same token is still armed and eligible.
-- A never returns `Arm`/`Expired`.
-
-- [ ] **Step 1: Implement only the state described by Task 1.** Internal state contains token, ready, videoExpected, surfaceAvailable, firstFrameReported, armed and expired.
-- [ ] **Step 2: Map variant timeout exactly.** A -> `null`, B -> `10_000L`, C -> `5_000L`.
-- [ ] **Step 3: Run focused tests until GREEN.**
-- [ ] **Step 4: Run `PlaybackAttemptToken` / callback-gate regression tests together with the watchdog test.**
-- [ ] **Step 5: Commit minimal GREEN.**
+- [x] Implement active attempt token, READY/video/surface/first-frame state, arm/disarm and one-shot expiry only.
+- [x] Map A -> no per-attempt timer, B -> 10,000 ms, C -> 5,000 ms.
+- [x] Keep stale previous-attempt timer callbacks inert through token ownership.
+- [x] Verify pure GREEN at `94e25084bc3aecaa29932db2f878c934eaa61af3`, run `34750376815`, job `103705834818`.
+- [x] Do not add unused service-only APIs solely to satisfy the original sketch; service integration remains outside the pure seam until accepted.
 
 ### Task 3: Deterministic A/B/C correctness corpus
 
 **Files:**
-- Create: `player/media3/src/test/kotlin/app/muxtv/player/media3/C12NoFirstFrameWatchdogEvidenceTest.kt`
-- Extend only if required: `PlaybackNoFirstFrameWatchdogTest.kt`.
+- `player/media3/src/test/kotlin/app/muxtv/player/media3/C12NoFirstFrameWatchdogEvidenceTest.kt`
 
-**Interfaces:**
-- Pure event sequences drive the exact same watchdog implementation for A/B/C.
-- Evidence summary records `falseDetections`, `wrongAbandonments`, `expiredNoFrameAttempts`, `staleActions`, and `detectionLatencyMillis`.
+- [x] Compare A/B/C with the same deterministic event sequences.
+- [x] Include a healthy first frame 7,000 ms after READY, still inside MuxTV's existing 20,000 ms total budget.
+- [x] Verify stale timers and duplicate expiry remain zero.
+- [x] Verify corpus GREEN at `409563e8b27de30a5be67160085e225495ce2037`, run `34758816912`, job `103727866807`.
+- [x] Record result:
+  - A: 20,000 ms stuck detection, 0 useful early fallback, 0 false/wrong/stale/duplicate actions.
+  - B: 10,000 ms stuck detection, 1 useful early fallback, 0 false/wrong/stale/duplicate actions.
+  - C: 5,000 ms stuck detection, 1 useful early fallback, 1 false stop and 1 wrong abandonment.
+- [x] Reject `C_READY_GATED_5S` on correctness evidence.
 
-- [ ] **Step 1: Encode mandatory healthy sequences.** Frame-before-READY; READY->frame; READY->BUFFERING->READY->frame; READY while surface unavailable then surface arrives; surface loss; audio-only/no-video-track.
-- [ ] **Step 2: Encode failure sequences.** READY+video+surface with no frame; player error while armed; stale generation; replacement attempt; repeated timer; global deadline earlier than watchdog.
-- [ ] **Step 3: Encode recovery sequence.** Candidate A expires no-frame, existing orchestrator receives explicit `TRY_NEXT_CANDIDATE`, candidate B renders first frame and succeeds without preferred-variant mutation.
-- [ ] **Step 4: Assert A/B/C invariants.** All variants: zero false detections/wrong abandonment/stale mutation; B deterministic expiry at 10,000 ms; C at 5,000 ms; A has no per-attempt expiry.
-- [ ] **Step 5: Commit corpus only after focused GREEN.**
-
-### Task 4: Android surface/video/READY evidence seam
-
-**Files:**
-- Create: `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12NoFirstFrameWatchdogEvidenceInstrumentedTest.kt`
-- Create: `.github/workflows/c12-no-first-frame-watchdog.yml`
-- Create: `tools/ci/Run-C12NoFirstFrameWatchdogEvidence.sh`
-- Reuse: C09/C10 deterministic media corpus, `C10Media3EvidenceActivity`, canonical API26/API36 runner identity.
-
-**Interfaces:**
-- Production watchdog is still not wired into `MuxTvPlaybackService` in this task.
-- Instrumentation feeds real Media3 `STATE_READY`, `onRenderedFirstFrame`, selected-video-track and surface-lifecycle facts into the pure watchdog.
-
-- [ ] **Step 1: Normal playback guardrail.** Reuse deterministic raw TS/HLS playback and assert no watchdog expiry on successful first-frame paths.
-- [ ] **Step 2: Surface lifecycle case.** Start without an output surface, allow player state to progress, assert no expiry while surface eligibility is false, then attach a valid surface and complete playback.
-- [ ] **Step 3: Buffering case.** Inject delayed first segment/throttling and assert BUFFERING intervals do not accumulate READY watchdog time.
-- [ ] **Step 4: No-video case.** Use deterministic track state with no selected video and assert no arm/expiry.
-- [ ] **Step 5: Deterministic no-frame fault.** With selected video and valid surface, suppress the harness's first-frame completion signal while preserving READY eligibility; assert B/C expiry times and one-shot ownership without fabricating a Media3 exception.
-- [ ] **Step 6: Run API26 and API36 correctness.** Record exact source SHA, corpus hashes, environment fingerprint and raw secret-free event evidence.
-
-### Task 5: Decision before production wiring
+### Task 4: Android Media3 event-mapping evidence
 
 **Files:**
-- No `MuxTvPlaybackService` modification unless a candidate clears #382.
-- Update #382 and PR body with exact evidence.
+- `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameEvidence.kt`
+- `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameEvidenceInstrumentedTest.kt`
+- `player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameFaultInstrumentedTest.kt`
+- `player/media3/src/debug/kotlin/app/muxtv/player/media3/C12Media3EvidenceActivity.kt`
+- `player/media3/src/debug/AndroidManifest.xml`
+- `player/media3/build.gradle.kts`
+- `tools/ci/Run-C12Media3NoFirstFrameEvidence.sh`
+- `.github/workflows/c12-media3-no-first-frame-evidence.yml`
 
-- [ ] **Step 1: Reject any candidate with one false no-frame detection, wrong abandonment, stale action or duplicate expiry.**
-- [ ] **Step 2: Compare B/C rescue latency against A's total-deadline behavior.**
-- [ ] **Step 3: If both B/C are correctness-safe, prefer B unless C has evidence-backed additional user benefit strong enough to justify the shorter decoder tail.**
-- [ ] **Step 4: If emulator evidence cannot justify vendor-decoder tail safety, record `DEFER` and keep production A while retaining the tested seam/evidence harness.**
+- [x] Add an opt-in C12 instrumentation selector mutually exclusive with C09/C10 selectors.
+- [x] Use only local pinned C09 AVC media and MockWebServer; no remote provider dependency.
+- [x] Healthy RAW_TS and HLS: observe BUFFERING, selected video and a real SurfaceHolder; require first frame and forbid B/C expiry.
+- [x] Surface lifecycle: reach READY + selected video without an output surface, prove B/C arm count remains zero, then attach surface and render first frame.
+- [x] No-video projection: READY + surface with `videoExpected=false` never arms/expires.
+- [x] Baseline API26/API36 run `34759294813` passed both device jobs and the aggregate gate.
+- [x] Baseline artifacts:
+  - API26 `10318890843`, SHA256 `30479a159020d7e2bfcd8e9c3e86beb7684510b60061ab70980a5a8008c0e185`.
+  - API36 `10317869621`, SHA256 `2ff33011d0119fb26d0c837eadfcedef71dd726e6ccca927964d856a8364d2ee`.
+- [x] Inspect baseline raw evidence: healthy RAW_TS/HLS first frame arrived before the first recorded READY on both APIs (`ready_ms=null`), so B/C arm count remained zero; surface/no-video guards behaved as required.
+- [x] Add a bounded Android fault injection that preserves real READY/selected-video/surface events and physical rendering but deliberately suppresses forwarding `onRenderedFirstFrame()` to the watchdog; require B and C to arm once and expire once.
+- [ ] Verify the fault-inclusive exact head on API26 and API36 and require one `C12_FAULT` evidence record per API.
 
-### Task 6: Accepted production integration only
+### Task 5: Evidence decision
 
-**Files:**
-- Modify only if accepted: `player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt`
-- Extend focused tests as required.
+- [x] `C_READY_GATED_5S` = **REJECT** because deterministic correctness corpus produced a false stop/wrong abandonment.
+- [ ] Evaluate B after fault-inclusive API26/API36 evidence.
+- [ ] If B's fault path is GREEN, record **DEFER B production adoption**: emulator evidence proves event mapping and bounded timer behavior but does not establish weak/vendor-TV decoder-tail safety. Keep production A/current and merge only the seam/evidence harness.
+- [ ] If B's fault path is not GREEN, do not wire production; record the observed evidence failure and keep A/current.
 
-**Interfaces:**
-- Service owns one `Job?` for the currently armed per-attempt watchdog.
-- Media3 listener maps playback state, tracks, surface availability, first frame and player error into the pure watchdog.
-- `Arm` cancels any old per-attempt job and schedules exactly one delay.
-- `Disarm` cancels the per-attempt job.
-- Timer wake-up calls `onTimerFired(token)` on service ownership context; only `Expired(token)` may trigger recovery.
-- Expiry records secret-safe `ATTEMPT_FAILED` with existing `PLAYER_RENDER` category / unspecified Media3 code, then calls `recovery.onPlayerError(..., TRY_NEXT_CANDIDATE)` directly.
+### Task 6: Production integration gate
 
-- [ ] **Step 1: TDD service integration.** Add a failing focused test around event-to-directive mapping before modifying service behavior.
-- [ ] **Step 2: Wire one job and no new total deadline.** Cancel it from `clearInstalled`, cancellation/replacement, first frame and player error paths.
-- [ ] **Step 3: Preserve C11.** Actual `PlaybackException` continues through `Media3FailureClassifier` and `Media3RecoveryDispositionPolicy.productionDisposition`; watchdog expiry does not.
-- [ ] **Step 4: Run host/focused tests and API26/API36 integration again on the selected production variant.**
+`MuxTvPlaybackService` must remain unchanged in this C12 PR unless new evidence changes the decision gate before final review.
+
+- [x] No production service wiring exists through the Android baseline head.
+- [ ] Re-check final PR diff before merge and confirm `MuxTvPlaybackService`, recovery orchestrator, C09 renderer and C10 LoadControl production code are unchanged.
+- [ ] Because the currently expected decision is DEFER B / REJECT C, skip service integration and keep production A/current.
 
 ### Task 7: Final qualification and bookkeeping
 
-- [ ] **Step 1: Run full exact-head Hosted CI/Validation, Media3/App lint, focused device and API26/API36 product matrix.**
-- [ ] **Step 2: Verify PR changed-file scope and unresolved review threads.**
-- [ ] **Step 3: Record RED/GREEN/evidence run IDs and artifact digests in #382.**
-- [ ] **Step 4: Record final result in #348, #109 and #30.**
-- [ ] **Step 5: Re-check `main` and merge only with exact-head guard if all relevant checks are terminal GREEN.**
+- [ ] Require terminal GREEN on the final exact head for C12 focused policy/corpus, C12 API26/API36 evidence, Hosted CI/Validation, Media3/App lint and relevant Android device matrices.
+- [ ] Inspect final fault-inclusive evidence artifacts and record IDs/digests in #382 and PR #383.
+- [ ] Verify changed-file scope and unresolved PR review threads.
+- [ ] Re-check current `main`; if it moved, reconcile and requalify rather than merging a stale head.
+- [ ] Record final `REJECT C / DEFER B / production A` result in #382, #348, #109 and #30 if the final evidence supports that disposition.
+- [ ] Mark PR ready and merge only with an exact-head SHA guard after all relevant checks are terminal GREEN.

@@ -48,9 +48,10 @@ if [[ $gradle_status -eq 0 ]]; then
   sample_count=$(grep -c '^C12_SAMPLE' "$evidence_tsv" || true)
   surface_count=$(grep -c '^C12_SURFACE' "$evidence_tsv" || true)
   no_video_count=$(grep -c '^C12_NOVIDEO' "$evidence_tsv" || true)
+  fault_count=$(grep -c '^C12_FAULT' "$evidence_tsv" || true)
 
-  if [[ "$env_count" -ne 1 || "$sample_count" -ne 2 || "$surface_count" -ne 1 || "$no_video_count" -ne 1 ]]; then
-    echo "C12 evidence cardinality mismatch: env=$env_count samples=$sample_count surface=$surface_count no_video=$no_video_count" >&2
+  if [[ "$env_count" -ne 1 || "$sample_count" -ne 2 || "$surface_count" -ne 1 || "$no_video_count" -ne 1 || "$fault_count" -ne 1 ]]; then
+    echo "C12 evidence cardinality mismatch: env=$env_count samples=$sample_count surface=$surface_count no_video=$no_video_count fault=$fault_count" >&2
     gradle_status=1
   fi
 fi

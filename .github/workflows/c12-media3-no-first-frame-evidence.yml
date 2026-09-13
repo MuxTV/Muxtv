@@ -14,6 +14,7 @@ on:
       - 'player/media3/src/debug/kotlin/app/muxtv/player/media3/C12Media3EvidenceActivity.kt'
       - 'player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameEvidence.kt'
       - 'player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameEvidenceInstrumentedTest.kt'
+      - 'player/media3/src/androidTest/kotlin/app/muxtv/player/media3/C12Media3NoFirstFrameFaultInstrumentedTest.kt'
       - 'tools/ci/Run-C12Media3NoFirstFrameEvidence.sh'
   workflow_dispatch:
 
