@@ -30,7 +30,7 @@ class PlaybackRecoveryDispositionTest {
         assertThat(stopped).isEqualTo(
             PlaybackRecoveryAction.Failed(
                 generation = generation,
-                failure = PlaybackRecoveryFailure.TerminalFailure,
+                failure = PlaybackRecoveryFailure.CandidatesExhausted,
                 attempt = 0,
             ),
         )

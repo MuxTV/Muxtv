@@ -6,7 +6,6 @@ internal fun hasPlaybackAttemptEvidence(
 ): Boolean = when (failure) {
     PlaybackRecoveryFailure.CandidatesExhausted,
     PlaybackRecoveryFailure.DeadlineExceeded,
-    PlaybackRecoveryFailure.TerminalFailure,
     -> attemptNumber > 0
     PlaybackRecoveryFailure.NoCandidates,
     PlaybackRecoveryFailure.AccessUnavailable,
