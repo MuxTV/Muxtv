@@ -1,0 +1,62 @@
+name: C11 typed recovery policy
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/c11-typed-recovery-policy.yml'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackRecoveryOrchestrator.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackObservationAvailability.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/Media3FailureClassifier.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/Media3RecoveryDispositionPolicy.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackRecoveryDispositionTest.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackRecoveryOrchestratorTest.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackObservationAvailabilityTest.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/Media3RecoveryDispositionPolicyTest.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/C11TypedRecoveryEvidenceTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c11-typed-recovery-policy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    name: C11 typed recovery policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Run focused C11 policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon \
+            :player:media3:testDebugUnitTest \
+            --tests '*PlaybackRecoveryDispositionTest*' \
+            --tests '*PlaybackRecoveryOrchestratorTest*' \
+            --tests '*PlaybackObservationAvailabilityTest*' \
+            --tests '*Media3RecoveryDispositionPolicyTest*' \
+            --tests '*C11TypedRecoveryEvidenceTest*'

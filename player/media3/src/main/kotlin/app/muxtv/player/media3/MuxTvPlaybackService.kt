@@ -628,10 +628,15 @@ class MuxTvPlaybackService : MediaSessionService() {
                     !callbackGate.isCurrent(token)
                 ) return
                 activeAttemptNumber = token.attempt + 1
-                recordAttemptFailure(Media3FailureClassifier.classify(error))
+                val failure = Media3FailureClassifier.classify(error)
+                recordAttemptFailure(failure)
                 processCallback(
                     token,
-                    recovery.onPlayerError(token.generation, token.candidate),
+                    recovery.onPlayerError(
+                        generation = token.generation,
+                        candidate = token.candidate,
+                        disposition = Media3RecoveryDispositionPolicy.productionDisposition(failure),
+                    ),
                 )
             }
         }
