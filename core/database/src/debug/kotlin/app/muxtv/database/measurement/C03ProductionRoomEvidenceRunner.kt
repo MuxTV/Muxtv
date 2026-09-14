@@ -574,7 +574,7 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
         fun digestFrames(domain: String, values: List<String>): String {
             val digest = MessageDigest.getInstance("SHA-256")
             digest.updateFrame(domain)
-            values.forEach(digest::updateFrame)
+            values.forEach { value -> digest.updateFrame(value) }
             return digest.digest().joinToString(separator = "") { byte ->
                 "%02x".format(byte.toInt() and 0xff)
             }
