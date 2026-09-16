@@ -5,10 +5,14 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
+import androidx.paging.map
 import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelManagementItem
+import app.muxtv.catalog.ChannelManagementQuery
+import app.muxtv.catalog.ChannelManagementVisibility
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
@@ -17,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
@@ -64,6 +69,23 @@ internal class RoomChannelBrowseRepository(
                     },
                 ).flow
             }
+
+    override fun managementPages(query: ChannelManagementQuery): Flow<PagingData<ChannelManagementItem>> =
+        Pager(
+            config = CHANNEL_BROWSE_PAGING_CONFIG,
+            pagingSourceFactory = {
+                dao.pageManagedChannels(
+                    profileId = query.profileId,
+                    hiddenState = when (query.visibility) {
+                        ChannelManagementVisibility.ALL -> null
+                        ChannelManagementVisibility.VISIBLE -> 0
+                        ChannelManagementVisibility.HIDDEN -> 1
+                    },
+                )
+            },
+        ).flow.map { pagingData ->
+            pagingData.map(ActiveChannelManagementRow::toModel)
+        }
 }
 
 internal val CHANNEL_BROWSE_PAGING_CONFIG = PagingConfig(
@@ -167,4 +189,17 @@ private fun ActiveChannelBrowseRow.toModel(guide: ChannelNowNext?): ChannelBrows
         nextProgrammeStartEpochMillis = guide?.next?.startEpochMillis,
         variantCount = variantCount,
         guideState = guide?.state ?: GuideProjectionState.NO_GUIDE,
+    )
+
+private fun ActiveChannelManagementRow.toModel(): ChannelManagementItem =
+    ChannelManagementItem(
+        channelId = channelId,
+        canonicalDisplayName = canonicalDisplayName,
+        effectiveDisplayName = effectiveDisplayName,
+        defaultChannelNumber = defaultChannelNumber,
+        customChannelNumber = customChannelNumber,
+        effectiveChannelNumber = effectiveChannelNumber,
+        isFavorite = isFavorite,
+        isHidden = isHidden,
+        variantCount = variantCount,
     )
