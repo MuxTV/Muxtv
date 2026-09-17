@@ -19,7 +19,7 @@ class ConventionFilesTest {
             "tv-material = \"1.1.0\"",
             "tv-foundation = \"1.0.0\"",
             "navigation3 = \"1.1.7\"",
-            "media3 = \"1.11.0\"",
+            "media3 = \"1.11.1\"",
             "room3 = \"3.0.0\"",
             "dagger-hilt = \"2.60.1\"",
             "work = \"2.11.2\"",

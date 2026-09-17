@@ -37,7 +37,12 @@ import org.junit.runner.RunWith
  * DataSpec and asks for more input. HlsMediaChunk stores nextLoadPosition == DataSpec.length and
  * retries the same chunk. The retry calls DataSpec.subrange(length), which attempts to create an
  * illegal zero-length DataSpec and surfaces an unexpected IllegalArgumentException before another
- * HTTP open. This test locks that existing upstream failure signature; it is not a workaround.
+ * HTTP open.
+ *
+ * Media3 1.11.1 fixes that upstream retry. The media fragment in this fixture is intentionally
+ * truncated, so a different parser/source error remains a valid terminal outcome. The regression
+ * contract is narrower: the former DataSpec.subrange/HlsMediaChunk IllegalArgumentException must
+ * not reappear, and the bounded media part must not be requested more than once.
  */
 @RunWith(AndroidJUnit4::class)
 @AndroidXOptIn(UnstableApi::class)
@@ -45,7 +50,7 @@ class LlHlsByteRangeCharacterizationTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun byteRangeLlHlsPart_retriesIntoIllegalZeroLengthSubrange() {
+    fun byteRangeLlHlsPart_doesNotRetryFullyConsumedChunk() {
         LlHlsOrigin.start().use { origin ->
             PlayerHarness(context).use { harness ->
                 harness.post {
@@ -64,33 +69,31 @@ class LlHlsByteRangeCharacterizationTest {
                     harness.player.play()
                 }
 
-                val error = harness.awaitPlayerError(ERROR_TIMEOUT_SECONDS) {
-                    "requests=${origin.requests()}"
+                origin.awaitMediaPartRequest(PART_REQUEST_TIMEOUT_SECONDS)
+                val error = harness.observePlayerErrorFor(REGRESSION_OBSERVATION_MILLIS)
+                if (error != null) {
+                    assertThat(hasFormerFullyConsumedRetryFailure(error)).isFalse()
                 }
-                val causes = causeChain(error)
-                val illegalArgument = causes.filterIsInstance<IllegalArgumentException>()
-                    .firstOrNull()
-
-                assertThat(illegalArgument).isNotNull()
-                val stack = checkNotNull(illegalArgument).stackTrace
-                assertThat(
-                    stack.any {
-                        it.className == "androidx.media3.datasource.DataSpec" &&
-                            it.methodName == "subrange"
-                    },
-                ).isTrue()
-                assertThat(
-                    stack.any {
-                        it.className == "androidx.media3.exoplayer.hls.HlsMediaChunk" &&
-                            it.methodName == "feedDataToExtractor"
-                    },
-                ).isTrue()
 
                 val partRequests = origin.requests().filter { it.contains("GET /audio_2.m4s") }
                 assertThat(partRequests).containsExactly("GET /audio_2.m4s range=bytes=0-511")
             }
         }
     }
+
+    private fun hasFormerFullyConsumedRetryFailure(error: Throwable): Boolean =
+        causeChain(error)
+            .filterIsInstance<IllegalArgumentException>()
+            .any { illegalArgument ->
+                val stack = illegalArgument.stackTrace
+                stack.any {
+                    it.className == "androidx.media3.datasource.DataSpec" &&
+                        it.methodName == "subrange"
+                } && stack.any {
+                    it.className == "androidx.media3.exoplayer.hls.HlsMediaChunk" &&
+                        it.methodName == "feedDataToExtractor"
+                }
+            }
 
     private fun causeChain(error: Throwable): List<Throwable> {
         val result = mutableListOf<Throwable>()
@@ -147,18 +150,13 @@ class LlHlsByteRangeCharacterizationTest {
             failure.get()?.let { throw it }
         }
 
-        fun awaitPlayerError(
-            timeoutSeconds: Long,
-            diagnostics: () -> String,
-        ): PlaybackException {
-            val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+        fun observePlayerErrorFor(observationMillis: Long): PlaybackException? {
+            val deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(observationMillis)
             while (System.nanoTime() < deadlineNanos) {
                 playerError.get()?.let { return it }
                 Thread.sleep(POLL_INTERVAL_MILLIS)
             }
-            throw AssertionError(
-                "LL-HLS fixture did not produce a player error within the deadline; ${diagnostics()}",
-            )
+            return playerError.get()
         }
 
         override fun close() {
@@ -211,6 +209,20 @@ class LlHlsByteRangeCharacterizationTest {
         fun playlistUrl(): String = server.url("/fixture.m3u8").toString()
 
         fun requests(): List<String> = synchronized(requests) { requests.toList() }
+
+        fun awaitMediaPartRequest(timeoutSeconds: Long) {
+            val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+            while (System.nanoTime() < deadlineNanos) {
+                if (requests().any { it.contains("GET /audio_2.m4s") }) {
+                    return
+                }
+                Thread.sleep(POLL_INTERVAL_MILLIS)
+            }
+            throw AssertionError(
+                "LL-HLS fixture did not request the bounded media part within the deadline; " +
+                    "requests=${requests()}",
+            )
+        }
 
         override fun close() {
             server.close()
@@ -293,7 +305,8 @@ class LlHlsByteRangeCharacterizationTest {
     }
 
     private companion object {
-        const val ERROR_TIMEOUT_SECONDS = 20L
+        const val PART_REQUEST_TIMEOUT_SECONDS = 20L
+        const val REGRESSION_OBSERVATION_MILLIS = 2_000L
         const val OPERATION_TIMEOUT_SECONDS = 30L
         const val POLL_INTERVAL_MILLIS = 50L
         const val MAX_CAUSE_DEPTH = 16
