@@ -18,23 +18,20 @@ class PlaybackNoFirstFrameWatchdogTest {
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
         assertThat(watchdog.onVideoExpectedChanged(token, expected = true))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        assertThat(watchdog.onSurfaceAvailabilityChanged(token, available = true))
-            .isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(
-                    token = token,
-                    timeoutMillis = 10_000L,
-                ),
-            )
+        val firstArm = requireArm(
+            watchdog.onSurfaceAvailabilityChanged(token, available = true),
+            token = token,
+            timeoutMillis = 10_000L,
+        )
 
         assertThat(watchdog.onReadyChanged(token, ready = false))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
-        assertThat(watchdog.onReadyChanged(token, ready = true))
-            .isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(
-                    token = token,
-                    timeoutMillis = 10_000L,
-                ),
-            )
+        val secondArm = requireArm(
+            watchdog.onReadyChanged(token, ready = true),
+            token = token,
+            timeoutMillis = 10_000L,
+        )
+        assertThat(secondArm.windowId == firstArm.windowId).isFalse()
     }
 
     @Test
@@ -47,20 +44,24 @@ class PlaybackNoFirstFrameWatchdogTest {
         watchdog.activate(token)
         watchdog.onReadyChanged(token, ready = true)
         watchdog.onVideoExpectedChanged(token, expected = true)
-        val firstArm = watchdog.onSurfaceAvailabilityChanged(token, available = true)
-        assertThat(firstArm).isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
-        val firstWindowId = (firstArm as PlaybackNoFirstFrameWatchdogAction.Arm).windowId
+        val firstArm = requireArm(
+            watchdog.onSurfaceAvailabilityChanged(token, available = true),
+            token = token,
+            timeoutMillis = 10_000L,
+        )
 
         assertThat(watchdog.onReadyChanged(token, ready = false))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
-        val secondArm = watchdog.onReadyChanged(token, ready = true)
-        assertThat(secondArm).isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
-        val secondWindowId = (secondArm as PlaybackNoFirstFrameWatchdogAction.Arm).windowId
-        assertThat(secondWindowId).isNotEqualTo(firstWindowId)
+        val secondArm = requireArm(
+            watchdog.onReadyChanged(token, ready = true),
+            token = token,
+            timeoutMillis = 10_000L,
+        )
+        assertThat(secondArm.windowId == firstArm.windowId).isFalse()
 
-        assertThat(watchdog.onTimerFired(token, firstWindowId))
+        assertThat(watchdog.onTimerFired(token, firstArm.windowId))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        assertThat(watchdog.onTimerFired(token, secondWindowId))
+        assertThat(watchdog.onTimerFired(token, secondArm.windowId))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Expired(token))
     }
 
@@ -79,8 +80,6 @@ class PlaybackNoFirstFrameWatchdogTest {
 
         assertThat(watchdog.onReadyChanged(token, ready = true))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        assertThat(watchdog.onTimerFired(token))
-            .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
     }
 
     @Test
@@ -93,22 +92,20 @@ class PlaybackNoFirstFrameWatchdogTest {
         watchdog.activate(oldToken)
         watchdog.onReadyChanged(oldToken, ready = true)
         watchdog.onVideoExpectedChanged(oldToken, expected = true)
-        assertThat(watchdog.onSurfaceAvailabilityChanged(oldToken, available = true))
-            .isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(
-                    token = oldToken,
-                    timeoutMillis = 5_000L,
-                ),
-            )
-        assertThat(watchdog.onTimerFired(oldToken))
+        val arm = requireArm(
+            watchdog.onSurfaceAvailabilityChanged(oldToken, available = true),
+            token = oldToken,
+            timeoutMillis = 5_000L,
+        )
+        assertThat(watchdog.onTimerFired(oldToken, arm.windowId))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Expired(oldToken))
-        assertThat(watchdog.onTimerFired(oldToken))
+        assertThat(watchdog.onTimerFired(oldToken, arm.windowId))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
 
         val newToken = token("setup-new", generation = 5L)
         assertThat(watchdog.activate(newToken))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        assertThat(watchdog.onTimerFired(oldToken))
+        assertThat(watchdog.onTimerFired(oldToken, arm.windowId))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
     }
 
@@ -124,8 +121,19 @@ class PlaybackNoFirstFrameWatchdogTest {
         watchdog.onVideoExpectedChanged(token, expected = true)
         assertThat(watchdog.onSurfaceAvailabilityChanged(token, available = true))
             .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        assertThat(watchdog.onTimerFired(token))
-            .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
+    }
+
+    private fun requireArm(
+        action: PlaybackNoFirstFrameWatchdogAction,
+        token: PlaybackAttemptToken,
+        timeoutMillis: Long,
+    ): PlaybackNoFirstFrameWatchdogAction.Arm {
+        assertThat(action).isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
+        val arm = action as PlaybackNoFirstFrameWatchdogAction.Arm
+        assertThat(arm.token).isEqualTo(token)
+        assertThat(arm.timeoutMillis).isEqualTo(timeoutMillis)
+        assertThat(arm.windowId > 0L).isTrue()
+        return arm
     }
 
     private fun token(

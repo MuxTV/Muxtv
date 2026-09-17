@@ -59,31 +59,34 @@ class C12NoFirstFrameWatchdogEvidenceTest {
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
             assertThat(watchdog.onSurfaceAvailabilityChanged(token, available = true))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-            assertThat(watchdog.onTimerFired(token))
-                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
 
             val videoAction = watchdog.onVideoExpectedChanged(token, expected = true)
             if (variant == PlaybackNoFirstFrameWatchdogVariant.A_CURRENT_GLOBAL_ONLY) {
                 assertThat(videoAction).isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
                 continue
             }
-            assertThat(videoAction).isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
+            val firstArm = requireArm(videoAction, token)
 
             assertThat(watchdog.onReadyChanged(token, ready = false))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
-            assertThat(watchdog.onTimerFired(token))
+            assertThat(watchdog.onTimerFired(token, firstArm.windowId))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
 
-            assertThat(watchdog.onReadyChanged(token, ready = true))
-                .isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
+            val secondArm = requireArm(watchdog.onReadyChanged(token, ready = true), token)
+            assertThat(secondArm.windowId == firstArm.windowId).isFalse()
             assertThat(watchdog.onSurfaceAvailabilityChanged(token, available = false))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
-            assertThat(watchdog.onTimerFired(token))
+            assertThat(watchdog.onTimerFired(token, secondArm.windowId))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
 
+            val thirdArm = requireArm(
+                watchdog.onSurfaceAvailabilityChanged(token, available = true),
+                token,
+            )
             val replacement = token("replacement-${variant.ordinal}", generation = 40L + variant.ordinal)
-            watchdog.activate(replacement)
-            assertThat(watchdog.onTimerFired(token))
+            assertThat(watchdog.activate(replacement))
+                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
+            assertThat(watchdog.onTimerFired(token, thirdArm.windowId))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
         }
     }
@@ -108,24 +111,23 @@ class C12NoFirstFrameWatchdogEvidenceTest {
         healthy.activate(healthyToken)
         healthy.onVideoExpectedChanged(healthyToken, expected = true)
         healthy.onSurfaceAvailabilityChanged(healthyToken, available = true)
-        val healthyArm = healthy.onReadyChanged(healthyToken, ready = true)
+        val healthyArmAction = healthy.onReadyChanged(healthyToken, ready = true)
         if (threshold == null) {
-            assertThat(healthyArm).isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
+            assertThat(healthyArmAction).isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
             assertThat(healthy.onRenderedFirstFrame(healthyToken))
-                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-        } else if (SLOW_HEALTHY_FIRST_FRAME_MILLIS < threshold) {
-            assertThat(healthyArm).isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(healthyToken, threshold),
-            )
-            assertThat(healthy.onRenderedFirstFrame(healthyToken))
-                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
-            assertThat(healthy.onTimerFired(healthyToken))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
         } else {
-            assertThat(healthyArm).isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(healthyToken, threshold),
-            )
-            if (healthy.onTimerFired(healthyToken) == PlaybackNoFirstFrameWatchdogAction.Expired(healthyToken)) {
+            val healthyArm = requireArm(healthyArmAction, healthyToken)
+            assertThat(healthyArm.timeoutMillis).isEqualTo(threshold)
+            if (SLOW_HEALTHY_FIRST_FRAME_MILLIS < threshold) {
+                assertThat(healthy.onRenderedFirstFrame(healthyToken))
+                    .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Disarm)
+                assertThat(healthy.onTimerFired(healthyToken, healthyArm.windowId))
+                    .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
+            } else if (
+                healthy.onTimerFired(healthyToken, healthyArm.windowId) ==
+                PlaybackNoFirstFrameWatchdogAction.Expired(healthyToken)
+            ) {
                 falseStops += 1
                 wrongCandidateAbandonments += 1
             }
@@ -136,25 +138,28 @@ class C12NoFirstFrameWatchdogEvidenceTest {
         stuck.activate(stuckToken)
         stuck.onReadyChanged(stuckToken, ready = true)
         stuck.onVideoExpectedChanged(stuckToken, expected = true)
-        val stuckArm = stuck.onSurfaceAvailabilityChanged(stuckToken, available = true)
+        val stuckArmAction = stuck.onSurfaceAvailabilityChanged(stuckToken, available = true)
         if (threshold == null) {
-            assertThat(stuckArm).isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-            assertThat(stuck.onTimerFired(stuckToken))
-                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
+            assertThat(stuckArmAction).isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
         } else {
-            assertThat(stuckArm).isEqualTo(
-                PlaybackNoFirstFrameWatchdogAction.Arm(stuckToken, threshold),
-            )
-            assertThat(stuck.onTimerFired(stuckToken))
+            val stuckArm = requireArm(stuckArmAction, stuckToken)
+            assertThat(stuckArm.timeoutMillis).isEqualTo(threshold)
+            assertThat(stuck.onTimerFired(stuckToken, stuckArm.windowId))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.Expired(stuckToken))
             usefulFallbackSuccesses += 1
-            if (stuck.onTimerFired(stuckToken) != PlaybackNoFirstFrameWatchdogAction.None) {
+            if (
+                stuck.onTimerFired(stuckToken, stuckArm.windowId) !=
+                PlaybackNoFirstFrameWatchdogAction.None
+            ) {
                 duplicateExpiryActions += 1
             }
 
             val replacement = token("replacement-${variant.ordinal}", generation = 30L + variant.ordinal)
             stuck.activate(replacement)
-            if (stuck.onTimerFired(stuckToken) != PlaybackNoFirstFrameWatchdogAction.None) {
+            if (
+                stuck.onTimerFired(stuckToken, stuckArm.windowId) !=
+                PlaybackNoFirstFrameWatchdogAction.None
+            ) {
                 staleTimerActions += 1
             }
         }
@@ -167,6 +172,17 @@ class C12NoFirstFrameWatchdogEvidenceTest {
             staleTimerActions = staleTimerActions,
             duplicateExpiryActions = duplicateExpiryActions,
         )
+    }
+
+    private fun requireArm(
+        action: PlaybackNoFirstFrameWatchdogAction,
+        token: PlaybackAttemptToken,
+    ): PlaybackNoFirstFrameWatchdogAction.Arm {
+        assertThat(action).isInstanceOf(PlaybackNoFirstFrameWatchdogAction.Arm::class.java)
+        val arm = action as PlaybackNoFirstFrameWatchdogAction.Arm
+        assertThat(arm.token).isEqualTo(token)
+        assertThat(arm.windowId > 0L).isTrue()
+        return arm
     }
 
     private fun token(

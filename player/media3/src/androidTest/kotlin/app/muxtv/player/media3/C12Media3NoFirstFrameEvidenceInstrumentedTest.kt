@@ -171,8 +171,6 @@ class C12Media3NoFirstFrameEvidenceInstrumentedTest {
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
             assertThat(watchdog.onSurfaceAvailabilityChanged(token, available = true))
                 .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
-            assertThat(watchdog.onTimerFired(token))
-                .isEqualTo(PlaybackNoFirstFrameWatchdogAction.None)
         }
         Log.i(TAG, "C12_NOVIDEO\tready=true\tsurface=true\tvideo_selected=false\texpiry=false")
     }
@@ -505,7 +503,7 @@ class C12Media3NoFirstFrameEvidenceInstrumentedTest {
                     cancelPending()
                     armCount.incrementAndGet()
                     val timer = Runnable {
-                        accept(watchdog.onTimerFired(action.token))
+                        accept(watchdog.onTimerFired(action.token, action.windowId))
                     }
                     pending = timer
                     handler.postDelayed(timer, action.timeoutMillis)

@@ -11,6 +11,7 @@ internal sealed interface PlaybackNoFirstFrameWatchdogAction {
     data class Arm(
         val token: PlaybackAttemptToken,
         val timeoutMillis: Long,
+        val windowId: Long,
     ) : PlaybackNoFirstFrameWatchdogAction
     data object Disarm : PlaybackNoFirstFrameWatchdogAction
     data class Expired(
@@ -22,9 +23,10 @@ internal class PlaybackNoFirstFrameWatchdog(
     private val variant: PlaybackNoFirstFrameWatchdogVariant,
 ) {
     private var active: AttemptState? = null
+    private var nextWindowId: Long = 0L
 
     fun activate(token: PlaybackAttemptToken): PlaybackNoFirstFrameWatchdogAction {
-        val action = if (active?.armed == true) {
+        val action = if (active?.armedWindowId != null) {
             PlaybackNoFirstFrameWatchdogAction.Disarm
         } else {
             PlaybackNoFirstFrameWatchdogAction.None
@@ -58,12 +60,17 @@ internal class PlaybackNoFirstFrameWatchdog(
 
     fun onTimerFired(
         token: PlaybackAttemptToken,
+        windowId: Long,
     ): PlaybackNoFirstFrameWatchdogAction {
         val state = current(token) ?: return PlaybackNoFirstFrameWatchdogAction.None
-        if (!state.armed || !state.isEligible() || state.expired) {
+        if (
+            state.armedWindowId != windowId ||
+            !state.isEligible() ||
+            state.expired
+        ) {
             return PlaybackNoFirstFrameWatchdogAction.None
         }
-        state.armed = false
+        state.armedWindowId = null
         state.expired = true
         return PlaybackNoFirstFrameWatchdogAction.Expired(token)
     }
@@ -84,19 +91,27 @@ internal class PlaybackNoFirstFrameWatchdog(
         val timeoutMillis = variant.timeoutMillis()
         val eligible = timeoutMillis != null && state.isEligible()
         return when {
-            eligible && !state.armed -> {
-                state.armed = true
+            eligible && state.armedWindowId == null -> {
+                val windowId = allocateWindowId()
+                state.armedWindowId = windowId
                 PlaybackNoFirstFrameWatchdogAction.Arm(
                     token = state.token,
                     timeoutMillis = requireNotNull(timeoutMillis),
+                    windowId = windowId,
                 )
             }
-            !eligible && state.armed -> {
-                state.armed = false
+            !eligible && state.armedWindowId != null -> {
+                state.armedWindowId = null
                 PlaybackNoFirstFrameWatchdogAction.Disarm
             }
             else -> PlaybackNoFirstFrameWatchdogAction.None
         }
+    }
+
+    private fun allocateWindowId(): Long {
+        check(nextWindowId < Long.MAX_VALUE) { "C12 watchdog window id exhausted" }
+        nextWindowId += 1L
+        return nextWindowId
     }
 
     private fun AttemptState.isEligible(): Boolean =
@@ -112,7 +127,7 @@ internal class PlaybackNoFirstFrameWatchdog(
         var videoExpected: Boolean = false,
         var surfaceAvailable: Boolean = false,
         var firstFrameReported: Boolean = false,
-        var armed: Boolean = false,
+        var armedWindowId: Long? = null,
         var expired: Boolean = false,
     )
 }
