@@ -1,12 +1,17 @@
 package app.muxtv.database
 
+import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.muxtv.database.measurement.C03ProductionMeasurementVariant
+import app.muxtv.database.measurement.C03ProductionRoomEvidenceArguments
 import app.muxtv.database.measurement.C03ProductionRoomEvidenceRunner
+import app.muxtv.database.measurement.C03ProductionRoomMeasurementJsonWriter
+import app.muxtv.database.measurement.C03ProductionRoomMeasurementReportPublisher
 import app.muxtv.database.measurement.C03ProductionRoomMeasurementSpec
 import app.muxtv.database.measurement.C03ProductionScenario
 import com.google.common.truth.Truth.assertThat
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,7 +20,8 @@ import org.junit.runner.RunWith
 class C03ProductionRoomMeasurementTest {
     @Test
     fun smokeProducesThresholdFreeFileBackedAbEvidence() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
         val spec = C03ProductionRoomMeasurementSpec(
             sourceCommit = "instrumentation-smoke",
             warmupIterations = 0,
@@ -55,5 +61,47 @@ class C03ProductionRoomMeasurementTest {
             }).isTrue()
             assertThat(scenario.variants.all { it.writes.sourceMetadataWrites > 0L }).isTrue()
         }
+
+        val output = ByteArrayOutputStream()
+        C03ProductionRoomMeasurementJsonWriter.write(report, output)
+        val json = output.toString(Charsets.UTF_8.name())
+        assertThat(json).contains("\"sourceCommit\": \"instrumentation-smoke\"")
+        assertThat(json).contains("\"redactionPassed\": true")
+        assertThat(json).doesNotContain("https://")
+
+        val published = C03ProductionRoomMeasurementReportPublisher.publish(
+            context = instrumentation.context,
+            report = report,
+            outputName = "c03-production-room-smoke.json",
+        )
+        assertThat(published.isFile).isTrue()
+        assertThat(published.length()).isGreaterThan(0L)
+    }
+
+    @Test
+    fun canonicalEvidenceArgumentsUseThePreregisteredRegularMatrix() {
+        val arguments = C03ProductionRoomEvidenceArguments.parse(
+            Bundle().apply {
+                putString(C03ProductionRoomEvidenceArguments.ARGUMENT_SOURCE_COMMIT, SOURCE_COMMIT)
+                putString(C03ProductionRoomEvidenceArguments.ARGUMENT_WARMUPS, "1")
+                putString(C03ProductionRoomEvidenceArguments.ARGUMENT_ITERATIONS, "5")
+                putString(C03ProductionRoomEvidenceArguments.ARGUMENT_ENTRY_COUNT, "10000")
+                putString(
+                    C03ProductionRoomEvidenceArguments.ARGUMENT_OUTPUT_NAME,
+                    "c03-production-room-evidence.json",
+                )
+            },
+        )
+
+        assertThat(arguments.spec.sourceCommit).isEqualTo(SOURCE_COMMIT)
+        assertThat(arguments.spec.warmupIterations).isEqualTo(1)
+        assertThat(arguments.spec.measuredIterations).isEqualTo(5)
+        assertThat(arguments.spec.entryCount).isEqualTo(10_000)
+        assertThat(arguments.spec.scenarios).containsExactlyElementsIn(C03ProductionScenario.entries).inOrder()
+        assertThat(arguments.outputName).isEqualTo("c03-production-room-evidence.json")
+    }
+
+    private companion object {
+        const val SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
     }
 }
