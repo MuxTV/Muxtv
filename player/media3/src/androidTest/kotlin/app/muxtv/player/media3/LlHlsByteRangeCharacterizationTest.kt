@@ -37,7 +37,11 @@ import org.junit.runner.RunWith
  * DataSpec and asks for more input. HlsMediaChunk stores nextLoadPosition == DataSpec.length and
  * retries the same chunk. The retry calls DataSpec.subrange(length), which attempts to create an
  * illegal zero-length DataSpec and surfaces an unexpected IllegalArgumentException before another
- * HTTP open. This test locks that existing upstream failure signature; it is not a workaround.
+ * HTTP open.
+ *
+ * Media3 1.11.1 fixes that upstream retry. This test locks the fixed behavior through MuxTV's
+ * production HLS construction: the bounded part must be requested once and must not surface the
+ * former terminal player error during a bounded observation window. It is not a workaround.
  */
 @RunWith(AndroidJUnit4::class)
 @AndroidXOptIn(UnstableApi::class)
@@ -45,7 +49,7 @@ class LlHlsByteRangeCharacterizationTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun byteRangeLlHlsPart_retriesIntoIllegalZeroLengthSubrange() {
+    fun byteRangeLlHlsPart_doesNotRetryFullyConsumedChunk() {
         LlHlsOrigin.start().use { origin ->
             PlayerHarness(context).use { harness ->
                 harness.post {
@@ -64,42 +68,15 @@ class LlHlsByteRangeCharacterizationTest {
                     harness.player.play()
                 }
 
-                val error = harness.awaitPlayerError(ERROR_TIMEOUT_SECONDS) {
+                origin.awaitMediaPartRequest(PART_REQUEST_TIMEOUT_SECONDS)
+                harness.assertNoPlayerErrorFor(REGRESSION_OBSERVATION_MILLIS) {
                     "requests=${origin.requests()}"
                 }
-                val causes = causeChain(error)
-                val illegalArgument = causes.filterIsInstance<IllegalArgumentException>()
-                    .firstOrNull()
-
-                assertThat(illegalArgument).isNotNull()
-                val stack = checkNotNull(illegalArgument).stackTrace
-                assertThat(
-                    stack.any {
-                        it.className == "androidx.media3.datasource.DataSpec" &&
-                            it.methodName == "subrange"
-                    },
-                ).isTrue()
-                assertThat(
-                    stack.any {
-                        it.className == "androidx.media3.exoplayer.hls.HlsMediaChunk" &&
-                            it.methodName == "feedDataToExtractor"
-                    },
-                ).isTrue()
 
                 val partRequests = origin.requests().filter { it.contains("GET /audio_2.m4s") }
                 assertThat(partRequests).containsExactly("GET /audio_2.m4s range=bytes=0-511")
             }
         }
-    }
-
-    private fun causeChain(error: Throwable): List<Throwable> {
-        val result = mutableListOf<Throwable>()
-        var current: Throwable? = error
-        while (current != null && result.size < MAX_CAUSE_DEPTH) {
-            result += current
-            current = current.cause
-        }
-        return result
     }
 
     private class PlayerHarness(context: Context) : Closeable {
@@ -147,18 +124,19 @@ class LlHlsByteRangeCharacterizationTest {
             failure.get()?.let { throw it }
         }
 
-        fun awaitPlayerError(
-            timeoutSeconds: Long,
+        fun assertNoPlayerErrorFor(
+            observationMillis: Long,
             diagnostics: () -> String,
-        ): PlaybackException {
-            val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+        ) {
+            val deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(observationMillis)
             while (System.nanoTime() < deadlineNanos) {
-                playerError.get()?.let { return it }
+                playerError.get()?.let { error ->
+                    throw AssertionError(
+                        "LL-HLS fixture produced a player error: $error; ${diagnostics()}",
+                    )
+                }
                 Thread.sleep(POLL_INTERVAL_MILLIS)
             }
-            throw AssertionError(
-                "LL-HLS fixture did not produce a player error within the deadline; ${diagnostics()}",
-            )
         }
 
         override fun close() {
@@ -211,6 +189,20 @@ class LlHlsByteRangeCharacterizationTest {
         fun playlistUrl(): String = server.url("/fixture.m3u8").toString()
 
         fun requests(): List<String> = synchronized(requests) { requests.toList() }
+
+        fun awaitMediaPartRequest(timeoutSeconds: Long) {
+            val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds)
+            while (System.nanoTime() < deadlineNanos) {
+                if (requests().any { it.contains("GET /audio_2.m4s") }) {
+                    return
+                }
+                Thread.sleep(POLL_INTERVAL_MILLIS)
+            }
+            throw AssertionError(
+                "LL-HLS fixture did not request the bounded media part within the deadline; " +
+                    "requests=${requests()}",
+            )
+        }
 
         override fun close() {
             server.close()
@@ -293,9 +285,9 @@ class LlHlsByteRangeCharacterizationTest {
     }
 
     private companion object {
-        const val ERROR_TIMEOUT_SECONDS = 20L
+        const val PART_REQUEST_TIMEOUT_SECONDS = 20L
+        const val REGRESSION_OBSERVATION_MILLIS = 2_000L
         const val OPERATION_TIMEOUT_SECONDS = 30L
         const val POLL_INTERVAL_MILLIS = 50L
-        const val MAX_CAUSE_DEPTH = 16
     }
 }
