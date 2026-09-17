@@ -39,14 +39,30 @@ val c10Media3LoadControlEvidenceEnabled = providers.gradleProperty("c10Media3Loa
     }
 val c10SourceSha = providers.gradleProperty("c10SourceSha")
 
+val c12Media3NoFirstFrameEvidenceEnabled = providers.gradleProperty("c12Media3NoFirstFrameEvidence")
+    .orElse("false")
+    .map { rawValue ->
+        when (rawValue.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> throw GradleException("c12Media3NoFirstFrameEvidence must be true or false.")
+        }
+    }
+val c12SourceSha = providers.gradleProperty("c12SourceSha")
+
 android {
     namespace = "app.muxtv.player.media3"
     buildFeatures { compose = true }
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        if (c09Media3EvidenceEnabled.get() && c10Media3LoadControlEvidenceEnabled.get()) {
-            throw GradleException("C09 and C10 evidence selectors are mutually exclusive.")
+        val enabledEvidenceSelectors = listOf(
+            c09Media3EvidenceEnabled.get(),
+            c10Media3LoadControlEvidenceEnabled.get(),
+            c12Media3NoFirstFrameEvidenceEnabled.get(),
+        ).count { it }
+        if (enabledEvidenceSelectors > 1) {
+            throw GradleException("C09, C10 and C12 evidence selectors are mutually exclusive.")
         }
 
         val excludedAnnotations = mutableListOf<String>()
@@ -58,6 +74,9 @@ android {
         }
         if (!c10Media3LoadControlEvidenceEnabled.get()) {
             excludedAnnotations += "app.muxtv.player.media3.C10Media3LoadControlEvidence"
+        }
+        if (!c12Media3NoFirstFrameEvidenceEnabled.get()) {
+            excludedAnnotations += "app.muxtv.player.media3.C12Media3NoFirstFrameEvidence"
         }
         if (excludedAnnotations.isNotEmpty()) {
             testInstrumentationRunnerArguments["notAnnotation"] = excludedAnnotations.joinToString(",")
@@ -85,6 +104,19 @@ android {
             testInstrumentationRunnerArguments["annotation"] =
                 "app.muxtv.player.media3.C10Media3LoadControlEvidence"
             testInstrumentationRunnerArguments["c10SourceSha"] = sourceSha
+        }
+
+        if (c12Media3NoFirstFrameEvidenceEnabled.get()) {
+            val sourceSha = c12SourceSha.orNull
+                ?: throw GradleException(
+                    "c12SourceSha is required when c12Media3NoFirstFrameEvidence=true.",
+                )
+            if (!sourceSha.matches(Regex("[0-9a-f]{40}"))) {
+                throw GradleException("c12SourceSha must be an exact lowercase 40-hex commit.")
+            }
+            testInstrumentationRunnerArguments["annotation"] =
+                "app.muxtv.player.media3.C12Media3NoFirstFrameEvidence"
+            testInstrumentationRunnerArguments["c12SourceSha"] = sourceSha
         }
     }
     testOptions {

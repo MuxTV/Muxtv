@@ -1,0 +1,54 @@
+name: C12 no-first-frame watchdog
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/c12-no-first-frame-watchdog.yml'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdog.kt'
+      - 'player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackAttemptToken.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/PlaybackNoFirstFrameWatchdogTest.kt'
+      - 'player/media3/src/test/kotlin/app/muxtv/player/media3/C12NoFirstFrameWatchdogEvidenceTest.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c12-no-first-frame-watchdog-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    name: C12 no-first-frame watchdog
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Run focused C12 policy and evidence tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon \
+            :player:media3:testDebugUnitTest \
+            --tests '*PlaybackNoFirstFrameWatchdogTest*' \
+            --tests '*C12NoFirstFrameWatchdogEvidenceTest*'
