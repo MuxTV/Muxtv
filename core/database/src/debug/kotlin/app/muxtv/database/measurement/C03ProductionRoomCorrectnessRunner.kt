@@ -547,15 +547,12 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
             var cleanupPasses = 0
             var cleanupDeletedRows = 0
             var reachedFixedPoint = false
-            repeat(MAX_REPEATED_CLEANUP_PASSES) {
+            while (cleanupPasses < MAX_REPEATED_CLEANUP_PASSES && !reachedFixedPoint) {
                 cleanupPasses++
                 val result = candidate.dao.compactOrphans(REPEATED_CLEANUP_BATCH_SIZE)
                 val deleted = result.payloadRowsDeleted + result.searchPayloadRowsDeleted
                 cleanupDeletedRows += deleted
-                if (deleted == 0) {
-                    reachedFixedPoint = true
-                    return@repeat
-                }
+                reachedFixedPoint = deleted == 0
             }
             check(reachedFixedPoint) {
                 "C03 repeated-revision orphan compaction did not reach a bounded fixed point."
