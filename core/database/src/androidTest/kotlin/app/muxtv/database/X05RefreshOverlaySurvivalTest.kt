@@ -17,14 +17,7 @@ class X05RefreshOverlaySurvivalTest {
 
     @Test
     fun providerRefreshPreservesSupportedOverlayAndRecentState() = runTest {
-        val scenarios = listOf(
-            C03ProductionScenario.DELTA_0,
-            C03ProductionScenario.DELTA_10,
-            C03ProductionScenario.REORDER,
-            C03ProductionScenario.TOKEN_CHURN,
-        )
-
-        scenarios.forEach { scenario ->
+        C03ProductionScenario.entries.forEach { scenario ->
             val result = runner.runOverlaySurvivalScenario(
                 scenario = scenario,
                 entryCount = ENTRY_COUNT,

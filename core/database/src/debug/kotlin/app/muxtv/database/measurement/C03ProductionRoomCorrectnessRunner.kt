@@ -5,6 +5,8 @@ import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.useReaderConnection
 import app.muxtv.database.MuxTvDatabase
+import app.muxtv.database.ProfileEntity
+import app.muxtv.database.RecentWriteResult
 import app.muxtv.database.RoomSourceRefreshStore
 import app.muxtv.database.RoomSourceRevisionStore
 import app.muxtv.database.SourceDefinition
@@ -13,6 +15,7 @@ import app.muxtv.database.SourceRevisionActivationResult
 import app.muxtv.database.SourceRevisionStatistics
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.database.StagedCatalogEntry
+import app.muxtv.database.UserChannelOverlayEntity
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import kotlinx.coroutines.CompletableDeferred
@@ -70,6 +73,22 @@ internal data class C03ProductionSafetyResult(
     val candidate: C03ProductionCorrectnessSnapshot,
     val productionSuperseded: Boolean = false,
     val candidateSuperseded: Boolean = false,
+)
+
+internal data class X05UserStateSnapshot(
+    val isFavorite: Boolean,
+    val customName: String,
+    val channelNumber: Int,
+    val isHidden: Boolean,
+    val lastSuccessfulPlaybackAtEpochMillis: Long,
+)
+
+internal data class X05OverlaySurvivalResult(
+    val logicalChannelId: String,
+    val productionCanonicalChannelId: String,
+    val candidateCanonicalChannelId: String,
+    val before: X05UserStateSnapshot,
+    val after: X05UserStateSnapshot,
 )
 
 /**
@@ -144,6 +163,74 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
                 expectedIncomingOrderDigestSha256 = expectedOrder,
                 baselineLogicalIdentityDigestSha256 = baselineLogical,
                 baselineActiveDigestSha256 = baselineActive,
+            )
+        }
+    }
+
+
+    suspend fun runOverlaySurvivalScenario(
+        scenario: C03ProductionScenario,
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult {
+        require(entryCount > 0)
+        require(overlayIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[overlayIndex]
+        val incoming = scenario.apply(baseline)
+        check(incoming.any { it.logicalChannelId == anchor.logicalChannelId }) {
+            "X05 overlay anchor must survive the selected refresh scenario."
+        }
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            seedX05UserState(production.database, anchor.canonicalChannelId)
+            val before = production.database.x05UserState(anchor.canonicalChannelId)
+
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                    statistics = SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionCanonicalChannelId = production.database.productionCanonicalChannelId(
+                revision = REFRESH_REVISION,
+                providerKey = anchor.providerKey,
+            )
+            val candidateCanonicalChannelId = candidate.dao.activeRows(SOURCE_ID)
+                .single { it.logicalChannelId == anchor.logicalChannelId }
+                .canonicalChannelId
+            val after = production.database.x05UserState(anchor.canonicalChannelId)
+
+            X05OverlaySurvivalResult(
+                logicalChannelId = anchor.logicalChannelId,
+                productionCanonicalChannelId = productionCanonicalChannelId,
+                candidateCanonicalChannelId = candidateCanonicalChannelId,
+                before = before,
+                after = after,
             )
         }
     }
@@ -418,6 +505,94 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
                     (counts.searchPayloadRows - baselineCounts.searchPayloadRows).coerceAtLeast(0),
             cleanupPasses = cleanup.passes,
         )
+    }
+
+
+    private suspend fun seedX05UserState(
+        database: MuxTvDatabase,
+        canonicalChannelId: String,
+    ) {
+        database.profileDao().insert(
+            ProfileEntity(
+                id = X05_PROFILE_ID,
+                name = "X05 overlay profile",
+                isPrimary = false,
+            ),
+        )
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = X05_PROFILE_ID,
+                canonicalChannelId = canonicalChannelId,
+                isFavorite = true,
+                customName = X05_CUSTOM_NAME,
+                channelNumber = X05_CUSTOM_NUMBER,
+                isHidden = true,
+            ),
+        )
+        check(
+            database.recentChannelsDao().recordSuccessfulPlayback(
+                profileId = X05_PROFILE_ID,
+                channelId = canonicalChannelId,
+                successfulAtEpochMillis = X05_RECENT_AT_EPOCH_MILLIS,
+                retentionLimit = X05_RECENT_RETENTION_LIMIT,
+            ) == RecentWriteResult.Applied,
+        )
+    }
+
+    private suspend fun MuxTvDatabase.x05UserState(
+        canonicalChannelId: String,
+    ): X05UserStateSnapshot = useReaderConnection { connection ->
+        connection.usePrepared(
+            """
+            SELECT overlay.isFavorite,
+                   overlay.customName,
+                   overlay.channelNumber,
+                   overlay.isHidden,
+                   recent.lastSuccessfulPlaybackAtEpochMillis
+            FROM user_channel_overlays AS overlay
+            INNER JOIN recent_channels AS recent
+                ON recent.profileId = overlay.profileId
+               AND recent.canonicalChannelId = overlay.canonicalChannelId
+            WHERE overlay.profileId = ?
+              AND overlay.canonicalChannelId = ?
+            LIMIT 1
+            """.trimIndent(),
+        ) { statement ->
+            statement.bindText(1, X05_PROFILE_ID)
+            statement.bindText(2, canonicalChannelId)
+            check(statement.step()) { "X05 user state row is missing." }
+            X05UserStateSnapshot(
+                isFavorite = statement.getLong(0) != 0L,
+                customName = statement.getText(1),
+                channelNumber = statement.getLong(2).toInt(),
+                isHidden = statement.getLong(3) != 0L,
+                lastSuccessfulPlaybackAtEpochMillis = statement.getLong(4),
+            )
+        }
+    }
+
+    private suspend fun MuxTvDatabase.productionCanonicalChannelId(
+        revision: Long,
+        providerKey: String,
+    ): String = useReaderConnection { connection ->
+        connection.usePrepared(
+            """
+            SELECT variant.canonicalChannelId
+            FROM provider_channels AS provider
+            INNER JOIN stream_variants AS variant
+                ON variant.providerChannelId = provider.id
+            WHERE provider.sourceId = ?
+              AND provider.revisionNumber = ?
+              AND provider.providerKey = ?
+            LIMIT 1
+            """.trimIndent(),
+        ) { statement ->
+            statement.bindText(1, SOURCE_ID)
+            statement.bindLong(2, revision)
+            statement.bindText(3, providerKey)
+            check(statement.step()) { "X05 production anchor channel is missing." }
+            statement.getText(0)
+        }
     }
 
     private suspend fun compactToBaseline(
@@ -796,6 +971,11 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         const val ACTIVE_DIGEST_DOMAIN = "c03-active-digest-v1"
         const val LOGICAL_DIGEST_DOMAIN = "c03-logical-digest-v1"
         const val ORDER_DIGEST_DOMAIN = "c03-order-digest-v1"
+        const val X05_PROFILE_ID = "x05-overlay-profile"
+        const val X05_CUSTOM_NAME = "My News"
+        const val X05_CUSTOM_NUMBER = 77
+        const val X05_RECENT_AT_EPOCH_MILLIS = 42_000L
+        const val X05_RECENT_RETENTION_LIMIT = 50
 
         fun logicalChannelId(sourceId: String, providerKey: String): String =
             digestFrames(LOGICAL_ID_DOMAIN, listOf(sourceId, providerKey))
