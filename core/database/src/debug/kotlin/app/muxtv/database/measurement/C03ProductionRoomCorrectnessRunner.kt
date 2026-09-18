@@ -91,6 +91,25 @@ internal data class X05OverlaySurvivalResult(
     val after: X05UserStateSnapshot,
 )
 
+internal data class C03ActiveSearchPublicationResult(
+    val expectedCanonicalChannelId: String,
+    val productionBefore: List<String>,
+    val candidateBefore: List<String>,
+    val productionDuringStaging: List<String>,
+    val candidateDuringStaging: List<String>,
+    val productionAfter: List<String>,
+    val candidateAfter: List<String>,
+)
+
+internal data class C03RepeatedRevisionStorageResult(
+    val activeRevision: Long,
+    val retainedRevisions: List<Long>,
+    val beforeCompaction: C03ProductionCandidateRowCounts,
+    val afterCompaction: C03ProductionCandidateRowCounts,
+    val cleanupPasses: Int,
+    val cleanupDeletedRows: Int,
+)
+
 /**
  * Correctness-only A/B proof for #364.
  *
@@ -412,6 +431,147 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         }
     }
 
+
+    suspend fun runActiveSearchPublicationScenario(
+        entryCount: Int,
+        markerIndex: Int,
+    ): C03ActiveSearchPublicationResult {
+        require(entryCount > 0)
+        require(markerIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[markerIndex]
+        val marker = "c03searchmarker$markerIndex"
+        val incoming = baseline.mapIndexed { index, item ->
+            if (index == markerIndex) {
+                item.copy(rawName = marker).rehash()
+            } else {
+                item.copy(ordinal = index.toLong())
+            }
+        }
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            val productionBefore = production.database.productionSearchCanonicalIds(marker)
+            val candidateBefore = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                .map(C03ProductionCandidateSearchRow::canonicalChannelId)
+
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+
+            val productionDuringStaging = production.database.productionSearchCanonicalIds(marker)
+            val candidateDuringStaging = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                .map(C03ProductionCandidateSearchRow::canonicalChannelId)
+
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                    statistics = SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            C03ActiveSearchPublicationResult(
+                expectedCanonicalChannelId = anchor.canonicalChannelId,
+                productionBefore = productionBefore,
+                candidateBefore = candidateBefore,
+                productionDuringStaging = productionDuringStaging,
+                candidateDuringStaging = candidateDuringStaging,
+                productionAfter = production.database.productionSearchCanonicalIds(marker),
+                candidateAfter = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                    .map(C03ProductionCandidateSearchRow::canonicalChannelId),
+            )
+        }
+    }
+
+    suspend fun runRepeatedRevisionStorageScenario(
+        entryCount: Int,
+        revisionCount: Int,
+    ): C03RepeatedRevisionStorageResult {
+        require(entryCount > 0)
+        require(revisionCount >= 3)
+        val baseline = Fixture.baseline(entryCount)
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+
+            for (revision in 2L..revisionCount.toLong()) {
+                val incoming = baseline.mapIndexed { index, item ->
+                    item.copy(
+                        ordinal = index.toLong(),
+                        locator = "${item.locator}&repeatRevision=$revision&entry=$index",
+                    ).rehash()
+                }
+                candidate.dao.setRunningRefreshOwner(SOURCE_ID, "c03-repeat-$revision")
+                candidate.dao.beginRevision(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = revision,
+                    startedAtEpochMillis = 1_000L + revision,
+                )
+                incoming.chunked(BATCH_SIZE).forEach { batch ->
+                    candidate.dao.stageBatch(
+                        sourceId = SOURCE_ID,
+                        revisionNumber = revision,
+                        entries = batch.map(FixtureItem::toCandidateEntry),
+                    )
+                }
+                check(
+                    candidate.dao.activateIfRefreshOwnerMatches(
+                        sourceId = SOURCE_ID,
+                        revisionNumber = revision,
+                        expectedCredentialRef = CREDENTIAL_REF,
+                        expectedRunToken = "c03-repeat-$revision",
+                        activatedAtEpochMillis = 2_000L + revision,
+                    ) == C03ProductionCandidateActivationResult.Published,
+                )
+            }
+
+            val beforeCompaction = candidate.dao.rowCounts()
+            var cleanupPasses = 0
+            var cleanupDeletedRows = 0
+            var reachedFixedPoint = false
+            repeat(MAX_REPEATED_CLEANUP_PASSES) {
+                cleanupPasses++
+                val result = candidate.dao.compactOrphans(REPEATED_CLEANUP_BATCH_SIZE)
+                val deleted = result.payloadRowsDeleted + result.searchPayloadRowsDeleted
+                cleanupDeletedRows += deleted
+                if (deleted == 0) {
+                    reachedFixedPoint = true
+                    return@repeat
+                }
+            }
+            check(reachedFixedPoint) {
+                "C03 repeated-revision orphan compaction did not reach a bounded fixed point."
+            }
+
+            C03RepeatedRevisionStorageResult(
+                activeRevision = candidate.dao.activeRevision(SOURCE_ID),
+                retainedRevisions = candidate.dao.retainedRevisions(SOURCE_ID),
+                beforeCompaction = beforeCompaction,
+                afterCompaction = candidate.dao.rowCounts(),
+                cleanupPasses = cleanupPasses,
+                cleanupDeletedRows = cleanupDeletedRows,
+            )
+        }
+    }
+
     suspend fun runDuplicateScenario(): C03ProductionPairResult {
         val item = Fixture.baseline(1).single()
         val incoming = listOf(item.copy(ordinal = 0), item.copy(ordinal = 1))
@@ -715,6 +875,17 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
             ) == RecentWriteResult.Applied,
         )
     }
+
+
+    private suspend fun MuxTvDatabase.productionSearchCanonicalIds(
+        ftsExpression: String,
+    ): List<String> = channelSearchDao().searchCandidates(
+        profileId = SEARCH_PROFILE_ID,
+        ftsExpression = ftsExpression,
+        nowEpochMillis = 0L,
+        fetchLimit = SEARCH_LIMIT,
+        restrictToCanonicalIds = null,
+    ).map { it.canonicalChannelId }
 
     private suspend fun MuxTvDatabase.x05UserState(
         canonicalChannelId: String,
@@ -1159,6 +1330,10 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         const val X05_CUSTOM_NUMBER = 77
         const val X05_RECENT_AT_EPOCH_MILLIS = 42_000L
         const val X05_RECENT_RETENTION_LIMIT = 50
+        const val SEARCH_PROFILE_ID = "c03-search-profile"
+        const val SEARCH_LIMIT = 20
+        const val REPEATED_CLEANUP_BATCH_SIZE = 512
+        const val MAX_REPEATED_CLEANUP_PASSES = 4
 
         fun logicalChannelId(sourceId: String, providerKey: String): String =
             digestFrames(LOGICAL_ID_DOMAIN, listOf(sourceId, providerKey))
