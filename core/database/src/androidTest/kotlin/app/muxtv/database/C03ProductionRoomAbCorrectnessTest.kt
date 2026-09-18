@@ -121,8 +121,50 @@ class C03ProductionRoomAbCorrectnessTest {
         assertThat(result.candidate.orphanRowsAfterBoundedCleanup).isEqualTo(0)
     }
 
+
+    @Test
+    fun stagedSearchRemainsInvisibleUntilGuardedPublication() = runTest {
+        val result = runner.runActiveSearchPublicationScenario(
+            entryCount = ENTRY_COUNT,
+            markerIndex = SEARCH_MARKER_INDEX,
+        )
+
+        assertThat(result.productionBefore).isEmpty()
+        assertThat(result.candidateBefore).isEmpty()
+        assertThat(result.productionDuringStaging).isEmpty()
+        assertThat(result.candidateDuringStaging).isEmpty()
+        assertThat(result.productionAfter)
+            .containsExactly(result.expectedCanonicalChannelId)
+        assertThat(result.candidateAfter)
+            .containsExactly(result.expectedCanonicalChannelId)
+    }
+
+    @Test
+    fun repeatedTokenChurnStorageIsBoundedAfterCompaction() = runTest {
+        val result = runner.runRepeatedRevisionStorageScenario(
+            entryCount = ENTRY_COUNT,
+            revisionCount = REPEATED_REVISION_COUNT,
+        )
+
+        assertThat(result.activeRevision).isEqualTo(REPEATED_REVISION_COUNT.toLong())
+        assertThat(result.retainedRevisions)
+            .containsExactly((REPEATED_REVISION_COUNT - 1).toLong())
+        assertThat(result.beforeCompaction.payloadRows)
+            .isGreaterThan(result.afterCompaction.payloadRows)
+        assertThat(result.afterCompaction.payloadRows)
+            .isAtMost(ENTRY_COUNT * 2)
+        assertThat(result.afterCompaction.searchPayloadRows)
+            .isAtMost(ENTRY_COUNT)
+        assertThat(result.afterCompaction.membershipRows)
+            .isEqualTo(ENTRY_COUNT * 2)
+        assertThat(result.cleanupPasses).isAtMost(MAX_REPEATED_CLEANUP_PASSES)
+    }
+
     private companion object {
         const val ENTRY_COUNT = 120
         const val MAX_BOUNDED_CLEANUP_PASSES = 4
+        const val SEARCH_MARKER_INDEX = 42
+        const val REPEATED_REVISION_COUNT = 5
+        const val MAX_REPEATED_CLEANUP_PASSES = 4
     }
 }
