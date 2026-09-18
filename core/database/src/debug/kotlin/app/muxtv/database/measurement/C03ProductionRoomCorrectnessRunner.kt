@@ -235,6 +235,183 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         }
     }
 
+
+    suspend fun runOverlayPartialFailureSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.PARTIAL_FAILURE,
+    )
+
+    suspend fun runOverlayStaleOwnerSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.STALE_OWNER,
+    )
+
+    suspend fun runOverlayCancellationSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.CANCELLATION,
+    )
+
+    private suspend fun runOverlaySafetySurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+        mode: X05SafetyMode,
+    ): X05OverlaySurvivalResult {
+        require(entryCount > 1)
+        require(overlayIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[overlayIndex]
+        val incoming = C03ProductionScenario.DELTA_10.apply(baseline)
+        val partial = incoming.take(entryCount / 2)
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            seedX05UserState(production.database, anchor.canonicalChannelId)
+            val before = production.database.x05UserState(anchor.canonicalChannelId)
+            val candidateBaselineCounts = candidate.dao.rowCounts()
+
+            when (mode) {
+                X05SafetyMode.PARTIAL_FAILURE -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_REFRESH,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    val failure = runCatching {
+                        stage(production, candidate, REFRESH_REVISION, partial)
+                        error("injected-x05-partial-refresh-failure")
+                    }
+                    check(failure.isFailure)
+                    production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+                    candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+                }
+
+                X05SafetyMode.STALE_OWNER -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_STALE,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+                    check(
+                        production.refresh.tryAcquire(
+                            sourceId = SOURCE_ID,
+                            runToken = RUN_REPLACEMENT,
+                            startedAtEpochMillis = REPLACEMENT_STARTED_AT,
+                            staleBeforeEpochMillis = REPLACEMENT_STALE_BEFORE,
+                        ),
+                    )
+                    candidate.dao.setRunningRefreshOwner(SOURCE_ID, RUN_REPLACEMENT)
+
+                    val productionResult = production.revisions.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_STALE,
+                        REPLACEMENT_STARTED_AT + 1,
+                        SourceRevisionStatistics(incoming.size, 0, 0),
+                    )
+                    val candidateResult = candidate.dao.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_STALE,
+                        REPLACEMENT_STARTED_AT + 1,
+                    )
+                    check(productionResult == SourceRevisionActivationResult.Superseded)
+                    check(candidateResult == C03ProductionCandidateActivationResult.Superseded)
+                }
+
+                X05SafetyMode.CANCELLATION -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_REFRESH,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+
+                    coroutineScope {
+                        val staged = CompletableDeferred<Unit>()
+                        val job = launch {
+                            try {
+                                stage(production, candidate, REFRESH_REVISION, partial)
+                                staged.complete(Unit)
+                                awaitCancellation()
+                            } catch (failure: Throwable) {
+                                if (!staged.isCompleted) staged.completeExceptionally(failure)
+                                throw failure
+                            } finally {
+                                withContext(NonCancellable) {
+                                    production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+                                    candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+                                }
+                            }
+                        }
+                        staged.await()
+                        job.cancelAndJoin()
+                    }
+
+                    val lateCandidate = candidate.dao.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_REFRESH,
+                        REFRESH_ACTIVATED_AT,
+                    )
+                    check(lateCandidate != C03ProductionCandidateActivationResult.Published)
+                }
+            }
+
+            compactToBaseline(candidate, candidateBaselineCounts)
+            check(production.database.activeRevision() == BASELINE_REVISION)
+            check(candidate.dao.activeRevision(SOURCE_ID) == BASELINE_REVISION)
+            check(production.database.productionEntryCount(REFRESH_REVISION) == 0)
+            check(!candidate.dao.revisionExists(SOURCE_ID, REFRESH_REVISION))
+
+            val afterCounts = candidate.dao.rowCounts()
+            check(afterCounts == candidateBaselineCounts) {
+                "X05 candidate cleanup did not return payload/search/membership rows to baseline."
+            }
+
+            val productionCanonicalChannelId = production.database.productionCanonicalChannelId(
+                revision = BASELINE_REVISION,
+                providerKey = anchor.providerKey,
+            )
+            val candidateCanonicalChannelId = candidate.dao.activeRows(SOURCE_ID)
+                .single { it.logicalChannelId == anchor.logicalChannelId }
+                .canonicalChannelId
+            val after = production.database.x05UserState(anchor.canonicalChannelId)
+
+            X05OverlaySurvivalResult(
+                logicalChannelId = anchor.logicalChannelId,
+                productionCanonicalChannelId = productionCanonicalChannelId,
+                candidateCanonicalChannelId = candidateCanonicalChannelId,
+                before = before,
+                after = after,
+            )
+        }
+    }
+
     suspend fun runDuplicateScenario(): C03ProductionPairResult {
         val item = Fixture.baseline(1).single()
         val incoming = listOf(item.copy(ordinal = 0), item.copy(ordinal = 1))
@@ -777,6 +954,12 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         orphanRowsAfterBoundedCleanup = orphanRowsAfterBoundedCleanup,
         cleanupPasses = cleanupPasses,
     )
+
+    private enum class X05SafetyMode {
+        PARTIAL_FAILURE,
+        STALE_OWNER,
+        CANCELLATION,
+    }
 
     private data class ProductionHarness(
         val database: MuxTvDatabase,
