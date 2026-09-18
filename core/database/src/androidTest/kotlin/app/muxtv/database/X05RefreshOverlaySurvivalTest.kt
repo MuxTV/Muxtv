@@ -24,19 +24,43 @@ class X05RefreshOverlaySurvivalTest {
                 overlayIndex = OVERLAY_INDEX,
             )
 
-            assertThat(result.before).isEqualTo(result.after)
-            assertThat(result.before.isFavorite).isTrue()
-            assertThat(result.before.isHidden).isTrue()
-            assertThat(result.before.customName).isEqualTo(CUSTOM_NAME)
-            assertThat(result.before.channelNumber).isEqualTo(CUSTOM_NUMBER)
-            assertThat(result.before.lastSuccessfulPlaybackAtEpochMillis)
-                .isEqualTo(RECENT_AT_EPOCH_MILLIS)
-
-            assertThat(result.productionCanonicalChannelId)
-                .isEqualTo(result.logicalChannelId)
-            assertThat(result.candidateCanonicalChannelId)
-                .isEqualTo(result.logicalChannelId)
+            assertSurvived(result)
         }
+    }
+
+    @Test
+    fun failedCancelledAndStaleRefreshPreserveSupportedOverlayAndRecentState() = runTest {
+        val results = listOf(
+            runner.runOverlayPartialFailureSurvival(
+                entryCount = ENTRY_COUNT,
+                overlayIndex = OVERLAY_INDEX,
+            ),
+            runner.runOverlayStaleOwnerSurvival(
+                entryCount = ENTRY_COUNT,
+                overlayIndex = OVERLAY_INDEX,
+            ),
+            runner.runOverlayCancellationSurvival(
+                entryCount = ENTRY_COUNT,
+                overlayIndex = OVERLAY_INDEX,
+            ),
+        )
+
+        results.forEach(::assertSurvived)
+    }
+
+    private fun assertSurvived(result: app.muxtv.database.measurement.X05OverlaySurvivalResult) {
+        assertThat(result.before).isEqualTo(result.after)
+        assertThat(result.before.isFavorite).isTrue()
+        assertThat(result.before.isHidden).isTrue()
+        assertThat(result.before.customName).isEqualTo(CUSTOM_NAME)
+        assertThat(result.before.channelNumber).isEqualTo(CUSTOM_NUMBER)
+        assertThat(result.before.lastSuccessfulPlaybackAtEpochMillis)
+            .isEqualTo(RECENT_AT_EPOCH_MILLIS)
+
+        assertThat(result.productionCanonicalChannelId)
+            .isEqualTo(result.logicalChannelId)
+        assertThat(result.candidateCanonicalChannelId)
+            .isEqualTo(result.logicalChannelId)
     }
 
     private companion object {
