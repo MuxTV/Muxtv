@@ -10,6 +10,7 @@ on:
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/C03Production**'
       - 'core/database/src/androidTest/kotlin/app/muxtv/database/C03Production**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
+      - 'tools/ci/Run-HostedC364ProductionRoomEvidence.sh'
       - '.github/workflows/c364-production-room-adaptation.yml'
   workflow_dispatch:
 
@@ -114,5 +115,70 @@ jobs:
             core/database/build/outputs/androidTest-results/**
             .work/evidence/c364-smoke/**
           retention-days: 7
+          github-token: ${{ github.token }}
+
+  canonical-evidence:
+    name: C364 production Room canonical API36 evidence
+    needs: smoke-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/c364-canonical
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run canonical C364 evidence on API36
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: MuxTV_TV_CURRENT_API36
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          MUXTV_EVIDENCE_DIR: .work/evidence/c364-canonical
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 6G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedC364ProductionRoomEvidence.sh
+
+      - name: Upload canonical C364 evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c364-production-room-canonical-api36-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c364-canonical/**
+            core/database/build/outputs/androidTest-results/**
+          retention-days: 14
           github-token: ${{ github.token }}
 
