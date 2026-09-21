@@ -36,6 +36,7 @@ class C03ProductionRoomCanonicalEvidenceTest {
         assertThat(report.sourceCommit).isEqualTo(arguments.spec.sourceCommit)
         assertThat(report.corpusSha256).matches("[0-9a-f]{64}")
         assertThat(report.thresholdApplied).isFalse()
+        assertThat(report.baselineVariant).isEqualTo(C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION)
         assertThat(report.warmupIterations).isEqualTo(1)
         assertThat(report.measuredIterations).isAtLeast(5)
         assertThat(report.entryCount).isEqualTo(10_000)
@@ -65,6 +66,7 @@ class C03ProductionRoomCanonicalEvidenceTest {
                     .isEqualTo(scenario.expectedCorrectnessDigestSha256)
             }
             assertThat(scenario.executionSeed).isNotEqualTo(0L)
+            assertThat(scenario.correctnessPassed).isTrue()
             val correctnessRounds = scenario.executionOrder
                 .filter { it.phase == C03ProductionExecutionPhase.CORRECTNESS }
                 .groupBy { it.round }
@@ -103,9 +105,9 @@ class C03ProductionRoomCanonicalEvidenceTest {
                 it.variant == C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE
             }
             scenario.variants.forEach { variant ->
-                assertThat(variant.stage.p99Nanos).isAtLeast(variant.stage.p95Nanos)
-                assertThat(variant.publication.p99Nanos).isAtLeast(variant.publication.p95Nanos)
-                assertThat(variant.search.p99Nanos).isAtLeast(variant.search.p95Nanos)
+                assertThat(variant.stage.p99Nanos).isEqualTo(variant.stage.samples.max())
+                assertThat(variant.publication.p99Nanos).isEqualTo(variant.publication.samples.max())
+                assertThat(variant.search.p99Nanos).isEqualTo(variant.search.samples.max())
             }
             assertThat(candidate.queryPlans).isNotEmpty()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
