@@ -7,11 +7,29 @@ internal enum class C03ProductionMeasurementVariant {
     B_IMMUTABLE_REUSE,
 }
 
+internal enum class C03ProductionExecutionPhase {
+    WARMUP,
+    MEASURED,
+}
+
+internal data class C03ProductionRoomExecutionSlot(
+    val phase: C03ProductionExecutionPhase,
+    val round: Int,
+    val ordinal: Int,
+    val variant: C03ProductionMeasurementVariant,
+) {
+    init {
+        require(round > 0)
+        require(ordinal >= 0)
+    }
+}
+
 internal data class C03ProductionRoomMeasurementEnvironment(
     val apiLevel: Int,
     val manufacturer: String,
     val model: String,
     val availableProcessors: Int,
+    val fingerprintSha256: String,
 )
 
 internal data class C03ProductionRoomFileState(
@@ -50,6 +68,7 @@ internal data class C03ProductionRoomDistribution(
     val medianNanos: Long,
     val p90Nanos: Long,
     val p95Nanos: Long,
+    val p99Nanos: Long,
     val samples: List<Long>,
 )
 
@@ -80,6 +99,8 @@ internal data class C03ProductionRoomScenarioMeasurement(
     val scenarioId: String,
     val expectedCorrectnessDigestSha256: String,
     val expectedCorrectnessCount: Int,
+    val executionSeed: Long,
+    val executionOrder: List<C03ProductionRoomExecutionSlot>,
     val variants: List<C03ProductionRoomVariantMeasurement>,
 )
 
@@ -109,6 +130,8 @@ internal data class C03ProductionRoomMeasurementReport(
     val schemaVersion: Int,
     val methodVersion: String,
     val sourceCommit: String,
+    val corpusSha256: String,
+    val thresholdApplied: Boolean,
     val warmupIterations: Int,
     val measuredIterations: Int,
     val entryCount: Int,
