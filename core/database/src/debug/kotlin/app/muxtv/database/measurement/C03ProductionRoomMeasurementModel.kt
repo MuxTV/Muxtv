@@ -102,6 +102,7 @@ internal data class C03ProductionRoomScenarioMeasurement(
     val expectedCorrectnessCount: Int,
     val executionSeed: Long,
     val executionOrder: List<C03ProductionRoomExecutionSlot>,
+    val correctnessPassed: Boolean,
     val variants: List<C03ProductionRoomVariantMeasurement>,
 )
 
@@ -133,6 +134,7 @@ internal data class C03ProductionRoomMeasurementReport(
     val sourceCommit: String,
     val corpusSha256: String,
     val thresholdApplied: Boolean,
+    val baselineVariant: C03ProductionMeasurementVariant,
     val warmupIterations: Int,
     val measuredIterations: Int,
     val entryCount: Int,
