@@ -42,6 +42,7 @@ class C03ProductionRoomMeasurementTest {
         assertThat(report.warmupIterations).isEqualTo(0)
         assertThat(report.measuredIterations).isEqualTo(1)
         assertThat(report.entryCount).isEqualTo(64)
+        assertThat(report.batchSize).isEqualTo(250)
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
             "delta-0",
