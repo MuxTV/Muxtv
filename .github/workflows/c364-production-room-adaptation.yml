@@ -164,11 +164,11 @@ jobs:
           MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           MUXTV_EVIDENCE_DIR: .work/evidence/c364-canonical
         with:
-          api_level: 36
+          api-level: 36
           target: android-tv
           arch: x86_64
           profile: tv_1080p
-          avd_name: MuxTV_TV_CURRENT_API36
+          avd-name: MuxTV_TV_CURRENT_API36
           force-avd-creation: true
           cores: 2
           ram-size: 2048M
