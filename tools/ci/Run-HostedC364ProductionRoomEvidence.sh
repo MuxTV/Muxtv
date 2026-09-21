@@ -63,13 +63,24 @@ def require(condition, message):
     if not condition:
         raise SystemExit(message)
 
-require(report.get("schemaVersion") == 2, "Unsupported C364 schemaVersion.")
+require(report.get("schemaVersion") == 3, "Unsupported C364 schemaVersion.")
+require("c01-interleaved" in report.get("methodVersion", ""), "C364 methodVersion lost C01 interleaving provenance.")
 require("physical-mutations" in report.get("methodVersion", ""), "C364 methodVersion lost mutation provenance.")
 require(report.get("sourceCommit") == expected_sha, "C364 sourceCommit mismatch.")
+require(
+    isinstance(report.get("corpusSha256"), str) and len(report["corpusSha256"]) == 64,
+    "C364 corpus SHA-256 provenance is missing.",
+)
+require(report.get("thresholdApplied") is False, "C364 unexpectedly applied a performance threshold.")
 require(report.get("warmupIterations") == 1, "C364 warmup contract mismatch.")
 require(report.get("measuredIterations") == 5, "C364 iteration contract mismatch.")
 require(report.get("entryCount") == 10000, "C364 entry-count contract mismatch.")
 require(report.get("batchSize") == 250, "C364 batch-size contract mismatch.")
+environment = report.get("environment", {})
+require(
+    isinstance(environment.get("fingerprintSha256"), str) and len(environment["fingerprintSha256"]) == 64,
+    "C364 environment fingerprint is missing.",
+)
 require(report.get("redactionPassed") is True, "C364 report redaction gate failed.")
 
 expected_scenarios = [
@@ -80,6 +91,27 @@ scenarios = report.get("scenarios", [])
 require([s.get("scenarioId") for s in scenarios] == expected_scenarios, "C364 scenario matrix mismatch.")
 
 for scenario in scenarios:
+    seed = scenario.get("executionSeed")
+    require(isinstance(seed, int) and seed != 0, "C364 execution seed is missing.")
+    order = scenario.get("executionOrder", [])
+    expected_slot_count = (report["warmupIterations"] + report["measuredIterations"]) * 2
+    require(len(order) == expected_slot_count, "C364 execution slot count mismatch.")
+    require(
+        [slot.get("ordinal") for slot in order] == list(range(expected_slot_count)),
+        "C364 execution ordinals are not contiguous.",
+    )
+    for phase, rounds in (("WARMUP", report["warmupIterations"]), ("MEASURED", report["measuredIterations"])):
+        phase_slots = [slot for slot in order if slot.get("phase") == phase]
+        require(len(phase_slots) == rounds * 2, f"C364 {phase} slot count mismatch.")
+        for round_number in range(1, rounds + 1):
+            round_variants = [
+                slot.get("variant") for slot in phase_slots if slot.get("round") == round_number
+            ]
+            require(
+                sorted(round_variants) == ["A_CURRENT_PRODUCTION", "B_IMMUTABLE_REUSE"],
+                f"C364 {phase} round {round_number} is not complete.",
+            )
+
     variants = scenario.get("variants", [])
     require(
         [v.get("variant") for v in variants] == ["A_CURRENT_PRODUCTION", "B_IMMUTABLE_REUSE"],
@@ -97,6 +129,13 @@ for scenario in scenarios:
             int(variant.get("correctnessCount", -1)) == int(scenario.get("expectedCorrectnessCount", -2)),
             "C364 correctness count mismatch.",
         )
+        for metric in ("stage", "publication", "cleanup", "browse", "providerLookup", "search"):
+            distribution = variant.get(metric, {})
+            require("p99Nanos" in distribution, f"C364 {metric} p99 is missing.")
+            require(
+                int(distribution.get("p99Nanos", -1)) >= int(distribution.get("p95Nanos", 0)),
+                f"C364 {metric} p99 is below p95.",
+            )
     candidate = variants[1]
     plans = candidate.get("queryPlans", [])
     require(plans, "C364 candidate query-plan evidence is missing.")
@@ -145,6 +184,8 @@ measuredIterations=5
 scenarioCount=7
 repeatedRevisionCounts=5,10,20
 thresholdApplied=false
+executionOrder=c01-seeded-randomized-interleaved
+schemaVersion=3
 dispositionEligible=true
 EOF
 
