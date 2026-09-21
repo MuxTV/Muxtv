@@ -94,13 +94,13 @@ for scenario in scenarios:
     seed = scenario.get("executionSeed")
     require(isinstance(seed, int) and seed != 0, "C364 execution seed is missing.")
     order = scenario.get("executionOrder", [])
-    expected_slot_count = (report["warmupIterations"] + report["measuredIterations"]) * 2
+    expected_slot_count = (1 + report["warmupIterations"] + report["measuredIterations"]) * 2
     require(len(order) == expected_slot_count, "C364 execution slot count mismatch.")
     require(
         [slot.get("ordinal") for slot in order] == list(range(expected_slot_count)),
         "C364 execution ordinals are not contiguous.",
     )
-    for phase, rounds in (("WARMUP", report["warmupIterations"]), ("MEASURED", report["measuredIterations"])):
+    for phase, rounds in (("CORRECTNESS", 1), ("WARMUP", report["warmupIterations"]), ("MEASURED", report["measuredIterations"])):
         phase_slots = [slot for slot in order if slot.get("phase") == phase]
         require(len(phase_slots) == rounds * 2, f"C364 {phase} slot count mismatch.")
         for round_number in range(1, rounds + 1):
@@ -184,6 +184,7 @@ measuredIterations=5
 scenarioCount=7
 repeatedRevisionCounts=5,10,20
 thresholdApplied=false
+correctnessRounds=1
 executionOrder=c01-seeded-randomized-interleaved
 schemaVersion=3
 dispositionEligible=true
