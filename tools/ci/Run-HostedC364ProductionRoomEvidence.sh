@@ -144,7 +144,7 @@ measuredIterations=5
 scenarioCount=7
 repeatedRevisionCounts=5,10,20
 thresholdApplied=false
-claimEligible=true
+dispositionEligible=true
 EOF
 
 echo "C364 canonical production Room evidence passed."
