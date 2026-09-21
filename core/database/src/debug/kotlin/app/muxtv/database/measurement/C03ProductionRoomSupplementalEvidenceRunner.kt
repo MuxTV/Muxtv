@@ -340,7 +340,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             check(refresh.tryAcquire(SOURCE_ID, RUN_REFRESH, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE))
             revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
 
-            val cleanupStarted = nanoTime()
+            var cleanupNanos = 0L
             coroutineScope {
                 val staged = CompletableDeferred<Unit>()
                 val job = launch {
@@ -367,9 +367,10 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                     }
                 }
                 staged.await()
+                val cleanupStarted = nanoTime()
                 job.cancelAndJoin()
+                cleanupNanos = elapsed(cleanupStarted)
             }
-            val cleanupNanos = elapsed(cleanupStarted)
             val late = revisions.activateIfRefreshOwnerMatches(
                 sourceId = SOURCE_ID,
                 revisionNumber = REFRESH_REVISION,
@@ -477,7 +478,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_REFRESH)
             dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
 
-            val cleanupStarted = nanoTime()
+            var cleanupNanos = 0L
             coroutineScope {
                 val staged = CompletableDeferred<Unit>()
                 val job = launch {
@@ -500,10 +501,11 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                     }
                 }
                 staged.await()
+                val cleanupStarted = nanoTime()
                 job.cancelAndJoin()
+                cleanupNanos = elapsed(cleanupStarted)
             }
             compactCandidate(database)
-            val cleanupNanos = elapsed(cleanupStarted)
             val late = dao.activateIfRefreshOwnerMatches(
                 sourceId = SOURCE_ID,
                 revisionNumber = REFRESH_REVISION,
