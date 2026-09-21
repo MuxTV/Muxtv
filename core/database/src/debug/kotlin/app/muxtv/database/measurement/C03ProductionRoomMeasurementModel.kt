@@ -8,6 +8,7 @@ internal enum class C03ProductionMeasurementVariant {
 }
 
 internal enum class C03ProductionExecutionPhase {
+    CORRECTNESS,
     WARMUP,
     MEASURED,
 }
