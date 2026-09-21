@@ -17,6 +17,8 @@ import app.muxtv.database.StagedCatalogEntry
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.Collections
+import java.util.Random
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -65,24 +67,37 @@ internal class C03ProductionRoomMeasurementRunner(
                 val incoming = scenario.applyTo(baseline)
                 val expectedDigest = fixtureActiveDigest(incoming)
                 val expectedCount = incoming.size
-                val variants = C03ProductionMeasurementVariant.entries.map { variant ->
-                    repeat(spec.warmupIterations) { warmupIndex ->
-                        measureOnce(
-                            variant = variant,
-                            scenario = scenario,
-                            baseline = baseline,
-                            incoming = incoming,
-                            iterationLabel = "w${warmupIndex + 1}",
-                        )
+                val executionSeed = executionSeed(scenario)
+                val executionOrder = executionPlan(
+                    executionSeed = executionSeed,
+                    warmupRounds = spec.warmupIterations,
+                    measuredRounds = spec.measuredIterations,
+                )
+                val measuredByVariant = C03ProductionMeasurementVariant.entries.associateWith {
+                    mutableListOf<MeasuredVariant>()
+                }
+
+                executionOrder.forEach { slot ->
+                    val phaseLabel = when (slot.phase) {
+                        C03ProductionExecutionPhase.WARMUP -> "w"
+                        C03ProductionExecutionPhase.MEASURED -> "m"
                     }
-                    val measured = List(spec.measuredIterations) { index ->
-                        measureOnce(
-                            variant = variant,
-                            scenario = scenario,
-                            baseline = baseline,
-                            incoming = incoming,
-                            iterationLabel = "m${index + 1}",
-                        )
+                    val result = measureOnce(
+                        variant = slot.variant,
+                        scenario = scenario,
+                        baseline = baseline,
+                        incoming = incoming,
+                        iterationLabel = "${phaseLabel}${slot.round}-o${slot.ordinal}-${slot.variant.name.lowercase()}",
+                    )
+                    if (slot.phase == C03ProductionExecutionPhase.MEASURED) {
+                        measuredByVariant.getValue(slot.variant) += result
+                    }
+                }
+
+                val variants = C03ProductionMeasurementVariant.entries.map { variant ->
+                    val measured = measuredByVariant.getValue(variant).toList()
+                    check(measured.size == spec.measuredIterations) {
+                        "C03 measured round count disagrees with the execution schedule."
                     }
                     check(measured.all { it.correctnessDigestSha256 == expectedDigest }) {
                         "C03 measured active digest disagrees with deterministic fixture."
@@ -108,6 +123,8 @@ internal class C03ProductionRoomMeasurementRunner(
                     scenarioId = scenarioId(scenario),
                     expectedCorrectnessDigestSha256 = expectedDigest,
                     expectedCorrectnessCount = expectedCount,
+                    executionSeed = executionSeed,
+                    executionOrder = executionOrder,
                     variants = variants,
                 )
             }
@@ -116,16 +133,13 @@ internal class C03ProductionRoomMeasurementRunner(
                 schemaVersion = REPORT_SCHEMA_VERSION,
                 methodVersion = METHOD_VERSION,
                 sourceCommit = spec.sourceCommit,
+                corpusSha256 = corpusDigest(baseline, spec.scenarios),
+                thresholdApplied = false,
                 warmupIterations = spec.warmupIterations,
                 measuredIterations = spec.measuredIterations,
                 entryCount = spec.entryCount,
                 batchSize = C03_PRODUCTION_EVIDENCE_BATCH_SIZE,
-                environment = C03ProductionRoomMeasurementEnvironment(
-                    apiLevel = Build.VERSION.SDK_INT,
-                    manufacturer = Build.MANUFACTURER.safeEnvironmentValue(),
-                    model = Build.MODEL.safeEnvironmentValue(),
-                    availableProcessors = Runtime.getRuntime().availableProcessors(),
-                ),
+                environment = measurementEnvironment(),
                 scenarios = scenarios,
                 repeatedRevisionStorage = emptyList(),
                 safety = emptyList(),
@@ -135,9 +149,64 @@ internal class C03ProductionRoomMeasurementRunner(
                     "Write counts are persisted row-state deltas collected outside timed sections; trigger-based physical mutation auditing is the next Task 4 increment.",
                     "Search latency and query-plan fields are intentionally zero/empty until the Task 5 active-search contract is executable; no synthetic search number is reported.",
                     "Repeated-revision storage, bounded orphan compaction and cancellation cleanup remain separate evidence increments and are not inferred from one refresh.",
+                    "A/B performance execution uses the C01 seeded randomized per-round interleaving contract; the execution seed and full slot order are retained per scenario.",
                 ),
             )
         }
+
+    private fun executionSeed(scenario: C03ProductionScenario): Long =
+        C01_BASE_EXECUTION_SEED xor
+            ((scenario.ordinal + 1L) * C01_GOLDEN_GAMMA)
+
+    private fun executionPlan(
+        executionSeed: Long,
+        warmupRounds: Int,
+        measuredRounds: Int,
+    ): List<C03ProductionRoomExecutionSlot> {
+        val slots = ArrayList<C03ProductionRoomExecutionSlot>(
+            (warmupRounds + measuredRounds) * C03ProductionMeasurementVariant.entries.size,
+        )
+        repeat(warmupRounds) { index ->
+            slots += randomizedRound(
+                executionSeed = executionSeed,
+                phase = C03ProductionExecutionPhase.WARMUP,
+                round = index + 1,
+                ordinalOffset = slots.size,
+            )
+        }
+        repeat(measuredRounds) { index ->
+            slots += randomizedRound(
+                executionSeed = executionSeed,
+                phase = C03ProductionExecutionPhase.MEASURED,
+                round = index + 1,
+                ordinalOffset = slots.size,
+            )
+        }
+        return slots.toList()
+    }
+
+    private fun randomizedRound(
+        executionSeed: Long,
+        phase: C03ProductionExecutionPhase,
+        round: Int,
+        ordinalOffset: Int,
+    ): List<C03ProductionRoomExecutionSlot> {
+        val variants = C03ProductionMeasurementVariant.entries.toMutableList()
+        val phaseSalt = when (phase) {
+            C03ProductionExecutionPhase.WARMUP -> C01_WARMUP_PHASE_SALT
+            C03ProductionExecutionPhase.MEASURED -> C01_MEASURED_PHASE_SALT
+        }
+        val roundSeed = executionSeed xor phaseSalt xor (round.toLong() * C01_GOLDEN_GAMMA)
+        Collections.shuffle(variants, Random(roundSeed))
+        return variants.mapIndexed { index, variant ->
+            C03ProductionRoomExecutionSlot(
+                phase = phase,
+                round = round,
+                ordinal = ordinalOffset + index,
+                variant = variant,
+            )
+        }
+    }
 
     private suspend fun measureOnce(
         variant: C03ProductionMeasurementVariant,
@@ -693,6 +762,7 @@ internal class C03ProductionRoomMeasurementRunner(
             medianNanos = percentile(sorted, 50),
             p90Nanos = percentile(sorted, 90),
             p95Nanos = percentile(sorted, 95),
+            p99Nanos = percentile(sorted, 99),
             samples = values,
         )
     }
@@ -927,6 +997,46 @@ internal class C03ProductionRoomMeasurementRunner(
         rows.map { it.logicalChannelId }.sorted(),
     )
 
+    private fun corpusDigest(
+        baseline: List<FixtureItem>,
+        scenarios: List<C03ProductionScenario>,
+    ): String = digestFrames(
+        CORPUS_DIGEST_DOMAIN,
+        buildList {
+            add(baseline.size.toString())
+            add(fixtureActiveDigest(baseline))
+            scenarios.forEach { scenario ->
+                val incoming = scenario.applyTo(baseline)
+                add(scenarioId(scenario))
+                add(incoming.size.toString())
+                add(fixtureActiveDigest(incoming))
+            }
+        },
+    )
+
+    private fun measurementEnvironment(): C03ProductionRoomMeasurementEnvironment {
+        val apiLevel = Build.VERSION.SDK_INT
+        val manufacturer = Build.MANUFACTURER.safeEnvironmentValue()
+        val model = Build.MODEL.safeEnvironmentValue()
+        val availableProcessors = Runtime.getRuntime().availableProcessors()
+        val fingerprint = digestFrames(
+            ENVIRONMENT_DIGEST_DOMAIN,
+            listOf(
+                apiLevel.toString(),
+                manufacturer,
+                model,
+                availableProcessors.toString(),
+            ),
+        )
+        return C03ProductionRoomMeasurementEnvironment(
+            apiLevel = apiLevel,
+            manufacturer = manufacturer,
+            model = model,
+            availableProcessors = availableProcessors,
+            fingerprintSha256 = fingerprint,
+        )
+    }
+
     private fun elapsed(startedAt: Long): Long = (nanoTime() - startedAt).coerceAtLeast(1L)
 
     private fun File.safeLength(): Long = if (isFile) length().coerceAtLeast(0L) else 0L
@@ -935,7 +1045,7 @@ internal class C03ProductionRoomMeasurementRunner(
         trim().replace(CONTROL_CHARACTERS, " ").take(64).ifBlank { "unknown" }
 
     private companion object {
-        const val REPORT_SCHEMA_VERSION = 2
+        const val REPORT_SCHEMA_VERSION = 3
         const val METHOD_VERSION = "c03-production-room-file-v1"
         const val SOURCE_ID = "c03-production-ab-source"
         const val CREDENTIAL_REF = "credential-c03-production-ab"
@@ -950,6 +1060,12 @@ internal class C03ProductionRoomMeasurementRunner(
         const val RUN_REFRESH = "c03-refresh-run"
         const val SEARCH_PROFILE_ID = "c03-measurement-profile"
         const val SEARCH_LIMIT = 20
+        const val C01_BASE_EXECUTION_SEED = 0x433033524F4F4DL
+        const val C01_WARMUP_PHASE_SALT = 0x2468ACE0L
+        const val C01_MEASURED_PHASE_SALT = 0x5A17C9E3L
+        const val C01_GOLDEN_GAMMA = -7046029254386353131L
+        const val CORPUS_DIGEST_DOMAIN = "c03-production-corpus-v1"
+        const val ENVIRONMENT_DIGEST_DOMAIN = "c03-production-environment-v1"
         const val LOGICAL_ID_DOMAIN = "catalog-logical-v1"
         const val CONTENT_HASH_DOMAIN = "c03-production-content-v1"
         const val SEARCH_HASH_DOMAIN = "c03-production-search-v1"
