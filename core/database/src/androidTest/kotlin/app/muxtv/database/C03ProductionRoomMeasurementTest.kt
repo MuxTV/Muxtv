@@ -60,6 +60,43 @@ class C03ProductionRoomMeasurementTest {
                 it.correctnessDigestSha256 == scenario.expectedCorrectnessDigestSha256
             }).isTrue()
             assertThat(scenario.variants.all { it.writes.sourceMetadataWrites > 0L }).isTrue()
+            assertThat(scenario.variants.all { it.samples.all { sample -> sample.searchNanos > 0L } }).isTrue()
+
+            val candidate = scenario.variants.single {
+                it.variant == C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE
+            }
+            assertThat(candidate.queryPlans).isNotEmpty()
+            assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
+            assertThat(candidate.queryPlans.flatMap { it.details })
+                .containsNoneOf("https://", "token=", "session=")
+        }
+
+        assertThat(report.repeatedRevisionStorage.map { it.variant to it.revisionCount })
+            .containsExactly(
+                C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION to 5,
+                C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE to 5,
+                C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION to 10,
+                C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE to 10,
+                C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION to 20,
+                C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE to 20,
+            )
+        report.repeatedRevisionStorage.forEach { storage ->
+            assertThat(storage.compactionNanos).isAtLeast(0L)
+            assertThat(storage.orphanPayloadRows).isEqualTo(0)
+            assertThat(storage.orphanSearchPayloadRows).isEqualTo(0)
+        }
+
+        assertThat(report.safety.map { it.variant }).containsExactly(
+            C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+            C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+        )
+        report.safety.forEach { safety ->
+            assertThat(safety.previousGoodPreserved).isTrue()
+            assertThat(safety.supersededRejected).isTrue()
+            assertThat(safety.partialFailurePublished).isFalse()
+            assertThat(safety.cancellationLatePublished).isFalse()
+            assertThat(safety.cleanupBounded).isTrue()
+            assertThat(safety.cancellationCleanupNanos).isGreaterThan(0L)
         }
 
         val output = ByteArrayOutputStream()
