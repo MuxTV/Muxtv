@@ -1,5 +1,7 @@
 package app.muxtv.database.measurement
 
+internal const val C03_PRODUCTION_EVIDENCE_BATCH_SIZE = 250
+
 internal enum class C03ProductionMeasurementVariant {
     A_CURRENT_PRODUCTION,
     B_IMMUTABLE_REUSE,
@@ -110,6 +112,7 @@ internal data class C03ProductionRoomMeasurementReport(
     val warmupIterations: Int,
     val measuredIterations: Int,
     val entryCount: Int,
+    val batchSize: Int,
     val environment: C03ProductionRoomMeasurementEnvironment,
     val scenarios: List<C03ProductionRoomScenarioMeasurement>,
     val repeatedRevisionStorage: List<C03ProductionRoomRepeatedRevisionStorage>,

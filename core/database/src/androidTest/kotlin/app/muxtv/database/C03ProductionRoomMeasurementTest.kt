@@ -36,7 +36,7 @@ class C03ProductionRoomMeasurementTest {
 
         val report = C03ProductionRoomEvidenceRunner(context).run(spec)
 
-        assertThat(report.schemaVersion).isEqualTo(1)
+        assertThat(report.schemaVersion).isEqualTo(2)
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(spec.sourceCommit)
         assertThat(report.warmupIterations).isEqualTo(0)

@@ -88,6 +88,7 @@ internal object C03ProductionRoomMeasurementJsonWriter {
             append("  \"warmupIterations\": ${report.warmupIterations},\n")
             append("  \"measuredIterations\": ${report.measuredIterations},\n")
             append("  \"entryCount\": ${report.entryCount},\n")
+            append("  \"batchSize\": ${report.batchSize},\n")
             append("  \"environment\": {\n")
             append("    \"apiLevel\": ${report.environment.apiLevel},\n")
             append("    \"manufacturer\": ").appendJsonString(report.environment.manufacturer).append(",\n")

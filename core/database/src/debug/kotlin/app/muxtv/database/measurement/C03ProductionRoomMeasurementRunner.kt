@@ -119,6 +119,7 @@ internal class C03ProductionRoomMeasurementRunner(
                 warmupIterations = spec.warmupIterations,
                 measuredIterations = spec.measuredIterations,
                 entryCount = spec.entryCount,
+                batchSize = C03_PRODUCTION_EVIDENCE_BATCH_SIZE,
                 environment = C03ProductionRoomMeasurementEnvironment(
                     apiLevel = Build.VERSION.SDK_INT,
                     manufacturer = Build.MANUFACTURER.safeEnvironmentValue(),
@@ -179,7 +180,7 @@ internal class C03ProductionRoomMeasurementRunner(
             revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
 
             val stageStarted = nanoTime()
-            incoming.chunked(BATCH_SIZE).forEach { batch ->
+            incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     REFRESH_REVISION,
@@ -289,7 +290,7 @@ internal class C03ProductionRoomMeasurementRunner(
             dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
 
             val stageStarted = nanoTime()
-            incoming.chunked(BATCH_SIZE).forEach { batch ->
+            incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(
                     SOURCE_ID,
                     REFRESH_REVISION,
@@ -393,7 +394,7 @@ internal class C03ProductionRoomMeasurementRunner(
             revisions.upsertSource(SourceDefinition(SOURCE_ID, "C03 production measurement", CREDENTIAL_REF))
             check(refresh.tryAcquire(SOURCE_ID, RUN_BASELINE, BASELINE_STARTED_AT, 0))
             revisions.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     BASELINE_REVISION,
@@ -422,7 +423,7 @@ internal class C03ProductionRoomMeasurementRunner(
             dao.upsertSource(SOURCE_ID, CREDENTIAL_REF)
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_BASELINE)
             dao.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(SOURCE_ID, BASELINE_REVISION, batch.map(FixtureItem::toCandidateEntry))
             }
             check(
@@ -927,7 +928,7 @@ internal class C03ProductionRoomMeasurementRunner(
         trim().replace(CONTROL_CHARACTERS, " ").take(64).ifBlank { "unknown" }
 
     private companion object {
-        const val REPORT_SCHEMA_VERSION = 1
+        const val REPORT_SCHEMA_VERSION = 2
         const val METHOD_VERSION = "c03-production-room-file-v1"
         const val SOURCE_ID = "c03-production-ab-source"
         const val CREDENTIAL_REF = "credential-c03-production-ab"
@@ -940,7 +941,6 @@ internal class C03ProductionRoomMeasurementRunner(
         const val BASELINE_STALE_BEFORE = 50L
         const val RUN_BASELINE = "c03-baseline-run"
         const val RUN_REFRESH = "c03-refresh-run"
-        const val BATCH_SIZE = 40
         const val SEARCH_PROFILE_ID = "c03-measurement-profile"
         const val SEARCH_LIMIT = 20
         const val LOGICAL_ID_DOMAIN = "catalog-logical-v1"

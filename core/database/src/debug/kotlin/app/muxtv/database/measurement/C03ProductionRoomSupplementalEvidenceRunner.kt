@@ -83,7 +83,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                 )
                 revisions.beginRevision(SOURCE_ID, revision, startedAt)
                 val incoming = Fixture.tokenChurn(baseline, revision)
-                incoming.chunked(BATCH_SIZE).forEach { batch ->
+                incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                     revisions.stageBatch(
                         SOURCE_ID,
                         revision,
@@ -142,7 +142,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                 val incoming = Fixture.tokenChurn(baseline, revision)
                 dao.setRunningRefreshOwner(SOURCE_ID, "repeat-b-$revision")
                 dao.beginRevision(SOURCE_ID, revision, revision * 1_000L)
-                incoming.chunked(BATCH_SIZE).forEach { batch ->
+                incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                     dao.stageBatch(SOURCE_ID, revision, batch.map(FixtureItem::toCandidateEntry))
                 }
                 check(
@@ -257,7 +257,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
             Fixture.tokenChurn(baseline, REFRESH_REVISION)
                 .take((entryCount / 2).coerceAtLeast(1))
-                .chunked(BATCH_SIZE)
+                .chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE)
                 .forEach { batch ->
                     revisions.stageBatch(
                         SOURCE_ID,
@@ -291,7 +291,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             val refresh = RoomSourceRefreshStore(database.sourceRefreshDao())
             check(refresh.tryAcquire(SOURCE_ID, RUN_STALE, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE))
             revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
-            Fixture.tokenChurn(baseline, REFRESH_REVISION).chunked(BATCH_SIZE).forEach { batch ->
+            Fixture.tokenChurn(baseline, REFRESH_REVISION).chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     REFRESH_REVISION,
@@ -347,7 +347,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                     try {
                         Fixture.tokenChurn(baseline, REFRESH_REVISION)
                             .take((entryCount / 2).coerceAtLeast(1))
-                            .chunked(BATCH_SIZE)
+                            .chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE)
                             .forEach { batch ->
                                 revisions.stageBatch(
                                     SOURCE_ID,
@@ -405,7 +405,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
             Fixture.tokenChurn(baseline, REFRESH_REVISION)
                 .take((entryCount / 2).coerceAtLeast(1))
-                .chunked(BATCH_SIZE)
+                .chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE)
                 .forEach { batch ->
                     dao.stageBatch(SOURCE_ID, REFRESH_REVISION, batch.map(FixtureItem::toCandidateEntry))
                 }
@@ -438,7 +438,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             val dao = database.candidateDao()
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_STALE)
             dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
-            Fixture.tokenChurn(baseline, REFRESH_REVISION).chunked(BATCH_SIZE).forEach { batch ->
+            Fixture.tokenChurn(baseline, REFRESH_REVISION).chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(SOURCE_ID, REFRESH_REVISION, batch.map(FixtureItem::toCandidateEntry))
             }
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_REPLACEMENT)
@@ -485,7 +485,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
                     try {
                         Fixture.tokenChurn(baseline, REFRESH_REVISION)
                             .take((entryCount / 2).coerceAtLeast(1))
-                            .chunked(BATCH_SIZE)
+                            .chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE)
                             .forEach { batch ->
                                 dao.stageBatch(SOURCE_ID, REFRESH_REVISION, batch.map(FixtureItem::toCandidateEntry))
                             }
@@ -550,7 +550,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             revisions.upsertSource(SourceDefinition(SOURCE_ID, "C03 supplemental production", CREDENTIAL_REF))
             check(refresh.tryAcquire(SOURCE_ID, RUN_BASELINE, BASELINE_STARTED_AT, 0L))
             revisions.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     BASELINE_REVISION,
@@ -579,7 +579,7 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
             dao.upsertSource(SOURCE_ID, CREDENTIAL_REF)
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_BASELINE)
             dao.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(SOURCE_ID, BASELINE_REVISION, batch.map(FixtureItem::toCandidateEntry))
             }
             check(
@@ -861,7 +861,6 @@ internal class C03ProductionRoomSupplementalEvidenceRunner(
         const val RUN_REFRESH = "c03-refresh-run"
         const val RUN_STALE = "c03-stale-run"
         const val RUN_REPLACEMENT = "c03-replacement-run"
-        const val BATCH_SIZE = 250
         const val COMPACTION_BATCH_SIZE = 4_096
         const val MAX_COMPACTION_PASSES = 64
         const val MAX_SAFETY_ENTRY_COUNT = 10_000

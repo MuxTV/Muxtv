@@ -121,7 +121,7 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
                 ),
             ) { "C03 production audit refresh owner could not be acquired." }
             revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
-            incoming.chunked(BATCH_SIZE).forEach { batch ->
+            incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     REFRESH_REVISION,
@@ -177,7 +177,7 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
             val dao = database.candidateDao()
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_REFRESH)
             dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
-            incoming.chunked(BATCH_SIZE).forEach { batch ->
+            incoming.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(
                     SOURCE_ID,
                     REFRESH_REVISION,
@@ -227,7 +227,7 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
             revisions.upsertSource(SourceDefinition(SOURCE_ID, "C03 physical mutation audit", CREDENTIAL_REF))
             check(refresh.tryAcquire(SOURCE_ID, RUN_BASELINE, BASELINE_STARTED_AT, 0L))
             revisions.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 revisions.stageBatch(
                     SOURCE_ID,
                     BASELINE_REVISION,
@@ -259,7 +259,7 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
             dao.upsertSource(SOURCE_ID, CREDENTIAL_REF)
             dao.setRunningRefreshOwner(SOURCE_ID, RUN_BASELINE)
             dao.beginRevision(SOURCE_ID, BASELINE_REVISION, BASELINE_STARTED_AT)
-            baseline.chunked(BATCH_SIZE).forEach { batch ->
+            baseline.chunked(C03_PRODUCTION_EVIDENCE_BATCH_SIZE).forEach { batch ->
                 dao.stageBatch(
                     SOURCE_ID,
                     BASELINE_REVISION,
@@ -503,7 +503,6 @@ private class C03ProductionRoomPhysicalMutationRunner(context: Context) {
         const val BASELINE_STALE_BEFORE = 50L
         const val RUN_BASELINE = "c03-baseline-run"
         const val RUN_REFRESH = "c03-refresh-run"
-        const val BATCH_SIZE = 40
         const val LOGICAL_ID_DOMAIN = "catalog-logical-v1"
         const val CONTENT_HASH_DOMAIN = "c03-production-content-v1"
         const val SEARCH_HASH_DOMAIN = "c03-production-search-v1"
