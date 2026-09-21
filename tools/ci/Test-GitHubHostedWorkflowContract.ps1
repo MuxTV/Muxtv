@@ -88,8 +88,12 @@ if (-not (Test-Path -LiteralPath $c364SmokeRunnerPath -PathType Leaf)) {
     foreach ($requiredToken in @(
         "Run-HostedC364ProductionRoomSmoke.sh",
         "api_level: 26",
+        "arch: x86",
+        "ram: 1536M",
         "avd_name: MuxTV_TV_OLD_API26",
         "api_level: 36",
+        "arch: x86_64",
+        "ram: 2048M",
         "avd_name: MuxTV_TV_CURRENT_API36",
         "script: bash ./tools/ci/Run-HostedC364ProductionRoomSmoke.sh"
     )) {
