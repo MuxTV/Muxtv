@@ -63,11 +63,11 @@ jobs:
       matrix:
         include:
           - label: API26
-            api-level: 26
-            avd-name: MuxTV_TV_OLD_API26
+            api_level: 26
+            avd_name: MuxTV_TV_OLD_API26
           - label: API36
-            api-level: 36
-            avd-name: MuxTV_TV_CURRENT_API36
+            api_level: 36
+            avd_name: MuxTV_TV_CURRENT_API36
 
     steps:
       - name: Checkout exact source
@@ -97,13 +97,13 @@ jobs:
       - name: Run C364 measurement smoke on ${{ matrix.label }}
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         env:
-          MUXTV_EXPECTED_AVD: ${{ matrix.avd-name }}
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd_name }}
         with:
-          api-level: ${{ matrix.api-level }}
+          api-level: ${{ matrix.api_level }}
           target: android-tv
           arch: x86_64
           profile: tv_1080p
-          avd-name: ${{ matrix.avd-name }}
+          avd-name: ${{ matrix.avd_name }}
           force-avd-creation: true
           cores: 2
           ram-size: 2048M
@@ -164,11 +164,11 @@ jobs:
           MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           MUXTV_EVIDENCE_DIR: .work/evidence/c364-canonical
         with:
-          api-level: 36
+          api_level: 36
           target: android-tv
           arch: x86_64
           profile: tv_1080p
-          avd-name: MuxTV_TV_CURRENT_API36
+          avd_name: MuxTV_TV_CURRENT_API36
           force-avd-creation: true
           cores: 2
           ram-size: 2048M
