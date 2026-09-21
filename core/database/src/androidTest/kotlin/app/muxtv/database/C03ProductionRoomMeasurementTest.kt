@@ -43,6 +43,7 @@ class C03ProductionRoomMeasurementTest {
         assertThat(report.sourceCommit).isEqualTo(spec.sourceCommit)
         assertThat(report.corpusSha256).matches("[0-9a-f]{64}")
         assertThat(report.thresholdApplied).isFalse()
+        assertThat(report.baselineVariant).isEqualTo(C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION)
         assertThat(report.warmupIterations).isEqualTo(0)
         assertThat(report.measuredIterations).isEqualTo(1)
         assertThat(report.entryCount).isEqualTo(64)
@@ -72,6 +73,7 @@ class C03ProductionRoomMeasurementTest {
                 it.variant == C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE
             }
             assertThat(scenario.executionSeed).isNotEqualTo(0L)
+            assertThat(scenario.correctnessPassed).isTrue()
             assertThat(scenario.executionOrder).isNotEmpty()
             val correctnessRounds = scenario.executionOrder
                 .filter { it.phase == C03ProductionExecutionPhase.CORRECTNESS }
@@ -95,9 +97,9 @@ class C03ProductionRoomMeasurementTest {
             }
 
             scenario.variants.forEach { variant ->
-                assertThat(variant.stage.p99Nanos).isAtLeast(variant.stage.p95Nanos)
-                assertThat(variant.publication.p99Nanos).isAtLeast(variant.publication.p95Nanos)
-                assertThat(variant.search.p99Nanos).isAtLeast(variant.search.p95Nanos)
+                assertThat(variant.stage.p99Nanos).isEqualTo(variant.stage.samples.max())
+                assertThat(variant.publication.p99Nanos).isEqualTo(variant.publication.samples.max())
+                assertThat(variant.search.p99Nanos).isEqualTo(variant.search.samples.max())
             }
 
             assertThat(candidate.queryPlans).isNotEmpty()
