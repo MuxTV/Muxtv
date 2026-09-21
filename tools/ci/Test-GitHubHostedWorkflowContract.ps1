@@ -80,6 +80,16 @@ foreach ($workflow in $supportedWorkflows) {
 
 $c364WorkflowPath = Join-Path $workflowRoot "c364-production-room-adaptation.yml"
 $c364SmokeRunnerPath = Join-Path $RepositoryRoot "tools/ci/Run-HostedC364ProductionRoomSmoke.sh"
+$c364SmokeTestPath = Join-Path $RepositoryRoot "core/database/src/androidTest/kotlin/app/muxtv/database/C03ProductionRoomMeasurementTest.kt"
+
+if (-not (Test-Path -LiteralPath $c364SmokeTestPath -PathType Leaf)) {
+    $violations.Add("C03ProductionRoomMeasurementTest.kt: focused smoke test is missing")
+} else {
+    $c364SmokeTest = Get-Content -LiteralPath $c364SmokeTestPath -Raw
+    if ($c364SmokeTest.IndexOf("@CatalogDatabaseMeasurement", [System.StringComparison]::Ordinal) -lt 0) {
+        $violations.Add("C03ProductionRoomMeasurementTest.kt: measurement annotation is required to keep C03 out of ordinary device matrices")
+    }
+}
 
 if (-not (Test-Path -LiteralPath $c364SmokeRunnerPath -PathType Leaf)) {
     $violations.Add("c364-production-room-adaptation.yml: missing focused C364 smoke runner")
