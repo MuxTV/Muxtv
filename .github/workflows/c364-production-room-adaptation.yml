@@ -64,9 +64,13 @@ jobs:
         include:
           - label: API26
             api_level: 26
+            arch: x86
+            ram: 1536M
             avd_name: MuxTV_TV_OLD_API26
           - label: API36
             api_level: 36
+            arch: x86_64
+            ram: 2048M
             avd_name: MuxTV_TV_CURRENT_API36
 
     steps:
@@ -101,12 +105,12 @@ jobs:
         with:
           api-level: ${{ matrix.api_level }}
           target: android-tv
-          arch: x86_64
+          arch: ${{ matrix.arch }}
           profile: tv_1080p
           avd-name: ${{ matrix.avd_name }}
           force-avd-creation: true
           cores: 2
-          ram-size: 2048M
+          ram-size: ${{ matrix.ram }}
           heap-size: 256M
           disk-size: 4G
           disable-animations: true
