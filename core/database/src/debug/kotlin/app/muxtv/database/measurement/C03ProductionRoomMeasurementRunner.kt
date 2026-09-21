@@ -73,26 +73,65 @@ internal class C03ProductionRoomMeasurementRunner(
                     warmupRounds = spec.warmupIterations,
                     measuredRounds = spec.measuredIterations,
                 )
+                val expectedLogicalDigest = fixtureLogicalDigest(incoming)
+                val expectedPreviousGoodDigest = fixtureActiveDigest(baseline)
                 val measuredByVariant = C03ProductionMeasurementVariant.entries.associateWith {
                     mutableListOf<MeasuredVariant>()
                 }
 
-                executionOrder.forEach { slot ->
-                    val phaseLabel = when (slot.phase) {
-                        C03ProductionExecutionPhase.WARMUP -> "w"
-                        C03ProductionExecutionPhase.MEASURED -> "m"
-                    }
+                val correctnessSlots = executionOrder.filter {
+                    it.phase == C03ProductionExecutionPhase.CORRECTNESS
+                }
+                check(correctnessSlots.size == C03ProductionMeasurementVariant.entries.size) {
+                    "C03 correctness round must cover every variant exactly once."
+                }
+                val correctnessVariants = mutableSetOf<C03ProductionMeasurementVariant>()
+                correctnessSlots.forEach { slot ->
                     val result = measureOnce(
                         variant = slot.variant,
                         scenario = scenario,
                         baseline = baseline,
                         incoming = incoming,
-                        iterationLabel = "${phaseLabel}${slot.round}-o${slot.ordinal}-${slot.variant.name.lowercase()}",
+                        iterationLabel = "c${slot.round}-o${slot.ordinal}-${slot.variant.name.lowercase()}",
                     )
-                    if (slot.phase == C03ProductionExecutionPhase.MEASURED) {
-                        measuredByVariant.getValue(slot.variant) += result
+                    check(result.correctnessDigestSha256 == expectedDigest) {
+                        "C03 correctness phase active digest disagrees with deterministic fixture."
                     }
+                    check(result.correctnessCount == expectedCount) {
+                        "C03 correctness phase active count disagrees with deterministic fixture."
+                    }
+                    check(result.logicalIdentityDigestSha256 == expectedLogicalDigest) {
+                        "C03 correctness phase logical identity digest disagrees with deterministic fixture."
+                    }
+                    check(result.previousGoodDigestSha256 == expectedPreviousGoodDigest) {
+                        "C03 correctness phase previous-good digest disagrees with deterministic baseline."
+                    }
+                    correctnessVariants += slot.variant
                 }
+                check(correctnessVariants == C03ProductionMeasurementVariant.entries.toSet()) {
+                    "C03 correctness phase did not cover every variant."
+                }
+
+                executionOrder
+                    .asSequence()
+                    .filter { it.phase != C03ProductionExecutionPhase.CORRECTNESS }
+                    .forEach { slot ->
+                        val phaseLabel = when (slot.phase) {
+                            C03ProductionExecutionPhase.CORRECTNESS -> error("Correctness slot escaped the gate.")
+                            C03ProductionExecutionPhase.WARMUP -> "w"
+                            C03ProductionExecutionPhase.MEASURED -> "m"
+                        }
+                        val result = measureOnce(
+                            variant = slot.variant,
+                            scenario = scenario,
+                            baseline = baseline,
+                            incoming = incoming,
+                            iterationLabel = "${phaseLabel}${slot.round}-o${slot.ordinal}-${slot.variant.name.lowercase()}",
+                        )
+                        if (slot.phase == C03ProductionExecutionPhase.MEASURED) {
+                            measuredByVariant.getValue(slot.variant) += result
+                        }
+                    }
 
                 val variants = C03ProductionMeasurementVariant.entries.map { variant ->
                     val measured = measuredByVariant.getValue(variant).toList()
@@ -149,7 +188,7 @@ internal class C03ProductionRoomMeasurementRunner(
                     "Write counts are persisted row-state deltas collected outside timed sections; trigger-based physical mutation auditing is the next Task 4 increment.",
                     "Search latency and query-plan fields are intentionally zero/empty until the Task 5 active-search contract is executable; no synthetic search number is reported.",
                     "Repeated-revision storage, bounded orphan compaction and cancellation cleanup remain separate evidence increments and are not inferred from one refresh.",
-                    "A/B performance execution uses the C01 seeded randomized per-round interleaving contract; the execution seed and full slot order are retained per scenario.",
+                    "A/B execution uses the C01 correctness-before-performance gate plus seeded randomized per-round interleaving; the execution seed and full slot order are retained per scenario.",
                 ),
             )
         }
@@ -164,7 +203,13 @@ internal class C03ProductionRoomMeasurementRunner(
         measuredRounds: Int,
     ): List<C03ProductionRoomExecutionSlot> {
         val slots = ArrayList<C03ProductionRoomExecutionSlot>(
-            (warmupRounds + measuredRounds) * C03ProductionMeasurementVariant.entries.size,
+            (1 + warmupRounds + measuredRounds) * C03ProductionMeasurementVariant.entries.size,
+        )
+        slots += randomizedRound(
+            executionSeed = executionSeed,
+            phase = C03ProductionExecutionPhase.CORRECTNESS,
+            round = 1,
+            ordinalOffset = 0,
         )
         repeat(warmupRounds) { index ->
             slots += randomizedRound(
@@ -193,6 +238,7 @@ internal class C03ProductionRoomMeasurementRunner(
     ): List<C03ProductionRoomExecutionSlot> {
         val variants = C03ProductionMeasurementVariant.entries.toMutableList()
         val phaseSalt = when (phase) {
+            C03ProductionExecutionPhase.CORRECTNESS -> C01_CORRECTNESS_PHASE_SALT
             C03ProductionExecutionPhase.WARMUP -> C01_WARMUP_PHASE_SALT
             C03ProductionExecutionPhase.MEASURED -> C01_MEASURED_PHASE_SALT
         }
@@ -986,6 +1032,10 @@ internal class C03ProductionRoomMeasurementRunner(
         items.map { NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal) },
     )
 
+    private fun fixtureLogicalDigest(items: List<FixtureItem>): String = logicalDigest(
+        items.map { NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal) },
+    )
+
     private fun activeDigest(rows: List<NormalizedRow>): String = digestFrames(
         ACTIVE_DIGEST_DOMAIN,
         rows.sortedWith(compareBy<NormalizedRow> { it.logicalChannelId }.thenBy { it.contentHash })
@@ -1061,6 +1111,7 @@ internal class C03ProductionRoomMeasurementRunner(
         const val SEARCH_PROFILE_ID = "c03-measurement-profile"
         const val SEARCH_LIMIT = 20
         const val C01_BASE_EXECUTION_SEED = 0x433033524F4F4DL
+        const val C01_CORRECTNESS_PHASE_SALT = 0x13579BDFL
         const val C01_WARMUP_PHASE_SALT = 0x2468ACE0L
         const val C01_MEASURED_PHASE_SALT = 0x5A17C9E3L
         const val C01_GOLDEN_GAMMA = -7046029254386353131L
