@@ -164,6 +164,7 @@ internal class C03ProductionRoomMeasurementRunner(
                     expectedCorrectnessCount = expectedCount,
                     executionSeed = executionSeed,
                     executionOrder = executionOrder,
+                    correctnessPassed = true,
                     variants = variants,
                 )
             }
@@ -174,6 +175,7 @@ internal class C03ProductionRoomMeasurementRunner(
                 sourceCommit = spec.sourceCommit,
                 corpusSha256 = corpusDigest(baseline, spec.scenarios),
                 thresholdApplied = false,
+                baselineVariant = C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
                 warmupIterations = spec.warmupIterations,
                 measuredIterations = spec.measuredIterations,
                 entryCount = spec.entryCount,
