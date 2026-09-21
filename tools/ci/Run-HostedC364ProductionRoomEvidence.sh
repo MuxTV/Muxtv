@@ -72,6 +72,7 @@ require(
     "C364 corpus SHA-256 provenance is missing.",
 )
 require(report.get("thresholdApplied") is False, "C364 unexpectedly applied a performance threshold.")
+require(report.get("baselineVariant") == "A_CURRENT_PRODUCTION", "C364 baseline variant mismatch.")
 require(report.get("warmupIterations") == 1, "C364 warmup contract mismatch.")
 require(report.get("measuredIterations") == 5, "C364 iteration contract mismatch.")
 require(report.get("entryCount") == 10000, "C364 entry-count contract mismatch.")
@@ -93,6 +94,7 @@ require([s.get("scenarioId") for s in scenarios] == expected_scenarios, "C364 sc
 for scenario in scenarios:
     seed = scenario.get("executionSeed")
     require(isinstance(seed, int) and seed != 0, "C364 execution seed is missing.")
+    require(scenario.get("correctnessPassed") is True, "C364 correctness gate did not pass.")
     order = scenario.get("executionOrder", [])
     expected_slot_count = (1 + report["warmupIterations"] + report["measuredIterations"]) * 2
     require(len(order) == expected_slot_count, "C364 execution slot count mismatch.")
@@ -131,11 +133,19 @@ for scenario in scenarios:
         )
         for metric in ("stage", "publication", "cleanup", "browse", "providerLookup", "search"):
             distribution = variant.get(metric, {})
-            require("p99Nanos" in distribution, f"C364 {metric} p99 is missing.")
-            require(
-                int(distribution.get("p99Nanos", -1)) >= int(distribution.get("p95Nanos", 0)),
-                f"C364 {metric} p99 is below p95.",
-            )
+            samples = [int(value) for value in distribution.get("samples", [])]
+            require(samples, f"C364 {metric} samples are missing.")
+
+            def nearest_rank(percentile):
+                ordered = sorted(samples)
+                rank = (percentile * len(ordered) + 99) // 100
+                rank = max(1, min(rank, len(ordered)))
+                return ordered[rank - 1]
+
+            require(int(distribution.get("medianNanos", -1)) == nearest_rank(50), f"C364 {metric} median mismatch.")
+            require(int(distribution.get("p90Nanos", -1)) == nearest_rank(90), f"C364 {metric} p90 mismatch.")
+            require(int(distribution.get("p95Nanos", -1)) == nearest_rank(95), f"C364 {metric} p95 mismatch.")
+            require(int(distribution.get("p99Nanos", -1)) == nearest_rank(99), f"C364 {metric} p99 mismatch.")
     candidate = variants[1]
     plans = candidate.get("queryPlans", [])
     require(plans, "C364 candidate query-plan evidence is missing.")
@@ -184,6 +194,7 @@ measuredIterations=5
 scenarioCount=7
 repeatedRevisionCounts=5,10,20
 thresholdApplied=false
+baselineVariant=A_CURRENT_PRODUCTION
 correctnessRounds=1
 executionOrder=c01-seeded-randomized-interleaved
 schemaVersion=3
