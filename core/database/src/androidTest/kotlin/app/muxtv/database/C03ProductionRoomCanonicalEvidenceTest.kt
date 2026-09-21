@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.database.measurement.C03ProductionExecutionPhase
 import app.muxtv.database.measurement.C03ProductionMeasurementVariant
 import app.muxtv.database.measurement.C03ProductionRoomEvidenceArguments
 import app.muxtv.database.measurement.C03ProductionRoomEvidenceRunner
@@ -29,13 +30,17 @@ class C03ProductionRoomCanonicalEvidenceTest {
             instrumentation.targetContext,
         ).run(arguments.spec)
 
-        assertThat(report.schemaVersion).isEqualTo(2)
+        assertThat(report.schemaVersion).isEqualTo(3)
+        assertThat(report.methodVersion).contains("c01-interleaved")
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(arguments.spec.sourceCommit)
+        assertThat(report.corpusSha256).matches("[0-9a-f]{64}")
+        assertThat(report.thresholdApplied).isFalse()
         assertThat(report.warmupIterations).isEqualTo(1)
         assertThat(report.measuredIterations).isAtLeast(5)
         assertThat(report.entryCount).isEqualTo(10_000)
         assertThat(report.batchSize).isEqualTo(250)
+        assertThat(report.environment.fingerprintSha256).matches("[0-9a-f]{64}")
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
             "delta-0",
@@ -59,8 +64,38 @@ class C03ProductionRoomCanonicalEvidenceTest {
                 assertThat(variant.correctnessDigestSha256)
                     .isEqualTo(scenario.expectedCorrectnessDigestSha256)
             }
+            assertThat(scenario.executionSeed).isNotEqualTo(0L)
+            val warmupRounds = scenario.executionOrder
+                .filter { it.phase == C03ProductionExecutionPhase.WARMUP }
+                .groupBy { it.round }
+            assertThat(warmupRounds).hasSize(report.warmupIterations)
+            warmupRounds.values.forEach { round ->
+                assertThat(round.map { it.variant }).containsExactly(
+                    C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+                    C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+                )
+            }
+            val measuredRounds = scenario.executionOrder
+                .filter { it.phase == C03ProductionExecutionPhase.MEASURED }
+                .groupBy { it.round }
+            assertThat(measuredRounds).hasSize(report.measuredIterations)
+            measuredRounds.values.forEach { round ->
+                assertThat(round.map { it.variant }).containsExactly(
+                    C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+                    C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+                )
+            }
+            assertThat(scenario.executionOrder.map { it.ordinal })
+                .containsExactlyElementsIn(scenario.executionOrder.indices.toList())
+                .inOrder()
+
             val candidate = scenario.variants.single {
                 it.variant == C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE
+            }
+            scenario.variants.forEach { variant ->
+                assertThat(variant.stage.p99Nanos).isAtLeast(variant.stage.p95Nanos)
+                assertThat(variant.publication.p99Nanos).isAtLeast(variant.publication.p95Nanos)
+                assertThat(variant.search.p99Nanos).isAtLeast(variant.search.p95Nanos)
             }
             assertThat(candidate.queryPlans).isNotEmpty()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
@@ -99,6 +134,9 @@ class C03ProductionRoomCanonicalEvidenceTest {
         val output = ByteArrayOutputStream()
         C03ProductionRoomMeasurementJsonWriter.write(report, output)
         val json = output.toString(Charsets.UTF_8.name())
+        assertThat(json).contains("\"thresholdApplied\": false")
+        assertThat(json).contains("\"executionOrder\":")
+        assertThat(json).contains("\"p99Nanos\":")
         assertThat(json).doesNotContain("https://stream.invalid")
         assertThat(json).doesNotContain("token=")
         assertThat(json).doesNotContain("session=")
