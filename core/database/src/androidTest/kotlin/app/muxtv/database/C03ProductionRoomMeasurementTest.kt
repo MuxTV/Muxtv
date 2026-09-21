@@ -67,8 +67,13 @@ class C03ProductionRoomMeasurementTest {
             }
             assertThat(candidate.queryPlans).isNotEmpty()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
-            assertThat(candidate.queryPlans.flatMap { it.details })
-                .containsNoneOf("https://", "token=", "session=")
+            assertThat(
+                candidate.queryPlans.flatMap { it.details }.all { detail ->
+                    !detail.contains("https://") &&
+                        !detail.contains("token=") &&
+                        !detail.contains("session=")
+                },
+            ).isTrue()
         }
 
         assertThat(report.repeatedRevisionStorage.map { it.variant to it.revisionCount })
