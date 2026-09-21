@@ -67,6 +67,12 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
                 )
                 .plus(
                     "Repeated-revision storage and refresh safety are collected in separate untimed file-backed passes so they cannot contaminate stage/search latency distributions.",
+                )
+                .plus(
+                    "This report qualifies the production-equivalent candidate behavior only; it does not exercise or approve a production schema migration or read-path switch.",
+                )
+                .plus(
+                    "Allocations, GC and peak-memory deltas are not claimed by this file-backed Room pass; no allocation profiler is attached to timed sections.",
                 ),
         )
     }
