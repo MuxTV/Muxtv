@@ -536,13 +536,13 @@ abstract class C03ProductionCandidateDao {
     open suspend fun compactOrphans(limit: Int): C03ProductionCandidateCompactionResult {
         require(limit > 0)
         val payloadIds = orphanPayloadIds(limit)
-        val payloadRowsDeleted = if (payloadIds.isEmpty()) 0 else deletePayloads(payloadIds)
+        val payloadRowsDeleted = payloadIds
+            .chunked(SQL_BIND_DELETE_BATCH_SIZE)
+            .sumOf { payloadIdsChunk -> deletePayloads(payloadIdsChunk) }
         val searchPayloadIds = orphanSearchPayloadIds(limit)
-        val searchPayloadRowsDeleted = if (searchPayloadIds.isEmpty()) {
-            0
-        } else {
-            deleteSearchPayloads(searchPayloadIds)
-        }
+        val searchPayloadRowsDeleted = searchPayloadIds
+            .chunked(SQL_BIND_DELETE_BATCH_SIZE)
+            .sumOf { searchPayloadIdsChunk -> deleteSearchPayloads(searchPayloadIdsChunk) }
         return C03ProductionCandidateCompactionResult(
             payloadRowsDeleted = payloadRowsDeleted,
             searchPayloadRowsDeleted = searchPayloadRowsDeleted,
@@ -584,6 +584,9 @@ abstract class C03ProductionCandidateDao {
 
     private companion object {
         const val INSERT_IGNORED = -1L
+
+        // Keep Room-generated IN(...) deletes below old-edge SQLite bind-variable ceilings.
+        const val SQL_BIND_DELETE_BATCH_SIZE = 250
     }
 }
 

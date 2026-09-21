@@ -10,6 +10,7 @@ on:
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/C03Production**'
       - 'core/database/src/androidTest/kotlin/app/muxtv/database/C03Production**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
+      - 'tools/ci/Run-HostedC364ProductionRoomSmoke.sh'
       - 'tools/ci/Run-HostedC364ProductionRoomEvidence.sh'
       - '.github/workflows/c364-production-room-adaptation.yml'
   workflow_dispatch:
@@ -53,10 +54,20 @@ jobs:
           ./gradlew --no-daemon :core:database:compileDebugAndroidTestKotlin
 
   smoke-evidence:
-    name: C364 production Room API36 smoke evidence
+    name: C364 production Room ${{ matrix.label }} smoke evidence
     needs: correctness-contract
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: API26
+            api-level: 26
+            avd-name: MuxTV_TV_OLD_API26
+          - label: API36
+            api-level: 36
+            avd-name: MuxTV_TV_CURRENT_API36
 
     steps:
       - name: Checkout exact source
@@ -80,17 +91,19 @@ jobs:
       - name: Enable KVM for Android Emulator
         shell: bash
         env:
-          MUXTV_KVM_EVIDENCE: .work/evidence/c364-smoke
+          MUXTV_KVM_EVIDENCE: .work/evidence/c364-smoke-${{ matrix.label }}
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Run C364 measurement smoke on API36
+      - name: Run C364 measurement smoke on ${{ matrix.label }}
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        env:
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd-name }}
         with:
-          api-level: 36
+          api-level: ${{ matrix.api-level }}
           target: android-tv
           arch: x86_64
           profile: tv_1080p
-          avd-name: MuxTV_TV_CURRENT_API36
+          avd-name: ${{ matrix.avd-name }}
           force-avd-creation: true
           cores: 2
           ram-size: 2048M
@@ -100,20 +113,16 @@ jobs:
           enable-hw-keyboard: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
-          script: |
-            set -euo pipefail
-            ./gradlew --no-daemon --stacktrace --console=plain --no-problems-report \
-              :core:database:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.C03ProductionRoomMeasurementTest
+          script: bash ./tools/ci/Run-HostedC364ProductionRoomSmoke.sh
 
       - name: Upload C364 smoke evidence
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
-          name-prefix: c364-production-room-smoke-api36-${{ github.run_id }}-${{ github.run_attempt }}
+          name-prefix: c364-production-room-smoke-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             core/database/build/outputs/androidTest-results/**
-            .work/evidence/c364-smoke/**
+            .work/evidence/c364-smoke-${{ matrix.label }}/**
           retention-days: 7
           github-token: ${{ github.token }}
 
