@@ -73,6 +73,16 @@ class C03ProductionRoomMeasurementTest {
             }
             assertThat(scenario.executionSeed).isNotEqualTo(0L)
             assertThat(scenario.executionOrder).isNotEmpty()
+            val correctnessRounds = scenario.executionOrder
+                .filter { it.phase == C03ProductionExecutionPhase.CORRECTNESS }
+                .groupBy { it.round }
+            assertThat(correctnessRounds).hasSize(1)
+            correctnessRounds.values.forEach { round ->
+                assertThat(round.map { it.variant }).containsExactly(
+                    C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+                    C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+                )
+            }
             val measuredRounds = scenario.executionOrder
                 .filter { it.phase == C03ProductionExecutionPhase.MEASURED }
                 .groupBy { it.round }
