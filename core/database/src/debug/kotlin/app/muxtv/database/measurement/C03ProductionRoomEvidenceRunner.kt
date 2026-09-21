@@ -32,6 +32,7 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
     suspend fun run(spec: C03ProductionRoomMeasurementSpec): C03ProductionRoomMeasurementReport {
         val timed = C03ProductionRoomMeasurementRunner(applicationContext).run(spec)
         val physicalWrites = C03ProductionRoomPhysicalMutationRunner(applicationContext).run(spec)
+        val supplemental = C03ProductionRoomSupplementalEvidenceRunner(applicationContext).run(spec)
 
         val scenarios = timed.scenarios.mapIndexed { scenarioIndex, scenarioReport ->
             val scenario = spec.scenarios[scenarioIndex]
@@ -52,16 +53,26 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
         return timed.copy(
             methodVersion = METHOD_VERSION,
             scenarios = scenarios,
+            repeatedRevisionStorage = supplemental.repeatedRevisionStorage,
+            safety = supplemental.safety,
             limitations = timed.limitations
-                .filterNot { it.contains("row-state", ignoreCase = true) || it.contains("trigger-based", ignoreCase = true) }
+                .filterNot { limitation ->
+                    limitation.contains("row-state", ignoreCase = true) ||
+                        limitation.contains("trigger-based", ignoreCase = true) ||
+                        limitation.contains("Search latency", ignoreCase = true) ||
+                        limitation.contains("Repeated-revision", ignoreCase = true)
+                }
                 .plus(
                     "Physical write counts are application-table INSERT/UPDATE/DELETE mutations collected by persistent audit triggers in a separate untimed file-backed Room pass; timed latency/WAL databases never contain audit triggers.",
+                )
+                .plus(
+                    "Repeated-revision storage and refresh safety are collected in separate untimed file-backed passes so they cannot contaminate stage/search latency distributions.",
                 ),
         )
     }
 
     private companion object {
-        const val METHOD_VERSION = "c03-production-room-file-v2-physical-mutations"
+        const val METHOD_VERSION = "c03-production-room-file-v3-search-storage-safety"
     }
 }
 
