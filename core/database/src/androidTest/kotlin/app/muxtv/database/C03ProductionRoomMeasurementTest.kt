@@ -3,6 +3,7 @@ package app.muxtv.database
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.database.measurement.C03ProductionExecutionPhase
 import app.muxtv.database.measurement.C03ProductionMeasurementVariant
 import app.muxtv.database.measurement.C03ProductionRoomEvidenceArguments
 import app.muxtv.database.measurement.C03ProductionRoomEvidenceRunner
@@ -36,13 +37,17 @@ class C03ProductionRoomMeasurementTest {
 
         val report = C03ProductionRoomEvidenceRunner(context).run(spec)
 
-        assertThat(report.schemaVersion).isEqualTo(2)
+        assertThat(report.schemaVersion).isEqualTo(3)
+        assertThat(report.methodVersion).contains("c01-interleaved")
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(spec.sourceCommit)
+        assertThat(report.corpusSha256).matches("[0-9a-f]{64}")
+        assertThat(report.thresholdApplied).isFalse()
         assertThat(report.warmupIterations).isEqualTo(0)
         assertThat(report.measuredIterations).isEqualTo(1)
         assertThat(report.entryCount).isEqualTo(64)
         assertThat(report.batchSize).isEqualTo(250)
+        assertThat(report.environment.fingerprintSha256).matches("[0-9a-f]{64}")
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
             "delta-0",
@@ -69,7 +74,7 @@ class C03ProductionRoomMeasurementTest {
             assertThat(scenario.executionSeed).isNotEqualTo(0L)
             assertThat(scenario.executionOrder).isNotEmpty()
             val measuredRounds = scenario.executionOrder
-                .filter { it.phase == "MEASURED" }
+                .filter { it.phase == C03ProductionExecutionPhase.MEASURED }
                 .groupBy { it.round }
             assertThat(measuredRounds).hasSize(report.measuredIterations)
             measuredRounds.values.forEach { round ->
@@ -77,6 +82,12 @@ class C03ProductionRoomMeasurementTest {
                     C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
                     C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
                 )
+            }
+
+            scenario.variants.forEach { variant ->
+                assertThat(variant.stage.p99Nanos).isAtLeast(variant.stage.p95Nanos)
+                assertThat(variant.publication.p99Nanos).isAtLeast(variant.publication.p95Nanos)
+                assertThat(variant.search.p99Nanos).isAtLeast(variant.search.p95Nanos)
             }
 
             assertThat(candidate.queryPlans).isNotEmpty()
@@ -122,6 +133,9 @@ class C03ProductionRoomMeasurementTest {
         C03ProductionRoomMeasurementJsonWriter.write(report, output)
         val json = output.toString(Charsets.UTF_8.name())
         assertThat(json).contains("\"sourceCommit\": \"instrumentation-smoke\"")
+        assertThat(json).contains("\"thresholdApplied\": false")
+        assertThat(json).contains("\"executionOrder\":")
+        assertThat(json).contains("\"p99Nanos\":")
         assertThat(json).contains("\"redactionPassed\": true")
         assertThat(json).doesNotContain("https://")
 
