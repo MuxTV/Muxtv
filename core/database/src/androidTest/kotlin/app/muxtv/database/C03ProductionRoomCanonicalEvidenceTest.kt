@@ -34,7 +34,8 @@ class C03ProductionRoomCanonicalEvidenceTest {
         assertThat(report.sourceCommit).isEqualTo(arguments.spec.sourceCommit)
         assertThat(report.warmupIterations).isEqualTo(1)
         assertThat(report.measuredIterations).isAtLeast(5)
-        assertThat(report.entryCount).isEqualTo(10_000)\n        assertThat(report.batchSize).isEqualTo(250)
+        assertThat(report.entryCount).isEqualTo(10_000)
+        assertThat(report.batchSize).isEqualTo(250)
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
             "delta-0",

@@ -68,7 +68,8 @@ require("physical-mutations" in report.get("methodVersion", ""), "C364 methodVer
 require(report.get("sourceCommit") == expected_sha, "C364 sourceCommit mismatch.")
 require(report.get("warmupIterations") == 1, "C364 warmup contract mismatch.")
 require(report.get("measuredIterations") == 5, "C364 iteration contract mismatch.")
-require(report.get("entryCount") == 10000, "C364 entry-count contract mismatch.")\nrequire(report.get("batchSize") == 250, "C364 batch-size contract mismatch.")
+require(report.get("entryCount") == 10000, "C364 entry-count contract mismatch.")
+require(report.get("batchSize") == 250, "C364 batch-size contract mismatch.")
 require(report.get("redactionPassed") is True, "C364 report redaction gate failed.")
 
 expected_scenarios = [
