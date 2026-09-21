@@ -85,6 +85,8 @@ internal object C03ProductionRoomMeasurementJsonWriter {
             append("  \"schemaVersion\": ${report.schemaVersion},\n")
             append("  \"methodVersion\": ").appendJsonString(report.methodVersion).append(",\n")
             append("  \"sourceCommit\": ").appendJsonString(report.sourceCommit).append(",\n")
+            append("  \"corpusSha256\": ").appendJsonString(report.corpusSha256).append(",\n")
+            append("  \"thresholdApplied\": ${report.thresholdApplied},\n")
             append("  \"warmupIterations\": ${report.warmupIterations},\n")
             append("  \"measuredIterations\": ${report.measuredIterations},\n")
             append("  \"entryCount\": ${report.entryCount},\n")
@@ -93,7 +95,9 @@ internal object C03ProductionRoomMeasurementJsonWriter {
             append("    \"apiLevel\": ${report.environment.apiLevel},\n")
             append("    \"manufacturer\": ").appendJsonString(report.environment.manufacturer).append(",\n")
             append("    \"model\": ").appendJsonString(report.environment.model).append(",\n")
-            append("    \"availableProcessors\": ${report.environment.availableProcessors}\n")
+            append("    \"availableProcessors\": ${report.environment.availableProcessors},\n")
+            append("    \"fingerprintSha256\": ")
+                .appendJsonString(report.environment.fingerprintSha256).append("\n")
             append("  },\n")
             append("  \"scenarios\": [\n")
             report.scenarios.forEachIndexed { scenarioIndex, scenario ->
@@ -136,6 +140,14 @@ internal object C03ProductionRoomMeasurementJsonWriter {
         append("      \"expectedCorrectnessDigestSha256\": ")
             .appendJsonString(scenario.expectedCorrectnessDigestSha256).append(",\n")
         append("      \"expectedCorrectnessCount\": ${scenario.expectedCorrectnessCount},\n")
+        append("      \"executionSeed\": ${scenario.executionSeed},\n")
+        append("      \"executionOrder\": [\n")
+        scenario.executionOrder.forEachIndexed { index, slot ->
+            appendExecutionSlot(slot)
+            if (index != scenario.executionOrder.lastIndex) append(',')
+            append('\n')
+        }
+        append("      ],\n")
         append("      \"variants\": [\n")
         scenario.variants.forEachIndexed { index, variant ->
             appendVariant(variant)
@@ -144,6 +156,15 @@ internal object C03ProductionRoomMeasurementJsonWriter {
         }
         append("      ]\n")
         append("    }")
+    }
+
+    private fun StringBuilder.appendExecutionSlot(slot: C03ProductionRoomExecutionSlot) {
+        append("        {\n")
+        append("          \"phase\": ").appendJsonString(slot.phase.name).append(",\n")
+        append("          \"round\": ${slot.round},\n")
+        append("          \"ordinal\": ${slot.ordinal},\n")
+        append("          \"variant\": ").appendJsonString(slot.variant.name).append("\n")
+        append("        }")
     }
 
     private fun StringBuilder.appendVariant(variant: C03ProductionRoomVariantMeasurement) {
@@ -253,6 +274,7 @@ internal object C03ProductionRoomMeasurementJsonWriter {
         append(indent).append("  \"medianNanos\": ${distribution.medianNanos},\n")
         append(indent).append("  \"p90Nanos\": ${distribution.p90Nanos},\n")
         append(indent).append("  \"p95Nanos\": ${distribution.p95Nanos},\n")
+        append(indent).append("  \"p99Nanos\": ${distribution.p99Nanos},\n")
         append(indent).append("  \"samples\": [")
         distribution.samples.forEachIndexed { index, value ->
             if (index > 0) append(", ")
