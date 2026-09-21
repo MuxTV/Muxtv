@@ -340,7 +340,8 @@ internal class C03ProductionRoomMeasurementRunner(
                 "C03 candidate active Search did not resolve the expected channel."
             }
             val queryPlans = listOf(
-                database.candidateActiveSearchQueryPlan(
+                candidateActiveSearchQueryPlan(
+                    databaseName = name,
                     ftsExpression = searchExpression,
                     limit = SEARCH_LIMIT,
                 ),
@@ -516,58 +517,64 @@ internal class C03ProductionRoomMeasurementRunner(
             }
         }
 
-    private suspend fun C03ProductionCandidateDatabase.candidateActiveSearchQueryPlan(
+    private fun candidateActiveSearchQueryPlan(
+        databaseName: String,
         ftsExpression: String,
         limit: Int,
-    ): C03ProductionRoomQueryPlan = useReaderConnection { connection ->
-        val details = connection.usePrepared(
-            """
-            EXPLAIN QUERY PLAN
-            SELECT
-                m.ordinal,
-                m.logicalChannelId,
-                p.payloadId,
-                p.canonicalChannelId,
-                p.rawName
-            FROM c03_production_candidate_search_documents_fts
-            INNER JOIN c03_production_candidate_search_documents AS d
-                ON d.rowid = c03_production_candidate_search_documents_fts.rowid
-            INNER JOIN c03_production_candidate_payloads AS p
-                ON p.searchPayloadId = d.searchPayloadId
-            INNER JOIN c03_production_candidate_memberships AS m
-                ON m.payloadId = p.payloadId
-            INNER JOIN c03_production_candidate_sources AS s
-                ON s.sourceId = m.sourceId AND s.activeRevision = m.revisionNumber
-            WHERE s.sourceId = ?
-              AND c03_production_candidate_search_documents_fts MATCH ?
-            GROUP BY m.sourceId, m.revisionNumber, m.ordinal
-            ORDER BY m.ordinal
-            LIMIT ?
-            """.trimIndent(),
-        ) { statement ->
-            statement.bindText(1, SOURCE_ID)
-            statement.bindText(2, ftsExpression)
-            statement.bindLong(3, limit.toLong())
-            buildList {
-                while (statement.step()) {
-                    add(
-                        statement.getText(3)
-                            .replace(CONTROL_CHARACTERS, " ")
-                            .take(256),
-                    )
+    ): C03ProductionRoomQueryPlan {
+        val file = applicationContext.getDatabasePath(databaseName)
+        check(file.isFile) { "C03 candidate database is missing for query-plan capture." }
+        val raw = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
+        return try {
+            val details = raw.rawQuery(
+                """
+                EXPLAIN QUERY PLAN
+                SELECT
+                    m.ordinal,
+                    m.logicalChannelId,
+                    p.payloadId,
+                    p.canonicalChannelId,
+                    p.rawName
+                FROM c03_production_candidate_search_documents_fts
+                INNER JOIN c03_production_candidate_search_documents AS d
+                    ON d.rowid = c03_production_candidate_search_documents_fts.rowid
+                INNER JOIN c03_production_candidate_payloads AS p
+                    ON p.searchPayloadId = d.searchPayloadId
+                INNER JOIN c03_production_candidate_memberships AS m
+                    ON m.payloadId = p.payloadId
+                INNER JOIN c03_production_candidate_sources AS s
+                    ON s.sourceId = m.sourceId AND s.activeRevision = m.revisionNumber
+                WHERE s.sourceId = ?
+                  AND c03_production_candidate_search_documents_fts MATCH ?
+                GROUP BY m.sourceId, m.revisionNumber, m.ordinal
+                ORDER BY m.ordinal
+                LIMIT ?
+                """.trimIndent(),
+                arrayOf(SOURCE_ID, ftsExpression, limit.toString()),
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            cursor.getString(3)
+                                .replace(CONTROL_CHARACTERS, " ")
+                                .take(256),
+                        )
+                    }
                 }
             }
+            check(details.isNotEmpty()) { "C03 candidate active Search query plan is empty." }
+            C03ProductionRoomQueryPlan(
+                operation = "candidate-active-search",
+                details = details,
+                indexed = details.any { detail ->
+                    detail.contains("VIRTUAL TABLE INDEX", ignoreCase = true) ||
+                        detail.contains("USING INDEX", ignoreCase = true) ||
+                        detail.contains("USING COVERING INDEX", ignoreCase = true)
+                },
+            )
+        } finally {
+            raw.close()
         }
-        check(details.isNotEmpty()) { "C03 candidate active Search query plan is empty." }
-        C03ProductionRoomQueryPlan(
-            operation = "candidate-active-search",
-            details = details,
-            indexed = details.any { detail ->
-                detail.contains("VIRTUAL TABLE INDEX", ignoreCase = true) ||
-                    detail.contains("USING INDEX", ignoreCase = true) ||
-                    detail.contains("USING COVERING INDEX", ignoreCase = true)
-            },
-        )
     }
 
     private suspend fun C03ProductionCandidateDatabase.candidateRevisionCount(): Long =
