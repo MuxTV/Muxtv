@@ -87,6 +87,7 @@ internal object C03ProductionRoomMeasurementJsonWriter {
             append("  \"sourceCommit\": ").appendJsonString(report.sourceCommit).append(",\n")
             append("  \"corpusSha256\": ").appendJsonString(report.corpusSha256).append(",\n")
             append("  \"thresholdApplied\": ${report.thresholdApplied},\n")
+            append("  \"baselineVariant\": ").appendJsonString(report.baselineVariant.name).append(",\n")
             append("  \"warmupIterations\": ${report.warmupIterations},\n")
             append("  \"measuredIterations\": ${report.measuredIterations},\n")
             append("  \"entryCount\": ${report.entryCount},\n")
@@ -141,6 +142,7 @@ internal object C03ProductionRoomMeasurementJsonWriter {
             .appendJsonString(scenario.expectedCorrectnessDigestSha256).append(",\n")
         append("      \"expectedCorrectnessCount\": ${scenario.expectedCorrectnessCount},\n")
         append("      \"executionSeed\": ${scenario.executionSeed},\n")
+        append("      \"correctnessPassed\": ${scenario.correctnessPassed},\n")
         append("      \"executionOrder\": [\n")
         scenario.executionOrder.forEachIndexed { index, slot ->
             appendExecutionSlot(slot)
