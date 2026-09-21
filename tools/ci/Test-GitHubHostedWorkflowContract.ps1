@@ -78,6 +78,41 @@ foreach ($workflow in $supportedWorkflows) {
     }
 }
 
+$c364WorkflowPath = Join-Path $workflowRoot "c364-production-room-adaptation.yml"
+$c364SmokeRunnerPath = Join-Path $RepositoryRoot "tools/ci/Run-HostedC364ProductionRoomSmoke.sh"
+
+if (-not (Test-Path -LiteralPath $c364SmokeRunnerPath -PathType Leaf)) {
+    $violations.Add("c364-production-room-adaptation.yml: missing focused C364 smoke runner")
+} elseif (Test-Path -LiteralPath $c364WorkflowPath -PathType Leaf) {
+    $c364Workflow = Get-Content -LiteralPath $c364WorkflowPath -Raw
+    foreach ($requiredToken in @(
+        "Run-HostedC364ProductionRoomSmoke.sh",
+        "api_level: 26",
+        "avd_name: MuxTV_TV_OLD_API26",
+        "api_level: 36",
+        "avd_name: MuxTV_TV_CURRENT_API36",
+        "script: bash ./tools/ci/Run-HostedC364ProductionRoomSmoke.sh"
+    )) {
+        if ($c364Workflow.IndexOf($requiredToken, [System.StringComparison]::Ordinal) -lt 0) {
+            $violations.Add("c364-production-room-adaptation.yml: missing C364 smoke contract token: $requiredToken")
+        }
+    }
+
+    $c364SmokeRunner = Get-Content -LiteralPath $c364SmokeRunnerPath -Raw
+    foreach ($requiredToken in @(
+        "set -euo pipefail",
+        "-PcatalogMeasurements=true",
+        "C03ProductionRoomMeasurementTest"
+    )) {
+        if ($c364SmokeRunner.IndexOf($requiredToken, [System.StringComparison]::Ordinal) -lt 0) {
+            $violations.Add("Run-HostedC364ProductionRoomSmoke.sh: missing focused smoke token: $requiredToken")
+        }
+    }
+    if ($c364Workflow -match '(?ms)script:\s*\|\s*\r?\n\s*set -euo pipefail') {
+        $violations.Add("c364-production-room-adaptation.yml: multiline emulator script must not rely on /bin/sh pipefail")
+    }
+}
+
 if (-not (Test-Path -LiteralPath $jdkActionPath -PathType Leaf)) {
     $violations.Add("setup-muxtv-jdks: composite action is missing")
 } else {
