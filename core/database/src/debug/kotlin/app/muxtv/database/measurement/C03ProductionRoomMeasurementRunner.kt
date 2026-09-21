@@ -814,9 +814,12 @@ internal class C03ProductionRoomMeasurementRunner(
     }
 
     private fun percentile(sorted: List<Long>, percentile: Int): Long {
-        require(percentile in 0..100)
-        val index = (((sorted.size - 1).toLong() * percentile) / 100L).toInt()
-        return sorted[index]
+        require(sorted.isNotEmpty())
+        require(percentile in 1..100)
+        val rank = ((percentile.toLong() * sorted.size + 99L) / 100L)
+            .toInt()
+            .coerceIn(1, sorted.size)
+        return sorted[rank - 1]
     }
 
     private fun fileState(name: String): C03ProductionRoomFileState {
