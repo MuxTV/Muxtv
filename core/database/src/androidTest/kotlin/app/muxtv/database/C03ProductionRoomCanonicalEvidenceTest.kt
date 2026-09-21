@@ -65,6 +65,16 @@ class C03ProductionRoomCanonicalEvidenceTest {
                     .isEqualTo(scenario.expectedCorrectnessDigestSha256)
             }
             assertThat(scenario.executionSeed).isNotEqualTo(0L)
+            val correctnessRounds = scenario.executionOrder
+                .filter { it.phase == C03ProductionExecutionPhase.CORRECTNESS }
+                .groupBy { it.round }
+            assertThat(correctnessRounds).hasSize(1)
+            correctnessRounds.values.forEach { round ->
+                assertThat(round.map { it.variant }).containsExactly(
+                    C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+                    C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+                )
+            }
             val warmupRounds = scenario.executionOrder
                 .filter { it.phase == C03ProductionExecutionPhase.WARMUP }
                 .groupBy { it.round }
