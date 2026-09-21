@@ -99,6 +99,9 @@ internal class C03ProductionRoomMeasurementRunner(
                     check(measured.map { it.writes }.distinct().size == 1) {
                         "C03 row-state write evidence was not deterministic."
                     }
+                    check(measured.map { it.queryPlans }.distinct().size == 1) {
+                        "C03 query-plan evidence was not deterministic."
+                    }
                     variantMeasurement(variant, measured)
                 }
                 C03ProductionRoomScenarioMeasurement(
@@ -211,6 +214,20 @@ internal class C03ProductionRoomMeasurementRunner(
             val lookupStarted = nanoTime()
             check(database.productionProviderExists(incoming.first().providerKey))
             val lookupNanos = elapsed(lookupStarted)
+            val searchExpression = searchExpression(incoming)
+            val expectedSearchId = incoming.first().canonicalChannelId
+            val searchStarted = nanoTime()
+            val searchRows = database.channelSearchDao().searchCandidates(
+                profileId = SEARCH_PROFILE_ID,
+                ftsExpression = searchExpression,
+                nowEpochMillis = 0L,
+                fetchLimit = SEARCH_LIMIT,
+                restrictToCanonicalIds = null,
+            )
+            val searchNanos = elapsed(searchStarted)
+            check(searchRows.any { it.canonicalChannelId == expectedSearchId }) {
+                "C03 production active Search did not resolve the expected channel."
+            }
 
             MeasuredVariant(
                 correctnessDigestSha256 = activeDigest(rows),
@@ -237,12 +254,13 @@ internal class C03ProductionRoomMeasurementRunner(
                     cancellationCleanupNanos = 0,
                     browseNanos = browseNanos,
                     providerLookupNanos = lookupNanos,
-                    searchNanos = 0,
+                    searchNanos = searchNanos,
                     before = before,
                     afterStage = afterStage,
                     afterPublication = afterPublication,
                     afterCleanup = afterPublication,
                 ),
+                queryPlans = emptyList(),
             )
         } finally {
             database.close()
@@ -308,6 +326,24 @@ internal class C03ProductionRoomMeasurementRunner(
             val lookupStarted = nanoTime()
             check(database.candidateProviderExists(incoming.first().providerKey))
             val lookupNanos = elapsed(lookupStarted)
+            val searchExpression = searchExpression(incoming)
+            val expectedSearchId = incoming.first().canonicalChannelId
+            val searchStarted = nanoTime()
+            val searchRows = dao.activeSearch(
+                sourceId = SOURCE_ID,
+                ftsExpression = searchExpression,
+                limit = SEARCH_LIMIT,
+            )
+            val searchNanos = elapsed(searchStarted)
+            check(searchRows.any { it.canonicalChannelId == expectedSearchId }) {
+                "C03 candidate active Search did not resolve the expected channel."
+            }
+            val queryPlans = listOf(
+                database.candidateActiveSearchQueryPlan(
+                    ftsExpression = searchExpression,
+                    limit = SEARCH_LIMIT,
+                ),
+            )
 
             MeasuredVariant(
                 correctnessDigestSha256 = activeDigest(rows),
@@ -335,12 +371,13 @@ internal class C03ProductionRoomMeasurementRunner(
                     cancellationCleanupNanos = 0,
                     browseNanos = browseNanos,
                     providerLookupNanos = lookupNanos,
-                    searchNanos = 0,
+                    searchNanos = searchNanos,
                     before = before,
                     afterStage = afterStage,
                     afterPublication = afterPublication,
                     afterCleanup = afterPublication,
                 ),
+                queryPlans = queryPlans,
             )
         } finally {
             database.close()
@@ -478,6 +515,60 @@ internal class C03ProductionRoomMeasurementRunner(
             }
         }
 
+    private suspend fun C03ProductionCandidateDatabase.candidateActiveSearchQueryPlan(
+        ftsExpression: String,
+        limit: Int,
+    ): C03ProductionRoomQueryPlan = useReaderConnection { connection ->
+        val details = connection.usePrepared(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT
+                m.ordinal,
+                m.logicalChannelId,
+                p.payloadId,
+                p.canonicalChannelId,
+                p.rawName
+            FROM c03_production_candidate_search_documents_fts
+            INNER JOIN c03_production_candidate_search_documents AS d
+                ON d.rowid = c03_production_candidate_search_documents_fts.rowid
+            INNER JOIN c03_production_candidate_payloads AS p
+                ON p.searchPayloadId = d.searchPayloadId
+            INNER JOIN c03_production_candidate_memberships AS m
+                ON m.payloadId = p.payloadId
+            INNER JOIN c03_production_candidate_sources AS s
+                ON s.sourceId = m.sourceId AND s.activeRevision = m.revisionNumber
+            WHERE s.sourceId = ?
+              AND c03_production_candidate_search_documents_fts MATCH ?
+            GROUP BY m.sourceId, m.revisionNumber, m.ordinal
+            ORDER BY m.ordinal
+            LIMIT ?
+            """.trimIndent(),
+        ) { statement ->
+            statement.bindText(1, SOURCE_ID)
+            statement.bindText(2, ftsExpression)
+            statement.bindLong(3, limit.toLong())
+            buildList {
+                while (statement.step()) {
+                    add(
+                        statement.getText(3)
+                            .replace(CONTROL_CHARACTERS, " ")
+                            .take(256),
+                    )
+                }
+            }
+        }
+        check(details.isNotEmpty()) { "C03 candidate active Search query plan is empty." }
+        C03ProductionRoomQueryPlan(
+            operation = "candidate-active-search",
+            details = details,
+            indexed = details.any { detail ->
+                detail.contains("VIRTUAL TABLE INDEX", ignoreCase = true) ||
+                    detail.contains("USING INDEX", ignoreCase = true) ||
+                    detail.contains("USING COVERING INDEX", ignoreCase = true)
+            },
+        )
+    }
+
     private suspend fun C03ProductionCandidateDatabase.candidateRevisionCount(): Long =
         useReaderConnection { connection ->
             connection.usePrepared("SELECT COUNT(*) FROM c03_production_candidate_revisions") { statement ->
@@ -583,7 +674,7 @@ internal class C03ProductionRoomMeasurementRunner(
             browse = distribution(samples.map(C03ProductionRoomTimingSample::browseNanos)),
             providerLookup = distribution(samples.map(C03ProductionRoomTimingSample::providerLookupNanos)),
             search = distribution(samples.map(C03ProductionRoomTimingSample::searchNanos)),
-            queryPlans = emptyList(),
+            queryPlans = first.queryPlans,
         )
     }
 
@@ -805,7 +896,13 @@ internal class C03ProductionRoomMeasurementRunner(
         val previousGoodDigestSha256: String,
         val writes: C03ProductionRoomWriteCounts,
         val sample: C03ProductionRoomTimingSample,
+        val queryPlans: List<C03ProductionRoomQueryPlan>,
     )
+
+    private fun searchExpression(items: List<FixtureItem>): String {
+        val first = items.first()
+        return "\"${first.rawName.replace("\"", "")}\""
+    }
 
     private fun fixtureActiveDigest(items: List<FixtureItem>): String = activeDigest(
         items.map { NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal) },
@@ -844,6 +941,8 @@ internal class C03ProductionRoomMeasurementRunner(
         const val RUN_BASELINE = "c03-baseline-run"
         const val RUN_REFRESH = "c03-refresh-run"
         const val BATCH_SIZE = 40
+        const val SEARCH_PROFILE_ID = "c03-measurement-profile"
+        const val SEARCH_LIMIT = 20
         const val LOGICAL_ID_DOMAIN = "catalog-logical-v1"
         const val CONTENT_HASH_DOMAIN = "c03-production-content-v1"
         const val SEARCH_HASH_DOMAIN = "c03-production-search-v1"
