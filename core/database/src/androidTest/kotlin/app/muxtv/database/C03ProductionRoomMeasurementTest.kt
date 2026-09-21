@@ -66,6 +66,19 @@ class C03ProductionRoomMeasurementTest {
             val candidate = scenario.variants.single {
                 it.variant == C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE
             }
+            assertThat(scenario.executionSeed).isNotEqualTo(0L)
+            assertThat(scenario.executionOrder).isNotEmpty()
+            val measuredRounds = scenario.executionOrder
+                .filter { it.phase == "MEASURED" }
+                .groupBy { it.round }
+            assertThat(measuredRounds).hasSize(report.measuredIterations)
+            measuredRounds.values.forEach { round ->
+                assertThat(round.map { it.variant }).containsExactly(
+                    C03ProductionMeasurementVariant.A_CURRENT_PRODUCTION,
+                    C03ProductionMeasurementVariant.B_IMMUTABLE_REUSE,
+                )
+            }
+
             assertThat(candidate.queryPlans).isNotEmpty()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
             assertThat(
