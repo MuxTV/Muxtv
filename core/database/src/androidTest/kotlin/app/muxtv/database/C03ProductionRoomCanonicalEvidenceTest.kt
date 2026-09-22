@@ -30,7 +30,7 @@ class C03ProductionRoomCanonicalEvidenceTest {
             instrumentation.targetContext,
         ).run(arguments.spec)
 
-        assertThat(report.schemaVersion).isEqualTo(3)
+        assertThat(report.schemaVersion).isEqualTo(4)
         assertThat(report.methodVersion).contains("c01-interleaved")
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(arguments.spec.sourceCommit)
@@ -41,6 +41,8 @@ class C03ProductionRoomCanonicalEvidenceTest {
         assertThat(report.measuredIterations).isAtLeast(5)
         assertThat(report.entryCount).isEqualTo(10_000)
         assertThat(report.batchSize).isEqualTo(250)
+        assertThat(report.browsePageSize).isEqualTo(64)
+        assertThat(report.browseOffset).isEqualTo(0)
         assertThat(report.environment.fingerprintSha256).matches("[0-9a-f]{64}")
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
@@ -109,7 +111,10 @@ class C03ProductionRoomCanonicalEvidenceTest {
                 assertThat(variant.publication.p99Nanos).isEqualTo(variant.publication.samples.max())
                 assertThat(variant.search.p99Nanos).isEqualTo(variant.search.samples.max())
             }
-            assertThat(candidate.queryPlans).isNotEmpty()
+            assertThat(candidate.queryPlans.map { it.operation }).containsExactly(
+                "candidate-active-browse-page",
+                "candidate-active-search",
+            ).inOrder()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
         }
 
