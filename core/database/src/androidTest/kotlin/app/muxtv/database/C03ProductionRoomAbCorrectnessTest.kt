@@ -80,6 +80,14 @@ class C03ProductionRoomAbCorrectnessTest {
     }
 
     @Test
+    fun duplicateBrowsePreservesVariantMultiplicityWhenPayloadIsReused() = runTest {
+        val result = runner.runDuplicateBrowseScenario()
+
+        assertThat(result.productionVariantCount).isEqualTo(2)
+        assertThat(result.candidateVariantCount).isEqualTo(2)
+    }
+
+    @Test
     fun partialFailureCannotPublishAndLeavesPreviousGoodActive() = runTest {
         val result = runner.runPartialFailureScenario(entryCount = ENTRY_COUNT)
 
