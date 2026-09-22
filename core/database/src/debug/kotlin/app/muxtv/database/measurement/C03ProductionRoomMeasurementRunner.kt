@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.os.SystemClock
+import androidx.paging.PagingSource
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.useReaderConnection
@@ -180,6 +181,8 @@ internal class C03ProductionRoomMeasurementRunner(
                 measuredIterations = spec.measuredIterations,
                 entryCount = spec.entryCount,
                 batchSize = C03_PRODUCTION_EVIDENCE_BATCH_SIZE,
+                browsePageSize = BROWSE_PAGE_SIZE,
+                browseOffset = BROWSE_OFFSET,
                 environment = measurementEnvironment(),
                 scenarios = scenarios,
                 repeatedRevisionStorage = emptyList(),
@@ -191,6 +194,7 @@ internal class C03ProductionRoomMeasurementRunner(
                     "Search latency and query-plan fields are intentionally zero/empty until the Task 5 active-search contract is executable; no synthetic search number is reported.",
                     "Repeated-revision storage, bounded orphan compaction and cancellation cleanup remain separate evidence increments and are not inferred from one refresh.",
                     "A/B execution uses the C01 correctness-before-performance gate plus seeded randomized per-round interleaving; the execution seed and full slot order are retained per scenario.",
+                    "Active browse timing uses equivalent Room PagingSource Refresh workloads for A and B: offset 0, load size 64; full-catalog materialization is not timed as browse.",
                 ),
             )
         }
@@ -326,9 +330,20 @@ internal class C03ProductionRoomMeasurementRunner(
             val rows = database.productionRows(REFRESH_REVISION)
             val previousRows = database.productionRows(BASELINE_REVISION)
             val browseStarted = nanoTime()
-            val browseCount = database.productionActiveCount()
+            val productionBrowsePage = database.channelBrowseDao()
+                .pageActiveChannels(SEARCH_PROFILE_ID, false)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = BROWSE_OFFSET,
+                        loadSize = BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
             val browseNanos = elapsed(browseStarted)
-            check(browseCount == incoming.size)
+            val productionBrowseRows =
+                (productionBrowsePage as? PagingSource.LoadResult.Page)?.data
+                    ?: error("C03 production browse page failed.")
+            check(productionBrowseRows.size == expectedBrowsePageSize(incoming.size))
             val lookupStarted = nanoTime()
             check(database.productionProviderExists(incoming.first().providerKey))
             val lookupNanos = elapsed(lookupStarted)
@@ -438,9 +453,19 @@ internal class C03ProductionRoomMeasurementRunner(
             }
             val previousRows = database.candidateRows(BASELINE_REVISION)
             val browseStarted = nanoTime()
-            val browsed = dao.activeRows(SOURCE_ID)
+            val candidateBrowsePage = dao.pageActiveChannels(SOURCE_ID)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = BROWSE_OFFSET,
+                        loadSize = BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
             val browseNanos = elapsed(browseStarted)
-            check(browsed.size == incoming.size)
+            val candidateBrowseRows =
+                (candidateBrowsePage as? PagingSource.LoadResult.Page)?.data
+                    ?: error("C03 candidate browse page failed.")
+            check(candidateBrowseRows.size == expectedBrowsePageSize(incoming.size))
             val lookupStarted = nanoTime()
             check(database.candidateProviderExists(incoming.first().providerKey))
             val lookupNanos = elapsed(lookupStarted)
@@ -457,6 +482,11 @@ internal class C03ProductionRoomMeasurementRunner(
                 "C03 candidate active Search did not resolve the expected channel."
             }
             val queryPlans = listOf(
+                candidateActiveBrowseQueryPlan(
+                    databaseName = name,
+                    limit = BROWSE_PAGE_SIZE,
+                    offset = BROWSE_OFFSET,
+                ),
                 candidateActiveSearchQueryPlan(
                     databaseName = name,
                     ftsExpression = searchExpression,
@@ -633,6 +663,69 @@ internal class C03ProductionRoomMeasurementRunner(
                 statement.step()
             }
         }
+
+    private fun candidateActiveBrowseQueryPlan(
+        databaseName: String,
+        limit: Int,
+        offset: Int,
+    ): C03ProductionRoomQueryPlan {
+        val file = applicationContext.getDatabasePath(databaseName)
+        check(file.isFile) { "C03 candidate database is missing for browse query-plan capture." }
+        val raw = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
+        return try {
+            val details = raw.rawQuery(
+                """
+                EXPLAIN QUERY PLAN
+                SELECT
+                    p.canonicalChannelId AS channelId,
+                    MIN(p.rawName) AS displayName,
+                    MIN(p.groupTitle) AS groupTitle,
+                    MIN(p.channelNumber) AS channelNumber,
+                    0 AS isFavorite,
+                    COUNT(DISTINCT p.payloadId) AS variantCount
+                FROM c03_production_candidate_sources AS s
+                INNER JOIN c03_production_candidate_memberships AS m
+                    ON m.sourceId = s.sourceId AND m.revisionNumber = s.activeRevision
+                INNER JOIN c03_production_candidate_payloads AS p
+                    ON p.payloadId = m.payloadId
+                WHERE s.sourceId = ?
+                GROUP BY p.canonicalChannelId
+                ORDER BY CASE
+                             WHEN MIN(p.channelNumber) <> ''
+                              AND MIN(p.channelNumber) NOT GLOB '*[^0-9]*'
+                             THEN CAST(MIN(p.channelNumber) AS INTEGER)
+                             ELSE 2147483647
+                         END,
+                         displayName COLLATE NOCASE,
+                         p.canonicalChannelId COLLATE BINARY
+                LIMIT ? OFFSET ?
+                """.trimIndent(),
+                arrayOf(SOURCE_ID, limit.toString(), offset.toString()),
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            cursor.getString(3)
+                                .replace(CONTROL_CHARACTERS, " ")
+                                .take(256),
+                        )
+                    }
+                }
+            }
+            check(details.isNotEmpty()) { "C03 candidate active browse query plan is empty." }
+            C03ProductionRoomQueryPlan(
+                operation = "candidate-active-browse-page",
+                details = details,
+                indexed = details.any { detail ->
+                    detail.contains("USING INDEX", ignoreCase = true) ||
+                        detail.contains("USING COVERING INDEX", ignoreCase = true) ||
+                        detail.contains("INTEGER PRIMARY KEY", ignoreCase = true)
+                },
+            )
+        } finally {
+            raw.close()
+        }
+    }
 
     private fun candidateActiveSearchQueryPlan(
         databaseName: String,
@@ -1092,6 +1185,9 @@ internal class C03ProductionRoomMeasurementRunner(
         )
     }
 
+    private fun expectedBrowsePageSize(totalEntries: Int): Int =
+        (totalEntries - BROWSE_OFFSET).coerceAtLeast(0).coerceAtMost(BROWSE_PAGE_SIZE)
+
     private fun elapsed(startedAt: Long): Long = (nanoTime() - startedAt).coerceAtLeast(1L)
 
     private fun File.safeLength(): Long = if (isFile) length().coerceAtLeast(0L) else 0L
@@ -1100,7 +1196,7 @@ internal class C03ProductionRoomMeasurementRunner(
         trim().replace(CONTROL_CHARACTERS, " ").take(64).ifBlank { "unknown" }
 
     private companion object {
-        const val REPORT_SCHEMA_VERSION = 3
+        const val REPORT_SCHEMA_VERSION = 4
         const val METHOD_VERSION = "c03-production-room-file-v1"
         const val SOURCE_ID = "c03-production-ab-source"
         const val CREDENTIAL_REF = "credential-c03-production-ab"
@@ -1115,6 +1211,8 @@ internal class C03ProductionRoomMeasurementRunner(
         const val RUN_REFRESH = "c03-refresh-run"
         const val SEARCH_PROFILE_ID = "c03-measurement-profile"
         const val SEARCH_LIMIT = 20
+        const val BROWSE_PAGE_SIZE = 64
+        const val BROWSE_OFFSET = 0
         const val C01_BASE_EXECUTION_SEED = 0x433033524F4F4DL
         const val C01_CORRECTNESS_PHASE_SALT = 0x13579BDFL
         const val C01_WARMUP_PHASE_SALT = 0x2468ACE0L
