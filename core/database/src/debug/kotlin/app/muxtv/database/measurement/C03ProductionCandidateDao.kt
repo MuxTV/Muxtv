@@ -1,14 +1,18 @@
 package app.muxtv.database.measurement
 
+import androidx.paging.PagingSource
 import androidx.room3.Dao
+import androidx.room3.DaoReturnTypeConverters
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.paging.PagingSourceDaoReturnTypeConverter
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 @Dao
+@DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
 abstract class C03ProductionCandidateDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertSource(entity: C03ProductionCandidateSourceEntity): Long
@@ -274,6 +278,36 @@ abstract class C03ProductionCandidateDao {
         ftsExpression: String,
         limit: Int,
     ): List<C03ProductionCandidateSearchRow>
+
+    @Query(
+        """
+        SELECT
+            p.canonicalChannelId AS channelId,
+            MIN(p.rawName) AS displayName,
+            MIN(p.groupTitle) AS groupTitle,
+            MIN(p.channelNumber) AS channelNumber,
+            0 AS isFavorite,
+            COUNT(DISTINCT p.payloadId) AS variantCount
+        FROM c03_production_candidate_sources AS s
+        INNER JOIN c03_production_candidate_memberships AS m
+            ON m.sourceId = s.sourceId AND m.revisionNumber = s.activeRevision
+        INNER JOIN c03_production_candidate_payloads AS p
+            ON p.payloadId = m.payloadId
+        WHERE s.sourceId = :sourceId
+        GROUP BY p.canonicalChannelId
+        ORDER BY CASE
+                     WHEN MIN(p.channelNumber) <> ''
+                      AND MIN(p.channelNumber) NOT GLOB '*[^0-9]*'
+                     THEN CAST(MIN(p.channelNumber) AS INTEGER)
+                     ELSE 2147483647
+                 END,
+                 displayName COLLATE NOCASE,
+                 p.canonicalChannelId COLLATE BINARY
+        """,
+    )
+    abstract fun pageActiveChannels(
+        sourceId: String,
+    ): PagingSource<Int, C03ProductionCandidateBrowseRow>
 
     @Query("SELECT COUNT(*) FROM c03_production_candidate_payloads")
     protected abstract suspend fun payloadRowCount(): Int
