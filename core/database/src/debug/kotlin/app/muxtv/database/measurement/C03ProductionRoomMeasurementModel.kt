@@ -139,6 +139,8 @@ internal data class C03ProductionRoomMeasurementReport(
     val measuredIterations: Int,
     val entryCount: Int,
     val batchSize: Int,
+    val browsePageSize: Int,
+    val browseOffset: Int,
     val environment: C03ProductionRoomMeasurementEnvironment,
     val scenarios: List<C03ProductionRoomScenarioMeasurement>,
     val repeatedRevisionStorage: List<C03ProductionRoomRepeatedRevisionStorage>,
