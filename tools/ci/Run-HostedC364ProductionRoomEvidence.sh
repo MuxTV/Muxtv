@@ -63,7 +63,7 @@ def require(condition, message):
     if not condition:
         raise SystemExit(message)
 
-require(report.get("schemaVersion") == 3, "Unsupported C364 schemaVersion.")
+require(report.get("schemaVersion") == 4, "Unsupported C364 schemaVersion.")
 require("c01-interleaved" in report.get("methodVersion", ""), "C364 methodVersion lost C01 interleaving provenance.")
 require("physical-mutations" in report.get("methodVersion", ""), "C364 methodVersion lost mutation provenance.")
 require(report.get("sourceCommit") == expected_sha, "C364 sourceCommit mismatch.")
@@ -77,6 +77,8 @@ require(report.get("warmupIterations") == 1, "C364 warmup contract mismatch.")
 require(report.get("measuredIterations") == 5, "C364 iteration contract mismatch.")
 require(report.get("entryCount") == 10000, "C364 entry-count contract mismatch.")
 require(report.get("batchSize") == 250, "C364 batch-size contract mismatch.")
+require(report.get("browsePageSize") == 64, "C364 browse page-size contract mismatch.")
+require(report.get("browseOffset") == 0, "C364 browse offset contract mismatch.")
 environment = report.get("environment", {})
 require(
     isinstance(environment.get("fingerprintSha256"), str) and len(environment["fingerprintSha256"]) == 64,
@@ -148,7 +150,10 @@ for scenario in scenarios:
             require(int(distribution.get("p99Nanos", -1)) == nearest_rank(99), f"C364 {metric} p99 mismatch.")
     candidate = variants[1]
     plans = candidate.get("queryPlans", [])
-    require(plans, "C364 candidate query-plan evidence is missing.")
+    require(
+        [plan.get("operation") for plan in plans] == ["candidate-active-browse-page", "candidate-active-search"],
+        "C364 candidate query-plan operation matrix mismatch.",
+    )
     require(all(plan.get("indexed") is True for plan in plans), "C364 candidate query plan is not indexed.")
 
 repeated = report.get("repeatedRevisionStorage", [])
@@ -197,7 +202,9 @@ thresholdApplied=false
 baselineVariant=A_CURRENT_PRODUCTION
 correctnessRounds=1
 executionOrder=c01-seeded-randomized-interleaved
-schemaVersion=3
+schemaVersion=4
+browsePageSize=64
+browseOffset=0
 dispositionEligible=true
 EOF
 
