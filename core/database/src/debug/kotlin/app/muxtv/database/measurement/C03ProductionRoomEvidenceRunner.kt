@@ -78,7 +78,7 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
     }
 
     private companion object {
-        const val METHOD_VERSION = "c03-production-room-file-v6-fair-paged-browse-c01-interleaved-correctness-first-physical-mutations-search-storage-safety"
+        const val METHOD_VERSION = "c03-production-room-file-v7-fair-paged-browse-membership-multiplicity-c01-interleaved-correctness-first-physical-mutations-search-storage-safety"
     }
 }
 
