@@ -32,6 +32,7 @@ class C03ProductionRoomCanonicalEvidenceTest {
 
         assertThat(report.schemaVersion).isEqualTo(4)
         assertThat(report.methodVersion).contains("c01-interleaved")
+        assertThat(report.methodVersion).contains("membership-multiplicity")
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(arguments.spec.sourceCommit)
         assertThat(report.corpusSha256).matches("[0-9a-f]{64}")

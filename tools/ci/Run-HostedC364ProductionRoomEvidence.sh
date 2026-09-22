@@ -65,6 +65,7 @@ def require(condition, message):
 
 require(report.get("schemaVersion") == 4, "Unsupported C364 schemaVersion.")
 require("c01-interleaved" in report.get("methodVersion", ""), "C364 methodVersion lost C01 interleaving provenance.")
+require("membership-multiplicity" in report.get("methodVersion", ""), "C364 methodVersion lost Browse multiplicity provenance.")
 require("physical-mutations" in report.get("methodVersion", ""), "C364 methodVersion lost mutation provenance.")
 require(report.get("sourceCommit") == expected_sha, "C364 sourceCommit mismatch.")
 require(
