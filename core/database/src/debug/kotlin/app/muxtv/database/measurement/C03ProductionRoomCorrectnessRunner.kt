@@ -1,6 +1,7 @@
 package app.muxtv.database.measurement
 
 import android.content.Context
+import androidx.paging.PagingSource
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.useReaderConnection
@@ -53,6 +54,11 @@ internal data class C03ProductionCorrectnessSnapshot(
     val orphanRowsAfterBoundedCleanup: Int = 0,
     val cleanupPasses: Int = 0,
     val lateActivationPublished: Boolean = false,
+)
+
+internal data class C03DuplicateBrowseResult(
+    val productionVariantCount: Int,
+    val candidateVariantCount: Int,
 )
 
 internal data class C03ProductionContentScenarioResult(
@@ -608,6 +614,74 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
                     distinctCatalogPayloadCount = candidateRows.mapNotNull { it.payloadId }.toSet().size,
                     membershipCount = candidate.dao.membershipCount(SOURCE_ID, REFRESH_REVISION),
                 ),
+            )
+        }
+    }
+
+    suspend fun runDuplicateBrowseScenario(): C03DuplicateBrowseResult {
+        val item = Fixture.baseline(1).single()
+        val incoming = listOf(item.copy(ordinal = 0), item.copy(ordinal = 1))
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, listOf(item))
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                    SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionPage = production.database.channelBrowseDao()
+                .pageActiveChannels(DUPLICATE_BROWSE_PROFILE_ID, false)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = DUPLICATE_BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
+            val candidatePage = candidate.dao.pageActiveChannels(SOURCE_ID)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = DUPLICATE_BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
+
+            val productionRow =
+                (productionPage as? PagingSource.LoadResult.Page)?.data?.single()
+                    ?: error("C03 production duplicate browse page failed.")
+            val candidateRow =
+                (candidatePage as? PagingSource.LoadResult.Page)?.data?.single()
+                    ?: error("C03 candidate duplicate browse page failed.")
+
+            check(productionRow.channelId == item.canonicalChannelId)
+            check(candidateRow.channelId == item.canonicalChannelId)
+
+            C03DuplicateBrowseResult(
+                productionVariantCount = productionRow.variantCount,
+                candidateVariantCount = candidateRow.variantCount,
             )
         }
     }
@@ -1329,6 +1403,8 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         const val X05_RECENT_RETENTION_LIMIT = 50
         const val SEARCH_PROFILE_ID = "c03-search-profile"
         const val SEARCH_LIMIT = 20
+        const val DUPLICATE_BROWSE_PROFILE_ID = "c03-duplicate-browse-profile"
+        const val DUPLICATE_BROWSE_PAGE_SIZE = 64
         const val REPEATED_CLEANUP_BATCH_SIZE = 512
         const val MAX_REPEATED_CLEANUP_PASSES = 4
 

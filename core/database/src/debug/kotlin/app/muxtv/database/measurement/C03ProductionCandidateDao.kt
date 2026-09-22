@@ -287,7 +287,7 @@ abstract class C03ProductionCandidateDao {
             MIN(p.groupTitle) AS groupTitle,
             MIN(p.channelNumber) AS channelNumber,
             0 AS isFavorite,
-            COUNT(DISTINCT p.payloadId) AS variantCount
+            COUNT(*) AS variantCount
         FROM c03_production_candidate_sources AS s
         INNER JOIN c03_production_candidate_memberships AS m
             ON m.sourceId = s.sourceId AND m.revisionNumber = s.activeRevision
