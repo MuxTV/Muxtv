@@ -30,6 +30,21 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
     private val applicationContext = context.applicationContext
 
     suspend fun run(spec: C03ProductionRoomMeasurementSpec): C03ProductionRoomMeasurementReport {
+        val correctnessRunner = C03ProductionRoomCorrectnessRunner(applicationContext)
+        spec.scenarios.forEach { scenario ->
+            val browseParity = correctnessRunner.runBrowseParityScenario(
+                scenario = scenario,
+                entryCount = spec.entryCount,
+                pageSize = CANONICAL_BROWSE_PAGE_SIZE,
+            )
+            check(browseParity.productionRows == browseParity.candidateRows) {
+                "C03 Browse parity failed before performance for ${scenario.name}."
+            }
+        }
+        val duplicateBrowse = correctnessRunner.runDuplicateBrowseScenario()
+        check(duplicateBrowse.productionVariantCount == DUPLICATE_VARIANT_COUNT)
+        check(duplicateBrowse.candidateVariantCount == DUPLICATE_VARIANT_COUNT)
+
         val timed = C03ProductionRoomMeasurementRunner(applicationContext).run(spec)
         val physicalWrites = C03ProductionRoomPhysicalMutationRunner(applicationContext).run(spec)
         val supplemental = C03ProductionRoomSupplementalEvidenceRunner(applicationContext).run(spec)
@@ -78,7 +93,9 @@ internal class C03ProductionRoomEvidenceRunner(context: Context) {
     }
 
     private companion object {
-        const val METHOD_VERSION = "c03-production-room-file-v7-fair-paged-browse-membership-multiplicity-c01-interleaved-correctness-first-physical-mutations-search-storage-safety"
+        const val METHOD_VERSION = "c03-production-room-file-v8-browse-parity-gated-membership-multiplicity-c01-interleaved-correctness-first-physical-mutations-search-storage-safety"
+        const val CANONICAL_BROWSE_PAGE_SIZE = 64
+        const val DUPLICATE_VARIANT_COUNT = 2
     }
 }
 
