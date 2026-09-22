@@ -242,6 +242,15 @@ data class C03ProductionCandidateActiveRow(
     val channelNumber: String?,
 )
 
+data class C03ProductionCandidateBrowseRow(
+    val channelId: String,
+    val displayName: String,
+    val groupTitle: String?,
+    val channelNumber: String?,
+    val isFavorite: Boolean,
+    val variantCount: Int,
+)
+
 data class C03ProductionCandidateSearchRow(
     val ordinal: Long,
     val logicalChannelId: String,
