@@ -56,6 +56,20 @@ internal data class C03ProductionCorrectnessSnapshot(
     val lateActivationPublished: Boolean = false,
 )
 
+internal data class C03BrowseParityRow(
+    val channelId: String,
+    val displayName: String,
+    val groupTitle: String?,
+    val channelNumber: String?,
+    val isFavorite: Boolean,
+    val variantCount: Int,
+)
+
+internal data class C03BrowseParityResult(
+    val productionRows: List<C03BrowseParityRow>,
+    val candidateRows: List<C03BrowseParityRow>,
+)
+
 internal data class C03DuplicateBrowseResult(
     val productionVariantCount: Int,
     val candidateVariantCount: Int,
@@ -614,6 +628,98 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
                     distinctCatalogPayloadCount = candidateRows.mapNotNull { it.payloadId }.toSet().size,
                     membershipCount = candidate.dao.membershipCount(SOURCE_ID, REFRESH_REVISION),
                 ),
+            )
+        }
+    }
+
+    suspend fun runBrowseParityScenario(
+        scenario: C03ProductionScenario,
+        entryCount: Int,
+        pageSize: Int,
+    ): C03BrowseParityResult {
+        require(entryCount > 0)
+        require(pageSize > 0)
+        val baseline = Fixture.baseline(entryCount)
+        val incoming = scenario.apply(baseline)
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                    SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionPage = production.database.channelBrowseDao()
+                .pageActiveChannels(BROWSE_PARITY_PROFILE_ID, false)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = pageSize,
+                        placeholdersEnabled = false,
+                    ),
+                )
+            val candidatePage = candidate.dao.pageActiveChannels(SOURCE_ID)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = pageSize,
+                        placeholdersEnabled = false,
+                    ),
+                )
+
+            val productionRows =
+                (productionPage as? PagingSource.LoadResult.Page)?.data
+                    ?.map { row ->
+                        C03BrowseParityRow(
+                            channelId = row.channelId,
+                            displayName = row.displayName,
+                            groupTitle = row.groupTitle,
+                            channelNumber = row.channelNumber,
+                            isFavorite = row.isFavorite,
+                            variantCount = row.variantCount,
+                        )
+                    }
+                    ?: error("C03 production browse parity page failed.")
+            val candidateRows =
+                (candidatePage as? PagingSource.LoadResult.Page)?.data
+                    ?.map { row ->
+                        C03BrowseParityRow(
+                            channelId = row.channelId,
+                            displayName = row.displayName,
+                            groupTitle = row.groupTitle,
+                            channelNumber = row.channelNumber,
+                            isFavorite = row.isFavorite,
+                            variantCount = row.variantCount,
+                        )
+                    }
+                    ?: error("C03 candidate browse parity page failed.")
+
+            C03BrowseParityResult(
+                productionRows = productionRows,
+                candidateRows = candidateRows,
             )
         }
     }
@@ -1403,6 +1509,7 @@ internal class C03ProductionRoomCorrectnessRunner(context: Context) {
         const val X05_RECENT_RETENTION_LIMIT = 50
         const val SEARCH_PROFILE_ID = "c03-search-profile"
         const val SEARCH_LIMIT = 20
+        const val BROWSE_PARITY_PROFILE_ID = "c03-browse-parity-profile"
         const val DUPLICATE_BROWSE_PROFILE_ID = "c03-duplicate-browse-profile"
         const val DUPLICATE_BROWSE_PAGE_SIZE = 64
         const val REPEATED_CLEANUP_BATCH_SIZE = 512
