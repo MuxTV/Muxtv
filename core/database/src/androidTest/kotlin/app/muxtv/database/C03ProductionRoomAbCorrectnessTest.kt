@@ -80,6 +80,20 @@ class C03ProductionRoomAbCorrectnessTest {
     }
 
     @Test
+    fun regularScenariosPreserveBrowsePageSemantics() = runTest {
+        C03ProductionScenario.entries.forEach { scenario ->
+            val result = runner.runBrowseParityScenario(
+                scenario = scenario,
+                entryCount = ENTRY_COUNT,
+                pageSize = BROWSE_PAGE_SIZE,
+            )
+
+            assertThat(result.productionRows).containsExactlyElementsIn(result.candidateRows).inOrder()
+            assertThat(result.productionRows).hasSize(BROWSE_PAGE_SIZE)
+        }
+    }
+
+    @Test
     fun duplicateBrowsePreservesVariantMultiplicityWhenPayloadIsReused() = runTest {
         val result = runner.runDuplicateBrowseScenario()
 
@@ -173,6 +187,7 @@ class C03ProductionRoomAbCorrectnessTest {
         const val MAX_BOUNDED_CLEANUP_PASSES = 4
         const val SEARCH_MARKER_INDEX = 42
         const val REPEATED_REVISION_COUNT = 5
+        const val BROWSE_PAGE_SIZE = 64
         const val MAX_REPEATED_CLEANUP_PASSES = 4
     }
 }
