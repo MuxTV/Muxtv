@@ -38,7 +38,7 @@ class C03ProductionRoomMeasurementTest {
 
         val report = C03ProductionRoomEvidenceRunner(context).run(spec)
 
-        assertThat(report.schemaVersion).isEqualTo(3)
+        assertThat(report.schemaVersion).isEqualTo(4)
         assertThat(report.methodVersion).contains("c01-interleaved")
         assertThat(report.methodVersion).contains("physical-mutations")
         assertThat(report.sourceCommit).isEqualTo(spec.sourceCommit)
@@ -49,6 +49,8 @@ class C03ProductionRoomMeasurementTest {
         assertThat(report.measuredIterations).isEqualTo(1)
         assertThat(report.entryCount).isEqualTo(64)
         assertThat(report.batchSize).isEqualTo(250)
+        assertThat(report.browsePageSize).isEqualTo(64)
+        assertThat(report.browseOffset).isEqualTo(0)
         assertThat(report.environment.fingerprintSha256).matches("[0-9a-f]{64}")
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.scenarios.map { it.scenarioId }).containsExactly(
@@ -103,7 +105,10 @@ class C03ProductionRoomMeasurementTest {
                 assertThat(variant.search.p99Nanos).isEqualTo(variant.search.samples.max())
             }
 
-            assertThat(candidate.queryPlans).isNotEmpty()
+            assertThat(candidate.queryPlans.map { it.operation }).containsExactly(
+                "candidate-active-browse-page",
+                "candidate-active-search",
+            ).inOrder()
             assertThat(candidate.queryPlans.all { it.indexed }).isTrue()
             assertThat(
                 candidate.queryPlans.flatMap { it.details }.all { detail ->
