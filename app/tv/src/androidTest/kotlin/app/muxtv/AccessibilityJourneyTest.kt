@@ -164,6 +164,10 @@ private object EmptyCatalogFixture : app.muxtv.catalog.ChannelBrowseRepository {
     override fun pages(query: app.muxtv.catalog.ChannelBrowseQuery):
         kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<app.muxtv.catalog.ChannelBrowseItem>> =
         kotlinx.coroutines.flow.flowOf(androidx.paging.PagingData.empty())
+
+    override fun managementPages(query: app.muxtv.catalog.ChannelManagementQuery):
+        kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<app.muxtv.catalog.ChannelManagementItem>> =
+        kotlinx.coroutines.flow.flowOf(androidx.paging.PagingData.empty())
 }
 
 private fun SemanticsNodeInteraction.press(

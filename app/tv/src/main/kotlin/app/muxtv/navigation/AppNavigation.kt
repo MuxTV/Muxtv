@@ -36,6 +36,7 @@ import app.muxtv.designsystem.component.MuxTvNavigationRail
 import app.muxtv.designsystem.component.MuxTvNavigationRailItem
 import app.muxtv.designsystem.icon.MuxTvIcons
 import app.muxtv.feature.channels.ChannelsRoute
+import app.muxtv.feature.channels.ManageChannelsRoute
 import app.muxtv.feature.doctor.DoctorExportStatus
 import app.muxtv.feature.doctor.DoctorRoute
 import app.muxtv.feature.guide.GuideRoute
@@ -147,12 +148,21 @@ fun AppNavigation(
 
                         AppDestination.Channels -> ChannelsRoute(
                             channelBrowseRepository = channelBrowseRepository,
+                            channelPreferencesRepository = channelPreferencesRepository,
                             epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
                             },
+                            onManageChannels = { open(AppDestination.ManageChannels) },
+                            railFocusRequester = railFocusRequester,
+                        )
+
+                        AppDestination.ManageChannels -> ManageChannelsRoute(
+                            channelBrowseRepository = channelBrowseRepository,
+                            channelPreferencesRepository = channelPreferencesRepository,
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             railFocusRequester = railFocusRequester,
                         )
 
@@ -279,6 +289,7 @@ private fun AppDestination.navigationKey(): String = when (this) {
     AppDestination.Guide -> "guide"
     AppDestination.Search -> "search"
     AppDestination.Settings -> "settings"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
@@ -300,6 +311,7 @@ private fun AppDestination.navigationLabel(): String = when (this) {
     AppDestination.Guide -> "Программа"
     AppDestination.Search -> "Поиск"
     AppDestination.Settings -> "Настройки"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
@@ -312,6 +324,7 @@ private fun AppDestination.navigationIcon() = when (this) {
     AppDestination.Guide -> MuxTvIcons.Guide
     AppDestination.Search -> MuxTvIcons.Search
     AppDestination.Settings -> MuxTvIcons.Settings
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
@@ -324,6 +337,7 @@ private fun AppDestination.navigationTestTag(): String = when (this) {
     AppDestination.Guide -> "nav-guide"
     AppDestination.Search -> "nav-search"
     AppDestination.Settings -> "nav-settings"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
@@ -331,6 +345,7 @@ private fun AppDestination.navigationTestTag(): String = when (this) {
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
+    AppDestination.ManageChannels -> AppDestination.Channels
     AppDestination.Sources, AppDestination.Doctor, AppDestination.AddSource -> AppDestination.Settings
     is AppDestination.Player -> AppDestination.Channels
     else -> this
