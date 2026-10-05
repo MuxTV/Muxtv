@@ -189,6 +189,149 @@ for forbidden in ("https://stream.invalid", "token=", "session="):
 print("C364 canonical report validation passed.")
 PY
 
+python3 - "$REPORT_PATH" "$MUXTV_EVIDENCE_DIR/c03-production-room-disposition-summary.md" <<'PY'
+import json
+import pathlib
+import statistics
+import sys
+
+report_path = pathlib.Path(sys.argv[1])
+summary_path = pathlib.Path(sys.argv[2])
+report = json.loads(report_path.read_text(encoding="utf-8"))
+
+def delta_percent(baseline, candidate):
+    baseline = int(baseline)
+    candidate = int(candidate)
+    if baseline == 0:
+        return None
+    return (candidate - baseline) * 100.0 / baseline
+
+def fmt_delta(value):
+    return "n/a" if value is None else f"{value:+.1f}%"
+
+def total_writes(variant):
+    writes = variant["writes"]
+    return sum(
+        int(writes.get(field, 0))
+        for field in (
+            "providerOrPayloadWrites",
+            "searchPayloadWrites",
+            "searchDocumentWrites",
+            "membershipWrites",
+            "revisionMetadataWrites",
+            "sourceMetadataWrites",
+        )
+    )
+
+def median_after_stage_wal(variant):
+    return int(statistics.median(int(sample["afterStage"]["walBytes"]) for sample in variant["samples"]))
+
+def metric_delta(a, b, metric):
+    return delta_percent(a[metric]["medianNanos"], b[metric]["medianNanos"])
+
+lines = [
+    "# C364 canonical disposition summary",
+    "",
+    f"- source commit: `{report['sourceCommit']}`",
+    f"- method: `{report['methodVersion']}`",
+    f"- corpus: `{report['corpusSha256']}`",
+    f"- environment: `{report['environment']['fingerprintSha256']}`",
+    f"- API: {report['environment']['apiLevel']}",
+    f"- entries / batch: {report['entryCount']} / {report['batchSize']}",
+    f"- warmup / measured rounds: {report['warmupIterations']} / {report['measuredIterations']}",
+    f"- correctness-before-performance: {'PASS' if all(s['correctnessPassed'] for s in report['scenarios']) else 'FAIL'}",
+    f"- redaction: {'PASS' if report['redactionPassed'] else 'FAIL'}",
+    "",
+    "## A/B scenario deltas",
+    "",
+    "| Scenario | writes B vs A | stage median | publication median | WAL after stage | browse median | provider lookup median | provider-search median |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|",
+]
+
+read_regressions = []
+for scenario in report["scenarios"]:
+    a, b = scenario["variants"]
+    write_delta = delta_percent(total_writes(a), total_writes(b))
+    wal_delta = delta_percent(median_after_stage_wal(a), median_after_stage_wal(b))
+    browse_delta = metric_delta(a, b, "browse")
+    search_delta = metric_delta(a, b, "search")
+    if (browse_delta is not None and browse_delta > 10.0) or (
+        search_delta is not None and search_delta > 10.0
+    ):
+        read_regressions.append(scenario["scenarioId"])
+    lines.append(
+        "| {scenario} | {writes} | {stage} | {publication} | {wal} | {browse} | {lookup} | {search} |".format(
+            scenario=scenario["scenarioId"],
+            writes=fmt_delta(write_delta),
+            stage=fmt_delta(metric_delta(a, b, "stage")),
+            publication=fmt_delta(metric_delta(a, b, "publication")),
+            wal=fmt_delta(wal_delta),
+            browse=fmt_delta(browse_delta),
+            lookup=fmt_delta(metric_delta(a, b, "providerLookup")),
+            search=fmt_delta(search_delta),
+        )
+    )
+
+lines.extend([
+    "",
+    "Positive percentages mean candidate B is slower/larger; negative percentages mean B is faster/smaller.",
+    "Provider-search timing is a bounded provider-search viability measurement, not full production Search parity.",
+    "",
+    "## Repeated revision storage",
+    "",
+    "| Revisions | A after compaction | B after compaction | B vs A | B compaction |",
+    "|---:|---:|---:|---:|---:|",
+])
+
+storage = report["repeatedRevisionStorage"]
+for revision_count in (5, 10, 20):
+    a = next(row for row in storage if row["variant"] == "A_CURRENT_PRODUCTION" and row["revisionCount"] == revision_count)
+    b = next(row for row in storage if row["variant"] == "B_IMMUTABLE_REUSE" and row["revisionCount"] == revision_count)
+    a_bytes = int(a["afterCompaction"]["totalBytes"])
+    b_bytes = int(b["afterCompaction"]["totalBytes"])
+    lines.append(
+        f"| {revision_count} | {a_bytes} B | {b_bytes} B | {fmt_delta(delta_percent(a_bytes, b_bytes))} | {int(b['compactionNanos']) / 1_000_000:.1f} ms |"
+    )
+
+candidate_plans_indexed = all(
+    all(plan["indexed"] for plan in scenario["variants"][1]["queryPlans"])
+    for scenario in report["scenarios"]
+)
+safety_passed = all(
+    row["previousGoodPreserved"]
+    and row["supersededRejected"]
+    and not row["partialFailurePublished"]
+    and not row["cancellationLatePublished"]
+    and row["cleanupBounded"]
+    for row in report["safety"]
+)
+orphans_zero = all(
+    int(row["orphanPayloadRows"]) == 0 and int(row["orphanSearchPayloadRows"]) == 0
+    for row in report["repeatedRevisionStorage"]
+)
+
+lines.extend([
+    "",
+    "## Guardrail facts",
+    "",
+    f"- candidate query plans indexed: {'PASS' if candidate_plans_indexed else 'FAIL'}",
+    f"- previous-good / stale-owner / cancellation / cleanup safety: {'PASS' if safety_passed else 'FAIL'}",
+    f"- orphan payload/search rows after bounded compaction: {'PASS' if orphans_zero else 'FAIL'}",
+    f"- scenarios with >10% candidate median Browse or provider-search regression requiring investigation: {', '.join(read_regressions) if read_regressions else 'none'}",
+    "",
+    "This file is a deterministic evidence summary. It does not itself select ADAPT/DEFER/REJECT and does not authorize a production schema/read-path switch.",
+    "",
+])
+
+summary = "\n".join(lines)
+summary_path.write_text(summary, encoding="utf-8")
+print(summary)
+PY
+
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  cat "$MUXTV_EVIDENCE_DIR/c03-production-room-disposition-summary.md" >> "$GITHUB_STEP_SUMMARY"
+fi
+
 cat > "$MUXTV_EVIDENCE_DIR/c03-production-room-canonical-summary.txt" <<EOF
 status=passed
 sourceCommit=$MUXTV_SOURCE_COMMIT
