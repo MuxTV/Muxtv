@@ -1,5 +1,6 @@
 package app.muxtv.catalog.importer
 
+import app.muxtv.common.catalog.CatalogFingerprintCodec
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
@@ -15,11 +16,12 @@ internal data class CatalogEntryIdentity(
 /**
  * Generates stable catalog identifiers while reusing one digest inside one import.
  *
- * Instances are deliberately scoped to a single import. [MessageDigest] is mutable and must not be
- * shared between concurrent imports.
+ * Instances are deliberately scoped to a single import. [MessageDigest] and
+ * [CatalogFingerprintCodec] are mutable and must not be shared between concurrent imports.
  */
 internal class CatalogEntryIdentityFactory(
     private val messageDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
+    private val fingerprintCodec: CatalogFingerprintCodec = CatalogFingerprintCodec(),
 ) {
     fun create(
         entry: CatalogImportEntry,
@@ -36,25 +38,14 @@ internal class CatalogEntryIdentityFactory(
 
         return CatalogEntryIdentity(
             providerKey = providerKey,
-            logicalChannelId = framedStableId(
-                domain = LOGICAL_CHANNEL_ID_DOMAIN,
-                sourceId,
-                providerKey,
+            logicalChannelId = fingerprintCodec.logicalChannelId(
+                sourceId = sourceId,
+                providerKey = providerKey,
             ),
             providerChannelId = stableId("provider|$sourceId|$revisionNumber|$ordinal"),
             canonicalChannelId = stableId("canonical|$canonicalScope"),
             streamVariantId = stableId("stream|$sourceId|$revisionNumber|$ordinal"),
         )
-    }
-
-    private fun framedStableId(
-        domain: String,
-        vararg values: String,
-    ): String {
-        messageDigest.reset()
-        messageDigest.updateFrame(domain)
-        values.forEach(messageDigest::updateFrame)
-        return messageDigest.digest().toHex()
     }
 
     private fun stableId(value: String): String {
@@ -64,17 +55,7 @@ internal class CatalogEntryIdentityFactory(
 
     private companion object {
         const val SHA_256 = "SHA-256"
-        const val LOGICAL_CHANNEL_ID_DOMAIN = "catalog-logical-v1"
     }
-}
-
-private fun MessageDigest.updateFrame(value: String) {
-    val bytes = value.toByteArray(StandardCharsets.UTF_8)
-    update((bytes.size ushr 24).toByte())
-    update((bytes.size ushr 16).toByte())
-    update((bytes.size ushr 8).toByte())
-    update(bytes.size.toByte())
-    update(bytes)
 }
 
 internal fun ByteArray.toHex(): String {
