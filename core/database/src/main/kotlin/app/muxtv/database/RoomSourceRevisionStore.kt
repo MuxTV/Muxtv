@@ -4,6 +4,8 @@ import app.muxtv.common.catalog.CatalogFingerprintCodec
 import app.muxtv.common.catalog.CatalogPayloadFingerprintInput
 import app.muxtv.common.tracing.MuxTvTrace
 import app.muxtv.common.tracing.MuxTvTraceSection
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 internal class RoomSourceRevisionStore(
     private val dao: SourceRevisionDao,
@@ -175,11 +177,13 @@ internal class RoomSourceRevisionStore(
         revisionNumber: Long,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevision(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun activateIfCredentialMatches(
@@ -188,12 +192,14 @@ internal class RoomSourceRevisionStore(
         expectedCredentialRef: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevisionIfCredentialMatches(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        expectedCredentialRef = expectedCredentialRef,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevisionIfCredentialMatches(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            expectedCredentialRef = expectedCredentialRef,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun activateIfRefreshOwnerMatches(
@@ -203,13 +209,15 @@ internal class RoomSourceRevisionStore(
         expectedRunToken: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevisionIfRefreshOwnerMatches(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        expectedCredentialRef = expectedCredentialRef,
-        expectedRunToken = expectedRunToken,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevisionIfRefreshOwnerMatches(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            expectedCredentialRef = expectedCredentialRef,
+            expectedRunToken = expectedRunToken,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun discard(
@@ -217,6 +225,7 @@ internal class RoomSourceRevisionStore(
         revisionNumber: Long,
     ) {
         dao.discardRevision(sourceId, revisionNumber)
+        drainCatalogPayloadOrphans()
     }
 
     override suspend fun removeInactiveSource(
@@ -230,15 +239,33 @@ internal class RoomSourceRevisionStore(
             expectedCredentialRef = expectedCredentialRef,
         )
         if (result == InactiveSourceRemovalResult.Removed) {
-            // Source deletion cascades memberships/catalog payloads. Search payloads are reusable
-            // across payloads and intentionally have no source FK, so sweep newly unreachable rows
-            // in bounded transactions after authoritative source removal has committed.
-            while (dao.compactCatalogPayloadOrphansBatch().totalRowsDeleted > 0) {
-                // Continue until the unreachable backlog is empty. Each DAO call is independently
-                // bounded to the old-edge SQLite bind ceiling and remains cancellation responsive.
-            }
+            drainCatalogPayloadOrphans()
         }
         return result
+    }
+
+    private suspend fun finalizeTerminalMutation(
+        result: SourceRevisionActivationResult,
+    ): SourceRevisionActivationResult {
+        if (
+            result is SourceRevisionActivationResult.Activated ||
+            result == SourceRevisionActivationResult.Superseded
+        ) {
+            drainCatalogPayloadOrphans()
+        }
+        return result
+    }
+
+    private suspend fun drainCatalogPayloadOrphans() {
+        // Publication/discard is already committed before this helper runs. Cleanup therefore uses
+        // independent bounded transactions and can drain arbitrarily large unreachable backlogs
+        // without extending the atomic active-pointer transaction.
+        withContext(NonCancellable) {
+            while (dao.compactCatalogPayloadOrphansBatch().totalRowsDeleted > 0) {
+                // Each batch is capped by SourceRevisionDao and remains below old-edge SQLite
+                // variable limits. Continue until storage is bounded by reachable revisions.
+            }
+        }
     }
 
     private companion object {
