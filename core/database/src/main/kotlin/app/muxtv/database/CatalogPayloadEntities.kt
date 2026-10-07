@@ -43,6 +43,12 @@ internal data class CatalogSearchPayloadEntity(
             childColumns = ["searchPayloadId"],
             onDelete = ForeignKey.RESTRICT,
         ),
+        ForeignKey(
+            entity = CanonicalChannelEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["canonicalChannelId"],
+            onDelete = ForeignKey.RESTRICT,
+        ),
     ],
     indices = [
         Index(value = ["sourceId"]),
