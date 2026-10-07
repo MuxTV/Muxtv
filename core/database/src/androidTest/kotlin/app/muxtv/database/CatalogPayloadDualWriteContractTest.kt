@@ -102,6 +102,59 @@ class CatalogPayloadDualWriteContractTest {
             .isEqualTo("variant-r3")
     }
 
+    @Test
+    fun activationDrainsMoreThanOneOrphanBatchWithoutGrowingStorageByRefreshCount() = runTest {
+        store.upsertSource(SourceDefinition(SOURCE_ID, "Provider"))
+
+        activateMany(revision = 1, token = "one")
+        activateMany(revision = 2, token = "one")
+        activateMany(revision = 3, token = "two")
+        activateMany(revision = 4, token = "three")
+
+        // Active r4 + previous-good r3 remain. The r1/r2 "one" generation is unreachable and
+        // contains 300 payloads, deliberately larger than the 250-row compaction batch.
+        assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(ENTRY_COUNT * 2)
+        assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(ENTRY_COUNT * 2)
+        assertThat(database.catalogShadowDao().searchPayloadCount()).isEqualTo(ENTRY_COUNT)
+    }
+
+    private suspend fun activateMany(
+        revision: Long,
+        token: String,
+    ) {
+        store.beginRevision(SOURCE_ID, revision, revision * 10_000)
+        val entries = (0 until ENTRY_COUNT).map { index ->
+            StagedCatalogEntry(
+                providerChannelId = "provider-r$revision-$index",
+                providerKey = "tvg:channel-$index",
+                rawName = "Channel $index",
+                canonicalChannelId = "canonical-$index",
+                canonicalDisplayName = "Channel $index",
+                streamVariantId = "variant-r$revision-$index",
+                locator = "https://stream.invalid/$index?token=$token",
+                tvgId = "channel-$index",
+                tvgName = "Channel $index",
+                groupTitle = "General",
+                channelNumber = (index + 1).toString(),
+            )
+        }
+        entries.chunked(250).forEach { batch ->
+            store.stageBatch(
+                sourceId = SOURCE_ID,
+                revisionNumber = revision,
+                entries = batch,
+            )
+        }
+        assertThat(
+            store.activate(
+                sourceId = SOURCE_ID,
+                revisionNumber = revision,
+                activatedAtEpochMillis = revision * 10_000 + 100,
+                statistics = SourceRevisionStatistics(ENTRY_COUNT, 0, 0),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+    }
+
     private suspend fun activate(
         revision: Long,
         variantId: String,
@@ -149,5 +202,6 @@ class CatalogPayloadDualWriteContractTest {
     private companion object {
         const val SOURCE_ID = "source-c03-prod-a"
         const val CHANNEL_ID = "channel-one"
+        const val ENTRY_COUNT = 300
     }
 }
