@@ -22,14 +22,6 @@ internal data class CatalogSearchPayloadEntity(
     val groupTitle: String?,
     val channelNumber: String?,
 ) {
-    init {
-        require(searchPayloadId.isNotBlank())
-        require(searchContentHash.isNotBlank())
-        require(searchHashVersion > 0)
-        require(canonicalChannelId.isNotBlank())
-        require(rawName.isNotBlank())
-    }
-
     override fun toString(): String =
         "CatalogSearchPayloadEntity(searchPayloadId=<redacted>, searchHashVersion=$searchHashVersion, " +
             "canonicalChannelId=<redacted>, rawName=<redacted>, groupTitle=<redacted>, " +
@@ -85,20 +77,6 @@ internal data class CatalogPayloadEntity(
     val referrer: String?,
     val searchPayloadId: String,
 ) {
-    init {
-        require(payloadId.isNotBlank())
-        require(sourceId.isNotBlank())
-        require(logicalChannelId.isNotBlank())
-        require(contentHash.isNotBlank())
-        require(contentHashVersion > 0)
-        require(canonicalChannelId.isNotBlank())
-        require(providerKey.isNotBlank())
-        require(rawName.isNotBlank())
-        require(locator.isNotBlank())
-        require(catchupDays == null || catchupDays >= 0)
-        require(searchPayloadId.isNotBlank())
-    }
-
     override fun toString(): String =
         "CatalogPayloadEntity(payloadId=<redacted>, sourceId=<redacted>, " +
             "logicalChannelId=<redacted>, contentHashVersion=$contentHashVersion, " +
@@ -159,4 +137,13 @@ internal data class SourceRevisionMembershipDraft(
         require(payloadId.isNotBlank())
         require(variantId.isNotBlank())
     }
+}
+
+
+internal data class CatalogPayloadCompactionResult(
+    val payloadRowsDeleted: Int,
+    val searchPayloadRowsDeleted: Int,
+) {
+    val totalRowsDeleted: Int
+        get() = payloadRowsDeleted + searchPayloadRowsDeleted
 }
