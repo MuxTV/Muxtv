@@ -717,7 +717,6 @@ internal abstract class SourceRevisionDao {
         )
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
-        compactCatalogPayloadOrphansBatch()
 
         return SourceRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -737,7 +736,6 @@ internal abstract class SourceRevisionDao {
         deleteStagingRevision(sourceId, revisionNumber)
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
-        compactCatalogPayloadOrphansBatch()
     }
 
     private companion object {
