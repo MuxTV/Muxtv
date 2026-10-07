@@ -5,6 +5,28 @@ import org.junit.Test
 
 class C03CatalogPayloadIdentityContractTest {
     @Test
+    fun importerMappingMatchesCanonicalProductionGoldenVector() {
+        val factory = CatalogEntryIdentityFactory()
+        val entry = entry()
+        val identity = factory.create(
+            entry = entry,
+            sourceId = SOURCE_ID,
+            revisionNumber = 17,
+            ordinal = 42,
+        )
+        val fingerprint = CatalogEntryPayloadFingerprinter().fingerprint(entry, identity)
+
+        assertThat(identity.logicalChannelId)
+            .isEqualTo("feee6c5319b99580350fe732c916568d2ded27984ac4a35bed7e68c2c0c0765a")
+        assertThat(identity.canonicalChannelId)
+            .isEqualTo("6ad24a2ec9e65345d6ac47f18539d556025e2eb6457a96cf8f0698d2c8c49b38")
+        assertThat(fingerprint.contentHash)
+            .isEqualTo("a567356333c3e56877b01343ef63999fb239c9b86e0fa0a907f2af8ac6fff4cf")
+        assertThat(fingerprint.searchContentHash)
+            .isEqualTo("15d3480da894cffb6c40c0ea0bea405fa69d8a988b646eb9071ca1beb0b54eff")
+    }
+
+    @Test
     fun logicalIdentityIsStableAcrossRevisionOrderAndLocatorTokenChurn() {
         val factory = CatalogEntryIdentityFactory()
         val baseline = entry(playbackReference = "https://stream.invalid/live?token=alpha")
