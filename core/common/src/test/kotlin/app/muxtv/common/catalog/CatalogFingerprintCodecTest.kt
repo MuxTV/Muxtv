@@ -24,6 +24,32 @@ class CatalogFingerprintCodecTest {
     }
 
     @Test
+    fun goldenVectorPinsProductionContentAddresses() {
+        val codec = CatalogFingerprintCodec()
+        val logicalChannelId =
+            "feee6c5319b99580350fe732c916568d2ded27984ac4a35bed7e68c2c0c0765a"
+        val contentHash =
+            "a567356333c3e56877b01343ef63999fb239c9b86e0fa0a907f2af8ac6fff4cf"
+        val searchContentHash =
+            "15d3480da894cffb6c40c0ea0bea405fa69d8a988b646eb9071ca1beb0b54eff"
+
+        assertThat(
+            codec.payloadId(
+                sourceId = "source-a",
+                logicalChannelId = logicalChannelId,
+                contentHashVersion = 1,
+                contentHash = contentHash,
+            ),
+        ).isEqualTo("268c34736c68e2b280a13e68fa299f167e10b858869f8f7d0f42e5c4692b4508")
+        assertThat(
+            codec.searchPayloadId(
+                searchHashVersion = 1,
+                searchContentHash = searchContentHash,
+            ),
+        ).isEqualTo("18becba8049551ba63521a33a649016fb15d13b250ff2968805af691be10991f")
+    }
+
+    @Test
     fun logicalIdentityIsSourceScopedAndSecretIndependent() {
         val codec = CatalogFingerprintCodec()
 
