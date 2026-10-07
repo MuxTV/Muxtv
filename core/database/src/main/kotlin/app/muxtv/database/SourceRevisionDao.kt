@@ -587,6 +587,11 @@ internal abstract class SourceRevisionDao {
               FROM user_channel_overlays
               WHERE user_channel_overlays.canonicalChannelId = canonical_channels.id
           )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM catalog_payloads
+              WHERE catalog_payloads.canonicalChannelId = canonical_channels.id
+          )
         """,
     )
     abstract suspend fun deleteUnreferencedCanonicalChannels(): Int
@@ -604,6 +609,12 @@ internal abstract class SourceRevisionDao {
         """,
     )
     protected abstract suspend fun deleteOrphanCanonicalSearchDocuments(): Int
+
+    @Transaction
+    open suspend fun cleanupUnreferencedCanonicalMetadata() {
+        deleteUnreferencedCanonicalChannels()
+        deleteOrphanCanonicalSearchDocuments()
+    }
 
     @Transaction
     open suspend fun activateRevisionIfCredentialMatches(
