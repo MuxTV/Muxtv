@@ -225,10 +225,20 @@ internal class RoomSourceRevisionStore(
     ): InactiveSourceRemovalResult {
         require(sourceId.isNotBlank())
         require(expectedCredentialRef.isNotBlank())
-        return dao.removeInactiveSource(
+        val result = dao.removeInactiveSource(
             sourceId = sourceId,
             expectedCredentialRef = expectedCredentialRef,
         )
+        if (result == InactiveSourceRemovalResult.Removed) {
+            // Source deletion cascades memberships/catalog payloads. Search payloads are reusable
+            // across payloads and intentionally have no source FK, so sweep newly unreachable rows
+            // in bounded transactions after authoritative source removal has committed.
+            while (dao.compactCatalogPayloadOrphansBatch().totalRowsDeleted > 0) {
+                // Continue until the unreachable backlog is empty. Each DAO call is independently
+                // bounded to the old-edge SQLite bind ceiling and remains cancellation responsive.
+            }
+        }
+        return result
     }
 
     private companion object {
