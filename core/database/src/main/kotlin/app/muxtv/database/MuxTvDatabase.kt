@@ -29,6 +29,9 @@ import androidx.room3.RoomDatabase
         EpgChannelMatchEntity::class,
         SearchDocumentEntity::class,
         SearchDocumentFtsEntity::class,
+        CatalogSearchPayloadEntity::class,
+        CatalogPayloadEntity::class,
+        SourceRevisionMembershipEntity::class,
     ],
     version = CURRENT_DATABASE_VERSION,
     exportSchema = true,
@@ -52,4 +55,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun guideWindowInvalidationDao(): GuideWindowInvalidationDao
     abstract fun searchIndexDao(): SearchIndexDao
     abstract fun channelSearchDao(): ChannelSearchDao
+    internal abstract fun catalogShadowDao(): CatalogShadowDao
 }
