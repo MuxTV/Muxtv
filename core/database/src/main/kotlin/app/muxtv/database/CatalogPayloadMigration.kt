@@ -69,6 +69,8 @@ private fun createC03ProductionTables(connection: SQLiteConnection) {
             FOREIGN KEY(`sourceId`) REFERENCES `sources`(`id`)
                 ON UPDATE NO ACTION ON DELETE CASCADE,
             FOREIGN KEY(`searchPayloadId`) REFERENCES `catalog_search_payloads`(`searchPayloadId`)
+                ON UPDATE NO ACTION ON DELETE RESTRICT,
+            FOREIGN KEY(`canonicalChannelId`) REFERENCES `canonical_channels`(`id`)
                 ON UPDATE NO ACTION ON DELETE RESTRICT
         )
         """.trimIndent(),
