@@ -1,5 +1,7 @@
 package app.muxtv.database
 
+import app.muxtv.common.catalog.CatalogFingerprintCodec
+import app.muxtv.common.catalog.CatalogPayloadFingerprintInput
 import app.muxtv.common.tracing.MuxTvTrace
 import app.muxtv.common.tracing.MuxTvTraceSection
 
@@ -47,6 +49,10 @@ internal class RoomSourceRevisionStore(
             val canonicalChannels = ArrayList<CanonicalChannelEntity>(entries.size)
             val providerChannels = ArrayList<ProviderChannelEntity>(entries.size)
             val streamVariants = ArrayList<StreamVariantEntity>(entries.size)
+            val catalogSearchPayloads = ArrayList<CatalogSearchPayloadEntity>(entries.size)
+            val catalogPayloads = ArrayList<CatalogPayloadEntity>(entries.size)
+            val membershipDrafts = ArrayList<SourceRevisionMembershipDraft>(entries.size)
+            val fingerprintCodec = CatalogFingerprintCodec()
 
             entries.forEach { entry ->
                 canonicalChannels += CanonicalChannelEntity(
@@ -77,12 +83,89 @@ internal class RoomSourceRevisionStore(
                     userAgent = entry.userAgent,
                     referrer = entry.referrer,
                 )
+
+                val logicalChannelId = fingerprintCodec.logicalChannelId(
+                    sourceId = sourceId,
+                    providerKey = entry.providerKey,
+                )
+                val fingerprint = fingerprintCodec.fingerprint(
+                    CatalogPayloadFingerprintInput(
+                        providerKey = entry.providerKey,
+                        canonicalChannelId = entry.canonicalChannelId,
+                        rawName = entry.rawName,
+                        tvgId = entry.tvgId,
+                        tvgName = entry.tvgName,
+                        logoUrl = entry.logoUrl,
+                        groupTitle = entry.groupTitle,
+                        channelNumber = entry.channelNumber,
+                        catchupMode = entry.catchupMode,
+                        catchupSource = entry.catchupSource,
+                        catchupDays = entry.catchupDays,
+                        catchupCorrection = entry.catchupCorrection,
+                        locator = entry.locator,
+                        userAgent = entry.userAgent,
+                        referrer = entry.referrer,
+                    ),
+                )
+                val searchPayloadId = fingerprintCodec.searchPayloadId(
+                    searchHashVersion = fingerprint.searchHashVersion,
+                    searchContentHash = fingerprint.searchContentHash,
+                )
+                val payloadId = fingerprintCodec.payloadId(
+                    sourceId = sourceId,
+                    logicalChannelId = logicalChannelId,
+                    contentHashVersion = fingerprint.contentHashVersion,
+                    contentHash = fingerprint.contentHash,
+                )
+
+                catalogSearchPayloads += CatalogSearchPayloadEntity(
+                    searchPayloadId = searchPayloadId,
+                    searchContentHash = fingerprint.searchContentHash,
+                    searchHashVersion = fingerprint.searchHashVersion,
+                    canonicalChannelId = entry.canonicalChannelId,
+                    rawName = entry.rawName,
+                    groupTitle = entry.groupTitle,
+                    channelNumber = entry.channelNumber,
+                )
+                catalogPayloads += CatalogPayloadEntity(
+                    payloadId = payloadId,
+                    sourceId = sourceId,
+                    logicalChannelId = logicalChannelId,
+                    contentHash = fingerprint.contentHash,
+                    contentHashVersion = fingerprint.contentHashVersion,
+                    canonicalChannelId = entry.canonicalChannelId,
+                    providerKey = entry.providerKey,
+                    rawName = entry.rawName,
+                    tvgId = entry.tvgId,
+                    tvgName = entry.tvgName,
+                    logoUrl = entry.logoUrl,
+                    groupTitle = entry.groupTitle,
+                    channelNumber = entry.channelNumber,
+                    catchupMode = entry.catchupMode,
+                    catchupSource = entry.catchupSource,
+                    catchupDays = entry.catchupDays,
+                    catchupCorrection = entry.catchupCorrection,
+                    locator = entry.locator,
+                    userAgent = entry.userAgent,
+                    referrer = entry.referrer,
+                    searchPayloadId = searchPayloadId,
+                )
+                membershipDrafts += SourceRevisionMembershipDraft(
+                    logicalChannelId = logicalChannelId,
+                    payloadId = payloadId,
+                    variantId = entry.streamVariantId,
+                )
             }
 
             dao.stageCatalogBatch(
+                sourceId = sourceId,
+                revisionNumber = revisionNumber,
                 canonicalChannels = canonicalChannels,
                 providerChannels = providerChannels,
                 streamVariants = streamVariants,
+                catalogSearchPayloads = catalogSearchPayloads,
+                catalogPayloads = catalogPayloads,
+                membershipDrafts = membershipDrafts,
             )
         }
     }
