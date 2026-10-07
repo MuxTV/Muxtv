@@ -79,9 +79,9 @@ internal interface CatalogShadowDao {
           AND (
               :searchPattern IS NULL
               OR COALESCE(user_channel_overlays.customName, canonical_channels.displayName)
-                    LIKE :searchPattern ESCAPE '\\'
-              OR p.rawName LIKE :searchPattern ESCAPE '\\'
-              OR p.groupTitle LIKE :searchPattern ESCAPE '\\'
+                    LIKE :searchPattern ESCAPE '\'
+              OR p.rawName LIKE :searchPattern ESCAPE '\'
+              OR p.groupTitle LIKE :searchPattern ESCAPE '\'
           )
         GROUP BY canonical_channels.id,
                  canonical_channels.displayName,
