@@ -1,0 +1,49 @@
+name: X05 refresh overlay-survival contract
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/x05-refresh-overlay-survival.yml'
+      - 'core/database/src/androidTest/kotlin/app/muxtv/database/X05RefreshOverlaySurvivalTest.kt'
+      - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/C03ProductionRoomCorrectnessRunner.kt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: x05-refresh-overlay-survival-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contract:
+    name: X05 overlay-survival compile contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Compile X05 instrumentation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :core:database:compileDebugAndroidTestKotlin
