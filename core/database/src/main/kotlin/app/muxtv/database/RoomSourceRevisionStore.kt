@@ -265,6 +265,9 @@ internal class RoomSourceRevisionStore(
                 // Each batch is capped by SourceRevisionDao and remains below old-edge SQLite
                 // variable limits. Continue until storage is bounded by reachable revisions.
             }
+            // Payload RESTRICT FKs intentionally pin canonical identities until the payload drain
+            // has completed. Re-run canonical/Search metadata cleanup afterward.
+            dao.cleanupUnreferencedCanonicalMetadata()
         }
     }
 
