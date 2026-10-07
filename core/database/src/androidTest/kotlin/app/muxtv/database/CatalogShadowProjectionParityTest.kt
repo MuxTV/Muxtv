@@ -197,6 +197,31 @@ class CatalogShadowProjectionParityTest {
     }
 
     @Test
+    fun guideChannelWindowMatchesAuthoritativeRepresentation() = runTest {
+        val authoritative = database.guideWindowDao().channelWindow(
+            profileId = PROFILE_ID,
+            afterHasChannelNumber = false,
+            afterChannelNumber = null,
+            afterDisplayName = null,
+            afterCanonicalChannelId = null,
+            limit = 100,
+        )
+        val shadow = database.catalogShadowDao().guideChannelWindow(
+            profileId = PROFILE_ID,
+            afterHasChannelNumber = false,
+            afterChannelNumber = null,
+            afterDisplayName = null,
+            afterCanonicalChannelId = null,
+            limit = 100,
+        )
+
+        assertThat(shadow).isEqualTo(authoritative)
+        assertThat(shadow.single().channelId).isEqualTo(NEWS_ID)
+        assertThat(shadow.single().cursorChannelNumber).isEqualTo(7)
+        assertThat(shadow.single().variantCount).isEqualTo(2)
+    }
+
+    @Test
     fun recentProjectionMatchesAuthoritativeRepresentation() = runTest {
         val authoritative = database.recentChannelsDao()
             .observeRecent(PROFILE_ID, limit = 50)
