@@ -59,6 +59,8 @@ class CatalogFingerprintCodec(
     private val logicalDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
     private val contentDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
     private val searchDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
+    private val payloadAddressDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
+    private val searchPayloadAddressDigest: MessageDigest = MessageDigest.getInstance(SHA_256),
 ) {
     fun logicalChannelId(
         sourceId: String,
@@ -72,6 +74,40 @@ class CatalogFingerprintCodec(
         logicalDigest.updateFrame(sourceId)
         logicalDigest.updateFrame(providerKey)
         return logicalDigest.digest().toLowerHex()
+    }
+
+    fun payloadId(
+        sourceId: String,
+        logicalChannelId: String,
+        contentHashVersion: Int,
+        contentHash: String,
+    ): String {
+        require(sourceId.isNotBlank())
+        require(logicalChannelId.isNotBlank())
+        require(contentHashVersion > 0)
+        require(contentHash.isNotBlank())
+
+        payloadAddressDigest.reset()
+        payloadAddressDigest.updateFrame(PAYLOAD_ID_DOMAIN)
+        payloadAddressDigest.updateFrame(sourceId)
+        payloadAddressDigest.updateFrame(logicalChannelId)
+        payloadAddressDigest.updateFrame(contentHashVersion.toString())
+        payloadAddressDigest.updateFrame(contentHash)
+        return payloadAddressDigest.digest().toLowerHex()
+    }
+
+    fun searchPayloadId(
+        searchHashVersion: Int,
+        searchContentHash: String,
+    ): String {
+        require(searchHashVersion > 0)
+        require(searchContentHash.isNotBlank())
+
+        searchPayloadAddressDigest.reset()
+        searchPayloadAddressDigest.updateFrame(SEARCH_PAYLOAD_ID_DOMAIN)
+        searchPayloadAddressDigest.updateFrame(searchHashVersion.toString())
+        searchPayloadAddressDigest.updateFrame(searchContentHash)
+        return searchPayloadAddressDigest.digest().toLowerHex()
     }
 
     fun fingerprint(input: CatalogPayloadFingerprintInput): CatalogPayloadFingerprint =
@@ -106,6 +142,8 @@ class CatalogFingerprintCodec(
         const val LOGICAL_CHANNEL_ID_DOMAIN = "catalog-logical-v1"
         const val CONTENT_DOMAIN = "catalog-content-v1"
         const val SEARCH_DOMAIN = "catalog-search-content-v1"
+        const val PAYLOAD_ID_DOMAIN = "catalog-payload-id-v1"
+        const val SEARCH_PAYLOAD_ID_DOMAIN = "catalog-search-payload-id-v1"
     }
 }
 
