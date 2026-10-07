@@ -473,11 +473,21 @@ internal abstract class SourceRevisionDao {
     @Query("DELETE FROM catalog_search_payloads WHERE searchPayloadId IN (:searchPayloadIds)")
     protected abstract suspend fun deleteCatalogSearchPayloads(searchPayloadIds: List<String>): Int
 
-    protected suspend fun compactCatalogPayloadOrphans(limit: Int = ORPHAN_COMPACTION_BATCH_SIZE) {
+    @Transaction
+    open suspend fun compactCatalogPayloadOrphansBatch(
+        limit: Int = ORPHAN_COMPACTION_BATCH_SIZE,
+    ): CatalogPayloadCompactionResult {
+        require(limit in 1..ORPHAN_COMPACTION_BATCH_SIZE)
         val payloadIds = orphanCatalogPayloadIds(limit)
-        if (payloadIds.isNotEmpty()) deleteCatalogPayloads(payloadIds)
+        val payloadRowsDeleted =
+            if (payloadIds.isEmpty()) 0 else deleteCatalogPayloads(payloadIds)
         val searchPayloadIds = orphanCatalogSearchPayloadIds(limit)
-        if (searchPayloadIds.isNotEmpty()) deleteCatalogSearchPayloads(searchPayloadIds)
+        val searchPayloadRowsDeleted =
+            if (searchPayloadIds.isEmpty()) 0 else deleteCatalogSearchPayloads(searchPayloadIds)
+        return CatalogPayloadCompactionResult(
+            payloadRowsDeleted = payloadRowsDeleted,
+            searchPayloadRowsDeleted = searchPayloadRowsDeleted,
+        )
     }
 
     @Query(
@@ -707,7 +717,7 @@ internal abstract class SourceRevisionDao {
         )
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
-        compactCatalogPayloadOrphans()
+        compactCatalogPayloadOrphansBatch()
 
         return SourceRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -727,7 +737,7 @@ internal abstract class SourceRevisionDao {
         deleteStagingRevision(sourceId, revisionNumber)
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
-        compactCatalogPayloadOrphans()
+        compactCatalogPayloadOrphansBatch()
     }
 
     private companion object {
