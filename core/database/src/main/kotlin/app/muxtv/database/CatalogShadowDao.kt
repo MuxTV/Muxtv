@@ -188,6 +188,100 @@ internal interface CatalogShadowDao {
 
     @Query(
         """
+        SELECT user_channel_overlays.channelNumber AS cursorChannelNumber,
+               canonical_channels.id AS channelId,
+               COALESCE(user_channel_overlays.customName, canonical_channels.displayName) AS displayName,
+               MIN(p.logoUrl) AS logoUrl,
+               MIN(p.groupTitle) AS groupTitle,
+               COALESCE(
+                   CAST(user_channel_overlays.channelNumber AS TEXT),
+                   MIN(p.channelNumber)
+               ) AS channelNumber,
+               COALESCE(user_channel_overlays.isFavorite, 0) AS isFavorite,
+               COUNT(DISTINCT m.variantId) AS variantCount
+        FROM canonical_channels
+        INNER JOIN catalog_payloads AS p
+            ON p.canonicalChannelId = canonical_channels.id
+        INNER JOIN source_revision_memberships AS m
+            ON m.payloadId = p.payloadId
+        INNER JOIN sources AS s
+            ON s.id = m.sourceId
+           AND s.activeRevision = m.revisionNumber
+        LEFT JOIN user_channel_overlays
+            ON user_channel_overlays.profileId = :profileId
+           AND user_channel_overlays.canonicalChannelId = canonical_channels.id
+        WHERE COALESCE(user_channel_overlays.isHidden, 0) = 0
+          AND (
+              :afterCanonicalChannelId IS NULL
+              OR (
+                  :afterHasChannelNumber = 1
+                  AND (
+                      user_channel_overlays.channelNumber IS NULL
+                      OR user_channel_overlays.channelNumber > :afterChannelNumber
+                      OR (
+                          user_channel_overlays.channelNumber = :afterChannelNumber
+                          AND (
+                              COALESCE(
+                                  user_channel_overlays.customName,
+                                  canonical_channels.displayName
+                              ) COLLATE NOCASE > :afterDisplayName COLLATE NOCASE
+                              OR (
+                                  COALESCE(
+                                      user_channel_overlays.customName,
+                                      canonical_channels.displayName
+                                  ) COLLATE NOCASE = :afterDisplayName COLLATE NOCASE
+                                  AND canonical_channels.id COLLATE BINARY >
+                                      :afterCanonicalChannelId COLLATE BINARY
+                              )
+                          )
+                      )
+                  )
+              )
+              OR (
+                  :afterHasChannelNumber = 0
+                  AND user_channel_overlays.channelNumber IS NULL
+                  AND (
+                      COALESCE(
+                          user_channel_overlays.customName,
+                          canonical_channels.displayName
+                      ) COLLATE NOCASE > :afterDisplayName COLLATE NOCASE
+                      OR (
+                          COALESCE(
+                              user_channel_overlays.customName,
+                              canonical_channels.displayName
+                          ) COLLATE NOCASE = :afterDisplayName COLLATE NOCASE
+                          AND canonical_channels.id COLLATE BINARY >
+                              :afterCanonicalChannelId COLLATE BINARY
+                      )
+                  )
+              )
+          )
+        GROUP BY canonical_channels.id,
+                 canonical_channels.displayName,
+                 user_channel_overlays.customName,
+                 user_channel_overlays.channelNumber,
+                 user_channel_overlays.isFavorite
+        ORDER BY CASE
+                     WHEN user_channel_overlays.channelNumber IS NULL THEN 1
+                     ELSE 0
+                 END ASC,
+                 user_channel_overlays.channelNumber ASC,
+                 displayName COLLATE NOCASE ASC,
+                 canonical_channels.id COLLATE BINARY ASC
+        LIMIT :limit
+        """,
+    )
+    suspend fun guideChannelWindow(
+        profileId: String,
+        afterHasChannelNumber: Boolean,
+        afterChannelNumber: Int?,
+        afterDisplayName: String?,
+        afterCanonicalChannelId: String?,
+        limit: Int,
+    ): List<GuideChannelWindowRow>
+
+    @Query(
+        """
         SELECT recent_channels.canonicalChannelId AS channelId,
                COALESCE(user_channel_overlays.customName, canonical_channels.displayName) AS displayName,
                MIN(p.logoUrl) AS logoUrl,
