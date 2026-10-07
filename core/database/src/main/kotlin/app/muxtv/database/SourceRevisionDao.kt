@@ -146,6 +146,53 @@ internal abstract class SourceRevisionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertStreamVariants(variants: List<StreamVariantEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertCatalogSearchPayload(
+        payload: CatalogSearchPayloadEntity,
+    ): Long
+
+    @Query(
+        """
+        SELECT *
+        FROM catalog_search_payloads
+        WHERE searchPayloadId = :searchPayloadId
+        LIMIT 1
+        """,
+    )
+    protected abstract suspend fun catalogSearchPayloadById(
+        searchPayloadId: String,
+    ): CatalogSearchPayloadEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    protected abstract suspend fun insertCatalogPayload(payload: CatalogPayloadEntity): Long
+
+    @Query(
+        """
+        SELECT *
+        FROM catalog_payloads
+        WHERE payloadId = :payloadId
+        LIMIT 1
+        """,
+    )
+    protected abstract suspend fun catalogPayloadById(payloadId: String): CatalogPayloadEntity?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    protected abstract suspend fun insertRevisionMembership(
+        membership: SourceRevisionMembershipEntity,
+    )
+
+    @Query(
+        """
+        SELECT COALESCE(MAX(ordinal), 0) + 1
+        FROM source_revision_memberships
+        WHERE sourceId = :sourceId AND revisionNumber = :revisionNumber
+        """,
+    )
+    protected abstract suspend fun nextMembershipOrdinal(
+        sourceId: String,
+        revisionNumber: Long,
+    ): Long
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertSearchDocuments(documents: List<SearchDocumentEntity>)
 
@@ -181,10 +228,19 @@ internal abstract class SourceRevisionDao {
 
     @Transaction
     open suspend fun stageCatalogBatch(
+        sourceId: String,
+        revisionNumber: Long,
         canonicalChannels: List<CanonicalChannelEntity>,
         providerChannels: List<ProviderChannelEntity>,
         streamVariants: List<StreamVariantEntity>,
+        catalogSearchPayloads: List<CatalogSearchPayloadEntity>,
+        catalogPayloads: List<CatalogPayloadEntity>,
+        membershipDrafts: List<SourceRevisionMembershipDraft>,
     ) {
+        require(sourceId.isNotBlank())
+        require(revisionNumber > 0)
+        require(catalogPayloads.size == membershipDrafts.size)
+
         // STAGING may create a missing canonical identity, but it cannot mutate metadata already
         // visible through an active revision. Canonical-name search metadata is therefore published
         // only in activateRevision(), after canonical display metadata is accepted.
@@ -193,6 +249,36 @@ internal abstract class SourceRevisionDao {
         insertStreamVariants(streamVariants)
         val searchDocuments = providerSearchDocuments(providerChannels, streamVariants)
         if (searchDocuments.isNotEmpty()) insertSearchDocuments(searchDocuments)
+
+        catalogSearchPayloads.forEach { payload ->
+            if (insertCatalogSearchPayload(payload) == INSERT_IGNORED) {
+                check(catalogSearchPayloadById(payload.searchPayloadId) == payload) {
+                    "Immutable catalog search payload collision."
+                }
+            }
+        }
+        catalogPayloads.forEach { payload ->
+            if (insertCatalogPayload(payload) == INSERT_IGNORED) {
+                check(catalogPayloadById(payload.payloadId) == payload) {
+                    "Immutable catalog payload collision."
+                }
+            }
+        }
+
+        var ordinal = nextMembershipOrdinal(sourceId, revisionNumber)
+        membershipDrafts.forEach { draft ->
+            insertRevisionMembership(
+                SourceRevisionMembershipEntity(
+                    sourceId = sourceId,
+                    revisionNumber = revisionNumber,
+                    ordinal = ordinal,
+                    logicalChannelId = draft.logicalChannelId,
+                    payloadId = draft.payloadId,
+                    variantId = draft.variantId,
+                ),
+            )
+            ordinal += 1
+        }
     }
 
     @Query(
@@ -325,6 +411,74 @@ internal abstract class SourceRevisionDao {
         currentRevision: Long,
         previousRevision: Long,
     ): List<CanonicalChannelEntity>
+
+    @Query(
+        """
+        DELETE FROM source_revision_memberships
+        WHERE sourceId = :sourceId
+          AND revisionNumber != :currentRevision
+          AND revisionNumber != :previousRevision
+        """,
+    )
+    protected abstract suspend fun deleteMembershipsExcept(
+        sourceId: String,
+        currentRevision: Long,
+        previousRevision: Long,
+    ): Int
+
+    @Query(
+        """
+        DELETE FROM source_revision_memberships
+        WHERE sourceId = :sourceId AND revisionNumber = :revisionNumber
+        """,
+    )
+    protected abstract suspend fun deleteMembershipsForRevision(
+        sourceId: String,
+        revisionNumber: Long,
+    ): Int
+
+    @Query(
+        """
+        SELECT p.payloadId
+        FROM catalog_payloads AS p
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM source_revision_memberships AS m
+            WHERE m.payloadId = p.payloadId
+        )
+        ORDER BY p.payloadId COLLATE BINARY
+        LIMIT :limit
+        """,
+    )
+    protected abstract suspend fun orphanCatalogPayloadIds(limit: Int): List<String>
+
+    @Query("DELETE FROM catalog_payloads WHERE payloadId IN (:payloadIds)")
+    protected abstract suspend fun deleteCatalogPayloads(payloadIds: List<String>): Int
+
+    @Query(
+        """
+        SELECT s.searchPayloadId
+        FROM catalog_search_payloads AS s
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM catalog_payloads AS p
+            WHERE p.searchPayloadId = s.searchPayloadId
+        )
+        ORDER BY s.searchPayloadId COLLATE BINARY
+        LIMIT :limit
+        """,
+    )
+    protected abstract suspend fun orphanCatalogSearchPayloadIds(limit: Int): List<String>
+
+    @Query("DELETE FROM catalog_search_payloads WHERE searchPayloadId IN (:searchPayloadIds)")
+    protected abstract suspend fun deleteCatalogSearchPayloads(searchPayloadIds: List<String>): Int
+
+    protected suspend fun compactCatalogPayloadOrphans(limit: Int = ORPHAN_COMPACTION_BATCH_SIZE) {
+        val payloadIds = orphanCatalogPayloadIds(limit)
+        if (payloadIds.isNotEmpty()) deleteCatalogPayloads(payloadIds)
+        val searchPayloadIds = orphanCatalogSearchPayloadIds(limit)
+        if (searchPayloadIds.isNotEmpty()) deleteCatalogSearchPayloads(searchPayloadIds)
+    }
 
     @Query(
         """
@@ -531,6 +685,11 @@ internal abstract class SourceRevisionDao {
         )
         if (canonicalDocuments.isNotEmpty()) upsertCanonicalSearchDocuments(canonicalDocuments)
 
+        deleteMembershipsExcept(
+            sourceId = sourceId,
+            currentRevision = revisionNumber,
+            previousRevision = previousRevision,
+        )
         deleteProviderSearchDocumentsExcept(
             sourceId = sourceId,
             currentRevision = revisionNumber,
@@ -548,6 +707,7 @@ internal abstract class SourceRevisionDao {
         )
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
+        compactCatalogPayloadOrphans()
 
         return SourceRevisionActivationResult.Activated(
             revisionNumber = revisionNumber,
@@ -561,10 +721,17 @@ internal abstract class SourceRevisionDao {
         sourceId: String,
         revisionNumber: Long,
     ) {
+        deleteMembershipsForRevision(sourceId, revisionNumber)
         deleteProviderSearchDocumentsForRevision(sourceId, revisionNumber)
         deleteProviderChannelsForRevision(sourceId, revisionNumber)
         deleteStagingRevision(sourceId, revisionNumber)
         deleteUnreferencedCanonicalChannels()
         deleteOrphanCanonicalSearchDocuments()
+        compactCatalogPayloadOrphans()
+    }
+
+    private companion object {
+        const val INSERT_IGNORED = -1L
+        const val ORPHAN_COMPACTION_BATCH_SIZE = 250
     }
 }
