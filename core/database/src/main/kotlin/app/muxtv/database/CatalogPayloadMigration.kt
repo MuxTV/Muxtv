@@ -214,11 +214,53 @@ private fun backfillC03ProductionTables(connection: SQLiteConnection) {
         ) VALUES (?, ?, ?, ?, ?, ?)
         """.trimIndent(),
     )
+    val verifySearchPayload = connection.prepare(
+        """
+        SELECT searchContentHash,
+               searchHashVersion,
+               canonicalChannelId,
+               rawName,
+               groupTitle,
+               channelNumber
+        FROM catalog_search_payloads
+        WHERE searchPayloadId = ?
+        LIMIT 1
+        """.trimIndent(),
+    )
+    val verifyPayload = connection.prepare(
+        """
+        SELECT sourceId,
+               logicalChannelId,
+               contentHash,
+               contentHashVersion,
+               canonicalChannelId,
+               providerKey,
+               rawName,
+               tvgId,
+               tvgName,
+               logoUrl,
+               groupTitle,
+               channelNumber,
+               catchupMode,
+               catchupSource,
+               catchupDays,
+               catchupCorrection,
+               locator,
+               userAgent,
+               referrer,
+               searchPayloadId
+        FROM catalog_payloads
+        WHERE payloadId = ?
+        LIMIT 1
+        """.trimIndent(),
+    )
 
     select.use { rows ->
         insertSearchPayload.use { searchStatement ->
             insertPayload.use { payloadStatement ->
                 insertMembership.use { membershipStatement ->
+                    verifySearchPayload.use { verifySearchStatement ->
+                        verifyPayload.use { verifyPayloadStatement ->
                     var currentSourceId: String? = null
                     var currentRevision = Long.MIN_VALUE
                     var ordinal = 0L
@@ -293,7 +335,7 @@ private fun backfillC03ProductionTables(connection: SQLiteConnection) {
                         searchStatement.step()
                         searchStatement.reset()
                         searchStatement.clearBindings()
-                        verifySearchPayload(connection, searchPayload)
+                        verifySearchPayload(verifySearchStatement, searchPayload)
 
                         val payload = CatalogPayloadEntity(
                             payloadId = payloadId,
@@ -322,7 +364,7 @@ private fun backfillC03ProductionTables(connection: SQLiteConnection) {
                         payloadStatement.step()
                         payloadStatement.reset()
                         payloadStatement.clearBindings()
-                        verifyPayload(connection, payload)
+                        verifyPayload(verifyPayloadStatement, payload)
 
                         membershipStatement.bindText(1, sourceId)
                         membershipStatement.bindLong(2, revisionNumber)
@@ -333,6 +375,8 @@ private fun backfillC03ProductionTables(connection: SQLiteConnection) {
                         membershipStatement.step()
                         membershipStatement.reset()
                         membershipStatement.clearBindings()
+                    }
+                        }
                     }
                 }
             }
@@ -381,89 +425,51 @@ private fun bindPayload(
 }
 
 private fun verifySearchPayload(
-    connection: SQLiteConnection,
+    statement: SQLiteStatement,
     expected: CatalogSearchPayloadEntity,
 ) {
-    connection.prepare(
-        """
-        SELECT searchContentHash,
-               searchHashVersion,
-               canonicalChannelId,
-               rawName,
-               groupTitle,
-               channelNumber
-        FROM catalog_search_payloads
-        WHERE searchPayloadId = ?
-        LIMIT 1
-        """.trimIndent(),
-    ).use { statement ->
-        statement.bindText(1, expected.searchPayloadId)
-        check(statement.step()) { "Missing migrated immutable search payload." }
-        check(statement.getText(0) == expected.searchContentHash)
-        check(statement.getLong(1).toInt() == expected.searchHashVersion)
-        check(statement.getText(2) == expected.canonicalChannelId)
-        check(statement.getText(3) == expected.rawName)
-        check(statement.nullableText(4) == expected.groupTitle)
-        check(statement.nullableText(5) == expected.channelNumber)
-        check(!statement.step())
-    }
+    statement.bindText(1, expected.searchPayloadId)
+    check(statement.step()) { "Missing migrated immutable search payload." }
+    check(statement.getText(0) == expected.searchContentHash)
+    check(statement.getLong(1).toInt() == expected.searchHashVersion)
+    check(statement.getText(2) == expected.canonicalChannelId)
+    check(statement.getText(3) == expected.rawName)
+    check(statement.nullableText(4) == expected.groupTitle)
+    check(statement.nullableText(5) == expected.channelNumber)
+    check(!statement.step())
+    statement.reset()
+    statement.clearBindings()
 }
 
 private fun verifyPayload(
-    connection: SQLiteConnection,
+    statement: SQLiteStatement,
     expected: CatalogPayloadEntity,
 ) {
-    connection.prepare(
-        """
-        SELECT sourceId,
-               logicalChannelId,
-               contentHash,
-               contentHashVersion,
-               canonicalChannelId,
-               providerKey,
-               rawName,
-               tvgId,
-               tvgName,
-               logoUrl,
-               groupTitle,
-               channelNumber,
-               catchupMode,
-               catchupSource,
-               catchupDays,
-               catchupCorrection,
-               locator,
-               userAgent,
-               referrer,
-               searchPayloadId
-        FROM catalog_payloads
-        WHERE payloadId = ?
-        LIMIT 1
-        """.trimIndent(),
-    ).use { statement ->
-        statement.bindText(1, expected.payloadId)
-        check(statement.step()) { "Missing migrated immutable catalog payload." }
-        check(statement.getText(0) == expected.sourceId)
-        check(statement.getText(1) == expected.logicalChannelId)
-        check(statement.getText(2) == expected.contentHash)
-        check(statement.getLong(3).toInt() == expected.contentHashVersion)
-        check(statement.getText(4) == expected.canonicalChannelId)
-        check(statement.getText(5) == expected.providerKey)
-        check(statement.getText(6) == expected.rawName)
-        check(statement.nullableText(7) == expected.tvgId)
-        check(statement.nullableText(8) == expected.tvgName)
-        check(statement.nullableText(9) == expected.logoUrl)
-        check(statement.nullableText(10) == expected.groupTitle)
-        check(statement.nullableText(11) == expected.channelNumber)
-        check(statement.nullableText(12) == expected.catchupMode)
-        check(statement.nullableText(13) == expected.catchupSource)
-        check(statement.nullableLong(14)?.toInt() == expected.catchupDays)
-        check(statement.nullableText(15) == expected.catchupCorrection)
-        check(statement.getText(16) == expected.locator)
-        check(statement.nullableText(17) == expected.userAgent)
-        check(statement.nullableText(18) == expected.referrer)
-        check(statement.getText(19) == expected.searchPayloadId)
-        check(!statement.step())
-    }
+    statement.bindText(1, expected.payloadId)
+    check(statement.step()) { "Missing migrated immutable catalog payload." }
+    check(statement.getText(0) == expected.sourceId)
+    check(statement.getText(1) == expected.logicalChannelId)
+    check(statement.getText(2) == expected.contentHash)
+    check(statement.getLong(3).toInt() == expected.contentHashVersion)
+    check(statement.getText(4) == expected.canonicalChannelId)
+    check(statement.getText(5) == expected.providerKey)
+    check(statement.getText(6) == expected.rawName)
+    check(statement.nullableText(7) == expected.tvgId)
+    check(statement.nullableText(8) == expected.tvgName)
+    check(statement.nullableText(9) == expected.logoUrl)
+    check(statement.nullableText(10) == expected.groupTitle)
+    check(statement.nullableText(11) == expected.channelNumber)
+    check(statement.nullableText(12) == expected.catchupMode)
+    check(statement.nullableText(13) == expected.catchupSource)
+    check(statement.nullableLong(14)?.toInt() == expected.catchupDays)
+    check(statement.nullableText(15) == expected.catchupCorrection)
+    check(statement.getText(16) == expected.locator)
+    check(statement.nullableText(17) == expected.userAgent)
+    check(statement.nullableText(18) == expected.referrer)
+    check(statement.getText(19) == expected.searchPayloadId)
+    check(!statement.step())
+    statement.reset()
+    statement.clearBindings()
 }
 
 private fun SQLiteStatement.bindNullableText(
