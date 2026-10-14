@@ -56,4 +56,5 @@ internal abstract class MuxTvDatabase : RoomDatabase() {
     abstract fun searchIndexDao(): SearchIndexDao
     abstract fun channelSearchDao(): ChannelSearchDao
     internal abstract fun catalogShadowDao(): CatalogShadowDao
+    internal abstract fun catalogShadowSearchDao(): CatalogShadowSearchDao
 }
