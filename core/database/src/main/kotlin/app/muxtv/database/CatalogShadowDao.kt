@@ -2,6 +2,7 @@ package app.muxtv.database
 
 import androidx.room3.Dao
 import androidx.room3.Query
+import app.muxtv.catalog.PlayableChannelSummary
 
 internal data class CatalogShadowActiveRow(
     val ordinal: Long,
@@ -321,6 +322,44 @@ internal interface CatalogShadowDao {
         profileId: String,
         limit: Int,
     ): List<RecentChannelRow>
+
+    // Search D1: compare only the final active summaries for already selected candidate IDs.
+    // FTS matches, programme eligibility, bounded source diversity and candidate ranking
+    // require a separate full shadow-policy implementation before any Search read cutover.
+    @Query(
+        """
+        SELECT canonical_channels.id AS channelId,
+               COALESCE(user_channel_overlays.customName, canonical_channels.displayName) AS displayName,
+               MIN(p.logoUrl) AS logoUrl,
+               MIN(p.groupTitle) AS groupTitle,
+               COALESCE(CAST(user_channel_overlays.channelNumber AS TEXT), MIN(p.channelNumber)) AS channelNumber,
+               COALESCE(user_channel_overlays.isFavorite, 0) AS isFavorite,
+               COUNT(DISTINCT m.variantId) AS variantCount
+        FROM canonical_channels
+        INNER JOIN catalog_payloads AS p
+            ON p.canonicalChannelId = canonical_channels.id
+        INNER JOIN source_revision_memberships AS m
+            ON m.payloadId = p.payloadId
+        INNER JOIN sources AS s
+            ON s.id = m.sourceId
+           AND s.activeRevision = m.revisionNumber
+        LEFT JOIN user_channel_overlays
+            ON user_channel_overlays.profileId = :profileId
+           AND user_channel_overlays.canonicalChannelId = canonical_channels.id
+        WHERE canonical_channels.id IN (:canonicalChannelIds)
+          AND COALESCE(user_channel_overlays.isHidden, 0) = 0
+        GROUP BY canonical_channels.id,
+                 canonical_channels.displayName,
+                 user_channel_overlays.customName,
+                 user_channel_overlays.channelNumber,
+                 user_channel_overlays.isFavorite
+        ORDER BY canonical_channels.id COLLATE BINARY
+        """,
+    )
+    suspend fun searchActiveSummaries(
+        profileId: String,
+        canonicalChannelIds: List<String>,
+    ): List<PlayableChannelSummary>
 
     @Query(
         """
