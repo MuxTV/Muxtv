@@ -1,0 +1,43 @@
+name: C03 schema bootstrap (temporary)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/c03-schema-bootstrap.yml'
+permissions:
+  contents: read
+jobs:
+  export-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Generate exact Room schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          schema="core/database/schemas/app.muxtv.database.MuxTvDatabase/11.json"
+          ./gradlew --no-daemon :core:database:copyRoomSchemas > /tmp/c03-schema-gradle.log 2>&1 || {
+            if [[ ! -s "$schema" ]]; then
+              tail -n 150 /tmp/c03-schema-gradle.log
+              exit 1
+            fi
+          }
+          test -s "$schema"
+          python3 - "$schema" <<'PY'
+          import base64, hashlib, json, pathlib, sys
+          contents = pathlib.Path(sys.argv[1]).read_bytes()
+          assert json.loads(contents)['database']['version'] == 11
+          print('C03_SCHEMA_SHA256=' + hashlib.sha256(contents).hexdigest())
+          print('C03_SCHEMA_BEGIN')
+          encoded = base64.b64encode(contents).decode('ascii')
+          for i in range(0, len(encoded), 1000):
+              print(encoded[i:i+1000])
+          print('C03_SCHEMA_END')
+          PY
