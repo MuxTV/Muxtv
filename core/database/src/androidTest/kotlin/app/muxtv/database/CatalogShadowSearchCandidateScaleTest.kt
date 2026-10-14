@@ -3,7 +3,9 @@ package app.muxtv.database
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.muxtv.catalog.ChannelSearchQuery
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -74,6 +76,28 @@ class CatalogShadowSearchCandidateScaleTest {
             assertThat(database.catalogShadowDao().membershipCount())
                 .isEqualTo(ALPHA_COUNT + ZETA_COUNT)
 
+            // D2-C: run the full bounded search pipeline over >800 candidates. This
+            // exercises final summary lookup, sorting, truncation and overflow handling.
+            val broad = assertSnapshotParity("Broadcast", limit = 5)
+            assertThat(broad.results).hasSize(5)
+            assertThat(broad.isTruncated).isTrue()
+            assertThat(broad.nextBoundaryEpochMillis).isNull()
+            assertThat(broad.results.map { it.channel.channelId })
+                .contains("channel-zeta-0000")
+
+            // The selective second token must find an alpha channel after the 800-row
+            // unrestricted boundary by rechecking that token inside its small seed set.
+            val late = assertSnapshotParity("Broadcast 0804", limit = 5)
+            assertThat(late.results.map { it.channel.channelId })
+                .containsExactly("channel-alpha-0804")
+            assertThat(late.isTruncated).isFalse()
+
+            val crossSource = assertSnapshotParity("Broadcast 0001", limit = 5)
+            assertThat(crossSource.results.map { it.channel.channelId })
+                .containsExactly("channel-alpha-0001", "channel-zeta-0001")
+                .inOrder()
+            assertThat(crossSource.isTruncated).isFalse()
+
             // A bounded re-probe over a small seed must bypass source reservations and
             // preserve requested ID restriction even when a broad unrestricted probe overflows.
             val restricted = listOf("channel-alpha-0804", "channel-zeta-0001")
@@ -99,7 +123,41 @@ class CatalogShadowSearchCandidateScaleTest {
                 .doesNotContain("channel-alpha-0000")
             assertThat(afterHide.map { it.canonicalChannelId })
                 .contains("channel-zeta-0000")
+
+            val hiddenBroad = assertSnapshotParity("Broadcast", limit = 5)
+            assertThat(hiddenBroad.results.map { it.channel.channelId })
+                .doesNotContain("channel-alpha-0000")
+            assertThat(hiddenBroad.isTruncated).isTrue()
         }
+
+    private suspend fun assertSnapshotParity(
+        text: String,
+        limit: Int,
+    ): app.muxtv.catalog.ChannelSearchSnapshot {
+        val query = ChannelSearchQuery(
+            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+            text = text,
+            nowEpochMillis = 1_500,
+            limit = limit,
+        )
+        val guide = RoomEpgGuideRepository(database.epgGuideDao())
+        val authoritative = RoomChannelSearchRepository(
+            dataSource = database.channelSearchDao(),
+            guideRepository = guide,
+        ).observe(query).first()
+        val shadow = RoomChannelSearchRepository(
+            dataSource = ShadowSearchParityDataSource(database),
+            guideRepository = guide,
+        ).observe(query).first()
+
+        assertThat(shadow).isEqualTo(authoritative)
+        assertThat(shadow.results.map { it.channel.channelId }).containsNoDuplicates()
+        assertThat(shadow.results.map { it.currentProgrammeTitle }).containsExactlyElementsIn(
+            List(shadow.results.size) { null },
+        )
+        assertThat(shadow.nextBoundaryEpochMillis).isNull()
+        return shadow
+    }
 
     private suspend fun stageRevision(
         source: String,
