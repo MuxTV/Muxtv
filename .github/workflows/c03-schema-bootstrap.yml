@@ -23,7 +23,11 @@ jobs:
         run: |
           set -euo pipefail
           schema="core/database/schemas/app.muxtv.database.MuxTvDatabase/11.json"
-          ./gradlew --no-daemon :core:database:copyRoomSchemas > /tmp/c03-schema-gradle.log 2>&1 || {
+          ./gradlew --no-daemon :core:database:compileDebugKotlin > /tmp/c03-schema-gradle.log 2>&1 || {
+            tail -n 150 /tmp/c03-schema-gradle.log
+            exit 1
+          }
+          ./gradlew --no-daemon :core:database:copyRoomSchemas >> /tmp/c03-schema-gradle.log 2>&1 || {
             if [[ ! -s "$schema" ]]; then
               tail -n 150 /tmp/c03-schema-gradle.log
               exit 1
