@@ -229,15 +229,9 @@ class CatalogPayloadMigration10To11ContractTest {
         assertPersistedUserState(version10)
         version10.close()
 
-        // Migrate the *same on-disk file*, rather than seeding a fresh v11 in-memory database.
-        val migrated = migrationHelper.runMigrationsAndValidate(
-            version = 11,
-            migrations = listOf(MIGRATION_10_11),
-        )
-        assertPersistedUserState(migrated)
-        assertSingleLong(migrated, "SELECT COUNT(*) FROM source_revision_memberships", 1L)
-        migrated.close()
-
+        // Leave the actual file at v10. Opening it through the production Room builder must
+        // perform the registered 10->11 migration automatically (not MigrationTestHelper).
+        // The separate migrationBackfills... test checks strict schema validation.
         val database = Room.databaseBuilder(
             context = targetContext,
             klass = MuxTvDatabase::class.java,
@@ -245,7 +239,9 @@ class CatalogPayloadMigration10To11ContractTest {
         ).addMigrations(*CURRENT_DATABASE_MIGRATIONS).build()
         try {
             val store = RoomSourceRevisionStore(database.sourceRevisionDao())
+            // First read opens the legacy file and triggers Room's production migration chain.
             assertRoomUserState(database)
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(1)
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r1")
 
