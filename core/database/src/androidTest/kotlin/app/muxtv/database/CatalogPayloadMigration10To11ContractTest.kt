@@ -240,7 +240,7 @@ class CatalogPayloadMigration10To11ContractTest {
         try {
             val store = RoomSourceRevisionStore(database.sourceRevisionDao())
             // First read opens the legacy file and triggers Room's production migration chain.
-            assertRoomUserState(database)
+            assertRoomUserState(database, expectedActiveRevision = 1L)
             assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(1)
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r1")
@@ -249,7 +249,7 @@ class CatalogPayloadMigration10To11ContractTest {
             store.beginRevision("source-upgrade", 2, 2_000)
             store.stageBatch("source-upgrade", 2, listOf(upgradedEntry(2)))
             store.discard("source-upgrade", 2)
-            assertRoomUserState(database)
+            assertRoomUserState(database, expectedActiveRevision = 1L)
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r1")
 
@@ -264,7 +264,7 @@ class CatalogPayloadMigration10To11ContractTest {
                     statistics = SourceRevisionStatistics(1, 0, 0),
                 ),
             ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
-            assertRoomUserState(database)
+            assertRoomUserState(database, expectedActiveRevision = 3L)
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r3")
             assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
@@ -281,7 +281,7 @@ class CatalogPayloadMigration10To11ContractTest {
                     statistics = SourceRevisionStatistics(1, 0, 0),
                 ),
             ).isEqualTo(SourceRevisionActivationResult.Superseded)
-            assertRoomUserState(database)
+            assertRoomUserState(database, expectedActiveRevision = 3L)
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r3")
             assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
@@ -304,9 +304,41 @@ class CatalogPayloadMigration10To11ContractTest {
         channelNumber = "1",
     )
 
-    private suspend fun assertRoomUserState(database: MuxTvDatabase) {
+    private suspend fun assertRoomUserState(
+        database: MuxTvDatabase,
+        expectedActiveRevision: Long,
+    ) {
+        // Room 3 supplies a Transactor here, not a raw SQLiteConnection. Assert persisted
+        // state through the same usePrepared reader API used by production Room repositories.
         database.useReaderConnection { connection ->
-            assertPersistedUserState(connection)
+            connection.usePrepared(
+                """
+                SELECT overlay.isFavorite, overlay.isHidden, overlay.customName,
+                       overlay.channelNumber, recent.lastSuccessfulPlaybackAtEpochMillis,
+                       source.activeRevision
+                FROM user_channel_overlays AS overlay
+                INNER JOIN canonical_channels AS canonical
+                    ON canonical.id = overlay.canonicalChannelId
+                INNER JOIN recent_channels AS recent
+                    ON recent.profileId = overlay.profileId
+                   AND recent.canonicalChannelId = overlay.canonicalChannelId
+                INNER JOIN sources AS source ON source.id = ?
+                WHERE overlay.profileId = ?
+                  AND overlay.canonicalChannelId = ?
+                """.trimIndent(),
+            ) { statement ->
+                statement.bindText(1, "source-upgrade")
+                statement.bindText(2, "profile-upgrade")
+                statement.bindText(3, "channel-upgrade")
+                assertThat(statement.step()).isTrue()
+                assertThat(statement.getLong(0)).isEqualTo(1L)
+                assertThat(statement.getLong(1)).isEqualTo(1L)
+                assertThat(statement.getText(2)).isEqualTo("My News")
+                assertThat(statement.getLong(3)).isEqualTo(77L)
+                assertThat(statement.getLong(4)).isEqualTo(42_000L)
+                assertThat(statement.getLong(5)).isEqualTo(expectedActiveRevision)
+                assertThat(statement.step()).isFalse()
+            }
         }
     }
 
