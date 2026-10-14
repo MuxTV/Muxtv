@@ -25,10 +25,13 @@ jobs:
           set -euo pipefail
           # Source CI commit c5f8b53 differs from this head only by a Kotlin test fix
           # and the temporary export workflow. No production schema sources changed.
-          gh run download 37596423826 \
-            --repo "$GITHUB_REPOSITORY" \
-            --name database-migration-api36-37596423826-1-attempt-1 \
-            --dir "$RUNNER_TEMP/c03-schemas"
+          curl --fail --location --silent --show-error --retry 2 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/11470099924/zip" \
+            -o "$RUNNER_TEMP/c03-schema-artifact.zip"
+          mkdir -p "$RUNNER_TEMP/c03-schemas"
+          unzip -q "$RUNNER_TEMP/c03-schema-artifact.zip" -d "$RUNNER_TEMP/c03-schemas"
           schema="$RUNNER_TEMP/c03-schemas/core/database/schemas/app.muxtv.database.MuxTvDatabase/11.json"
           test -s "$schema"
           echo "60789f3f65c415e94e05fb66c6793808764e4fd3a2156dc7642fe0e2029fede4  $schema" | sha256sum -c -
