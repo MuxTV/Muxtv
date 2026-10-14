@@ -6,34 +6,32 @@ on:
       - '.github/workflows/c03-schema-bootstrap.yml'
 permissions:
   contents: read
+  actions: read
 jobs:
   export-schema:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - name: Checkout exact PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - name: Set up MuxTV JDK toolchains
-        uses: ./.github/actions/setup-muxtv-jdks
-      - name: Generate exact Room schema
+      - name: Extract generated schema from exact-source CI archive
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          schema="core/database/schemas/app.muxtv.database.MuxTvDatabase/11.json"
-          ./gradlew --no-daemon :core:database:compileDebugKotlin > /tmp/c03-schema-gradle.log 2>&1 || {
-            tail -n 150 /tmp/c03-schema-gradle.log
-            exit 1
-          }
-          ./gradlew --no-daemon :core:database:copyRoomSchemas >> /tmp/c03-schema-gradle.log 2>&1 || {
-            if [[ ! -s "$schema" ]]; then
-              tail -n 150 /tmp/c03-schema-gradle.log
-              exit 1
-            fi
-          }
+          # Source CI commit c5f8b53 differs from this head only by a Kotlin test fix
+          # and the temporary export workflow. No production schema sources changed.
+          gh run download 37596423826 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name database-migration-api36-37596423826-1-attempt-1 \
+            --dir "$RUNNER_TEMP/c03-schemas"
+          schema="$RUNNER_TEMP/c03-schemas/core/database/schemas/app.muxtv.database.MuxTvDatabase/11.json"
           test -s "$schema"
+          echo "60789f3f65c415e94e05fb66c6793808764e4fd3a2156dc7642fe0e2029fede4  $schema" | sha256sum -c -
           python3 - "$schema" <<'PY'
           import base64, hashlib, json, pathlib, sys
           contents = pathlib.Path(sys.argv[1]).read_bytes()
