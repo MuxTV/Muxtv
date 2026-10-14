@@ -1,6 +1,8 @@
 package app.muxtv.database
 
+import androidx.room3.Room
 import androidx.room3.testing.MigrationTestHelper
+import androidx.room3.useReaderConnection
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.sqlite.execSQL
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -175,6 +177,179 @@ class CatalogPayloadMigration10To11ContractTest {
         assertSingleLong(migrated, "SELECT COUNT(*) FROM provider_channels", 3L)
         assertSingleLong(migrated, "SELECT COUNT(*) FROM stream_variants", 3L)
         migrated.close()
+    }
+
+
+    @Test
+    fun migratedUserStateSurvivesRefreshDiscardAndStaleCredential() = runBlocking {
+        val version10 = migrationHelper.createDatabase(10)
+        version10.execSQL(
+            "INSERT INTO profiles(id, name, isPrimary, archivedAtEpochMillis) " +
+                "VALUES('profile-upgrade', 'Primary', 1, NULL)",
+        )
+        version10.execSQL(
+            "INSERT INTO sources(id, name, credentialRef, activeRevision) " +
+                "VALUES('source-upgrade', 'Provider', NULL, 1)",
+        )
+        version10.execSQL(
+            "INSERT INTO source_revisions(" +
+                "sourceId, revisionNumber, status, startedAtEpochMillis, activatedAtEpochMillis, " +
+                "parsedEntries, skippedEntries, warningCount" +
+                ") VALUES('source-upgrade', 1, 'ACTIVE', 1000, 1100, 1, 0, 0)",
+        )
+        version10.execSQL(
+            "INSERT INTO canonical_channels(id, displayName) " +
+                "VALUES('channel-upgrade', 'Channel One')",
+        )
+        insertProvider(
+            version10,
+            id = "provider-upgrade-r1",
+            sourceId = "source-upgrade",
+            revision = 1,
+            providerKey = "tvg:channel-one",
+            rawName = "Channel One",
+        )
+        insertVariant(
+            version10,
+            id = "variant-upgrade-r1",
+            providerId = "provider-upgrade-r1",
+            canonicalId = "channel-upgrade",
+            locator = "https://stream.invalid/live?token=one",
+        )
+        version10.execSQL(
+            "INSERT INTO user_channel_overlays(" +
+                "profileId, canonicalChannelId, isFavorite, customName, channelNumber, isHidden" +
+                ") VALUES('profile-upgrade', 'channel-upgrade', 1, 'My News', 77, 1)",
+        )
+        version10.execSQL(
+            "INSERT INTO recent_channels(" +
+                "profileId, canonicalChannelId, lastSuccessfulPlaybackAtEpochMillis" +
+                ") VALUES('profile-upgrade', 'channel-upgrade', 42000)",
+        )
+        assertPersistedUserState(version10)
+        version10.close()
+
+        // Migrate the *same on-disk file*, rather than seeding a fresh v11 in-memory database.
+        val migrated = migrationHelper.runMigrationsAndValidate(
+            version = 11,
+            migrations = listOf(MIGRATION_10_11),
+        )
+        assertPersistedUserState(migrated)
+        assertSingleLong(migrated, "SELECT COUNT(*) FROM source_revision_memberships", 1L)
+        migrated.close()
+
+        val database = Room.databaseBuilder(
+            context = targetContext,
+            klass = MuxTvDatabase::class.java,
+            name = DATABASE_NAME,
+        ).addMigrations(*CURRENT_DATABASE_MIGRATIONS).build()
+        try {
+            val store = RoomSourceRevisionStore(database.sourceRevisionDao())
+            assertRoomUserState(database)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
+                .isEqualTo("variant-upgrade-r1")
+
+            // Failed/abandoned staging must not replace the active revision or user state.
+            store.beginRevision("source-upgrade", 2, 2_000)
+            store.stageBatch("source-upgrade", 2, listOf(upgradedEntry(2)))
+            store.discard("source-upgrade", 2)
+            assertRoomUserState(database)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
+                .isEqualTo("variant-upgrade-r1")
+
+            // Successful refresh changes only the source-owned occurrence and immutable payload.
+            store.beginRevision("source-upgrade", 3, 3_000)
+            store.stageBatch("source-upgrade", 3, listOf(upgradedEntry(3)))
+            assertThat(
+                store.activate(
+                    sourceId = "source-upgrade",
+                    revisionNumber = 3,
+                    activatedAtEpochMillis = 3_100,
+                    statistics = SourceRevisionStatistics(1, 0, 0),
+                ),
+            ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+            assertRoomUserState(database)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
+                .isEqualTo("variant-upgrade-r3")
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
+
+            // A stale credential cannot publish a later staged revision after the upgrade.
+            store.beginRevision("source-upgrade", 4, 4_000)
+            store.stageBatch("source-upgrade", 4, listOf(upgradedEntry(4)))
+            assertThat(
+                store.activateIfCredentialMatches(
+                    sourceId = "source-upgrade",
+                    revisionNumber = 4,
+                    expectedCredentialRef = "stale-credential-ref",
+                    activatedAtEpochMillis = 4_100,
+                    statistics = SourceRevisionStatistics(1, 0, 0),
+                ),
+            ).isEqualTo(SourceRevisionActivationResult.Superseded)
+            assertRoomUserState(database)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
+                .isEqualTo("variant-upgrade-r3")
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
+        } finally {
+            database.close()
+        }
+    }
+
+    private fun upgradedEntry(revision: Int) = StagedCatalogEntry(
+        providerChannelId = "provider-upgrade-r$revision",
+        providerKey = "tvg:channel-one",
+        rawName = "Channel One",
+        canonicalChannelId = "channel-upgrade",
+        canonicalDisplayName = "Channel One",
+        streamVariantId = "variant-upgrade-r$revision",
+        locator = "https://stream.invalid/live?token=r$revision",
+        tvgId = "channel-one",
+        tvgName = "Channel One",
+        groupTitle = "General",
+        channelNumber = "1",
+    )
+
+    private suspend fun assertRoomUserState(database: MuxTvDatabase) {
+        database.useReaderConnection { connection ->
+            assertPersistedUserState(connection)
+        }
+    }
+
+    private fun assertPersistedUserState(connection: androidx.sqlite.SQLiteConnection) {
+        assertSingleLong(
+            connection,
+            "SELECT COUNT(*) FROM canonical_channels WHERE id = 'channel-upgrade'",
+            1L,
+        )
+        assertSingleLong(
+            connection,
+            "SELECT isFavorite FROM user_channel_overlays " +
+                "WHERE profileId = 'profile-upgrade' AND canonicalChannelId = 'channel-upgrade'",
+            1L,
+        )
+        assertSingleLong(
+            connection,
+            "SELECT isHidden FROM user_channel_overlays " +
+                "WHERE profileId = 'profile-upgrade' AND canonicalChannelId = 'channel-upgrade'",
+            1L,
+        )
+        assertSingleText(
+            connection,
+            "SELECT customName FROM user_channel_overlays " +
+                "WHERE profileId = 'profile-upgrade' AND canonicalChannelId = 'channel-upgrade'",
+            "My News",
+        )
+        assertSingleLong(
+            connection,
+            "SELECT channelNumber FROM user_channel_overlays " +
+                "WHERE profileId = 'profile-upgrade' AND canonicalChannelId = 'channel-upgrade'",
+            77L,
+        )
+        assertSingleLong(
+            connection,
+            "SELECT lastSuccessfulPlaybackAtEpochMillis FROM recent_channels " +
+                "WHERE profileId = 'profile-upgrade' AND canonicalChannelId = 'channel-upgrade'",
+            42_000L,
+        )
     }
 
     private fun insertProvider(
