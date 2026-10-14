@@ -154,6 +154,53 @@ class CatalogShadowProjectionParityTest {
     }
 
     @Test
+    fun finalSearchSummariesMatchAuthoritativePolicyForHiddenAndProfileOverlays() = runTest {
+        val ids = listOf(NEWS_ID, SPORTS_ID)
+        val authoritative = database.channelSearchDao().activeChannelSummaries(
+            profileId = PROFILE_ID,
+            canonicalChannelIds = ids,
+        )
+        val shadow = database.catalogShadowDao().searchActiveSummaries(
+            profileId = PROFILE_ID,
+            canonicalChannelIds = ids,
+        )
+        assertThat(shadow).containsExactlyElementsIn(authoritative).inOrder()
+        assertThat(shadow.map { it.channelId }).containsExactly(NEWS_ID)
+        assertThat(shadow.single().displayName).isEqualTo("My News")
+        assertThat(shadow.single().channelNumber).isEqualTo("7")
+        assertThat(shadow.single().isFavorite).isTrue()
+        assertThat(shadow.single().variantCount).isEqualTo(2)
+
+        // The same candidate IDs must produce different final results when profile overlays
+        // differ. A hidden channel for the primary profile remains eligible for another profile.
+        val anotherProfileId = "profile-search-shadow-other"
+        database.profileDao().insert(
+            ProfileEntity(
+                id = anotherProfileId,
+                name = "Second",
+                isPrimary = false,
+            ),
+        )
+        val otherAuthoritative = database.channelSearchDao().activeChannelSummaries(
+            profileId = anotherProfileId,
+            canonicalChannelIds = ids,
+        )
+        val otherShadow = database.catalogShadowDao().searchActiveSummaries(
+            profileId = anotherProfileId,
+            canonicalChannelIds = ids,
+        )
+        assertThat(otherShadow).containsExactlyElementsIn(otherAuthoritative).inOrder()
+        assertThat(otherShadow.map { it.channelId }).containsExactly(NEWS_ID, SPORTS_ID).inOrder()
+        assertThat(otherShadow.map { it.variantCount }).containsExactly(2, 1).inOrder()
+        assertThat(otherShadow.first().isFavorite).isFalse()
+
+        // Restricting the already-selected ID set cannot resurrect a hidden result.
+        assertThat(
+            database.catalogShadowDao().searchActiveSummaries(PROFILE_ID, listOf(SPORTS_ID)),
+        ).isEmpty()
+    }
+
+    @Test
     fun playbackIdentityAndAccessProjectionsMatchAuthoritativeRepresentation() = runTest {
         val authoritativeVariants = database.playbackCatalogDao().getActiveVariants(NEWS_ID)
         val shadowVariants = database.catalogShadowDao().activeVariants(NEWS_ID)
