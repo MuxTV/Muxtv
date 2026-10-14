@@ -8,7 +8,13 @@ import androidx.sqlite.execSQL
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -322,6 +328,76 @@ class CatalogPayloadMigration10To11ContractTest {
                 .inOrder()
             assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(3)
             assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(2)
+
+            // Cancellation after durable staging must not publish a new generation.
+            // This exercises the store's cancellation boundary and terminal discard; it is
+            // not a replacement for importer/orchestrator cancellation coverage.
+            val staged = CompletableDeferred<Unit>()
+            val cancelledRefresh = launch {
+                try {
+                    store.beginRevision("source-upgrade", 8, 8_000)
+                    store.stageBatch("source-upgrade", 8, listOf(upgradedEntry(8)))
+                    staged.complete(Unit)
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) {
+                        store.discard("source-upgrade", 8)
+                    }
+                }
+            }
+            staged.await()
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(4)
+            cancelledRefresh.cancelAndJoin()
+            assertRoomUserState(database, expectedActiveRevision = 7L)
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(3)
+            assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(2)
+            assertThat(database.sourceRevisionDao().nextRevisionNumber("source-upgrade"))
+                .isEqualTo(8L)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.variantId })
+                .containsExactly("variant-survivor-r7", "variant-upgrade-r7")
+                .inOrder()
+
+            // Only inactive sources may be permanently removed. A source with its own
+            // staged payload referring to the same canonical channel must not delete
+            // the active source's payload, user overlay, canonical identity or Recent.
+            store.upsertSource(
+                SourceDefinition(
+                    id = "source-inactive",
+                    name = "Inactive",
+                    credentialRef = "credential-inactive",
+                ),
+            )
+            store.beginRevision("source-inactive", 1, 9_000)
+            store.stageBatch(
+                "source-inactive",
+                1,
+                listOf(
+                    upgradedEntry(9).copy(
+                        providerChannelId = "provider-inactive",
+                        streamVariantId = "variant-inactive",
+                    ),
+                ),
+            )
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(4)
+            assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(3)
+            assertThat(store.removeInactiveSource("source-inactive", "wrong-credential"))
+                .isEqualTo(InactiveSourceRemovalResult.CredentialMismatch)
+            assertThat(store.removeInactiveSource("source-upgrade", "credential-inactive"))
+                .isEqualTo(InactiveSourceRemovalResult.Active)
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(4)
+
+            assertThat(store.removeInactiveSource("source-inactive", "credential-inactive"))
+                .isEqualTo(InactiveSourceRemovalResult.Removed)
+            assertThat(database.sourceRevisionDao().activeRevision("source-inactive")).isNull()
+            assertRoomUserState(database, expectedActiveRevision = 7L)
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(3)
+            assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(2)
+            assertThat(database.catalogShadowDao().searchPayloadCount()).isEqualTo(2)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.variantId })
+                .containsExactly("variant-survivor-r7", "variant-upgrade-r7")
+                .inOrder()
         } finally {
             database.close()
         }
