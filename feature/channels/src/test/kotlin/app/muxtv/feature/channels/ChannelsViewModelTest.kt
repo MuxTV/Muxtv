@@ -9,6 +9,8 @@ import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseItem
 import app.muxtv.catalog.ChannelBrowseQuery
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelManagementItem
+import app.muxtv.catalog.ChannelManagementQuery
 import app.muxtv.catalog.ChannelNowNext
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideProjectionState
@@ -212,6 +214,9 @@ class ChannelsViewModelTest {
             }
             return flowOf(PagingData.from(listOf(item(id))))
         }
+
+        override fun managementPages(query: ChannelManagementQuery): Flow<PagingData<ChannelManagementItem>> =
+            flowOf(PagingData.empty())
     }
 
     private class FakePlaybackStateSource : PlaybackSessionStateSource {
