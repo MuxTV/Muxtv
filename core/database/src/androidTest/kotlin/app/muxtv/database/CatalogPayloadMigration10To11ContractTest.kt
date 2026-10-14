@@ -285,10 +285,78 @@ class CatalogPayloadMigration10To11ContractTest {
             assertThat(database.catalogShadowDao().activeRows("source-upgrade").single().variantId)
                 .isEqualTo("variant-upgrade-r3")
             assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
+
+            // The legacy channel becomes temporarily absent, but a different channel keeps
+            // the source revision non-empty. Revision 5 retains r3 as previous-good.
+            activateUpgradeRevision(store, 5, listOf(survivingEntry(5)))
+            assertRoomUserState(database, expectedActiveRevision = 5L)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.canonicalChannelId }).containsExactly("channel-survivor")
+
+            // Publishing r6 removes r3 from previous-good. The original source-owned rows
+            // and immutable payload must now be collected while the user overlay pins its
+            // canonical identity and Recent remains user-owned.
+            activateUpgradeRevision(store, 6, listOf(survivingEntry(6)))
+            assertRoomUserState(database, expectedActiveRevision = 6L)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.canonicalChannelId }).containsExactly("channel-survivor")
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(2)
+            assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(1)
+            assertThat(database.catalogShadowDao().searchPayloadCount()).isEqualTo(1)
+
+            // Re-add the same canonical identity with a *new* playback occurrence. The old
+            // favorite/hidden/custom metadata and Recent survive without recreating an overlay.
+            activateUpgradeRevision(
+                store,
+                7,
+                listOf(survivingEntry(7), upgradedEntry(7)),
+            )
+            assertRoomUserState(database, expectedActiveRevision = 7L)
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.canonicalChannelId })
+                .containsExactly("channel-survivor", "channel-upgrade")
+                .inOrder()
+            assertThat(database.catalogShadowDao().activeRows("source-upgrade")
+                .map { it.variantId })
+                .containsExactly("variant-survivor-r7", "variant-upgrade-r7")
+                .inOrder()
+            assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(3)
+            assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(2)
         } finally {
             database.close()
         }
     }
+
+    private suspend fun activateUpgradeRevision(
+        store: SourceRevisionStore,
+        revision: Int,
+        entries: List<StagedCatalogEntry>,
+    ) {
+        store.beginRevision("source-upgrade", revision.toLong(), revision * 1_000L)
+        store.stageBatch("source-upgrade", revision.toLong(), entries)
+        assertThat(
+            store.activate(
+                sourceId = "source-upgrade",
+                revisionNumber = revision.toLong(),
+                activatedAtEpochMillis = revision * 1_000L + 100L,
+                statistics = SourceRevisionStatistics(entries.size, 0, 0),
+            ),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+    }
+
+    private fun survivingEntry(revision: Int) = StagedCatalogEntry(
+        providerChannelId = "provider-survivor-r$revision",
+        providerKey = "tvg:survivor",
+        rawName = "Survivor",
+        canonicalChannelId = "channel-survivor",
+        canonicalDisplayName = "Survivor",
+        streamVariantId = "variant-survivor-r$revision",
+        locator = "https://stream.invalid/survivor.m3u8",
+        tvgId = "survivor",
+        tvgName = "Survivor",
+        groupTitle = "General",
+        channelNumber = "2",
+    )
 
     private fun upgradedEntry(revision: Int) = StagedCatalogEntry(
         providerChannelId = "provider-upgrade-r$revision",
