@@ -98,7 +98,7 @@ class CatalogFingerprintCodecTest {
         groupTitle = "General",
         channelNumber = "1",
         catchupMode = "default",
-        catchupSource = "${start}",
+        catchupSource = "\${start}",
         catchupDays = 7,
         catchupCorrection = "+00:00",
         locator = locator,
