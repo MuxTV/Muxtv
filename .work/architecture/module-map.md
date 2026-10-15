@@ -29,6 +29,9 @@ catalog/
 ├── sync/                  WorkManager scheduling и leases
 └── onboarding/            Durable source preparation registry
 
+local-control/
+└── core/                  Ephemeral TV-confirmed pairing authority (JVM only; no LAN listener)
+
 player/
 ├── api/                   Playback identity, recovery policy и observations
 ├── media3/                Единственный production Media3/service adapter
@@ -41,16 +44,18 @@ feature/
 ├── search/                Bounded top-N Search TV
 ├── player/
 ├── sources/
-└── doctor/                Redacted Doctor Lite
+├── doctor/                Redacted Doctor Lite
+└── settings/              TV settings workspace
 
 benchmark/
 ├── macrobenchmark/        CUJs и Baseline Profile producer
-└── jvm/                   JMH measurements
+├── jvm/                   JMH measurements
+└── competitive/           Competitive benchmark evidence contracts
 
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включены ровно 27 application/library/benchmark модулей. build-logic является отдельным included build и не считается двадцать восьмым project path.
+В settings.gradle.kts включены 30 application/library/benchmark модулей, включая `:local-control:core`. build-logic является отдельным included build и не входит в число 30 project paths. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
@@ -64,6 +69,6 @@ build-logic/               Included build с convention plugins
 
 ## Ещё не создано
 
-Отдельные feature:profiles, feature:settings и local-control modules появятся только при активном release/product scope. Новые epg/search/doctor layers не создаются для симметрии: текущие repository boundaries уже покрывают принятый продукт.
+Не реализованы `:feature:profiles`, локальный LAN transport/server и web-панель. `:local-control:core` сейчас предоставляет только сопряжение и не принимает HTTP-запросы. Новые epg/search/doctor layers не создаются для симметрии.
 
 Машинно-читаемая карта: [.work/meta/modules.yaml](../meta/modules.yaml).
