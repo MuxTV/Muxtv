@@ -122,6 +122,20 @@ class PairingAuthorityTest {
     }
 
     @Test
+    fun tvCanListAndRevokePairedDevicesWithoutDisclosingTokens() {
+        val authority = PairingAuthority()
+        val grant = grant(authority, authority.begin().secret, "Kitchen Phone")
+        val devices = authority.pairedDevices()
+        assertThat(devices).hasSize(1)
+        assertThat(devices.single().sessionId).isEqualTo(grant.sessionId)
+        assertThat(devices.single().clientLabel).isEqualTo("Kitchen Phone")
+        assertThat(devices.single().toString()).doesNotContain(grant.credential)
+        assertThat(authority.revoke(devices.single().sessionId)).isTrue()
+        assertThat(authority.pairedDevices()).isEmpty()
+        assertThat(authority.authorize(grant.sessionId, grant.credential, PairingCapability.SOURCE_CREATE)).isFalse()
+    }
+
+    @Test
     fun sessionCapacityCannotSilentlyGrow() {
         val authority = PairingAuthority(policy = PairingPolicy(maxSessions = 1))
         grant(authority, authority.begin().secret)
