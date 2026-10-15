@@ -275,13 +275,6 @@ private fun SourcesContent(
                 )
                 .focusRequester(addSourceFocusRequester),
         )
-        onOpenPhoneSetup?.let { action ->
-            MuxTvActionButton(
-                text = "Настроить с телефона",
-                onClick = action,
-                modifier = Modifier.testTag("source-phone-setup"),
-            )
-        }
         mutationError?.let { message ->
             Text(
                 message,
@@ -313,6 +306,15 @@ private fun SourcesContent(
                     onRefreshNow = onRefreshNow,
                     onConfigure = { onOpenDetails(source.sourceId) },
                 )
+            }
+            onOpenPhoneSetup?.let { action ->
+                item(key = "source-phone-setup") {
+                    MuxTvActionButton(
+                        text = "Настроить с телефона",
+                        onClick = action,
+                        modifier = Modifier.testTag("source-phone-setup"),
+                    )
+                }
             }
         }
     }
