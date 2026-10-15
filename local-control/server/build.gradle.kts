@@ -8,6 +8,7 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coroutines.core)
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
