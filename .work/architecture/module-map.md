@@ -30,7 +30,8 @@ catalog/
 └── onboarding/            Durable source preparation registry
 
 local-control/
-└── core/                  Ephemeral TV-confirmed pairing authority (JVM only; no LAN listener)
+├── core/                  Ephemeral TV-confirmed pairing authority (JVM, no socket)
+└── server/                Dormant Ktor LAN pairing transport; no catalog API yet
 
 player/
 ├── api/                   Playback identity, recovery policy и observations
@@ -55,7 +56,7 @@ benchmark/
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включены 30 application/library/benchmark модулей, включая `:local-control:core`. build-logic является отдельным included build и не входит в число 30 project paths. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
+В settings.gradle.kts включён 31 application/library/benchmark модуль, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
@@ -69,6 +70,6 @@ build-logic/               Included build с convention plugins
 
 ## Ещё не создано
 
-Не реализованы `:feature:profiles`, локальный LAN transport/server и web-панель. `:local-control:core` сейчас предоставляет только сопряжение и не принимает HTTP-запросы. Новые epg/search/doctor layers не создаются для симметрии.
+Не реализованы `:feature:profiles`, локальный TV QR UI и web-панель. `:local-control:server` предоставляет dormant LAN transport и ограниченные pairing/session endpoints, но ещё не активируется из Activity или service. Новые epg/search/doctor layers не создаются для симметрии.
 
 Машинно-читаемая карта: [.work/meta/modules.yaml](../meta/modules.yaml).
