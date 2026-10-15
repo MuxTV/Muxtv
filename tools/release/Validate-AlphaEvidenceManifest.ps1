@@ -123,6 +123,9 @@ foreach ($entry in $catalogById.GetEnumerator()) {
     if ([bool]$definition.requiredByDefault -and -not [bool]$gate.required) {
         Fail-Validation "Alpha evidence manifest weakens a required gate."
     }
+    if ([bool]$definition.recommendedOnly -and [bool]$gate.required) {
+        Fail-Validation "Recommended physical TV evidence must not be made a release blocker."
+    }
 }
 
 foreach ($id in $manifestById.Keys) {
