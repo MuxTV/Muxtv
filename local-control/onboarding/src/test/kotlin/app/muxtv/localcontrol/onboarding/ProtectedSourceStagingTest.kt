@@ -202,9 +202,30 @@ class ProtectedSourceStagingTest {
         stage.prepare(principal, SourcePreparationRequest.M3u("https://iptv.invalid"))
         port.cancellationResult = SourceCancellationResult.CleanupPending
         assertThat(stage.cancel(principal)).isEqualTo(SourceStagingResult.CLEANUP_PENDING)
+        assertThat(stage.activate(principal, "Must-not-retry"))
+            .isEqualTo(SourceStagingResult.CLEANUP_PENDING)
+        assertThat(port.activations).isEqualTo(0)
         port.cancellationResult = SourceCancellationResult.Removed
         assertThat(stage.cancel(principal)).isEqualTo(SourceStagingResult.CANCELED)
         assertThat(port.cancellations).isEqualTo(2)
+    }
+
+    @Test
+    fun activationCleanupPendingCannotBeRetriedUntilCancelled() = runBlocking {
+        val (principal, _) = PairingFixture().pair()
+        val port = FakeOnboarding()
+        val stage = ProtectedSourceStaging(port)
+        stage.prepare(principal, SourcePreparationRequest.M3u("https://iptv.invalid"))
+        port.activationResult = SourceActivationResult.Failed(
+            reason = app.muxtv.catalog.SourceActivationFailure.Import,
+            cleanupPending = true,
+        )
+        assertThat(stage.activate(principal, "TV"))
+            .isEqualTo(SourceStagingResult.CLEANUP_PENDING)
+        assertThat(stage.activate(principal, "TV"))
+            .isEqualTo(SourceStagingResult.CLEANUP_PENDING)
+        assertThat(port.activations).isEqualTo(1)
+        assertThat(stage.cancel(principal)).isEqualTo(SourceStagingResult.CANCELED)
     }
 
     @Test
