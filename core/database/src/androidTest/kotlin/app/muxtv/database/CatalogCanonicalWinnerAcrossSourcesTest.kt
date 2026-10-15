@@ -150,9 +150,9 @@ class CatalogCanonicalWinnerAcrossSourcesTest {
         assertThat(legacy.single().displayName).isEqualTo("My Channel")
         assertThat(legacy.single().channelNumber).isEqualTo("73")
         assertThat(legacy.single().isFavorite).isTrue()
-        assertThat(legacy.single().variantCount).isEqualTo(2.takeIf {
-            database.sourceRevisionDao().activeRevision(ALPHA_SOURCE) != 3L
-        } ?: 1)
+        val expectedVariantCount =
+            if (database.sourceRevisionDao().activeRevision(ALPHA_SOURCE) == 3L) 1 else 2
+        assertThat(legacy.single().variantCount).isEqualTo(expectedVariantCount)
     }
 
     private suspend fun stageAndActivate(
