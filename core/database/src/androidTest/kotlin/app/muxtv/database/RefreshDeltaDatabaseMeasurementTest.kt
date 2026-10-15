@@ -84,6 +84,12 @@ class RefreshDeltaDatabaseMeasurementTest {
                     assertThat(
                         variant.rowMutationBreakdown["source_revision_memberships.insert"],
                     ).isEqualTo(scenario.expectedActiveCount.toLong())
+                    // Fixed C03 scenarios change locator, order or membership only.
+                    // No canonical display name changes: publication must perform zero
+                    // canonical UPDATEs, while rename correctness is tested separately.
+                    assertThat(
+                        variant.rowMutationBreakdown["canonical_channels.update"] ?: 0L,
+                    ).isEqualTo(0L)
                     assertThat(variant.rowMutationBreakdown.keys.none { key ->
                         key.startsWith("c03_b_")
                     }).isTrue()
