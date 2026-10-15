@@ -68,6 +68,7 @@ class LocalRequestLimiter(
 ) {
     private data class Window(val started: Long, var count: Int)
     private val windows = mutableMapOf<String, Window>()
+    private var lastObservedMillis: Long? = null
 
     init {
         require(maxRequests in 1..1_000)
@@ -79,6 +80,12 @@ class LocalRequestLimiter(
     fun permit(peer: String): Boolean {
         if (!LanAddressPolicy.isPrivateLiteral(peer)) return false
         val now = monotonicMillis()
+        val previous = lastObservedMillis
+        lastObservedMillis = now
+        if (previous != null && now < previous) {
+            windows.clear()
+            return false // Fail closed on clock rollback; do not mint a fresh free request.
+        }
         val itr = windows.iterator()
         while (itr.hasNext()) {
             val w = itr.next().value
