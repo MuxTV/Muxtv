@@ -47,6 +47,7 @@ enum class SourceStagingResult {
     LOCAL_NETWORK_PERMISSION_REQUIRED,
     TV_HTTP_APPROVAL_REQUIRED,
     CLEANUP_PENDING,
+    ACTIVATION_OUTCOME_UNKNOWN,
     FAILED,
 }
 
@@ -120,8 +121,12 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
         }
         if (!principal.canWrite()) {
             prepared.remove(principal.sessionId)
-            // Activation may already have committed; do not claim rollback or success.
-            if (result !is SourceActivationResult.Activated) cancelHandle(handle)
+            // Activation can have committed before a simultaneous TV-side revocation.
+            // In that case the phone MUST NOT blindly retry or believe a rollback occurred.
+            if (result is SourceActivationResult.Activated) {
+                return@withLock SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN
+            }
+            cancelHandle(handle)
             return@withLock SourceStagingResult.ACCESS_DENIED
         }
         when (result) {
