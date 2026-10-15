@@ -140,6 +140,33 @@ function Assert-ValidatorFailure {
 try {
     Assert-ValidatorSuccess -Name "eligible" -Manifest (New-EligibleManifest)
 
+    # Physical devices are recommended evidence: missing hardware must never block alpha.
+    foreach ($physicalGateId in @(
+        "physical.current_android_tv",
+        "physical.constrained_tv",
+        "physical.fire_tv"
+    )) {
+        $definition = @($gateCatalog.gates | Where-Object { $_.id -ceq $physicalGateId })
+        if ($definition.Count -ne 1 -or [bool]$definition[0].requiredByDefault -or
+            -not [bool]$definition[0].recommendedOnly) {
+            throw "Physical TV gate must be recommendedOnly: $physicalGateId"
+        }
+    }
+
+    $physicalNotTested = New-EligibleManifest
+    $physicalNotTested.gates["physical.current_android_tv"].status = "BLOCKED"
+    $physicalNotTested.gates["physical.constrained_tv"].status = "FAILED"
+    $physicalNotTested.gates["physical.fire_tv"].status = "PENDING"
+    $physicalNotTested.knownLimitations = @(
+        "Physical Android TV has not been qualified; no device compatibility claim."
+    )
+    Assert-ValidatorSuccess -Name "eligible-with-physical-unavailable" -Manifest $physicalNotTested
+
+    $physicalForcedRequired = New-EligibleManifest
+    $physicalForcedRequired.gates["physical.current_android_tv"].required = $true
+    Assert-ValidatorFailure -Name "physical-must-not-block-alpha" -Manifest $physicalForcedRequired
+
+
     $safeReferences = New-EligibleManifest
     $safeReferences.gates["security.redaction"].evidence = @(
         [ordered]@{
