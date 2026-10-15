@@ -31,6 +31,7 @@ profileinstaller = "1.4.1"
 tracing = "2.0.1"
 uiautomator = "2.4.0"
 jmh-gradle = "0.7.3"
+ktor = "3.5.1"
 cyclonedx = "3.4.1"
 
 [libraries]
@@ -90,6 +91,10 @@ espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref =
 benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
 profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
+
+ktor-server-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor" }
+ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
