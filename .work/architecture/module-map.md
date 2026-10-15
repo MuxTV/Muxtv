@@ -32,7 +32,8 @@ catalog/
 local-control/
 ├── core/                  Ephemeral TV-confirmed pairing authority (JVM, no socket)
 ├── server/                User-initiated LAN pairing/QR bootstrap; no provider APIs
-└── onboarding/            Dormant TV-side SourceOnboarding adapter; protected transport NOT implemented
+├── onboarding/            Dormant SourceOnboarding adapter; protected transport NOT implemented
+└── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
 
 player/
 ├── api/                   Playback identity, recovery policy и observations
@@ -57,7 +58,7 @@ benchmark/
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включён 32 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
+В settings.gradle.kts включён 33 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
