@@ -382,6 +382,27 @@ internal abstract class SourceRevisionDao {
               WHERE stream_variants.canonicalChannelId = canonical_channels.id
                 AND provider_channels.revisionNumber = active_sources.activeRevision
           )
+          -- The chosen active provider and tie-break must match the SET subquery.
+          -- SQLite IS NOT is null-safe; skip physical UPDATE for unchanged names.
+          AND canonical_channels.displayName IS NOT (
+              SELECT CASE
+                  WHEN provider_channels.tvgName IS NOT NULL
+                   AND TRIM(provider_channels.tvgName) != ''
+                      THEN provider_channels.tvgName
+                  ELSE provider_channels.rawName
+              END
+              FROM stream_variants
+              INNER JOIN provider_channels
+                  ON provider_channels.id = stream_variants.providerChannelId
+              INNER JOIN sources AS active_sources
+                  ON active_sources.id = provider_channels.sourceId
+              WHERE stream_variants.canonicalChannelId = canonical_channels.id
+                AND provider_channels.revisionNumber = active_sources.activeRevision
+              ORDER BY provider_channels.sourceId COLLATE BINARY ASC,
+                       provider_channels.providerKey COLLATE BINARY ASC,
+                       provider_channels.id COLLATE BINARY ASC
+              LIMIT 1
+          )
         """,
     )
     abstract suspend fun publishCanonicalDisplayMetadata(
