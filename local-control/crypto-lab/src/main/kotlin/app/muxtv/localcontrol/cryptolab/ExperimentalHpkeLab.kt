@@ -123,7 +123,9 @@ class LabReceiver internal constructor(
             return LabDecryptResult.Denied(LabDecryptDenial.INVALID)
         }
         lastAcceptedCounter = message.counter
-        return LabDecryptResult.Accepted(plain)
+        val accepted = LabDecryptResult.Accepted(plain)
+        plain.fill(0)
+        return accepted
     }
 }
 
