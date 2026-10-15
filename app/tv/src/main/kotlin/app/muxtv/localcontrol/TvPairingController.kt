@@ -14,6 +14,8 @@ import app.muxtv.localcontrol.PendingTvPairing
 import app.muxtv.localcontrol.server.LanAddressPolicy
 import app.muxtv.localcontrol.server.TvLanServer
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicLong
@@ -76,7 +78,7 @@ class TvPairingController(
                 expiresAtElapsedMillis = SystemClock.elapsedRealtime() + invitation.lifetimeMillis,
             )
         } catch (failure: Exception) {
-            stopInternal()
+            withContext(NonCancellable) { stopInternal() }
             throw failure
         }
     }
@@ -89,7 +91,9 @@ class TvPairingController(
 
     suspend fun stop() {
         lifecycleEpoch.incrementAndGet()
-        lifecycleMutex.withLock { stopInternal() }
+        withContext(NonCancellable) {
+            lifecycleMutex.withLock { stopInternal() }
+        }
     }
 
     private suspend fun stopInternal() {
