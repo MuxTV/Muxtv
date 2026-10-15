@@ -47,6 +47,22 @@ class LocalHpkeLabIsolationContractTest {
     }
 
     @Test
+    fun `TV QR binding serializes only a public HPKE keyset and refuses claimed fingerprints`() {
+        val path = "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabTvQrKeyBinding.kt"
+        val source = root.resolve(path).readText()
+        assertContains(source, "TinkProtoKeysetFormat.serializeKeysetWithoutSecret")
+        assertContains(source, "TinkProtoKeysetFormat.parseKeysetWithoutSecret")
+        assertContains(source, "HpkeKem.DHKEM_X25519_HKDF_SHA256")
+        assertContains(source, "HpkeAead.AES_256_GCM")
+        assertContains(source, "MessageDigest.isEqual(receiverBytes, encodedPublicKeyset())")
+        assertFalse(source.contains("serializeKeyset("))
+        assertFalse(source.contains("InsecureSecretKeyAccess"))
+        assertFalse(source.contains("embeddedServer("))
+        assertFalse(source.contains("SourceOnboarding"))
+        assertTrue(root.resolve(".work/research/lc04-s2-qr-key-pinning-lab-20261015.md").isFile)
+    }
+
+    @Test
     fun `lab uses audited HPKE not a custom elliptic curve or TLS implementation`() {
         val code = root.resolve(
             "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/ExperimentalHpkeLab.kt",
