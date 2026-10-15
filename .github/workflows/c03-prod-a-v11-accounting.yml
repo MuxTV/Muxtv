@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   real-v11-api36:
-    name: Real v11 physical SQL and WAL API36 pilot
+    name: Real v11 physical SQL and WAL API36 repeat
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -51,7 +51,7 @@ jobs:
           MUXTV_KVM_EVIDENCE: .work/evidence/c03-prod-a-v11/kvm
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
 
-      - name: Run threshold-free real Room v11 pilot on API36
+      - name: Run threshold-free 3-round real Room v11 evidence on API36
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         with:
           api-level: 36
