@@ -15,7 +15,6 @@ import io.ktor.server.request.contentType
 import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
-import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.readAvailable
@@ -92,9 +91,9 @@ fun Application.installLocalControlTransport(
             }
         }
 
-        /** Authenticated proof-of-session endpoint; does not expose installation data. */
-        get("/v1/session") {
-            if (!call.checkLanRequest(activeEndpoint, remotePeer, rateLimiter)) return@get
+        /** Authenticated POST-only proof-of-session endpoint; browser requests carry Origin. */
+        post("/v1/session/check") {
+            if (!call.checkLanRequest(activeEndpoint, remotePeer, rateLimiter)) return@post
             val ids = call.request.headers.getAll(SESSION_ID).orEmpty()
             val auths = call.request.headers.getAll(HttpHeaders.Authorization).orEmpty()
             val bearer = auths.singleOrNull()
@@ -106,7 +105,7 @@ fun Application.installLocalControlTransport(
                 )
             ) {
                 call.respond(HttpStatusCode.Forbidden)
-                return@get
+                return@post
             }
             call.respondText("{\"paired\":true}", ContentType.Application.Json)
         }
