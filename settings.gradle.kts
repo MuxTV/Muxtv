@@ -29,6 +29,7 @@ include(
     ":core:credentials",
     ":local-control:core",
     ":local-control:server",
+    ":local-control:onboarding",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
