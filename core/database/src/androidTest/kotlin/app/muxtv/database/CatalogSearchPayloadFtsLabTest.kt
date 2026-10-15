@@ -15,12 +15,13 @@ import org.junit.runner.RunWith
 /**
  * D3-A feasibility oracle, deliberately isolated from the production Room schema.
  *
- * Rebuild a separate FTS4/unicode61 index using only active immutable v11 provider-search
- * payloads. Compare its provider/group/number candidates to the current production FTS
- * policy before/after staging, activation, old-revision retention and per-profile hiding.
+ * Rebuild a separate FTS4/unicode61 index from active immutable v11 provider-search
+ * payloads plus canonical display metadata and profile-owned overlays. Compare provider,
+ * group, number, canonical name and overlay ranks to the existing production FTS policy
+ * before/after staging, activation, old-revision retention and per-profile hiding.
  *
- * This does NOT add a persistent v11 Search table, replace existing canonical/overlay/EPG
- * indexing, or authorize a production Search cutover. A persistent index requires its own
+ * This does NOT add a persistent v11 Search table or independently index EPG programmes,
+ * and does not authorize a production Search cutover. A persistent index requires its own
  * schema migration, publication contract and write/WAL measurement.
  */
 @RunWith(AndroidJUnit4::class)
@@ -81,12 +82,27 @@ class CatalogSearchPayloadFtsLabTest {
             activate(store, 2, 2)
             assertProviderParity(database, lab, PRIMARY_PROFILE)
 
-            // An active profile overlay removes the canonical identity from both search
-            // implementations, while a different profile retains the same source content.
+            // Overlay name is a NAME-rank document (3); an overlay number is a
+            // PROVIDER-rank document (4). Neither belongs to the secondary profile.
             database.catalogDao().insertOverlay(
                 UserChannelOverlayEntity(
                     profileId = PRIMARY_PROFILE,
                     canonicalChannelId = CHANNEL_A,
+                    customName = "Личный Эфир",
+                    channelNumber = 88,
+                ),
+            )
+            assertProviderParity(database, lab, PRIMARY_PROFILE)
+            assertProviderParity(database, lab, SECONDARY_PROFILE)
+
+            // Hiding a channel suppresses canonical, overlay and provider matches for
+            // the primary profile while the secondary profile keeps its own visibility.
+            database.catalogDao().insertOverlay(
+                UserChannelOverlayEntity(
+                    profileId = PRIMARY_PROFILE,
+                    canonicalChannelId = CHANNEL_A,
+                    customName = "Личный Эфир",
+                    channelNumber = 88,
                     isHidden = true,
                 ),
             )
@@ -118,12 +134,18 @@ class CatalogSearchPayloadFtsLabTest {
             append(lab, payload.id, payload.canonicalId, "RAW", payload.rawName)
             append(lab, payload.id, payload.canonicalId, "GROUP", payload.groupTitle)
             append(lab, payload.id, payload.canonicalId, "NUMBER", payload.channelNumber)
+            // Canonical metadata is published by activation and may match the same
+            // token as provider RAW. The minimum rank must be 3, not provider rank 4.
+            append(lab, payload.id, payload.canonicalId, "CANONICAL", payload.canonicalName)
+            append(lab, payload.id, payload.canonicalId, "OVERLAY_NAME", payload.overlayName)
+            append(lab, payload.id, payload.canonicalId, "OVERLAY_NUMBER", payload.overlayNumber)
         }
 
-        // No canonical/overlay/EPG document contains these probes in this fixture.
-        // Prefix-token syntax is produced by the real SearchQueryEncoder.
+        // EPG remains out of this oracle; this fixture has no EPG publications.
+        // The real SearchQueryEncoder supplies safe prefix syntax to both engines.
         listOf("рос", "перв", "нов", "спор", "live", "001", "002",
-            "вече", "ради", "муз", "077", "несуществующий").forEach { probe ->
+            "вече", "ради", "муз", "077", "лич", "эфи", "88",
+            "несуществующий").forEach { probe ->
             val token = SearchQueryEncoder.encode(probe).single().ftsExpression
             val actual = database.channelSearchDao().searchCandidates(
                 profileId = profileId,
@@ -143,8 +165,12 @@ class CatalogSearchPayloadFtsLabTest {
         transactor.usePrepared(
             """
             SELECT DISTINCT sp.searchPayloadId, sp.canonicalChannelId,
-                   sp.rawName, COALESCE(sp.groupTitle, ''), COALESCE(sp.channelNumber, '')
+                   sp.rawName, COALESCE(sp.groupTitle, ''), COALESCE(sp.channelNumber, ''),
+                   canonical.displayName, COALESCE(overlay.customName, ''),
+                   COALESCE(CAST(overlay.channelNumber AS TEXT), '')
             FROM catalog_search_payloads AS sp
+            INNER JOIN canonical_channels AS canonical
+                ON canonical.id = sp.canonicalChannelId
             INNER JOIN catalog_payloads AS p ON p.searchPayloadId = sp.searchPayloadId
             INNER JOIN source_revision_memberships AS m ON m.payloadId = p.payloadId
             INNER JOIN sources AS src
@@ -166,6 +192,9 @@ class CatalogSearchPayloadFtsLabTest {
                             rawName = stmt.getText(2),
                             groupTitle = stmt.getText(3),
                             channelNumber = stmt.getText(4),
+                            canonicalName = stmt.getText(5),
+                            overlayName = stmt.getText(6),
+                            overlayNumber = stmt.getText(7),
                         ),
                     )
                 }
@@ -202,7 +231,11 @@ class CatalogSearchPayloadFtsLabTest {
         lab.prepare(
             """
             SELECT canonicalChannelId,
-                   MIN(CASE WHEN documentKind = 'GROUP' THEN 5 ELSE 4 END) AS bestMatchRank
+                   MIN(CASE
+                       WHEN documentKind IN ('CANONICAL', 'OVERLAY_NAME') THEN 3
+                       WHEN documentKind = 'GROUP' THEN 5
+                       ELSE 4
+                   END) AS bestMatchRank
             FROM lab_provider_fts
             WHERE lab_provider_fts MATCH ?
             GROUP BY canonicalChannelId
@@ -252,6 +285,9 @@ class CatalogSearchPayloadFtsLabTest {
         val rawName: String,
         val groupTitle: String,
         val channelNumber: String,
+        val canonicalName: String,
+        val overlayName: String,
+        val overlayNumber: String,
     )
 
     private companion object {
