@@ -25,6 +25,7 @@ import app.muxtv.external.LocalNetworkPermissionGate
 import app.muxtv.external.LocalNetworkPermissionState
 import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.navigation.AppNavigation
+import app.muxtv.localcontrol.TvPairingController
 import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
@@ -39,6 +40,11 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private lateinit var doctorExportState: DoctorExportState
+    private val pairingController by lazy {
+        TvPairingController(this) {
+            stopPhonePairing() // active LAN interface/transport changed; never auto-rebind
+        }
+    }
     private var pendingLocalNetworkPermission: CompletableDeferred<LocalNetworkPermissionOutcome>? = null
     private var pendingLocalNetworkSettings: CompletableDeferred<Boolean>? = null
 
@@ -115,6 +121,13 @@ class MainActivity : ComponentActivity() {
                     playbackSessionGateway = playbackSessionGateway,
                     sourceManagement = sourceManagement,
                     sourceOnboarding = sourceOnboarding,
+                    startPhonePairing = ::startPhonePairing,
+                    stopPhonePairing = ::stopPhonePairing,
+                    pendingPhonePairing = { pairingController.pendingClaim() },
+                    approvePhonePairing = pairingController::approve,
+                    denyPhonePairing = pairingController::deny,
+                    activePhonePairings = pairingController::activeSessionCount,
+                    phonePairingIsActive = pairingController::isActive,
                     playbackObservationReader = playbackObservationReader,
                     doctorExportStatus = doctorExportState.status,
                     onExportDoctorReport = ::beginDoctorExport,
@@ -125,6 +138,20 @@ class MainActivity : ComponentActivity() {
             }
         }
         doctorExportState.pendingExportForResume()?.let(::writeDoctorExport)
+    }
+
+    private suspend fun startPhonePairing(): TvPairingController.ScreenSession? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            runCatching { pairingController.start() }.getOrNull()
+        }
+    }
+
+    private fun stopPhonePairing() {
+        pairingController.revokeImmediately()
+        lifecycleScope.launch(Dispatchers.IO) {
+            pairingController.stop()
+        }
     }
 
     private suspend fun requestLocalNetworkPermission(): LocalNetworkPermissionOutcome {
@@ -226,6 +253,11 @@ class MainActivity : ComponentActivity() {
             doctorExportState.pendingDestinationUriForSave(),
         )
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onStop() {
+        stopPhonePairing()
+        super.onStop()
     }
 
     override fun onDestroy() {
