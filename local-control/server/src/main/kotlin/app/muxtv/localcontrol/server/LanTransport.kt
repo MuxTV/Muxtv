@@ -18,6 +18,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -58,7 +59,7 @@ private class RedeemResponse(val sessionId: String, val credential: String) {
  * No provider credentials, catalog/Room or player routes exist in this LC02 slice.
  * A same-origin browser may make calls only after TV has opened the pairing window.
  */
-fun Application.installLocalControlTransport(
+internal fun Application.installLocalControlTransport(
     authority: PairingAuthority,
     activeEndpoint: () -> LanEndpoint?,
     remotePeer: (ApplicationCall) -> String = { call -> call.request.local.remoteHost },
@@ -151,17 +152,21 @@ private suspend inline fun <reified T> ApplicationCall.boundedJson(): T? {
     val declared = request.header(HttpHeaders.ContentLength)?.toLongOrNull()
     if (declared != null && (declared < 0 || declared > MAX_PAIRING_BODY_BYTES)) return null
 
-    val channel = receiveChannel()
-    val bytes = ByteArrayOutputStream()
-    val buffer = ByteArray(256)
-    while (true) {
-        val read = channel.readAvailable(buffer, 0, buffer.size)
-        if (read < 0) break
-        if (bytes.size() + read > MAX_PAIRING_BODY_BYTES) return null
-        if (read > 0) bytes.write(buffer, 0, read)
-    }
+    // Network-slow clients must not hold a pairing handler indefinitely.
+    val payload = withTimeoutOrNull(5_000L) {
+        val channel = receiveChannel()
+        val bytes = ByteArrayOutputStream()
+        val buffer = ByteArray(256)
+        while (true) {
+            val read = channel.readAvailable(buffer, 0, buffer.size)
+            if (read < 0) break
+            if (bytes.size() + read > MAX_PAIRING_BODY_BYTES) return@withTimeoutOrNull null
+            if (read > 0) bytes.write(buffer, 0, read)
+        }
+        bytes.toByteArray()
+    } ?: return null
     return try {
-        strictJson.decodeFromString<T>(bytes.toByteArray().toString(Charsets.UTF_8))
+        strictJson.decodeFromString<T>(payload.toString(Charsets.UTF_8))
     } catch (_: IllegalArgumentException) {
         null // Validation diagnostics must never echo token/body content.
     }
