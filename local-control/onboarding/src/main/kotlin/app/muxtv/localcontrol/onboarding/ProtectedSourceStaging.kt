@@ -63,7 +63,11 @@ enum class SourceStagingResult {
  */
 class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
     private val mutex = Mutex()
-    private val prepared = mutableMapOf<String, SourcePreparationHandle>()
+    private class PreparedState(
+        val handle: SourcePreparationHandle,
+        var cleanupOnly: Boolean = false,
+    )
+    private val prepared = mutableMapOf<String, PreparedState>()
 
     suspend fun prepare(
         principal: ProtectedSourcePrincipal,
@@ -92,7 +96,7 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
 
         when (result) {
             is SourcePreparationResult.Prepared -> {
-                prepared[principal.sessionId] = result.handle
+                prepared[principal.sessionId] = PreparedState(result.handle)
                 SourceStagingResult.PREPARED
             }
             SourcePreparationResult.LocalNetworkAccessRequired ->
@@ -111,7 +115,9 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
     ): SourceStagingResult = mutex.withLock {
         if (!principal.canWrite()) return@withLock SourceStagingResult.ACCESS_DENIED
         if (!sourceName.isValidDisplayName()) return@withLock SourceStagingResult.INVALID_INPUT
-        val handle = prepared[principal.sessionId] ?: return@withLock SourceStagingResult.EMPTY
+        val state = prepared[principal.sessionId] ?: return@withLock SourceStagingResult.EMPTY
+        if (state.cleanupOnly) return@withLock SourceStagingResult.CLEANUP_PENDING
+        val handle = state.handle
         val result = try {
             onboarding.activate(handle, sourceName)
         } catch (cancelled: CancellationException) {
@@ -139,6 +145,7 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
 
             is SourceActivationResult.Failed -> {
                 if (!result.cleanupPending) prepared.remove(principal.sessionId)
+                else state.cleanupOnly = true
                 if (result.cleanupPending) SourceStagingResult.CLEANUP_PENDING
                 else SourceStagingResult.FAILED
             }
@@ -147,13 +154,16 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
 
     suspend fun cancel(principal: ProtectedSourcePrincipal): SourceStagingResult = mutex.withLock {
         if (!principal.canWrite()) return@withLock SourceStagingResult.ACCESS_DENIED
-        val handle = prepared[principal.sessionId] ?: return@withLock SourceStagingResult.EMPTY
-        when (cancelHandle(handle)) {
+        val state = prepared[principal.sessionId] ?: return@withLock SourceStagingResult.EMPTY
+        when (cancelHandle(state.handle)) {
             SourceCancellationResult.Removed, SourceCancellationResult.NotFound -> {
                 prepared.remove(principal.sessionId)
                 SourceStagingResult.CANCELED
             }
-            SourceCancellationResult.CleanupPending -> SourceStagingResult.CLEANUP_PENDING
+            SourceCancellationResult.CleanupPending -> {
+                state.cleanupOnly = true
+                SourceStagingResult.CLEANUP_PENDING
+            }
         }
     }
 
@@ -163,8 +173,8 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
      * Any durable cleanup failure is reported; recovery belongs to SourceOnboarding.
      */
     suspend fun discardRevoked(sessionId: String): SourceStagingResult = mutex.withLock {
-        val handle = prepared.remove(sessionId) ?: return@withLock SourceStagingResult.EMPTY
-        when (cancelHandle(handle)) {
+        val state = prepared.remove(sessionId) ?: return@withLock SourceStagingResult.EMPTY
+        when (cancelHandle(state.handle)) {
             SourceCancellationResult.Removed, SourceCancellationResult.NotFound ->
                 SourceStagingResult.CANCELED
             SourceCancellationResult.CleanupPending -> SourceStagingResult.CLEANUP_PENDING
@@ -173,7 +183,7 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
 
     suspend fun discardAllAfterStop(): SourceStagingResult = mutex.withLock {
         var pending = false
-        val entries = prepared.values.toList()
+        val entries = prepared.values.map { it.handle }
         prepared.clear()
         entries.forEach { handle ->
             if (cancelHandle(handle) == SourceCancellationResult.CleanupPending) pending = true
