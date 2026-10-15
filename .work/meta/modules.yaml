@@ -42,6 +42,10 @@ actual_modules:
     gradle_path: :local-control:core
     type: pure_kotlin_library
     owns: [ephemeral_pairing_proof, tv_consent, replay_protection, scoped_session_authority]
+  local-control-server:
+    gradle_path: :local-control:server
+    type: jvm_library
+    owns: [ephemeral_ktor_lan_transport, private_address_binding, host_origin_checks, bounded_http_pairing]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
