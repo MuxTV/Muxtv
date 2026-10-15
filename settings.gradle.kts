@@ -30,6 +30,7 @@ include(
     ":local-control:core",
     ":local-control:server",
     ":local-control:onboarding",
+    ":local-control:crypto-lab",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
