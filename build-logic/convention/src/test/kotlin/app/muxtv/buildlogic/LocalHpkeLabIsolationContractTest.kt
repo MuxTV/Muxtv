@@ -26,6 +26,27 @@ class LocalHpkeLabIsolationContractTest {
     }
 
     @Test
+    fun `phone possession and every-message signatures remain lab-only and explicit`() {
+        val enrollment = root.resolve(
+            "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabPhoneEnrollment.kt",
+        ).readText()
+        val envelopes = root.resolve(
+            "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabSignedHpkeEnvelope.kt",
+        ).readText()
+        assertContains(enrollment, "Signature.getInstance(\"Ed25519\")")
+        assertContains(enrollment, "approveOnTv(")
+        assertContains(enrollment, "TV_CONSENT_REQUIRED")
+        assertContains(envelopes, "verifyAndDecrypt(")
+        assertContains(envelopes, "RejectedSignature")
+        assertContains(envelopes, "approvedPhoneFingerprint")
+        listOf("embeddedServer(", "installLocalControlTransport(", "SourceOnboarding(").forEach {
+            assertFalse(enrollment.contains(it))
+            assertFalse(envelopes.contains(it))
+        }
+        assertTrue(root.resolve(".work/research/lc04-s2-phone-enrollment-lab-20261015.md").isFile)
+    }
+
+    @Test
     fun `lab uses audited HPKE not a custom elliptic curve or TLS implementation`() {
         val code = root.resolve(
             "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/ExperimentalHpkeLab.kt",
