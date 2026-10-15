@@ -58,6 +58,9 @@ class PairingGrant(val sessionId: String, val credential: String, val capabiliti
     override fun toString(): String = "PairingGrant(sessionId=[REDACTED], credential=[REDACTED])"
 }
 
+/** TV-owned revocation/listing metadata. Contains no bearer secrets. */
+class PairedDeviceSummary(val sessionId: String, val clientLabel: String, val createdAtMillis: Long)
+
 sealed interface PairingRedemption {
     class Granted(val grant: PairingGrant) : PairingRedemption
     class Denied(val reason: PairingDenial) : PairingRedemption
@@ -83,6 +86,7 @@ class PairingAuthority(
         val digest: ByteArray,
         val createdAt: Long,
         var lastUsedAt: Long,
+        val clientLabel: String,
         val capabilities: Set<PairingCapability>,
     ) {
         fun erase() = digest.fill(0)
@@ -158,7 +162,10 @@ class PairingAuthority(
         }
         val id = newSecret(16)
         val credential = newSecret(32)
-        sessions[id] = SessionState(digest(credential), now, now, setupCapabilities)
+        sessions[id] = SessionState(
+            digest(credential), now, now,
+            checkNotNull(invitation.clientLabel), setupCapabilities,
+        )
         cancelPending()
         return PairingRedemption.Granted(PairingGrant(id, credential, setupCapabilities))
     }
@@ -194,6 +201,15 @@ class PairingAuthority(
         cancelPending()
         sessions.values.forEach { it.erase() }
         sessions.clear()
+    }
+
+    /** TV-local only: never return this inventory from an unauthenticated HTTP route. */
+    @Synchronized
+    fun pairedDevices(): List<PairedDeviceSummary> {
+        prune(clock.elapsedRealtimeMillis())
+        return sessions.map { (id, state) ->
+            PairedDeviceSummary(id, state.clientLabel, state.createdAt)
+        }
     }
 
     @Synchronized
