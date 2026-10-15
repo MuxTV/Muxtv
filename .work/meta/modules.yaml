@@ -46,6 +46,10 @@ actual_modules:
     gradle_path: :local-control:server
     type: jvm_library
     owns: [ephemeral_ktor_lan_transport, private_address_binding, host_origin_checks, bounded_http_pairing]
+  local-control-onboarding:
+    gradle_path: :local-control:onboarding
+    type: pure_kotlin_library
+    owns: [protected_channel_source_staging, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
