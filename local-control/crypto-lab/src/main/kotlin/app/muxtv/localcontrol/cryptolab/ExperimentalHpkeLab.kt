@@ -130,10 +130,14 @@ class LabReceiver internal constructor(
 sealed interface LabDecryptResult {
     class Accepted(plaintext: ByteArray) : LabDecryptResult {
         private val secret = plaintext.clone()
+        private var consumed = false
+        @Synchronized
         fun consumeOnce(block: (ByteArray) -> Unit) {
+            check(!consumed) { "HPKE decrypted payload already consumed." }
+            consumed = true
             val copy = secret.clone()
-            try { block(copy) } finally { copy.fill(0) }
             secret.fill(0)
+            try { block(copy) } finally { copy.fill(0) }
         }
         override fun toString(): String = "LabDecryptResult.Accepted([REDACTED])"
     }
