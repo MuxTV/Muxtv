@@ -201,6 +201,104 @@ class CatalogShadowProjectionParityTest {
     }
 
     @Test
+    fun canonicalPublicationSkipsUnchangedNamesButPublishesRealRename() = runTest {
+        val dao = database.sourceRevisionDao()
+        assertThat(dao.publishCanonicalDisplayMetadata(SOURCE_ID, 1, 0)).isEqualTo(0)
+
+        // A refresh with identical searchable names must preserve display and
+        // overlay semantics without physically updating the canonical rows.
+        store.beginRevision(SOURCE_ID, 2, 3_000)
+        store.stageBatch(
+            SOURCE_ID,
+            2,
+            listOf(
+                entry(
+                    providerId = "provider-news-r2",
+                    providerKey = "tvg:news",
+                    canonicalId = NEWS_ID,
+                    displayName = "News",
+                    variantId = "variant-news-r2",
+                    locator = "https://stream.invalid/news-r2",
+                    group = "Information",
+                    number = "10",
+                ),
+                entry(
+                    providerId = "provider-sports-r2",
+                    providerKey = "tvg:sports",
+                    canonicalId = SPORTS_ID,
+                    displayName = "Sports",
+                    variantId = "variant-sports-r2",
+                    locator = "https://stream.invalid/sports-r2",
+                    group = "Sports",
+                    number = "20",
+                ),
+            ),
+        )
+        assertThat(
+            store.activate(SOURCE_ID, 2, 4_000, SourceRevisionStatistics(2, 0, 0)),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(dao.publishCanonicalDisplayMetadata(SOURCE_ID, 2, 1)).isEqualTo(0)
+        assertThat(database.catalogDao().findActiveCanonicalChannel(NEWS_ID)?.displayName)
+            .isEqualTo("News")
+        assertThat(database.searchIndexDao().textsForCanonicalKind(
+            NEWS_ID, SearchDocumentKind.CANONICAL_NAME,
+        )).containsExactly("News")
+        val primary = database.playbackCatalogDao().observeActiveChannels(
+            PROFILE_ID, null, false, 10,
+        ).first()
+        assertThat(primary.single().displayName).isEqualTo("My News")
+        assertThat(database.catalogShadowDao().activeChannelSummaries(
+            PROFILE_ID, null, false, 10,
+        )).isEqualTo(primary)
+
+        // A changed deterministic winner must still publish its new canonical
+        // name and canonical Search document. A second publication must be a no-op.
+        store.beginRevision(SOURCE_ID, 3, 5_000)
+        store.stageBatch(
+            SOURCE_ID,
+            3,
+            listOf(
+                entry(
+                    providerId = "provider-news-r3",
+                    providerKey = "tvg:news",
+                    canonicalId = NEWS_ID,
+                    displayName = "News Renamed",
+                    variantId = "variant-news-r3",
+                    locator = "https://stream.invalid/news-r3",
+                    group = "Information",
+                    number = "10",
+                ),
+                entry(
+                    providerId = "provider-sports-r3",
+                    providerKey = "tvg:sports",
+                    canonicalId = SPORTS_ID,
+                    displayName = "Sports",
+                    variantId = "variant-sports-r3",
+                    locator = "https://stream.invalid/sports-r3",
+                    group = "Sports",
+                    number = "20",
+                ),
+            ),
+        )
+        assertThat(
+            store.activate(SOURCE_ID, 3, 6_000, SourceRevisionStatistics(2, 0, 0)),
+        ).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        assertThat(database.catalogDao().findActiveCanonicalChannel(NEWS_ID)?.displayName)
+            .isEqualTo("News Renamed")
+        assertThat(database.searchIndexDao().textsForCanonicalKind(
+            NEWS_ID, SearchDocumentKind.CANONICAL_NAME,
+        )).containsExactly("News Renamed")
+        assertThat(dao.publishCanonicalDisplayMetadata(SOURCE_ID, 3, 2)).isEqualTo(0)
+        val renamedPrimary = database.playbackCatalogDao().observeActiveChannels(
+            PROFILE_ID, null, false, 10,
+        ).first()
+        assertThat(renamedPrimary.single().displayName).isEqualTo("My News")
+        assertThat(database.catalogShadowDao().activeChannelSummaries(
+            PROFILE_ID, null, false, 10,
+        )).isEqualTo(renamedPrimary)
+    }
+
+    @Test
     fun playbackIdentityAndAccessProjectionsMatchAuthoritativeRepresentation() = runTest {
         val authoritativeVariants = database.playbackCatalogDao().getActiveVariants(NEWS_ID)
         val shadowVariants = database.catalogShadowDao().activeVariants(NEWS_ID)
