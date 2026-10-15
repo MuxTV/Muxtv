@@ -92,6 +92,10 @@ for sc in scenarios:
     mutations = production.get("rowMutationBreakdown", {})
     require(mutations.get("source_revision_memberships.insert") == expected,
             "v11 membership writes omitted or incorrect")
+    # All seven fixed scenarios retain the same canonical display metadata.
+    # The optimized publication path must skip unchanged SQL UPDATEs.
+    require(mutations.get("canonical_channels.update", 0) == 0,
+            "unchanged canonical metadata still incurs physical SQL UPDATEs")
     require(production.get("actualRowMutations") == sum(mutations.values()),
             "physical SQL mutation sum mismatch")
     require(not any(k.startswith("c03_b_") for k in mutations),
