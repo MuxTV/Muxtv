@@ -32,6 +32,7 @@ tracing = "2.0.1"
 uiautomator = "2.4.0"
 jmh-gradle = "0.7.3"
 ktor = "3.5.1"
+tink = "1.23.0"
 zxing = "3.5.4"
 cyclonedx = "3.4.1"
 
@@ -98,6 +99,8 @@ ktor-server-cio = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor"
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+
+tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
