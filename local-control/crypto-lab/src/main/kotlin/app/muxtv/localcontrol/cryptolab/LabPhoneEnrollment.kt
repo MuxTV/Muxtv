@@ -88,7 +88,7 @@ enum class LabEnrollmentDenial {
 
 sealed interface LabEnrollmentOutcome {
     /** Still LAB ONLY. This is not a production authorization token or principal. */
-    class ProofVerified(
+    class ProofVerified internal constructor(
         val approvedPhoneFingerprint: String,
         approvedPhoneKey: ByteArray,
         internal val tvInvitationId: String,
