@@ -30,6 +30,7 @@ class ProtectedSourceStagingTest {
         var activationResult: SourceActivationResult = SourceActivationResult.Activated
         var cancellationResult: SourceCancellationResult = SourceCancellationResult.Removed
         var onPrepare: (() -> Unit)? = null
+        var onActivate: (() -> Unit)? = null
 
         override suspend fun prepare(locator: String, insecureHttpApproved: Boolean): SourcePreparationResult =
             prepare(SourcePreparationRequest.M3u(locator, insecureHttpApproved))
@@ -48,6 +49,7 @@ class ProtectedSourceStagingTest {
             assertThat(handle).isSameInstanceAs(this.handle)
             activations++
             previousName = sourceName
+            onActivate?.invoke()
             return activationResult
         }
 
@@ -162,6 +164,21 @@ class ProtectedSourceStagingTest {
             .isEqualTo(SourceStagingResult.ACCESS_DENIED)
         assertThat(port.cancellations).isEqualTo(1)
         assertThat(stage.discardRevoked(grant.sessionId)).isEqualTo(SourceStagingResult.EMPTY)
+    }
+
+    @Test
+    fun revocationDuringActivationDoesNotClaimRollbackOrEncourageBlindRetry() = runBlocking {
+        val fixture = PairingFixture()
+        val (principal, grant) = fixture.pair()
+        val port = FakeOnboarding()
+        val stage = ProtectedSourceStaging(port)
+        assertThat(stage.prepare(principal, SourcePreparationRequest.M3u("https://iptv.invalid")))
+            .isEqualTo(SourceStagingResult.PREPARED)
+        port.onActivate = { fixture.authority.revoke(grant.sessionId) }
+        assertThat(stage.activate(principal, "Name"))
+            .isEqualTo(SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN)
+        assertThat(port.activations).isEqualTo(1)
+        assertThat(stage.activate(principal, "Name")).isEqualTo(SourceStagingResult.ACCESS_DENIED)
     }
 
     @Test
