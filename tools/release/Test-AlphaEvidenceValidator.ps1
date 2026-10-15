@@ -166,6 +166,33 @@ try {
     $physicalForcedRequired.gates["physical.current_android_tv"].required = $true
     Assert-ValidatorFailure -Name "physical-must-not-block-alpha" -Manifest $physicalForcedRequired
 
+    # Performance figures are advisory to alpha, not a release publication prerequisite.
+    foreach ($performanceGateId in @(
+        "perf.baseline_profile_effect",
+        "perf.startup_frames_memory",
+        "perf.measurement_provenance"
+    )) {
+        $definition = @($gateCatalog.gates | Where-Object { $_.id -ceq $performanceGateId })
+        if ($definition.Count -ne 1 -or [bool]$definition[0].requiredByDefault -or
+            -not [bool]$definition[0].recommendedOnly) {
+            throw "Alpha performance gate must be recommendedOnly: $performanceGateId"
+        }
+    }
+
+    $performanceUnavailable = New-EligibleManifest
+    $performanceUnavailable.gates["perf.baseline_profile_effect"].status = "BLOCKED"
+    $performanceUnavailable.gates["perf.startup_frames_memory"].status = "PENDING"
+    $performanceUnavailable.gates["perf.measurement_provenance"].status = "FAILED"
+    $performanceUnavailable.knownLimitations = @(
+        "No qualified real-device startup performance gain is claimed."
+    )
+    Assert-ValidatorSuccess -Name "eligible-without-performance-claims" -Manifest $performanceUnavailable
+
+    $performanceForcedRequired = New-EligibleManifest
+    $performanceForcedRequired.gates["perf.baseline_profile_effect"].required = $true
+    Assert-ValidatorFailure -Name "performance-must-not-block-alpha" -Manifest $performanceForcedRequired
+
+
 
     $safeReferences = New-EligibleManifest
     $safeReferences.gates["security.redaction"].evidence = @(

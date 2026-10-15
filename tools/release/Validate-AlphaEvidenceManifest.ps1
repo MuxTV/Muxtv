@@ -124,7 +124,7 @@ foreach ($entry in $catalogById.GetEnumerator()) {
         Fail-Validation "Alpha evidence manifest weakens a required gate."
     }
     if ($null -ne $definition.PSObject.Properties["recommendedOnly"] -and [bool]$definition.recommendedOnly -and [bool]$gate.required) {
-        Fail-Validation "Recommended physical TV evidence must not be made a release blocker."
+        Fail-Validation "Recommended evidence must not be made a release blocker."
     }
 }
 

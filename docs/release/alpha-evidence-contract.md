@@ -51,7 +51,7 @@ The executable inventory is `alpha-gates-v1.json`. Its groups are:
 - recovery: TV-operable recovery, previous-good preservation and user recovery docs;
 - player/diagnostics: core TV journey, transport behavior and diagnostic export;
 - **recommended, non-blocking** physical qualification: current Android/Google TV, constrained TV and Fire TV when available;
-- performance: Baseline Profile effect, startup/frame/memory evidence and measurement provenance.
+- **recommended, non-blocking** performance: Baseline Profile effect, startup/frame/memory measurements and their provenance when collected.
 
 Physical observations are recommended and remain device-scoped. Emulator evidence cannot certify vendor codec, HDR/Dolby Vision, passthrough, weak-ARM, Fire OS, thermal or absolute performance behavior. Lack of physical hardware does not prevent an alpha release, provided public notes state the evidence limits.
 
@@ -59,7 +59,7 @@ Physical observations are recommended and remain device-scoped. Emulator evidenc
 
 Every gate from `alpha-gates-v1.json`, including optional/availability-conditional gates, must be present in the manifest so unavailable work cannot disappear silently. The finalizer rejects unknown gates and missing canonical gates. A manifest cannot weaken a gate whose catalog entry has `requiredByDefault=true` by setting `required=false`.
 
-Optional gates may remain non-required with an explicit non-passed status while `claimEligible=true`; their state and limitations must still be represented truthfully. All three `physical.*` gates are `recommendedOnly=true`: the manifest must keep `required=false` even if a test failed or hardware is unavailable. Physical QA is never an alpha publication blocker, although unverified hardware must never be advertised as tested or compatible.
+Optional gates may remain non-required with an explicit non-passed status while `claimEligible=true`; their state and limitations must still be represented truthfully. All `physical.*` and `perf.*` gates are `recommendedOnly=true`: the manifest must keep `required=false` even if an advisory test fails or hardware is unavailable. Physical QA and optional performance measurements never block alpha publication. Unverified hardware must never be advertised as tested or compatible, and no performance improvement may be claimed without comparable evidence.
 
 ## Exact-commit provenance
 
@@ -108,7 +108,7 @@ The alpha release does not require parental-control features (profile PIN, child
 
 ## Release artifact and performance policy
 
-Release hardening must operate on the minified release-shaped artifact. R8 keep-rule changes need analyzer/runtime evidence rather than broad defensive keep rules. Baseline Profile packaging is a separate gate from measured effect; emulator-generated profiles or correctness runs are not public performance claims. Physical-device before/after evidence remains required for release-facing startup/frame performance claims.
+Release hardening must operate on the minified release-shaped artifact. R8 keep-rule changes need analyzer/runtime evidence rather than broad defensive keep rules. Baseline Profile packaging is distinct from its optional measured effect. Missing or inconclusive performance results do not block an alpha build; never assert a startup gain without comparable before/after evidence. Emulator measurements are limited engineering evidence, not physical-TV performance certification. Physical-device before/after evidence is needed only for hardware-specific performance claims.
 
 ## Qualification boundary
 
