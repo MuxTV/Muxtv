@@ -61,6 +61,9 @@ class PairingGrant(val sessionId: String, val credential: String, val capabiliti
 /** TV-owned revocation/listing metadata. Contains no bearer secrets. */
 class PairedDeviceSummary(val sessionId: String, val clientLabel: String, val createdAtMillis: Long)
 
+/** Exposed only to TV UI, never an HTTP endpoint. */
+class PendingTvPairing(val claimId: String, val clientLabel: String)
+
 sealed interface PairingRedemption {
     class Granted(val grant: PairingGrant) : PairingRedemption
     class Denied(val reason: PairingDenial) : PairingRedemption
@@ -128,6 +131,24 @@ class PairingAuthority(
         invitation.claimId = id
         invitation.clientLabel = label
         return PairingClaim.AwaitingTvConfirmation(id, label)
+    }
+
+    /** Local TV can render/confirm the pending label without receiving the one-time proof. */
+    @Synchronized
+    fun pendingClaimForTv(): PendingTvPairing? {
+        prune(clock.elapsedRealtimeMillis())
+        val invitation = pending ?: return null
+        val id = invitation.claimId ?: return null
+        val label = invitation.clientLabel ?: return null
+        return PendingTvPairing(id, label)
+    }
+
+    @Synchronized
+    fun deny(claimId: String): Boolean {
+        prune(clock.elapsedRealtimeMillis())
+        if (pending?.claimId != claimId || claimId.isEmpty()) return false
+        cancelPending()
+        return true
     }
 
     /** TV confirmation requires an ID obtained from the pending claim, not a phone-side flag. */

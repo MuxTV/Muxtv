@@ -136,6 +136,23 @@ class PairingAuthorityTest {
     }
 
     @Test
+    fun tvObservesPendingClaimAndCanRejectItWithoutExposingProof() {
+        val authority = PairingAuthority()
+        val invitation = authority.begin()
+        assertThat(authority.pendingClaimForTv()).isNull()
+        val claim = authority.claim(invitation.secret, "Bedroom Phone") as PairingClaim.AwaitingTvConfirmation
+        val tvPending = authority.pendingClaimForTv()
+        assertThat(tvPending?.clientLabel).isEqualTo("Bedroom Phone")
+        assertThat(tvPending?.claimId).isEqualTo(claim.claimId)
+        assertThat(tvPending.toString()).doesNotContain(invitation.secret)
+        assertThat(authority.deny("other")).isFalse()
+        assertThat(authority.deny(claim.claimId)).isTrue()
+        assertThat(authority.pendingClaimForTv()).isNull()
+        assertThat(authority.approve(claim.claimId)).isFalse()
+        assertThat(authority.redeem(claim.claimId, invitation.secret)).isInstanceOf(PairingRedemption.Denied::class.java)
+    }
+
+    @Test
     fun sessionCapacityCannotSilentlyGrow() {
         val authority = PairingAuthority(policy = PairingPolicy(maxSessions = 1))
         grant(authority, authority.begin().secret)
