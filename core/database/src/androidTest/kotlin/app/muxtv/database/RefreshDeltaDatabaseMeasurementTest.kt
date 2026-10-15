@@ -52,6 +52,7 @@ class RefreshDeltaDatabaseMeasurementTest {
         )
 
         assertThat(report.thresholdApplied).isFalse()
+        assertThat(report.methodVersion).isEqualTo("c03-room-delta-v2-v11-physical-audit")
         assertThat(report.redactionPassed).isTrue()
         assertThat(report.sourceCommit).isEqualTo(sourceCommit)
         assertThat(report.entryCount).isEqualTo(10_000)
@@ -76,6 +77,17 @@ class RefreshDeltaDatabaseMeasurementTest {
                 assertThat(variant.correctnessCount).isEqualTo(scenario.expectedActiveCount)
                 assertThat(variant.previousGoodCount).isEqualTo(report.entryCount)
                 assertThat(variant.actualRowMutations).isGreaterThan(0L)
+                if (variant.variant == RefreshDeltaDatabaseVariant.A_CURRENT_MUXTV) {
+                    // The actual v11 production refresh must create one physical
+                    // membership per incoming occurrence, even when immutable payloads
+                    // are reused. The previous v10-only audit silently omitted this work.
+                    assertThat(
+                        variant.rowMutationBreakdown["source_revision_memberships.insert"],
+                    ).isEqualTo(scenario.expectedActiveCount.toLong())
+                    assertThat(variant.rowMutationBreakdown.keys.none { key ->
+                        key.startsWith("c03_b_")
+                    }).isTrue()
+                }
                 assertThat(variant.samples).hasSize(iterations)
                 assertThat(variant.samples.all { it.refreshWallNanos > 0L }).isTrue()
                 assertThat(variant.samples.all { it.stageTotalNanos > 0L }).isTrue()
