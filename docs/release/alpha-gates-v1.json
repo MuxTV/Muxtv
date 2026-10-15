@@ -35,8 +35,8 @@
     { "id": "physical.constrained_tv", "requiredByDefault": false, "availabilityConditional": true, "recommendedOnly": true },
     { "id": "physical.fire_tv", "requiredByDefault": false, "availabilityConditional": true, "recommendedOnly": true },
 
-    { "id": "perf.baseline_profile_effect", "requiredByDefault": true, "availabilityConditional": false },
-    { "id": "perf.startup_frames_memory", "requiredByDefault": true, "availabilityConditional": false },
-    { "id": "perf.measurement_provenance", "requiredByDefault": true, "availabilityConditional": false }
+    { "id": "perf.baseline_profile_effect", "requiredByDefault": false, "availabilityConditional": true, "recommendedOnly": true },
+    { "id": "perf.startup_frames_memory", "requiredByDefault": false, "availabilityConditional": true, "recommendedOnly": true },
+    { "id": "perf.measurement_provenance", "requiredByDefault": false, "availabilityConditional": true, "recommendedOnly": true }
   ]
 }
