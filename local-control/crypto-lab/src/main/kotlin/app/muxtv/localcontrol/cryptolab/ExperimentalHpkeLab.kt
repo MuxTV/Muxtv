@@ -44,8 +44,8 @@ class LabBinding(
     }
 
     internal fun context(operation: LabOperation, counter: Int): ByteArray =
-        "MuxTV-LC04-HPKE-LAB-v1|$tvInvitationId|$approvedPairingId|phone-to-tv|" +
-            "${operation.name}|$counter".toByteArray(Charsets.US_ASCII)
+        ("MuxTV-LC04-HPKE-LAB-v1|$tvInvitationId|$approvedPairingId|phone-to-tv|" +
+            "${operation.name}|$counter").toByteArray(Charsets.US_ASCII)
 
     override fun toString(): String = "LabBinding([REDACTED])"
 }
