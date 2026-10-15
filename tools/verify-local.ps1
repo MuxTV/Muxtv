@@ -162,6 +162,7 @@ if ($Mode -ne "DeviceOnly") {
         ":catalog:api:test",
         ":catalog:ingest:test",
         ":local-control:core:test",
+        ":local-control:server:test",
         ":benchmark:jvm:jmhClasses",
         ":player:api:test",
         ":player:fake:test"
