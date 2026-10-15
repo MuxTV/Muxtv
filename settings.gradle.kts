@@ -28,6 +28,7 @@ include(
     ":core:network",
     ":core:credentials",
     ":local-control:core",
+    ":local-control:server",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
