@@ -32,14 +32,19 @@ import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private lateinit var doctorExportState: DoctorExportState
+    // Cleanup must outlive Activity.lifecycleScope cancellation during onDestroy.
+    private val pairingCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pairingController by lazy {
         TvPairingController(this) {
             stopPhonePairing() // active LAN interface/transport changed; never auto-rebind
@@ -143,13 +148,19 @@ class MainActivity : ComponentActivity() {
     private suspend fun startPhonePairing(): TvPairingController.ScreenSession? {
         if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
         return withContext(Dispatchers.IO) {
-            runCatching { pairingController.start() }.getOrNull()
+            try {
+                pairingController.start()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // Do not expose transport failures or pairing secrets in TV UI.
+            }
         }
     }
 
     private fun stopPhonePairing() {
         pairingController.revokeImmediately()
-        lifecycleScope.launch(Dispatchers.IO) {
+        pairingCleanupScope.launch {
             pairingController.stop()
         }
     }
@@ -261,6 +272,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        stopPhonePairing()
         pendingLocalNetworkPermission?.cancel()
         pendingLocalNetworkSettings?.cancel()
         pendingLocalNetworkPermission = null
