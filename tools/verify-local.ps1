@@ -164,6 +164,7 @@ if ($Mode -ne "DeviceOnly") {
         ":local-control:core:test",
         ":local-control:server:test",
         ":local-control:onboarding:test",
+        ":local-control:crypto-lab:test",
         ":benchmark:jvm:jmhClasses",
         ":player:api:test",
         ":player:fake:test"

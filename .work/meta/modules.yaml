@@ -50,6 +50,10 @@ actual_modules:
     gradle_path: :local-control:onboarding
     type: pure_kotlin_library
     owns: [protected_channel_source_staging, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
+  local-control-crypto-lab:
+    gradle_path: :local-control:crypto-lab
+    type: pure_kotlin_library
+    owns: [hpke_protocol_feasibility, binding_and_replay_lab, attack_negative_tests]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
