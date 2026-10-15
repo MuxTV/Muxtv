@@ -79,7 +79,7 @@ class LanTransportTest {
         val credential = parsed.getValue("credential").jsonPrimitive.content
         assertThat(credential).hasLength(64)
 
-        val status = client.get("/v1/session") {
+        val status = client.post("/v1/session/check") {
             sameOrigin()
             header("X-MuxTV-Session-Id", sessionId)
             header(HttpHeaders.Authorization, "Bearer $credential")
@@ -94,7 +94,7 @@ class LanTransportTest {
         }
         assertThat(replay.status).isEqualTo(HttpStatusCode.Forbidden)
         authority.revoke(sessionId)
-        val afterRevoke = client.get("/v1/session") {
+        val afterRevoke = client.post("/v1/session/check") {
             sameOrigin()
             header("X-MuxTV-Session-Id", sessionId)
             header(HttpHeaders.Authorization, "Bearer $credential")
@@ -128,7 +128,7 @@ class LanTransportTest {
                 remotePeer = { "8.8.8.8" },
             )
         }
-        val response = client.get("/v1/session") { sameOrigin() }
+        val response = client.post("/v1/session/check") { sameOrigin() }
         assertThat(response.status).isEqualTo(HttpStatusCode.Forbidden)
     }
 
