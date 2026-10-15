@@ -50,16 +50,16 @@ The executable inventory is `alpha-gates-v1.json`. Its groups are:
 - data/security: Room schema/upgrade, Keystore persistence/reset and redaction;
 - recovery: TV-operable recovery, previous-good preservation and user recovery docs;
 - player/diagnostics: core TV journey, transport behavior and diagnostic export;
-- physical qualification: current Android/Google TV, constrained TV and availability-conditional Fire TV;
+- **recommended, non-blocking** physical qualification: current Android/Google TV, constrained TV and Fire TV when available;
 - performance: Baseline Profile effect, startup/frame/memory evidence and measurement provenance.
 
-Physical observations remain device-scoped. Emulator evidence cannot certify vendor codec, HDR/Dolby Vision, passthrough, weak-ARM, Fire OS, thermal or absolute performance behavior.
+Physical observations are recommended and remain device-scoped. Emulator evidence cannot certify vendor codec, HDR/Dolby Vision, passthrough, weak-ARM, Fire OS, thermal or absolute performance behavior. Lack of physical hardware does not prevent an alpha release, provided public notes state the evidence limits.
 
 ## Canonical gate ownership
 
 Every gate from `alpha-gates-v1.json`, including optional/availability-conditional gates, must be present in the manifest so unavailable work cannot disappear silently. The finalizer rejects unknown gates and missing canonical gates. A manifest cannot weaken a gate whose catalog entry has `requiredByDefault=true` by setting `required=false`.
 
-Optional gates may remain non-required with an explicit non-passed status while `claimEligible=true`; their state and limitations must still be represented truthfully.
+Optional gates may remain non-required with an explicit non-passed status while `claimEligible=true`; their state and limitations must still be represented truthfully. All three `physical.*` gates are `recommendedOnly=true`: the manifest must keep `required=false` even if a test failed or hardware is unavailable. Physical QA is never an alpha publication blocker, although unverified hardware must never be advertised as tested or compatible.
 
 ## Exact-commit provenance
 
@@ -100,6 +100,11 @@ Evidence references and artifact names are public-safe metadata only. The finali
 - private-machine absolute filesystem paths.
 
 Diagnostics for rejected metadata must not echo the rejected value. The manifest must never contain playlist/provider credentials, signing secrets, temporary signed download URLs, private keystore paths, Authorization/Cookie material or raw secret-bearing locators.
+
+
+## Scope simplification
+
+The alpha release does not require parental-control features (profile PIN, child/age/category restrictions or watching-time quotas). User-owned profile customization, hidden channels and content organization remain ordinary, unrestricted preferences. No parental access policy is required to pass any release gate.
 
 ## Release artifact and performance policy
 
