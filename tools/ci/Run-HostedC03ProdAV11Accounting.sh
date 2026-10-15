@@ -16,15 +16,18 @@ mkdir -p "$MUXTV_EVIDENCE_DIR"
 rm -rf core/database/build/outputs/androidTest-results/connected/debug
 chmod +x ./gradlew
 
-# Threshold-free, bounded pilot: one measured round / no warmups, seven fixed 10k
-# scenarios. Full statistical performance qualification needs more rounds.
+# Repeated, bounded Gate E characterization (1 warmup + 3 measured rounds).
+# This records noise and medians; it is NOT a before/after causal A/B benchmark,
+# because the B schema is benchmark-only and the variants are not interleaved.
+warmups=1
+iterations=3
 ./gradlew :core:database:connectedDebugAndroidTest \
   --no-daemon --stacktrace --console=plain --no-problems-report \
   -PcatalogMeasurements=true \
   -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.RefreshDeltaDatabaseMeasurementTest \
   -Pandroid.testInstrumentationRunnerArguments.c03SourceCommit="$MUXTV_SOURCE_COMMIT" \
-  -Pandroid.testInstrumentationRunnerArguments.c03Warmups=0 \
-  -Pandroid.testInstrumentationRunnerArguments.c03Iterations=1
+  -Pandroid.testInstrumentationRunnerArguments.c03Warmups="$warmups" \
+  -Pandroid.testInstrumentationRunnerArguments.c03Iterations="$iterations"
 
 ROOT="core/database/build/outputs/androidTest-results/connected/debug"
 mapfile -t logs < <(find "$ROOT" -type f -name test-results.log | sort)
@@ -59,6 +62,9 @@ require(data.get("schemaVersion") == 1, "unexpected report schema")
 require(data.get("methodVersion") == "c03-room-delta-v2-v11-physical-audit", "wrong method")
 require(data.get("sourceCommit") == sha, "source provenance mismatch")
 require(data.get("entryCount") == 10000, "fixed corpus missing")
+require(data.get("batchSize") == 250, "fixed batch size missing")
+require(isinstance(data.get("fixtureManifestSha256"), str) and len(data["fixtureManifestSha256"]) == 64,
+        "fixture provenance missing")
 require(data.get("redactionPassed") is True, "redaction gate not passed")
 require(data.get("thresholdApplied") is False, "pilot cannot apply performance thresholds")
 require(data.get("environment", {}).get("apiLevel") == 36, "API36 evidence required")
@@ -77,17 +83,23 @@ for sc in scenarios:
         require(var.get("correctnessCount") == expected, "incorrect active count")
         require(var.get("correctnessDigestSha256") == sc.get("expectedActiveDigestSha256"),
                 "incorrect active digest")
-        require(len(var.get("samples", [])) == 1, "not one measured round")
-        sample = var["samples"][0]
-        for field in ("refreshWallNanos", "stageTotalNanos", "activationTransactionNanos"):
-            require(isinstance(sample.get(field), int) and sample[field] > 0,
-                    "missing phase timing")
-        for field in ("before", "afterStage", "afterActivation", "afterCheckpoint"):
-            state = sample.get(field, {})
-            require(all(isinstance(state.get(k), int) and state[k] >= 0
-                        for k in ("databaseBytes", "walBytes", "shmBytes")),
-                    "missing physical file-state evidence")
-        require(isinstance(sample.get("walPeakBytes"), int), "WAL accounting absent")
+        require(var.get("previousGoodCount") == data["entryCount"],
+                "previous-good retention changed")
+        samples = var.get("samples", [])
+        require(len(samples) == 3, "expected exactly three measured rounds")
+        require([s.get("iteration") for s in samples] == [1, 2, 3],
+                "measured round ordering/identity mismatch")
+        for sample in samples:
+            for field in ("refreshWallNanos", "stageTotalNanos", "activationTransactionNanos"):
+                require(isinstance(sample.get(field), int) and sample[field] > 0,
+                        "missing phase timing")
+            for field in ("before", "afterStage", "afterActivation", "afterCheckpoint"):
+                state = sample.get(field, {})
+                require(all(isinstance(state.get(k), int) and state[k] >= 0
+                            for k in ("databaseBytes", "walBytes", "shmBytes")),
+                        "missing physical file-state evidence")
+            require(isinstance(sample.get("walPeakBytes"), int) and sample["walPeakBytes"] >= 0,
+                    "WAL accounting absent")
     production = variants["A_CURRENT_MUXTV"]
     mutations = production.get("rowMutationBreakdown", {})
     require(mutations.get("source_revision_memberships.insert") == expected,
@@ -100,6 +112,62 @@ for sc in scenarios:
             "physical SQL mutation sum mismatch")
     require(not any(k.startswith("c03_b_") for k in mutations),
             "candidate mutations mixed into real production A")
-# Report contains per-scenario evidence and limitations. Do not print raw channel data.
-print("C03 PROD-A v11 file-backed evidence: 7 scenarios, exact SHA, correct v11 audit; PASS.")
+# Immutable summary: only actual Room A; do not report synthetic B as
+# equivalent production and do not compare across SHA/device runs as a causal gain.
+import statistics
+
+def five_point(values):
+    require(len(values) == 3 and all(isinstance(x, int) and x >= 0 for x in values),
+            "invalid repeated sample")
+    return {
+        "sampleCount": len(values),
+        "minimum": min(values),
+        "median": int(statistics.median(values)),
+        "maximum": max(values),
+    }
+
+summary = {
+    "schemaVersion": 1,
+    "protocol": "c03-prod-a-real-room-v11-repeat-v1",
+    "sourceCommit": sha,
+    "fixtureManifestSha256": data["fixtureManifestSha256"],
+    "methodVersion": data["methodVersion"],
+    "environment": data["environment"],
+    "entryCount": data["entryCount"],
+    "warmupIterations": 1,
+    "measuredIterations": 3,
+    "thresholdApplied": False,
+    "redactionPassed": True,
+    "limitations": [
+        "Three measured rounds provide a noise range, not a significance test.",
+        "The earlier one-shot run from a different SHA is not a paired control.",
+        "A_CURRENT_MUXTV and B_IMMUTABLE_COW differ structurally and are not comparable production alternatives.",
+        "The variants run in separate blocks rather than seeded interleaved order.",
+        "WAL file length does not identify which SQLite index or FTS pages were written.",
+    ],
+    "scenarios": [],
+}
+for sc in scenarios:
+    production = next(v for v in sc["variants"] if v["variant"] == "A_CURRENT_MUXTV")
+    samples = production["samples"]
+    summary["scenarios"].append({
+        "scenarioId": sc["scenarioId"],
+        "expectedActiveCount": sc["expectedActiveCount"],
+        "actualRowMutations": production["actualRowMutations"],
+        "canonicalUpdateCount": production["rowMutationBreakdown"].get("canonical_channels.update", 0),
+        "membershipInsertCount": production["rowMutationBreakdown"]["source_revision_memberships.insert"],
+        "refreshWallNanos": five_point([s["refreshWallNanos"] for s in samples]),
+        "stageTotalNanos": five_point([s["stageTotalNanos"] for s in samples]),
+        "activationTransactionNanos": five_point([s["activationTransactionNanos"] for s in samples]),
+        "walPeakBytes": five_point([s["walPeakBytes"] for s in samples]),
+        "checkpointDatabaseGrowthBytes": five_point(
+            [s["checkpointDatabaseGrowthBytes"] for s in samples]
+        ),
+    })
+summary_path = report_path.with_name("c03-prod-a-v11-series-summary.json")
+summary_path.write_text(
+    json.dumps(summary, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+print("C03 PROD-A v11 repeat evidence: 7 scenarios, 1 warmup, 3 rounds, exact SHA, audited v11 writes; PASS.")
 PY
