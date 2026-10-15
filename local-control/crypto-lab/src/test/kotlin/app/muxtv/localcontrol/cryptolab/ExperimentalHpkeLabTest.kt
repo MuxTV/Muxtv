@@ -30,6 +30,27 @@ class ExperimentalHpkeLabTest {
         assertThat(second.reason).isEqualTo(LabDecryptDenial.REPLAYED)
     }
 
+    @Test fun anyoneKnowingPublicKeyCanEncryptSoHpkeIsNotPhoneAuthentication() {
+        val tv = ExperimentalHpkeLab.newReceiver(binding)
+        // Attacker impersonating a sender can encrypt to a public TV key.
+        // This test MUST remain as a release blocker for unauthenticated API wiring.
+        val attacker = LabPhoneSender(binding, tv.publicKeyset)
+        val forged = attacker.encrypt(LabOperation.SOURCE_ACTIVATE, "forged".toByteArray())
+        assertThat(tv.decrypt(forged)).isInstanceOf(LabDecryptResult.Accepted::class.java)
+    }
+
+    @Test fun consumedPlaintextCannotBeReadAgain() {
+        val tv = ExperimentalHpkeLab.newReceiver(binding)
+        val phone = LabPhoneSender(binding, tv.publicKeyset)
+        val msg = phone.encrypt(LabOperation.SOURCE_PREPARE, "secret".toByteArray())
+        val result = tv.decrypt(msg) as LabDecryptResult.Accepted
+        result.consumeOnce { assertThat(it.toString(Charsets.UTF_8)).isEqualTo("secret") }
+        var denied = false
+        try { result.consumeOnce { error("must not be called") } }
+        catch (_: IllegalStateException) { denied = true }
+        assertThat(denied).isTrue()
+    }
+
     @Test fun wrongTvQrKeyCannotDecrypt() {
         val intendedTv = ExperimentalHpkeLab.newReceiver(binding)
         val wrongTv = ExperimentalHpkeLab.newReceiver(binding)
