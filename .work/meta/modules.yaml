@@ -38,6 +38,10 @@ actual_modules:
     gradle_path: :core:credentials
     type: android_library
     owns: [android_keystore_keys, encrypted_credential_store, credential_envelopes]
+  local-control-core:
+    gradle_path: :local-control:core
+    type: pure_kotlin_library
+    owns: [ephemeral_pairing_proof, tv_consent, replay_protection, scoped_session_authority]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library

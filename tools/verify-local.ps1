@@ -31,6 +31,7 @@ if ($Mode -ne "DeviceOnly") {
     & (Join-Path $repositoryRoot "tools\ci\Test-RepositoryTruthContract.ps1") -RepositoryRoot $repositoryRoot
     & (Join-Path $repositoryRoot "tools\ci\Test-FeatureAdapterBoundaryContract.ps1") -RepositoryRoot $repositoryRoot
     & (Join-Path $repositoryRoot "tools\ci\Test-ProcessAsyncOwnershipContract.ps1") -RepositoryRoot $repositoryRoot
+    & (Join-Path $repositoryRoot "tools\release\Test-AlphaEvidenceValidator.ps1")
     if ($Mode -eq "Full") {
         & (Join-Path $repositoryRoot "tools\ci\Test-RepositoryTruthContractShallowClone.ps1") -RepositoryRoot $repositoryRoot
     }
@@ -160,6 +161,7 @@ if ($Mode -ne "DeviceOnly") {
         ":core:testing:test",
         ":catalog:api:test",
         ":catalog:ingest:test",
+        ":local-control:core:test",
         ":benchmark:jvm:jmhClasses",
         ":player:api:test",
         ":player:fake:test"

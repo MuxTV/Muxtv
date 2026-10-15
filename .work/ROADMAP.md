@@ -99,7 +99,7 @@ Timed/repeated 50k Search/M3U execution является manual stress evidence,
 - channel zapping/numeric/previous channel;
 - stable playback error catalog and bounded recovery;
 - basic device capability evidence;
-- first physical Android/Fire TV playback matrix;
+- recommended, non-blocking physical Android/Google TV/Fire TV playback sampling when devices are available;
 - Baseline Profiles for startup/live browser/start playback.
 
 **Exit gate:** rejected/malformed source cannot corrupt active catalog; Activity recreation does not stop playback; 100-switch leak test and representative channel startup budgets pass.
@@ -118,7 +118,7 @@ Timed/repeated 50k Search/M3U execution является manual stress evidence,
 - atomic source refresh and tombstones/retention;
 - backup/restore schema v1 with primary profile rules;
 - additional user-created profiles and optional startup picker;
-- profile policies/PIN as independent settings, no built-in role types.
+- profile-specific presentation and catalog preferences without parental controls, PIN gates, age filters or watch-time quotas; no built-in role types.
 
 **Exit gate:** source/EPG refresh preserves overlays/manual bindings; guide handles configured large window with bounded heap; backup round-trip and profile isolation tests pass.
 
@@ -186,6 +186,6 @@ Timed/repeated 50k Search/M3U execution является manual stress evidence,
 
 - До `0.1.0` публичных обещаний compatibility нет, но schema/signing/applicationId decisions already treated as durable.
 - Начиная с `0.1.0`, migrations/backup/update/error catalogs проходят contract tests на каждом PR.
-- `1.0.0` требует Phase 00–04, physical Android/Google/Fire device matrix, threat review, update/migration recovery and documented support boundaries.
+- `1.0.0` требует Phase 00–04, threat review, update/migration recovery and documented support boundaries. Physical Android/Google/Fire TV qualification is recommended, not a release blocker; supported-hardware claims are restricted to devices actually verified.
 - Новая крупная функция не принимается, если она ухудшает startup, zapping, memory, focus correctness, privacy or security budgets без принятого ADR.
 - Reference application feature parity is never roadmap justification by itself.
