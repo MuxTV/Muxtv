@@ -60,6 +60,7 @@ class LanSecurityTest {
         time += 60_000
         assertThat(gate.permit("192.168.1.2")).isTrue()
         time -= 1
+        assertThat(gate.permit("192.168.1.2")).isFalse()
         assertThat(gate.permit("192.168.1.2")).isTrue()
         assertThat(gate.permit("8.8.8.8")).isFalse()
         gate.clear()
