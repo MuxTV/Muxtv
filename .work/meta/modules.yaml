@@ -133,7 +133,6 @@ actual_modules:
     owns: [convention_plugins, module_defaults, quality_wiring]
 planned_not_created:
   - feature_profiles
-  - local_control_server
   - local_control_web
 rules:
   - pure_kotlin_modules_must_not_depend_on_android
