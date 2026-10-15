@@ -32,6 +32,7 @@ tracing = "2.0.1"
 uiautomator = "2.4.0"
 jmh-gradle = "0.7.3"
 ktor = "3.5.1"
+zxing = "3.5.4"
 cyclonedx = "3.4.1"
 
 [libraries]
@@ -95,6 +96,8 @@ androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", 
 ktor-server-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
 ktor-server-cio = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
+
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
