@@ -30,6 +30,9 @@ sealed interface AppDestination : NavKey {
     data object AddSource : AppDestination
 
     @Serializable
+    data object PhonePairing : AppDestination
+
+    @Serializable
     data class Player(
         val channelId: String,
         val programmeId: String? = null,

@@ -70,6 +70,6 @@ build-logic/               Included build с convention plugins
 
 ## Ещё не создано
 
-Не реализованы `:feature:profiles`, локальный TV QR UI и web-панель. `:local-control:server` предоставляет dormant LAN transport и ограниченные pairing/session endpoints, но ещё не активируется из Activity или service. Новые epg/search/doctor layers не создаются для симметрии.
+Не реализованы `:feature:profiles` и управление IPTV-источниками через телефон. LC03 добавляет TV QR UI, Activity-owned запуск LAN-сервера и минимальную телефонную страницу сопряжения; `:local-control:server` остаётся выключенным до явного действия пользователя. Только LC04 сможет подключать SourceOnboarding после проверки защищённого транспорта. Новые epg/search/doctor layers не создаются для симметрии.
 
 Машинно-читаемая карта: [.work/meta/modules.yaml](../meta/modules.yaml).

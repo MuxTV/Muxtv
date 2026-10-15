@@ -111,6 +111,7 @@ internal fun Application.installLocalControlTransport(
             call.respondText("{\"paired\":true}", ContentType.Application.Json)
         }
     }
+    installPairingBootstrapPage(activeEndpoint, remotePeer, rateLimiter)
 }
 
 private suspend fun ApplicationCall.checkLanRequest(
