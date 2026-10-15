@@ -149,7 +149,7 @@ private suspend fun ApplicationCall.checkLanRequest(
 
 private suspend inline fun <reified T> ApplicationCall.boundedJson(): T? {
     if (!request.contentType().match(ContentType.Application.Json)) return null
-    val declared = request.header(HttpHeaders.ContentLength)?.toLongOrNull()
+    val declared = request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
     if (declared != null && (declared < 0 || declared > MAX_PAIRING_BODY_BYTES)) return null
 
     // Network-slow clients must not hold a pairing handler indefinitely.
