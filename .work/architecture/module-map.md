@@ -33,7 +33,8 @@ local-control/
 ├── core/                  Ephemeral TV-confirmed pairing authority (JVM, no socket)
 ├── server/                User-initiated LAN pairing/QR bootstrap; no provider APIs
 ├── onboarding/            Dormant SourceOnboarding adapter; protected transport NOT implemented
-└── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
+├── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
+└── crypto-android-compat/ Hosted API26/API36 instrumentation only; no production caller
 
 player/
 ├── api/                   Playback identity, recovery policy и observations
