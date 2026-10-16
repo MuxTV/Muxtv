@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">MuxTV Phone Preview</string>
+    <string name="heading">MuxTV — verify TV QR</string>
+    <string name="description">Choose a photo of the QR displayed by your television. Compare its SHA-256 fingerprint with the one independently displayed on the TV. A QR alone cannot prove which TV it came from.</string>
+    <string name="choose_image">Choose QR image</string>
+    <string name="idle">Not connected. Network requests and IPTV source entry are disabled.</string>
+    <string name="loading">Validating public key…</string>
+    <string name="invalid">Not a supported MuxTV public-key QR. No connection was made.</string>
+    <string name="verified">The public-key QR is structurally valid. Compare this fingerprint with the TV:</string>
+    <string name="warning">Preview only: no device has been paired or IPTV access granted.</string>
+</resources>

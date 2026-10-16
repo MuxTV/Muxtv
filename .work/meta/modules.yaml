@@ -6,6 +6,10 @@ actual_modules:
     gradle_path: :app:tv
     type: android_application
     owns: [composition_root, navigation3_routes, tv_activity, hilt_wiring, android_manifest]
+  app-phone:
+    gradle_path: :app:phone
+    type: android_application
+    owns: [offline_qr_image_selection, phone_key_fingerprint_preview, native_phone_entry_placeholder]
   core-common:
     gradle_path: :core:common
     type: pure_kotlin_library
@@ -54,6 +58,10 @@ actual_modules:
     gradle_path: :local-control:crypto-lab
     type: pure_kotlin_library
     owns: [hpke_protocol_feasibility, binding_and_replay_lab, attack_negative_tests]
+  local-control-qr-contract:
+    gradle_path: :local-control:qr-contract
+    type: pure_kotlin_library
+    owns: [strict_public_hpke_qr_parser, no_trust_grant_preview, public_key_fingerprint]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
