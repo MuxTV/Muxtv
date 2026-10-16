@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">MuxTV Phone Preview</string>
+    <string name="heading">MuxTV — проверка QR телевизора</string>
+    <string name="description">Выберите изображение QR, показанного на телевизоре. Сверьте SHA-256 отпечаток с отпечатком, который отдельно показан на экране ТВ. QR сам по себе не подтверждает личность телевизора.</string>
+    <string name="choose_image">Выбрать изображение QR</string>
+    <string name="idle">Не подключено. Сетевые запросы и ввод IPTV-источников отключены.</string>
+    <string name="loading">Проверка публичного ключа…</string>
+    <string name="invalid">Это не поддерживаемый QR публичного ключа MuxTV. Соединение не установлено.</string>
+    <string name="verified">QR публичного ключа структурно корректен. Сверьте этот отпечаток с телевизором:</string>
+    <string name="warning">Режим предварительной проверки: никакое устройство не сопряжено, доступ к IPTV не предоставлен.</string>
+</resources>
