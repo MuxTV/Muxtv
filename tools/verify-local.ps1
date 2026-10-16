@@ -165,12 +165,14 @@ if ($Mode -ne "DeviceOnly") {
         ":local-control:server:test",
         ":local-control:onboarding:test",
         ":local-control:crypto-lab:test",
+        ":local-control:qr-contract:test",
         ":benchmark:jvm:jmhClasses",
         ":player:api:test",
         ":player:fake:test"
     )
     Add-Step -Name "android-unit-tests" -Arguments @(
         ":app:tv:testDebugUnitTest",
+        ":app:phone:testDebugUnitTest",
         ":catalog:importer:testDebugUnitTest",
         ":catalog:onboarding:testDebugUnitTest",
         ":catalog:refresh:testDebugUnitTest",
@@ -200,7 +202,8 @@ if ($Mode -ne "DeviceOnly") {
         ":benchmark:macrobenchmark:assembleNonMinifiedRelease"
     )
     Add-Step -Name "debug-apk" -Arguments @(
-        ":app:tv:assembleDebug"
+        ":app:tv:assembleDebug",
+        ":app:phone:assembleDebug"
     )
 
     if ($Mode -in @("Full", "Device")) {
