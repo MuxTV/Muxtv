@@ -209,6 +209,7 @@ if ($Mode -ne "DeviceOnly") {
     if ($Mode -in @("Full", "Device")) {
         Add-Step -Name "android-lint" -Arguments @(
             ":app:tv:lintDebug",
+            ":app:phone:lintDebug",
             ":catalog:importer:lintDebug",
             ":catalog:onboarding:lintDebug",
             ":catalog:refresh:lintDebug",
