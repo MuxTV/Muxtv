@@ -33,6 +33,7 @@ local-control/
 ├── core/                  Ephemeral TV-confirmed pairing authority (JVM, no socket)
 ├── server/                User-initiated LAN pairing/QR bootstrap; no provider APIs
 ├── onboarding/            Dormant SourceOnboarding adapter; protected transport NOT implemented
+├── qr-contract/           Production-boundary public-key QR parser; no authorization
 └── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
 
 player/
