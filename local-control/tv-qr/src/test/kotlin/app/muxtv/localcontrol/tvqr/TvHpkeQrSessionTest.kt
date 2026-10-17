@@ -2,6 +2,7 @@ package app.muxtv.localcontrol.tvqr
 
 import com.google.common.truth.Truth.assertThat
 import app.muxtv.localcontrol.cryptolab.LabTvQrKeyBinding
+import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import com.google.crypto.tink.HybridEncrypt
 import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.TinkProtoKeysetFormat
@@ -44,6 +45,12 @@ class TvHpkeQrSessionTest {
         assertThat(hpke.params.kem).isEqualTo(HpkeKem.DHKEM_X25519_HKDF_SHA256)
         assertThat(hpke.params.kdf).isEqualTo(HpkeKdf.HKDF_SHA256)
         assertThat(hpke.params.aead).isEqualTo(HpkeAead.AES_256_GCM)
+        // Verify actual accepted #410 phone runtime parser, not just prior JVM lab.
+        val phoneScanned = TvQrPublicKeyParser.parse(view.qrValue)
+        assertThat(phoneScanned.fingerprint).isEqualTo(view.fingerprintSha256)
+        assertThat(phoneScanned.invitationId).isEqualTo(fields[2])
+        assertThat(phoneScanned.pairingId).isEqualTo(fields[3])
+        assertThat(phoneScanned.publicKeysetBytes()).isEqualTo(bytes)
         val scanned = LabTvQrKeyBinding.parse(view.qrValue)
         assertThat(scanned.keyFingerprint).isEqualTo(view.fingerprintSha256)
         assertThat(scanned.binding.tvInvitationId).isEqualTo(fields[2])
