@@ -55,12 +55,12 @@ references upon revocation but **do not claim heap zeroization**.
 
 ## Tests and merge gate
 
-1. JVM: generated QR must parse through the **existing #405 lab parser**
+1. JVM: generated QR must parse through the **existing #405 lab parser** and **merged #410 native phone runtime parser**
    without production dependency on `crypto-lab`; pin the exact Tink public
    suite, canonical format, fingerprint, fresh IDs, expiry and revocation.
 2. Android instrumentation in the **existing canonical API26/API36 TV AVD
    names**, no third AVD: actual TV runtime key generation, strict #405
-   scanner parsing, and revocation.
+   scanner parsing through #405 and #410, and revocation.
 3. App TV compile/lint + full hosted CI at exact PR head, with explicit
    scope statement: crypto/QR tests are not protected-channel acceptance.
 4. UI/Back/D-pad focus review. Focus on "Back" rather than a privileged
