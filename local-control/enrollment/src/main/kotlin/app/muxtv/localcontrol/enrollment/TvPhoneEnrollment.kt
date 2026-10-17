@@ -118,6 +118,9 @@ class TvPhoneEnrollment(
             if (current.failures >= maxFailures) {
                 current.erase()
                 pending = null
+                // Do not allow infinite fresh challenges after exhausting the gate.
+                // The TV owner must explicitly generate a new QR receiver session.
+                closed = true
             }
             return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.INVALID_PROOF)
         }
