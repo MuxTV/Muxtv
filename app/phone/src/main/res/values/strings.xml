@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MuxTV Phone</string>
+    <string name="scan_title">Сканирование ключа MuxTV</string>
+    <string name="scan_intro">Направьте камеру на защищённый QR публичного ключа ТВ (MXLC04:1).</string>
+    <string name="scan_permission">Разрешите доступ к камере, чтобы прочитать QR-код телевизора.</string>
+    <string name="scan_permission_button">Разрешить камеру</string>
+    <string name="scan_permission_denied">Камера недоступна. Разрешите доступ в настройках приложения.</string>
+    <string name="scan_busy">Сканирование…</string>
+    <string name="scan_error">Камера недоступна. Повторите попытку.</string>
+    <string name="scan_not_supported">Этот QR не содержит проверяемый публичный ключ MuxTV. Старые HTTP-ссылки не принимаются.</string>
+    <string name="scan_found">Прочитан публичный ключ ТВ</string>
+    <string name="scan_fingerprint">SHA-256 ключа: %1$s</string>
+    <string name="scan_invitation">Приглашение: %1$s</string>
+    <string name="scan_pairing">Сопряжение: %1$s</string>
+    <string name="scan_warning">Это только проверка формата ключа. Личность телевизора и телефона ещё не подтверждена. Передача IPTV-источников и паролей отключена.</string>
+    <string name="scan_again">Сканировать ещё раз</string>
+</resources>
