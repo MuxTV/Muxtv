@@ -15,4 +15,6 @@
     <string name="scan_pairing">Сопряжение: %1$s</string>
     <string name="scan_warning">Это только проверка формата ключа. Личность телевизора и телефона ещё не подтверждена. Передача IPTV-источников и паролей отключена.</string>
     <string name="scan_again">Сканировать ещё раз</string>
+    <string name="scan_phone_fingerprint">SHA-256 ключа телефона: %1$s. Сравните с отпечатком на ТВ перед подтверждением.</string>
+    <string name="scan_signing_key_error">Не удалось создать временный ключ телефона. Сканируйте QR повторно.</string>
 </resources>

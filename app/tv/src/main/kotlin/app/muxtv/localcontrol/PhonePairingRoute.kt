@@ -57,6 +57,9 @@ fun PhonePairingRoute(
     onStartPublicKeyPreview: suspend () -> TvHpkeQrPresentation?,
     onRevokePublicKeyPreview: () -> Unit,
     publicKeyPreviewIsActive: () -> Boolean,
+    pendingPhoneKeyFingerprint: () -> String?,
+    approvePhoneKeyOnTv: (String) -> Boolean,
+    denyPhoneKeyOnTv: (String) -> Boolean,
     pendingFromTv: () -> PendingTvPairing?,
     approveFromTv: (String) -> Boolean,
     denyFromTv: (String) -> Boolean,
@@ -76,6 +79,9 @@ fun PhonePairingRoute(
     var keyPreviewLoading by remember { mutableStateOf(false) }
     var keyPreviewError by remember { mutableStateOf(false) }
     var keySecondsRemaining by remember { mutableLongStateOf(0L) }
+    var requestedPhoneFingerprint by remember { mutableStateOf<String?>(null) }
+    var phoneKeyApproved by remember { mutableStateOf(false) }
+    val denyPhoneFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val closeFocus = remember { FocusRequester() }
     val denyFocus = remember { FocusRequester() }
@@ -84,6 +90,8 @@ fun PhonePairingRoute(
     suspend fun restart() {
         onRevokePublicKeyPreview()
         keyPreview = null
+        requestedPhoneFingerprint = null
+        phoneKeyApproved = false
         loading = true
         error = false
         pending = null
@@ -105,6 +113,8 @@ fun PhonePairingRoute(
         scope.launch {
             onRevokePublicKeyPreview()
             keyPreview = null
+            requestedPhoneFingerprint = null
+            phoneKeyApproved = false
             keyPreviewError = false
             keyPreviewLoading = true
             try {
@@ -140,6 +150,14 @@ fun PhonePairingRoute(
                     0L
                 }
             } ?: 0
+            if (keyPreview != null && keySecondsRemaining > 0L) {
+                val current = pendingPhoneKeyFingerprint()
+                if (current != requestedPhoneFingerprint) phoneKeyApproved = false
+                requestedPhoneFingerprint = current
+            } else {
+                requestedPhoneFingerprint = null
+                phoneKeyApproved = false
+            }
             if (keyPreview != null && keySecondsRemaining == 0L) {
                 onRevokePublicKeyPreview()
             }
@@ -156,6 +174,12 @@ fun PhonePairingRoute(
         if (pending != null && secondsRemaining > 0 && keyPreview == null) {
             withFrameNanos { }
             denyFocus.requestFocus() // Safe default: deny request instead of preselecting approval.
+        }
+    }
+    LaunchedEffect(requestedPhoneFingerprint) {
+        if (requestedPhoneFingerprint != null && keySecondsRemaining > 0L && !phoneKeyApproved) {
+            withFrameNanos { }
+            denyPhoneFocus.requestFocus()
         }
     }
     LaunchedEffect(keyPreview?.qrValue) {
@@ -199,6 +223,46 @@ fun PhonePairingRoute(
                         Text("Отпечаток SHA-256: ${key.fingerprintSha256.chunked(8).joinToString(" ")}",
                             modifier = Modifier.testTag("local-tv-key-fingerprint"))
                         Text("QR действителен ещё $keySecondsRemaining с")
+                        val requested = requestedPhoneFingerprint
+                        if (requested != null) {
+                            Text(
+                                text = "Телефон запрашивает подтверждение ключа. " +
+                                    "Сравните полный SHA-256 отпечаток со своим телефоном. " +
+                                    "Без совпадения нажмите «Отклонить».",
+                                modifier = Modifier.testTag("local-tv-phone-consent-warning"),
+                            )
+                            Text(
+                                text = "Отпечаток телефона: " +
+                                    requested.chunked(8).joinToString(" "),
+                                modifier = Modifier.testTag("local-tv-phone-consent-fingerprint"),
+                            )
+                            if (phoneKeyApproved) {
+                                Text("Ключ подтверждён на ТВ. Для завершения необходимо доказательство владения ключом.")
+                            } else {
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    MuxTvActionButton(
+                                        text = "Отклонить телефон",
+                                        onClick = {
+                                            if (denyPhoneKeyOnTv(requested)) {
+                                                requestedPhoneFingerprint = null
+                                                keyPreview = null
+                                                phoneKeyApproved = false
+                                            }
+                                        },
+                                        modifier = Modifier.focusRequester(denyPhoneFocus)
+                                            .testTag("local-tv-phone-consent-deny"),
+                                    )
+                                    MuxTvActionButton(
+                                        text = "Подтвердить отпечаток телефона",
+                                        onClick = {
+                                            // UI-local event only, never a network-originated approval.
+                                            phoneKeyApproved = approvePhoneKeyOnTv(requested)
+                                        },
+                                        modifier = Modifier.testTag("local-tv-phone-consent-approve"),
+                                    )
+                                }
+                            }
+                        }
                         Text("Сравните отпечаток на телефоне с этим экраном ТВ. " +
                             "Сканирование пока не разрешает передачу M3U/Xtream или паролей.")
                     } else {
