@@ -5,7 +5,6 @@ dependencies {
     implementation(libs.tink)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
-    testImplementation(project(":local-control:tv-qr"))
 }
 
 tasks.test { useJUnit() }
