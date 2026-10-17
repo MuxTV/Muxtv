@@ -45,7 +45,7 @@ MuxTV-LC04-PHONE-ENROLL-v1|<invitation32>|<pairing32>|<tv-key-sha256-64>|<phone-
 
 The TV verifies the proof through **Tink PublicKeyVerify** with the approved
 public-only key, after TV-local fingerprint consent. Tink signatures can carry a
-TINK output prefix and are bounded to 64–69 bytes. Invalid attempts are bounded;
+TINK output prefix and are bounded to 64–69 bytes. Invalid attempts are bounded; exhaustion locks the gate until a fresh TV QR,
 proofs are single-use, expiration and elapsed-clock rollback fail closed, and
 explicit receiver closure revokes pending state. The successful result is only a
 verified phone identity; it is **not** SOURCE_CREATE or a bearer capability.
