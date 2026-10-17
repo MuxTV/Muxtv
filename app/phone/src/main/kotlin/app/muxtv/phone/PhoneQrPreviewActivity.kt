@@ -38,11 +38,13 @@ class PhoneQrPreviewActivity : ComponentActivity() {
     private val scanning = AtomicBoolean(false)
     private var provider: ProcessCameraProvider? = null
     private var startingCamera = false
+    private var cameraPermissionPending = false
     private var accepted = false
 
     private val permission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
+        cameraPermissionPending = false
         if (granted) startCamera()
         else showStatus("Нет разрешения на камеру. Для сканирования разрешите доступ в настройках.")
     }
@@ -128,12 +130,13 @@ class PhoneQrPreviewActivity : ComponentActivity() {
     private fun startCamera() {
         if (!::previewView.isInitialized || accepted || isFinishing || isDestroyed ||
             lifecycle.currentState == androidx.lifecycle.Lifecycle.State.DESTROYED ||
-            startingCamera || scanning.get() || decodeExecutor.isShutdown
+            startingCamera || cameraPermissionPending || scanning.get() || decodeExecutor.isShutdown
         ) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
         ) {
             showStatus("Для считывания QR необходим доступ к камере.")
+            cameraPermissionPending = true
             permission.launch(Manifest.permission.CAMERA)
             return
         }
