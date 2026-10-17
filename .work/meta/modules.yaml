@@ -2,6 +2,10 @@ schema_version: 2
 state: implementation_current
 last_reviewed: 2026-09-08
 actual_modules:
+  app-phone:
+    gradle_path: :app:phone
+    type: android_application
+    owns: [offline_camera_qr_scanner, display_public_tv_key_fingerprint, phone_companion_entry]
   app-tv:
     gradle_path: :app:tv
     type: android_application
@@ -50,6 +54,10 @@ actual_modules:
     gradle_path: :local-control:onboarding
     type: pure_kotlin_library
     owns: [protected_channel_source_staging, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
+  local-control-qr-public:
+    gradle_path: :local-control:qr-public
+    type: pure_kotlin_library
+    owns: [bounded_canonical_tv_public_hpke_qr_parser, public_key_fingerprint]
   local-control-crypto-lab:
     gradle_path: :local-control:crypto-lab
     type: pure_kotlin_library
