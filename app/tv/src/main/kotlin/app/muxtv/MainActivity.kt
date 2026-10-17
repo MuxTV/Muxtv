@@ -42,13 +42,18 @@ import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Volatile private var tvVisible = false
     private lateinit var doctorExportState: DoctorExportState
     // Cleanup must outlive Activity.lifecycleScope cancellation during onDestroy.
     private val pairingCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pairingController by lazy {
-        TvPairingController(this) {
-            stopPhonePairing() // active LAN interface/transport changed; never auto-rebind
-        }
+        TvPairingController(
+            context = this,
+            invalidated = {
+                stopPhonePairing() // active LAN interface/transport changed; never auto-rebind
+            },
+            isTvVisible = { tvVisible },
+        )
     }
     private var pendingLocalNetworkPermission: CompletableDeferred<LocalNetworkPermissionOutcome>? = null
     private var pendingLocalNetworkSettings: CompletableDeferred<Boolean>? = null
@@ -273,12 +278,19 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    override fun onStart() {
+        super.onStart()
+        tvVisible = true
+    }
+
     override fun onStop() {
+        tvVisible = false
         stopPhonePairing()
         super.onStop()
     }
 
     override fun onDestroy() {
+        tvVisible = false
         stopPhonePairing()
         pendingLocalNetworkPermission?.cancel()
         pendingLocalNetworkSettings?.cancel()
