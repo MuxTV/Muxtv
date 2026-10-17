@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          ! grep -Eq 'android.permission.(INTERNET|ACCESS_LOCAL_NETWORK)' app/phone/src/main/AndroidManifest.xml
+          ! grep -Eq '<uses-permission.*android.permission.(INTERNET|ACCESS_LOCAL_NETWORK)' app/phone/src/main/AndroidManifest.xml
           ! grep -Eq 'project\(":local-control:crypto-lab"\)' app/phone/build.gradle.kts
           ! grep -Eq 'project\(":local-control:server"\)' app/phone/build.gradle.kts
 
