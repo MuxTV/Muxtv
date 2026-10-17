@@ -60,7 +60,7 @@ benchmark/
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включён 33 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
+В settings.gradle.kts включены 34 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
