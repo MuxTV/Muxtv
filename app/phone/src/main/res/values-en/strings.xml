@@ -15,4 +15,6 @@
     <string name="scan_pairing">Pairing: %1$s</string>
     <string name="scan_warning">Only key format was verified. TV and phone identity are not yet authenticated. IPTV source and password transfer remain disabled.</string>
     <string name="scan_again">Scan again</string>
+    <string name="scan_phone_fingerprint">Phone key SHA-256: %1$s. Compare against the TV approval screen before consenting.</string>
+    <string name="scan_signing_key_error">Cannot create ephemeral phone key. Scan the QR again.</string>
 </resources>
