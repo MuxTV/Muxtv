@@ -49,6 +49,7 @@ import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.feature.sources.SourcesRoute
 import app.muxtv.localcontrol.PendingTvPairing
 import app.muxtv.localcontrol.TvPairingController
+import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
 import app.muxtv.localcontrol.PhonePairingRoute
 import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
@@ -84,6 +85,9 @@ fun AppNavigation(
         DevicePlaybackProfileSummaryReader { null },
     startPhonePairing: suspend () -> TvPairingController.ScreenSession? = { null },
     stopPhonePairing: () -> Unit = {},
+    startPublicKeyQrPreview: suspend () -> TvHpkeQrPresentation? = { null },
+    revokePublicKeyQrPreview: () -> Unit = {},
+    publicKeyQrPreviewIsActive: () -> Boolean = { false },
     pendingPhonePairing: () -> PendingTvPairing? = { null },
     approvePhonePairing: (String) -> Boolean = { false },
     denyPhonePairing: (String) -> Boolean = { false },
@@ -213,6 +217,9 @@ fun AppNavigation(
                         AppDestination.PhonePairing -> PhonePairingRoute(
                             onStart = startPhonePairing,
                             onStop = stopPhonePairing,
+                            onStartPublicKeyPreview = startPublicKeyQrPreview,
+                            onRevokePublicKeyPreview = revokePublicKeyQrPreview,
+                            publicKeyPreviewIsActive = publicKeyQrPreviewIsActive,
                             pendingFromTv = pendingPhonePairing,
                             approveFromTv = approvePhonePairing,
                             denyFromTv = denyPhonePairing,
