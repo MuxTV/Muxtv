@@ -21,7 +21,7 @@ import java.util.Base64
  * close() releases references but cannot promise JVM heap zeroization of Tink key material.
  */
 class TvHpkeQrSession private constructor(
-    private var privateReceiver: KeysetHandle?,
+    @Volatile private var privateReceiver: KeysetHandle?,
     private val qr: String,
     private val fingerprint: String,
     private val createdAt: Long,
@@ -53,7 +53,13 @@ class TvHpkeQrSession private constructor(
         return TvPhoneEnrollment(
             tvQr = qr,
             elapsedMillis = elapsedMillis,
-            tvReceiverIsAlive = { presentation(elapsedMillis()) != null },
+            // Do not call a synchronized TV session method while holding the synchronized
+            // enrollment gate lock: session.close() takes locks in the opposite order.
+            tvReceiverIsAlive = {
+                val now = elapsedMillis()
+                privateReceiver != null &&
+                    now >= createdAt && now < expiresAtElapsedMillis
+            },
         ).also { pendingPhoneEnrollment = it }
     }
 
