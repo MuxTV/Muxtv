@@ -32,6 +32,7 @@ include(
     ":local-control:onboarding",
     ":local-control:crypto-lab",
     ":local-control:crypto-android-compat",
+    ":local-control:tv-qr",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
