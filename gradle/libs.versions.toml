@@ -34,6 +34,7 @@ jmh-gradle = "0.7.3"
 ktor = "3.5.1"
 tink = "1.23.0"
 zxing = "3.5.4"
+camera = "1.6.2"
 cyclonedx = "3.4.1"
 
 [libraries]
@@ -101,6 +102,10 @@ ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
