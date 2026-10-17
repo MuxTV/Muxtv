@@ -1,0 +1,84 @@
+name: Local Control phone QR preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-control-native-phone-qr-preview.yml'
+      - 'app/phone/**'
+      - 'gradle/libs.versions.toml'
+      - 'settings.gradle.kts'
+      - '.work/specifications/local-control-native-phone-preview.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lc04-phone-preview-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Phone offline QR preview build and JVM tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert immutable source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Assemble standalone phone APK and run QR decode tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :app:phone:assembleDebug :app:phone:testDebugUnitTest \
+            --no-daemon --console=plain --stacktrace --no-problems-report
+
+      - name: Fail closed on unexpected phone manifest capabilities
+        shell: bash
+        env:
+          EVIDENCE: .work/evidence/local-control-phone-preview
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE"
+          mapfile -t apks < <(find app/phone/build/outputs/apk/debug -type f -name '*.apk' | sort)
+          test "${#apks[@]}" -eq 1
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$aapt"
+          "$aapt" dump permissions "${apks[0]}" > "$EVIDENCE/manifest-permissions.txt"
+          grep -q 'android.permission.CAMERA' "$EVIDENCE/manifest-permissions.txt"
+          if grep -E -q 'android.permission.(INTERNET|ACCESS_LOCAL_NETWORK|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|QUERY_ALL_PACKAGES)' "$EVIDENCE/manifest-permissions.txt"; then
+            echo "Phone QR preview has an unexpected network/storage privilege." >&2
+            exit 1
+          fi
+          printf '%s\n' "PRODUCTION_TRANSPORT=NOT_IMPLEMENTED" > "$EVIDENCE/qualification.txt"
+          printf '%s\n' "OFFLINE_QR_ONLY=true" >> "$EVIDENCE/qualification.txt"
+          printf '%s\n' "CAMERA_HARDWARE_CUJ=NOT_TESTED" >> "$EVIDENCE/qualification.txt"
+
+      - name: Upload nonsecret qualification evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-native-phone-qr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/local-control-phone-preview/**
+            app/phone/build/test-results/testDebugUnitTest/**
+          retention-days: 7
+          github-token: ${{ github.token }}
