@@ -99,7 +99,8 @@ class TvPhoneEnrollment(
         if (!current.approved) return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.TV_CONSENT_REQUIRED)
         val signature = proof.signatureBytes()
         val valid = try {
-            if (signature.size != 64) {
+            // Tink signatures may contain a 5-byte output-prefix (RAW=64, TINK=69).
+            if (signature.size !in 64..69) {
                 false
             } else {
                 current.verifier.verify(signature, proofTranscript(
