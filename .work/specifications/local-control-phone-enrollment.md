@@ -34,7 +34,10 @@ enroll, call approveOnTv(), authenticate a protected session or reach onboarding
   outstanding key, even if an attacker tries to race approval.
 - A trusted TV-local UI **must** show and explicitly confirm the pending phone
   key fingerprint. There is intentionally no HTTP route to invoke consent.
-- The phone first parses the physical TV QR through the already merged #410
+- The native phone scanner now creates a **fresh in-memory Tink Ed25519 signing identity**
+  after a canonical TV QR scan and shows the phone public-key SHA-256 fingerprint.
+  It disposes the private-key reference on scan restart or Activity.onStop.
+  The phone first parses the physical TV QR through the already merged #410
   runtime parser and refuses challenge mismatch to that QR or its own identity.
 
 Canonical signed transcript (ASCII, fixed-width hex values and separators):
@@ -50,7 +53,7 @@ proofs are single-use, expiration and elapsed-clock rollback fail closed, and
 explicit receiver closure revokes pending state. The successful result is only a
 verified phone identity; it is **not** SOURCE_CREATE or a bearer capability.
 
-Phone signing keys are ephemeral and are never persisted by this module. Clearing
+Phone signing keys are ephemeral and are never persisted by this module or the phone Activity. Clearing
 managed key references does not guarantee in-heap private key zeroization.
 
 ## Attack/negative test matrix
