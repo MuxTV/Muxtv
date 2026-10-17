@@ -121,7 +121,7 @@ class TvPhoneEnrollment(
             }
             return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.INVALID_PROOF)
         }
-        val accepted = VerifiedPhoneIdentity(current.fingerprint, current.key)
+        val accepted = VerifiedPhoneIdentity(current.fingerprint, current.key, binding)
         current.erase()
         pending = null
         redeemed = true
@@ -205,7 +205,14 @@ class PhoneSigningIdentity private constructor(
 }
 
 /** This returned identity is NOT a SOURCE_CREATE capability, bearer or durable session. */
-class VerifiedPhoneIdentity internal constructor(val fingerprint: String, keyset: ByteArray) {
+class VerifiedPhoneIdentity internal constructor(
+    val fingerprint: String,
+    keyset: ByteArray,
+    binding: EnrollmentBinding,
+) {
+    val tvInvitationId: String = binding.invitationId
+    val tvPairingId: String = binding.pairingId
+    val tvFingerprint: String = binding.tvFingerprint
     private val public = keyset.clone()
     fun publicKeysetBytes(): ByteArray = public.clone()
     override fun toString(): String = "VerifiedPhoneIdentity([PUBLIC_KEY_REDACTED])"
