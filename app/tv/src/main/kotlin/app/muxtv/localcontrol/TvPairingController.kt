@@ -98,6 +98,15 @@ class TvPairingController(
         publicQrSession?.close()
         publicQrSession = null
         val receiver = TvHpkeQrSession.create(SystemClock.elapsedRealtime())
+        publishPublicKeyQr(receiver, lifecycle, previewGeneration)
+    }
+
+    @Synchronized
+    private fun publishPublicKeyQr(
+        receiver: TvHpkeQrSession,
+        lifecycle: Long,
+        previewGeneration: Long,
+    ): TvHpkeQrPresentation {
         if (lifecycleEpoch.get() != lifecycle || publicQrEpoch.get() != previewGeneration) {
             receiver.close()
             throw CancellationException("TV key preview was revoked.")
@@ -108,10 +117,11 @@ class TvPairingController(
             throw IllegalStateException("TV key preview expired before display.")
         }
         publicQrSession = receiver
-        view
+        return view
     }
 
     /** Safe to call on the UI thread and from Activity.onStop. */
+    @Synchronized
     fun revokePublicKeyQrPreview() {
         publicQrEpoch.incrementAndGet()
         publicQrSession?.close()
