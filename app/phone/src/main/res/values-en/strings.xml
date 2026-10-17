@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MuxTV Phone</string>
+    <string name="scan_title">Scan MuxTV public key</string>
+    <string name="scan_intro">Point the camera at a TV public-key QR code (MXLC04:1).</string>
+    <string name="scan_permission">Camera access is required to read the TV public-key QR code.</string>
+    <string name="scan_permission_button">Allow camera</string>
+    <string name="scan_permission_denied">Camera unavailable. Enable camera permission in app settings.</string>
+    <string name="scan_busy">Scanning…</string>
+    <string name="scan_error">Camera unavailable. Try again.</string>
+    <string name="scan_not_supported">This QR is not a verified-format MuxTV public key. Legacy HTTP links are not accepted.</string>
+    <string name="scan_found">TV public key scanned</string>
+    <string name="scan_fingerprint">Key SHA-256: %1$s</string>
+    <string name="scan_invitation">Invitation: %1$s</string>
+    <string name="scan_pairing">Pairing: %1$s</string>
+    <string name="scan_warning">Only key format was verified. TV and phone identity are not yet authenticated. IPTV source and password transfer remain disabled.</string>
+    <string name="scan_again">Scan again</string>
+</resources>
