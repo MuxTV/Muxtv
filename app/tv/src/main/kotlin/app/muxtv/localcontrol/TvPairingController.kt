@@ -136,6 +136,44 @@ class TvPairingController(
     fun isPublicKeyQrPreviewActive(): Boolean =
         publicQrSession?.presentation(SystemClock.elapsedRealtime()) != null
 
+    /**
+     * Display-only TV-local read: never expose the pending fingerprint via legacy LAN routes.
+     * A pending identity has no authority until the TV owner explicitly accepts it.
+     */
+    @Synchronized
+    fun pendingPhonePublicKeyFingerprint(): String? {
+        if (!isTvVisible()) return null
+        val receiver = publicQrSession ?: return null
+        if (receiver.presentation(SystemClock.elapsedRealtime()) == null) return null
+        return receiver.phoneEnrollmentGate(SystemClock::elapsedRealtime)
+            ?.pendingFingerprintForTv()
+    }
+
+    /**
+     * This method is wired ONLY to the trusted D-pad UI.
+     * It must not be imported or called by TvLanServer / plain /pair.
+     */
+    @Synchronized
+    fun approvePhonePublicKeyOnTv(exactVisibleFingerprint: String): Boolean {
+        if (!isTvVisible()) return false
+        val receiver = publicQrSession ?: return false
+        if (receiver.presentation(SystemClock.elapsedRealtime()) == null) return false
+        val gate = receiver.phoneEnrollmentGate(SystemClock::elapsedRealtime) ?: return false
+        if (gate.pendingFingerprintForTv() != exactVisibleFingerprint) return false
+        return gate.approveOnTv(exactVisibleFingerprint)
+    }
+
+    /** Declining revokes the entire key QR session: stale challenges cannot be retried. */
+    @Synchronized
+    fun denyPhonePublicKeyOnTv(exactVisibleFingerprint: String): Boolean {
+        if (!isTvVisible()) return false
+        val receiver = publicQrSession ?: return false
+        val gate = receiver.phoneEnrollmentGate(SystemClock::elapsedRealtime) ?: return false
+        if (gate.pendingFingerprintForTv() != exactVisibleFingerprint) return false
+        revokePublicKeyQrPreview()
+        return true
+    }
+
     fun pendingClaim(): PendingTvPairing? = pairing.pendingClaimForTv()
     fun approve(claimId: String): Boolean = pairing.approve(claimId)
     fun deny(claimId: String): Boolean = pairing.deny(claimId)
