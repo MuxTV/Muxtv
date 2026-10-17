@@ -23,6 +23,7 @@ import app.muxtv.localcontrol.qr.TvQrPublicKey
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Scan-only Android phone companion entry point.
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PhoneQrActivity : ComponentActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val delivered = AtomicBoolean(false)
+    private val scanEpoch = AtomicLong(0)
     private var cameraProvider: ProcessCameraProvider? = null
     private var scanned: TvQrPublicKey? = null
     private var phoneSigningIdentity: PhoneSigningIdentity? = null
@@ -89,6 +91,7 @@ class PhoneQrActivity : ComponentActivity() {
                     phoneSigningIdentity?.close()
                     phoneSigningIdentity = null
                     scanned = null
+                    scanEpoch.incrementAndGet()
                     delivered.set(false)
                     invalidNoticeSent = false
                     details.visibility = View.GONE
@@ -129,9 +132,11 @@ class PhoneQrActivity : ComponentActivity() {
 
         status.setText(R.string.scan_busy)
         retryButton.setText(R.string.scan_again)
+        val invocationEpoch = scanEpoch.get()
         val pending = ProcessCameraProvider.getInstance(this)
         pending.addListener({
             if (!hasCameraPermission() || scanned != null ||
+                scanEpoch.get() != invocationEpoch ||
                 !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@addListener
             try {
                 val provider = pending.get()
@@ -144,7 +149,7 @@ class PhoneQrActivity : ComponentActivity() {
                     .build()
                 analysis.setAnalyzer(cameraExecutor) { frame ->
                     try {
-                        if (delivered.get()) return@setAnalyzer
+                        if (scanEpoch.get() != invocationEpoch || delivered.get()) return@setAnalyzer
                         val plane = frame.planes.firstOrNull() ?: return@setAnalyzer
                         val bytes = ByteArray(plane.buffer.remaining())
                         plane.buffer.get(bytes)
@@ -158,7 +163,9 @@ class PhoneQrActivity : ComponentActivity() {
                             if (value.length > 900) return@setAnalyzer
                             val parsed = TvQrPublicKeyParser.parseOrNull(value)
                             if (parsed != null && delivered.compareAndSet(false, true)) {
-                                runOnUiThread { showScannedKey(parsed) }
+                                runOnUiThread {
+                                    if (scanEpoch.get() == invocationEpoch) showScannedKey(parsed)
+                                }
                             } else if (parsed == null && !invalidNoticeSent) {
                                 invalidNoticeSent = true
                                 runOnUiThread { status.setText(R.string.scan_not_supported) }
@@ -214,6 +221,7 @@ class PhoneQrActivity : ComponentActivity() {
         phoneSigningIdentity = null
         // Do not retain obsolete phone key material across foreground lifecycles.
         scanned = null
+        scanEpoch.incrementAndGet()
         delivered.set(false)
         if (::details.isInitialized) details.visibility = View.GONE
         super.onStop()
