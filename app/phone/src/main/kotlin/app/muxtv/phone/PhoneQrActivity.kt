@@ -8,6 +8,7 @@ import android.util.Size
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -112,7 +113,11 @@ class PhoneQrActivity : ComponentActivity() {
         content.addView(retryButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(12) })
-        setContentView(content)
+        // Camera preview plus two long fingerprints must remain reachable on small phones.
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+        })
 
         if (hasCameraPermission()) retryButton.setText(R.string.scan_again)
     }
