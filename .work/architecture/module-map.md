@@ -9,7 +9,7 @@ last_reviewed: 2026-08-11
 
 ~~~text
 app/
-└── tv/                    Android TV application и composition root
+├── tv/                    Android TV application и composition root\n└── phone/                 Offline Android camera QR scanner (no INTERNET, no provider API)
 
 core/
 ├── common/                Общие contracts, errors и IDs
@@ -33,7 +33,7 @@ local-control/
 ├── core/                  Ephemeral TV-confirmed pairing authority (JVM, no socket)
 ├── server/                User-initiated LAN pairing/QR bootstrap; no provider APIs
 ├── onboarding/            Dormant SourceOnboarding adapter; protected transport NOT implemented
-├── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
+├── qr-public/             Strict public HPKE-key QR parser used by phone app\n├── crypto-lab/            Isolated Tink RFC9180 HPKE experiments; no runtime caller
 └── crypto-android-compat/ Hosted API26/API36 instrumentation only; no production caller
 
 player/
@@ -59,7 +59,7 @@ benchmark/
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включён 33 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
+В settings.gradle.kts включён 35 application/library/benchmark модулей, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
