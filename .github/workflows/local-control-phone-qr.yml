@@ -1,0 +1,74 @@
+name: Local Control native phone QR scanner
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/phone/**'
+      - 'local-control/qr-public/**'
+      - '.github/workflows/local-control-phone-qr.yml'
+      - 'settings.gradle.kts'
+      - 'gradle/libs.versions.toml'
+      - '.work/specifications/local-control-native-phone-qr.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lc04-phone-qr-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  phone:
+    name: Offline phone scanner compile and parser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up repository JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Require exact source and offline manifest
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ! grep -Eq '<uses-permission.*android.permission.(INTERNET|ACCESS_LOCAL_NETWORK)' app/phone/src/main/AndroidManifest.xml
+          ! grep -Eq 'project\(":local-control:crypto-lab"\)' app/phone/build.gradle.kts
+          ! grep -Eq 'project\(":local-control:server"\)' app/phone/build.gradle.kts
+
+      - name: Compile phone APK and test parser plus QR luminance handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:qr-public:test \
+            :app:phone:assembleDebug :app:phone:testDebugUnitTest \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Verify phone APK exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/phone/build/outputs/apk/debug/phone-debug.apk
+
+      - name: Upload test-only evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-phone-qr-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/phone/build/test-results/**
+            local-control/qr-public/build/test-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
