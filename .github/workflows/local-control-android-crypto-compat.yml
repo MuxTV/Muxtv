@@ -8,6 +8,7 @@ on:
       - '.github/workflows/local-control-android-crypto-compat.yml'
       - 'local-control/crypto-android-compat/**'
       - 'local-control/crypto-lab/**'
+      - 'local-control/tv-qr/**'
       - 'tools/local-control/Run-AndroidCryptoProviderTests.sh'
       - '.work/research/lc04-s2-android-provider-20261015.md'
       - 'settings.gradle.kts'
@@ -69,7 +70,7 @@ jobs:
         shell: bash
         run: bash ./tools/ci/Install-HostedAdbRetryShim.sh
 
-      - name: Exercise isolated HPKE and Ed25519 on Android API${{ matrix.api }}
+      - name: Exercise HPKE, Ed25519 and TV QR preview on Android API${{ matrix.api }}
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
         env:
           MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
@@ -115,4 +116,4 @@ jobs:
         run: |
           set -euo pipefail
           test "$MATRIX_RESULT" = success
-          echo "Experimental Android device compatibility passed. Production secure channel remains unimplemented."
+          echo "Android device cryptography and public TV QR generation passed. Protected network channel remains unimplemented."
