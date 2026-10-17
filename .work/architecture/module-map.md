@@ -9,7 +9,8 @@ last_reviewed: 2026-08-11
 
 ~~~text
 app/
-└── tv/                    Android TV application и composition root
+├── tv/                    Android TV application и composition root
+└── phone/                 Offline preview-only QR scanner; NO network/credentials
 
 core/
 ├── common/                Общие contracts, errors и IDs
