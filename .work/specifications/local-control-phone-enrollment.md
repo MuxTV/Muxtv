@@ -65,6 +65,8 @@ managed key references does not guarantee in-heap private key zeroization.
 | Invalid/oversized/secret keyset | Reject before enrollment |
 | Challenge lifetime expired or elapsed clock rollback | Reject and revoke pending |
 | Original TV QR receiver revoked/expired | Enrollment gate closed |
+| D-pad reject on TV consent surface | Revoke entire TV QR key session |
+| Candidate on TV without explicit approval | Deny; D-pad default focus is Reject |
 | Wrong signature, repeated failures | Rejected; pending key invalidated at limit |
 | Existing LC03 HTTP session without Ed25519 proof | No access to this component |
 
@@ -75,8 +77,11 @@ Do not introduce a third AVD, self-hosted runner or release signing.
 ## Nonclaims and next security gate
 
 - The **actual phone** has not sent any enrollment bytes to TV over LAN.
-- There is no user-visible TV fingerprint approval screen, phone network
-  discovery or protected challenge exchange in this slice.
+- A TV-local consent screen and D-pad handlers now exist, with default focus
+  on Reject. The pending public identity can be injected only by the
+  independently reviewed TV-owned gate; there is **no LAN intake route** yet,
+  so this UI is exercised via synthetic candidates in emulator tests.
+- No phone network discovery or protected challenge exchange in this slice.
 - A verified proof alone does NOT authenticate TV replies, create a shared
   secure channel or authorize `SourceOnboarding`.
 - An attacker controlling the phone process/UI still controls its signing key.
@@ -87,7 +92,7 @@ Do not introduce a third AVD, self-hosted runner or release signing.
 - No secret M3U/Xtream URL, username, token or password may be transmitted
   over the existing untrusted `http://private-IP/pair` routes.
 
-Next: native phone-to-TV protected enrollment transport, real TV-local phone
-fingerprint consent, authenticated response, and a complete cross-device
+Next: native phone-to-TV protected enrollment transport to deliver a real
+pending identity to the TV-local consent UI, authenticated response, and a complete cross-device
 MITM/replay/revocation matrix. Only after these pass can
 `:local-control:onboarding` mint a session-scoped protected principal.
