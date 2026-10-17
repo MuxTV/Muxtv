@@ -11,6 +11,8 @@ import android.os.SystemClock
 import app.muxtv.localcontrol.PairingAuthority
 import app.muxtv.localcontrol.PairingClock
 import app.muxtv.localcontrol.PendingTvPairing
+import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
+import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.localcontrol.server.LanAddressPolicy
 import app.muxtv.localcontrol.server.TvLanServer
 import kotlinx.coroutines.CancellationException
@@ -35,6 +37,8 @@ class TvPairingController(
     private val server = TvLanServer(pairing)
     private val lifecycleMutex = Mutex()
     private val lifecycleEpoch = AtomicLong()
+    private val publicQrEpoch = AtomicLong()
+    @Volatile private var publicQrSession: TvHpkeQrSession? = null
     @Volatile private var observedNetwork: Network? = null
     @Volatile private var observedAddress: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -83,6 +87,40 @@ class TvPairingController(
         }
     }
 
+    /**
+     * Explicit TV-screen action only. This preview uses a separate, fresh HPKE receiver:
+     * no existing LC03 HTTP bearer, phone enrollment, source API or network route is involved.
+     * Key generation runs under the same lifecycle mutex as TV pairing shutdown.
+     */
+    suspend fun startPublicKeyQrPreview(): TvHpkeQrPresentation = lifecycleMutex.withLock {
+        val lifecycle = lifecycleEpoch.get()
+        val previewGeneration = publicQrEpoch.incrementAndGet()
+        publicQrSession?.close()
+        publicQrSession = null
+        val receiver = TvHpkeQrSession.create(SystemClock.elapsedRealtime())
+        if (lifecycleEpoch.get() != lifecycle || publicQrEpoch.get() != previewGeneration) {
+            receiver.close()
+            throw CancellationException("TV key preview was revoked.")
+        }
+        val view = receiver.presentation(SystemClock.elapsedRealtime())
+        if (view == null) {
+            receiver.close()
+            throw IllegalStateException("TV key preview expired before display.")
+        }
+        publicQrSession = receiver
+        view
+    }
+
+    /** Safe to call on the UI thread and from Activity.onStop. */
+    fun revokePublicKeyQrPreview() {
+        publicQrEpoch.incrementAndGet()
+        publicQrSession?.close()
+        publicQrSession = null
+    }
+
+    fun isPublicKeyQrPreviewActive(): Boolean =
+        publicQrSession?.presentation(SystemClock.elapsedRealtime()) != null
+
     fun pendingClaim(): PendingTvPairing? = pairing.pendingClaimForTv()
     fun approve(claimId: String): Boolean = pairing.approve(claimId)
     fun deny(claimId: String): Boolean = pairing.deny(claimId)
@@ -97,6 +135,7 @@ class TvPairingController(
     }
 
     private suspend fun stopInternal() {
+        revokePublicKeyQrPreview()
         networkCallback?.let { runCatching { networkManager.unregisterNetworkCallback(it) } }
         networkCallback = null
         observedNetwork = null
@@ -108,6 +147,7 @@ class TvPairingController(
     /** Immediate fail-closed invalidation on Activity.onStop or onDestroy. */
     fun revokeImmediately() {
         lifecycleEpoch.incrementAndGet()
+        revokePublicKeyQrPreview()
         observedNetwork = null
         observedAddress = null
         pairing.stop()
