@@ -42,7 +42,12 @@ class TvPhoneKeyConsentFocusTest {
                     approvePhoneKeyOnTv = { approved++; true },
                     denyPhoneKeyOnTv = {
                         denied++
-                        it == fingerprint
+                        if (it == fingerprint) {
+                            session?.close()
+                            true
+                        } else {
+                            false
+                        }
                     },
                     pendingFromTv = { null },
                     approveFromTv = { false },
@@ -70,6 +75,9 @@ class TvPhoneKeyConsentFocusTest {
         rule.runOnIdle {
             check(denied == 1) { "Expected one D-pad rejection, got $denied" }
             check(approved == 0) { "TV key was auto-approved" }
+            check(session?.presentation(SystemClock.elapsedRealtime()) == null) {
+                "Deny failed to revoke the TV QR owner in the fixture"
+            }
         }
         rule.waitUntil(15_000) {
             rule.onAllNodesWithTag("local-tv-phone-consent-approve").fetchSemanticsNodes().isEmpty()
