@@ -1,6 +1,7 @@
 package app.muxtv.localcontrol.tvqr
 
 import com.google.common.truth.Truth.assertThat
+import app.muxtv.localcontrol.cryptolab.LabTvQrKeyBinding
 import com.google.crypto.tink.HybridEncrypt
 import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.TinkProtoKeysetFormat
@@ -20,7 +21,7 @@ class TvHpkeQrSessionTest {
         val session = TvHpkeQrSession.create(100L)
         val view = session.presentation(100L)!!
         assertThat(view.qrValue).startsWith("MXLC04:1:")
-        assertThat(view.qrValue).hasLengthAtMost(900)
+        assertThat(view.qrValue.length).isAtMost(900)
         val fields = view.qrValue.split(':')
         assertThat(fields).hasSize(5)
         assertThat(fields[2]).matches("[0-9a-f]{32}")
@@ -43,6 +44,10 @@ class TvHpkeQrSessionTest {
         assertThat(hpke.params.kem).isEqualTo(HpkeKem.DHKEM_X25519_HKDF_SHA256)
         assertThat(hpke.params.kdf).isEqualTo(HpkeKdf.HKDF_SHA256)
         assertThat(hpke.params.aead).isEqualTo(HpkeAead.AES_256_GCM)
+        val scanned = LabTvQrKeyBinding.parse(view.qrValue)
+        assertThat(scanned.keyFingerprint).isEqualTo(view.fingerprintSha256)
+        assertThat(scanned.binding.tvInvitationId).isEqualTo(fields[2])
+        assertThat(scanned.binding.approvedPairingId).isEqualTo(fields[3])
         val parsed = TinkProtoKeysetFormat.parseKeysetWithoutSecret(bytes)
         assertThat(TinkProtoKeysetFormat.serializeKeysetWithoutSecret(parsed)).isEqualTo(bytes)
         val encryptor = parsed.getPrimitive(RegistryConfiguration.get(), HybridEncrypt::class.java)
