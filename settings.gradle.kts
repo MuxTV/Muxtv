@@ -19,6 +19,7 @@ rootProject.name = "MuxTV"
 
 include(
     ":app:tv",
+    ":app:phone",
     ":core:common",
     ":core:model",
     ":core:database",
@@ -32,6 +33,7 @@ include(
     ":local-control:onboarding",
     ":local-control:crypto-lab",
     ":local-control:crypto-android-compat",
+    ":local-control:qr-public",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
