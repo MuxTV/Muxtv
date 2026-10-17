@@ -34,6 +34,7 @@ include(
     ":local-control:crypto-lab",
     ":local-control:crypto-android-compat",
     ":local-control:qr-public",
+    ":local-control:tv-qr",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
