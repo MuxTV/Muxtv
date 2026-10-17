@@ -9,6 +9,7 @@ on:
       - 'local-control/crypto-android-compat/**'
       - 'local-control/crypto-lab/**'
       - 'local-control/tv-qr/**'
+      - 'local-control/enrollment/**'
       - 'tools/local-control/Run-AndroidCryptoProviderTests.sh'
       - '.work/research/lc04-s2-android-provider-20261015.md'
       - 'settings.gradle.kts'
