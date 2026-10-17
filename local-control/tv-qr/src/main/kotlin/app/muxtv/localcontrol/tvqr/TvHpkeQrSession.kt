@@ -1,5 +1,6 @@
 package app.muxtv.localcontrol.tvqr
 
+import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
 import com.google.crypto.tink.HybridDecrypt
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.RegistryConfiguration
@@ -26,6 +27,8 @@ class TvHpkeQrSession private constructor(
     private val createdAt: Long,
     val expiresAtElapsedMillis: Long,
 ) : AutoCloseable {
+    private var pendingPhoneEnrollment: TvPhoneEnrollment? = null
+
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
     @Synchronized
     fun presentation(nowElapsedMillis: Long): TvHpkeQrPresentation? {
@@ -37,8 +40,27 @@ class TvHpkeQrSession private constructor(
         return TvHpkeQrPresentation(qr, fingerprint, expiresAtElapsedMillis)
     }
 
+    /**
+     * The exact receiver that owns this public QR also owns the phone enrollment gate.
+     * A separate caller-supplied QR string cannot manufacture a TV-approved identity.
+     * This is intentionally NOT called by the legacy plaintext LAN server.
+     */
+    @Synchronized
+    fun phoneEnrollmentGate(elapsedMillis: () -> Long): TvPhoneEnrollment? {
+        if (presentation(elapsedMillis()) == null) return null
+        val existing = pendingPhoneEnrollment
+        if (existing != null) return existing
+        return TvPhoneEnrollment(
+            tvQr = qr,
+            elapsedMillis = elapsedMillis,
+            tvReceiverIsAlive = { presentation(elapsedMillis()) != null },
+        ).also { pendingPhoneEnrollment = it }
+    }
+
     @Synchronized
     override fun close() {
+        pendingPhoneEnrollment?.close()
+        pendingPhoneEnrollment = null
         privateReceiver = null
     }
 
