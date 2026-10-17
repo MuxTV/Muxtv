@@ -4,12 +4,11 @@ import app.muxtv.localcontrol.cryptolab.ExperimentalHpkeLab
 import app.muxtv.localcontrol.cryptolab.LabBinding
 import app.muxtv.localcontrol.cryptolab.LabTvQrKeyBinding
 import com.google.common.truth.Truth.assertThat
-import com.google.crypto.tink.TinkProtoKeysetFormat
 import com.google.crypto.tink.proto.HpkeAead
 import com.google.crypto.tink.proto.HpkePublicKey
 import com.google.crypto.tink.proto.KeyData
 import com.google.crypto.tink.proto.Keyset
-import com.google.crypto.tink.shaded.protobuf.ByteString
+import com.google.protobuf.ByteString
 import org.junit.Test
 import java.util.Base64
 
