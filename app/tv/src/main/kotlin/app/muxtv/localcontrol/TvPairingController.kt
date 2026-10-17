@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong
 class TvPairingController(
     context: Context,
     private val invalidated: () -> Unit,
+    private val isTvVisible: () -> Boolean,
 ) {
     private val networkManager =
         context.getSystemService(ConnectivityManager::class.java)
@@ -93,6 +94,7 @@ class TvPairingController(
      * Key generation runs under the same lifecycle mutex as TV pairing shutdown.
      */
     suspend fun startPublicKeyQrPreview(): TvHpkeQrPresentation = lifecycleMutex.withLock {
+        if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
         val lifecycle = lifecycleEpoch.get()
         val previewGeneration = publicQrEpoch.incrementAndGet()
         publicQrSession?.close()
@@ -107,7 +109,10 @@ class TvPairingController(
         lifecycle: Long,
         previewGeneration: Long,
     ): TvHpkeQrPresentation {
-        if (lifecycleEpoch.get() != lifecycle || publicQrEpoch.get() != previewGeneration) {
+        if (!isTvVisible() ||
+            lifecycleEpoch.get() != lifecycle ||
+            publicQrEpoch.get() != previewGeneration
+        ) {
             receiver.close()
             throw CancellationException("TV key preview was revoked.")
         }
