@@ -46,6 +46,48 @@ class SourceRevisionCleanupTest {
     }
 
     @Test
+    fun removingInactiveStagedSourceDrainsShadowPayloadGarbage() = runTest {
+        store.upsertSource(
+            SourceDefinition(
+                id = SOURCE_ID,
+                name = "Pending",
+                credentialRef = CREDENTIAL_REF,
+            ),
+        )
+        store.beginRevision(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            startedAtEpochMillis = 1_000,
+        )
+        store.stageBatch(
+            sourceId = SOURCE_ID,
+            revisionNumber = 1,
+            entries = listOf(
+                StagedCatalogEntry(
+                    providerChannelId = "provider-pending",
+                    providerKey = "tvg:pending",
+                    rawName = "Pending",
+                    canonicalChannelId = "canonical-pending",
+                    canonicalDisplayName = "Pending",
+                    streamVariantId = "variant-pending",
+                    locator = "https://stream.invalid/pending?token=secret",
+                ),
+            ),
+        )
+
+        assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(1)
+        assertThat(database.catalogShadowDao().searchPayloadCount()).isEqualTo(1)
+        assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(1)
+
+        assertThat(store.removeInactiveSource(SOURCE_ID, CREDENTIAL_REF))
+            .isEqualTo(InactiveSourceRemovalResult.Removed)
+
+        assertThat(database.catalogShadowDao().payloadCount()).isEqualTo(0)
+        assertThat(database.catalogShadowDao().searchPayloadCount()).isEqualTo(0)
+        assertThat(database.catalogShadowDao().membershipCount()).isEqualTo(0)
+    }
+
+    @Test
     fun credentialMismatchRetainsInactiveSource() = runTest {
         store.upsertSource(
             SourceDefinition(
