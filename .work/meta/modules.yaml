@@ -70,6 +70,10 @@ actual_modules:
     gradle_path: :local-control:tv-qr
     type: pure_kotlin_library
     owns: [ephemeral_tv_hpke_receiver, public_only_canonical_qr_preview, local_key_revocation]
+  local-control-enrollment:
+    gradle_path: :local-control:enrollment
+    type: pure_kotlin_library
+    owns: [tink_ed25519_phone_identity, tv_local_phone_consent_gate, bounded_nonce_proof]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
