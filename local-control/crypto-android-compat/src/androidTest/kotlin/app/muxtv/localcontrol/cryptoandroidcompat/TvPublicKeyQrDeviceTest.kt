@@ -3,6 +3,7 @@ package app.muxtv.localcontrol.cryptoandroidcompat
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.localcontrol.cryptolab.LabTvQrKeyBinding
+import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import com.google.common.truth.Truth.assertThat
 import com.google.crypto.tink.proto.KeyData
@@ -21,6 +22,9 @@ class TvPublicKeyQrDeviceTest {
         val session = TvHpkeQrSession.create(now)
         val presentation = session.presentation(SystemClock.elapsedRealtime())!!
         val scanned = LabTvQrKeyBinding.parse(presentation.qrValue)
+        val actualPhoneParser = TvQrPublicKeyParser.parse(presentation.qrValue)
+        assertThat(actualPhoneParser.fingerprint).isEqualTo(presentation.fingerprintSha256)
+        assertThat(actualPhoneParser.publicKeysetBytes()).isEqualTo(scanned.encodedPublicKeyset())
         assertThat(scanned.keyFingerprint).isEqualTo(presentation.fingerprintSha256)
         assertThat(scanned.publicKeyset.keysetInfo.keyInfoCount).isEqualTo(1)
         assertThat(scanned.publicKeyset.keysetInfo.getKeyInfo(0).typeUrl)
