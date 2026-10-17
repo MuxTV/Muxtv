@@ -12,6 +12,7 @@ android {
 dependencies {
     androidTestImplementation(project(":local-control:crypto-lab"))
     androidTestImplementation(libs.tink)
+    androidTestImplementation(project(":local-control:tv-qr"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.truth)
