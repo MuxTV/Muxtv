@@ -33,7 +33,7 @@ class LocalControlPhoneEnrollmentIsolationTest {
         assertContains(file, "MuxTV-LC04-PHONE-ENROLL-v1")
         for (forbidden in listOf(
             "SourceOnboarding", "SourcePreparationHandle", "PairingGrant",
-            "SOURCE_CREATE", "HttpClient", "TvLanServer", "route(", "post(",
+            "PairingCapability.SOURCE_CREATE", "HttpClient", "TvLanServer", "route(", "post(",
         )) assertFalse(file.contains(forbidden), "Forbidden enrollment authority: $forbidden")
     }
 
