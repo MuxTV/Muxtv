@@ -63,4 +63,22 @@ class LocalControlPhoneEnrollmentIsolationTest {
         assertFalse(workflow.contains("self-hosted"))
         assertFalse(workflow.contains("android-emulator-runner"))
     }
+
+    @Test fun `tv local consent requires visible fingerprint and reject is focus default`() {
+        val route = root.resolve(
+            "app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt",
+        ).readText()
+        assertContains(route, "pendingPhoneKeyFingerprint()")
+        assertContains(route, "denyPhoneFocus.requestFocus()")
+        assertContains(route, "focusRequester(denyPhoneFocus)")
+        assertContains(route, "denyPhoneKeyOnTv(requested)")
+        assertContains(route, "approvePhoneKeyOnTv(requested)")
+        assertContains(route, "local-tv-phone-consent-fingerprint")
+        val controller = root.resolve(
+            "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt",
+        ).readText()
+        assertContains(controller, "if (!isTvVisible()) return false")
+        assertContains(controller, "gate.pendingFingerprintForTv() != exactVisibleFingerprint")
+        assertContains(controller, "revokePublicKeyQrPreview()")
+    }
 }
