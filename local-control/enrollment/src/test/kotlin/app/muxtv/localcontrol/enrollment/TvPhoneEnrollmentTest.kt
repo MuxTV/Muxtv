@@ -115,6 +115,7 @@ class TvPhoneEnrollmentTest {
         assertThat((tv.verify(bad) as PhoneEnrollmentResult.Denied).reason)
             .isEqualTo(PhoneEnrollmentDenial.INVALID_PROOF)
         assertThat(tv.pendingFingerprintForTv()).isNull()
+        assertThat(tv.begin(attacker.publicKeysetBytes())).isNull() // locked until NEW TV QR
         assertThat(tv.verify(phone.prove(TvQrPublicKeyParser.parse(qr), nonce)))
             .isInstanceOf(PhoneEnrollmentResult.Denied::class.java)
     }
