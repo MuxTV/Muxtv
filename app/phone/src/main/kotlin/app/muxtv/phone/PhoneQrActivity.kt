@@ -18,6 +18,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.qr.TvQrPublicKey
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import java.util.concurrent.Executors
@@ -34,6 +35,7 @@ class PhoneQrActivity : ComponentActivity() {
     private val delivered = AtomicBoolean(false)
     private var cameraProvider: ProcessCameraProvider? = null
     private var scanned: TvQrPublicKey? = null
+    private var phoneSigningIdentity: PhoneSigningIdentity? = null
     private var invalidNoticeSent = false
 
     private lateinit var preview: PreviewView
@@ -84,6 +86,8 @@ class PhoneQrActivity : ComponentActivity() {
             setText(R.string.scan_permission_button)
             setOnClickListener {
                 if (scanned != null) {
+                    phoneSigningIdentity?.close()
+                    phoneSigningIdentity = null
                     scanned = null
                     delivered.set(false)
                     invalidNoticeSent = false
@@ -175,12 +179,27 @@ class PhoneQrActivity : ComponentActivity() {
     }
 
     private fun showScannedKey(key: TvQrPublicKey) {
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            delivered.set(false)
+            return
+        }
+        // No phone key or IPTV data is sent over legacy HTTP. The signing
+        // identity will be used only by a future reviewed protected transport.
+        val identity = try {
+            PhoneSigningIdentity.generate()
+        } catch (_: Exception) {
+            delivered.set(false)
+            status.setText(R.string.scan_signing_key_error)
+            return
+        }
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = identity
         scanned = key
         cameraProvider?.unbindAll()
         status.setText(R.string.scan_found)
         details.text = listOf(
             getString(R.string.scan_fingerprint, key.fingerprint),
+            getString(R.string.scan_phone_fingerprint, identity.fingerprint),
             getString(R.string.scan_invitation, key.invitationId),
             getString(R.string.scan_pairing, key.pairingId),
             getString(R.string.scan_warning),
@@ -191,12 +210,20 @@ class PhoneQrActivity : ComponentActivity() {
 
     override fun onStop() {
         cameraProvider?.unbindAll()
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = null
+        // Do not retain obsolete phone key material across foreground lifecycles.
+        scanned = null
+        delivered.set(false)
+        if (::details.isInitialized) details.visibility = View.GONE
         super.onStop()
     }
 
     override fun onDestroy() {
         cameraProvider?.unbindAll()
         cameraExecutor.shutdownNow()
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = null
         scanned = null
         super.onDestroy()
     }
