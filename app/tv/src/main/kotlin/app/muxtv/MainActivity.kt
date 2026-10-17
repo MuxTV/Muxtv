@@ -127,6 +127,13 @@ class MainActivity : ComponentActivity() {
                     sourceManagement = sourceManagement,
                     sourceOnboarding = sourceOnboarding,
                     startPhonePairing = ::startPhonePairing,
+                    startPublicKeyQrPreview = {
+                        withContext(Dispatchers.Default) {
+                            pairingController.startPublicKeyQrPreview()
+                        }
+                    },
+                    revokePublicKeyQrPreview = pairingController::revokePublicKeyQrPreview,
+                    publicKeyQrPreviewIsActive = pairingController::isPublicKeyQrPreviewActive,
                     stopPhonePairing = ::stopPhonePairing,
                     pendingPhonePairing = { pairingController.pendingClaim() },
                     approvePhonePairing = pairingController::approve,
