@@ -19,6 +19,7 @@ rootProject.name = "MuxTV"
 
 include(
     ":app:tv",
+    ":app:phone",
     ":core:common",
     ":core:model",
     ":core:database",

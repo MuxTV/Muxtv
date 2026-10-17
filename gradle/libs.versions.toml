@@ -34,6 +34,7 @@ jmh-gradle = "0.7.3"
 ktor = "3.5.1"
 tink = "1.23.0"
 zxing = "3.5.4"
+camerax = "1.6.2"
 cyclonedx = "3.4.1"
 
 [libraries]
@@ -72,6 +73,7 @@ androidx-hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref =
 work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
+androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -99,6 +101,10 @@ ktor-server-cio = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor"
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
 
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 

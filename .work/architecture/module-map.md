@@ -9,7 +9,8 @@ last_reviewed: 2026-08-11
 
 ~~~text
 app/
-└── tv/                    Android TV application и composition root
+├── tv/                    Android TV application и composition root
+└── phone/                 Offline preview-only QR scanner; NO network/credentials
 
 core/
 ├── common/                Общие contracts, errors и IDs
@@ -59,7 +60,7 @@ benchmark/
 build-logic/               Included build с convention plugins
 ~~~
 
-В settings.gradle.kts включён 33 application/library/benchmark модуля, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
+Актуальный набор application/library/benchmark модулей задаётся файлом `settings.gradle.kts`, включая `:local-control:core` и `:local-control:server`. build-logic является отдельным included build. Модули LC02 пока не подключены к TV Activity. Количество относится к данному изменению; фактический состав проверяет `.work/meta/modules.yaml`.
 
 ## Границы
 
