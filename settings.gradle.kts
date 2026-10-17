@@ -31,6 +31,7 @@ include(
     ":local-control:server",
     ":local-control:onboarding",
     ":local-control:crypto-lab",
+    ":local-control:crypto-android-compat",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",

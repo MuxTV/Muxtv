@@ -54,6 +54,10 @@ actual_modules:
     gradle_path: :local-control:crypto-lab
     type: pure_kotlin_library
     owns: [hpke_protocol_feasibility, binding_and_replay_lab, attack_negative_tests]
+  local-control-crypto-android-compat:
+    gradle_path: :local-control:crypto-android-compat
+    type: android_library
+    owns: [android_crypto_provider_evidence, hpke_android_compatibility, ed25519_device_matrix]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
