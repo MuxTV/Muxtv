@@ -36,8 +36,8 @@ class LabReplyPhone(
         val challenge = ByteArray(16).also(random::nextBytes)
         val payload = secret + challenge
         return try {
-            // A fixed already available lab operation; never dispatched to SourceOnboarding.
-            val envelope = signedSender.send(LabOperation.SOURCE_CANCEL, payload)
+            // Dedicated probe is NEVER a SOURCE_PREPARE/ACTIVATE/CANCEL action.
+            val envelope = signedSender.send(LabOperation.CHANNEL_PROBE, payload)
             LabPendingTvReply(binding, tvFingerprint, phoneFingerprint, envelope, secret, challenge)
         } finally {
             secret.fill(0)
@@ -66,7 +66,7 @@ class LabPendingTvReply internal constructor(
     @Synchronized
     fun verify(reply: LabSealedTvReply): Boolean {
         val secret = key ?: return false
-        if (failures >= 3) return false
+        if (failures >= 3) { close(); return false }
         val cipherBytes = reply.ciphertext()
         val iv = reply.iv()
         if (iv.size != 12 || cipherBytes.size !in 17..256 ||
@@ -74,6 +74,7 @@ class LabPendingTvReply internal constructor(
             !MessageDigest.isEqual(requestId, reply.requestId())
         ) {
             failures++
+            if (failures >= 3) close()
             return false
         }
         val plain = try {
@@ -84,6 +85,7 @@ class LabPendingTvReply internal constructor(
             cipher.doFinal(cipherBytes)
         } catch (_: GeneralSecurityException) {
             failures++
+            if (failures >= 3) close()
             return false
         } finally {
             iv.fill(0)
@@ -156,6 +158,7 @@ class LabAuthenticatedReplyTv(
     @Synchronized
     fun replyTo(request: LabSignedEnvelope): LabTvReplyResult {
         // Server FIRST verifies approved phone signature + per-request HPKE AAD/counter.
+        if (request.cipher().operation != LabOperation.CHANNEL_PROBE) return LabTvReplyResult.Denied
         val result = signedReceiver.verifyAndDecrypt(request)
         if (result !is LabSignedReceiveResult.Accepted) return LabTvReplyResult.Denied
         var reply: LabSealedTvReply? = null
@@ -195,7 +198,7 @@ private fun labReplyAad(
     require(counter in 1..128)
     return ("MuxTV-LC04-TV-REPLY-LAB-v1|" + binding.tvInvitationId + "|" +
         binding.approvedPairingId + "|" + tvFp + "|" + phoneFp +
-        "|tv-to-phone|SOURCE_CANCEL|" + counter + "|" + labHex(requestId))
+        "|tv-to-phone|CHANNEL_PROBE|" + counter + "|" + labHex(requestId))
         .toByteArray(Charsets.US_ASCII)
 }
 
