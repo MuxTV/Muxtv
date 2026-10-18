@@ -146,25 +146,19 @@ class LabHostileLanWireTest {
     }
 
     @Test fun forgedOrRewrittenTvReplyNeverPassesGcmAndGenuineReceiptStillWorks() {
-        val f = paired()
-        val (pending, request) = f.request()
-        val reply = f.receive(request)!!
-        val offsets = listOf(
-            6, 22, 38, 70, // decoded frame's original pinned identities
-            104 + 1, // counter
-            104 + 2, // signed request digest
-            104 + 34, // AES-GCM IV
-            reply.lastIndex, // ciphertext authentication tag
-        )
-        for (i in offsets) {
-            val attacker = relay(reply)!!.also { it[i] = (it[i].toInt() xor 1).toByte() }
+        // Each mutation is tested with an independent phone-owned reply secret:
+        // the existing lab intentionally closes a pending request after 3 failures.
+        for (offset in listOf(6, 22, 38, 70, 105, 106, 138, -1)) {
+            val f = paired()
+            val (pending, request) = f.request()
+            val reply = f.receive(request)!!
+            val index = if (offset < 0) reply.lastIndex else offset
+            val attacker = relay(reply)!!.also {
+                it[index] = (it[index].toInt() xor 1).toByte()
+            }
             assertThat(f.accept(attacker, pending)).isFalse()
-            // Invalid structural context is rejected before invoking LabPendingTvReply
-            // and therefore does not spend a crypto verification attempt.
-            // GCM-tag modifications can exhaust the lab's 3-attempt budget.
-            if (i == reply.lastIndex) break
+            assertThat(f.accept(reply, pending)).isTrue()
         }
-        assertThat(f.accept(reply, pending)).isTrue()
     }
 
     @Test fun attackerWithTvPublicHpkeKeyCannotImpersonateApprovedPhone() {
