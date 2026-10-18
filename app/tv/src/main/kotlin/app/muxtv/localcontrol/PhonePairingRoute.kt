@@ -81,7 +81,6 @@ fun PhonePairingRoute(
     var keySecondsRemaining by remember { mutableLongStateOf(0L) }
     var requestedPhoneFingerprint by remember { mutableStateOf<String?>(null) }
     var phoneKeyApproved by remember { mutableStateOf(false) }
-    val denyPhoneFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     val closeFocus = remember { FocusRequester() }
     val denyFocus = remember { FocusRequester() }
@@ -176,12 +175,6 @@ fun PhonePairingRoute(
             denyFocus.requestFocus() // Safe default: deny request instead of preselecting approval.
         }
     }
-    LaunchedEffect(requestedPhoneFingerprint) {
-        if (requestedPhoneFingerprint != null && keySecondsRemaining > 0L && !phoneKeyApproved) {
-            withFrameNanos { }
-            denyPhoneFocus.requestFocus()
-        }
-    }
     LaunchedEffect(keyPreview?.qrValue) {
         if (keyPreview != null) {
             withFrameNanos { }
@@ -223,46 +216,20 @@ fun PhonePairingRoute(
                         Text("Отпечаток SHA-256: ${key.fingerprintSha256.chunked(8).joinToString(" ")}",
                             modifier = Modifier.testTag("local-tv-key-fingerprint"))
                         Text("QR действителен ещё $keySecondsRemaining с")
-                        val requested = requestedPhoneFingerprint
-                        if (requested != null) {
-                            Text(
-                                text = "Телефон запрашивает подтверждение ключа. " +
-                                    "Сравните полный SHA-256 отпечаток со своим телефоном. " +
-                                    "Без совпадения нажмите «Отклонить».",
-                                modifier = Modifier.testTag("local-tv-phone-consent-warning"),
-                            )
-                            Text(
-                                text = "Отпечаток телефона: " +
-                                    requested.chunked(8).joinToString(" "),
-                                modifier = Modifier.testTag("local-tv-phone-consent-fingerprint"),
-                            )
-                            if (phoneKeyApproved) {
-                                Text("Ключ подтверждён на ТВ. Для завершения необходимо доказательство владения ключом.")
-                            } else {
-                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    MuxTvActionButton(
-                                        text = "Отклонить телефон",
-                                        onClick = {
-                                            if (denyPhoneKeyOnTv(requested)) {
-                                                requestedPhoneFingerprint = null
-                                                keyPreview = null
-                                                phoneKeyApproved = false
-                                            }
-                                        },
-                                        modifier = Modifier.focusRequester(denyPhoneFocus)
-                                            .testTag("local-tv-phone-consent-deny"),
-                                    )
-                                    MuxTvActionButton(
-                                        text = "Подтвердить отпечаток телефона",
-                                        onClick = {
-                                            // UI-local event only, never a network-originated approval.
-                                            phoneKeyApproved = approvePhoneKeyOnTv(requested)
-                                        },
-                                        modifier = Modifier.testTag("local-tv-phone-consent-approve"),
-                                    )
+                        TvPhoneKeyConsentActions(
+                            fingerprint = requestedPhoneFingerprint,
+                            approved = phoneKeyApproved,
+                            onApprove = { requested ->
+                                phoneKeyApproved = approvePhoneKeyOnTv(requested)
+                            },
+                            onDeny = { requested ->
+                                if (denyPhoneKeyOnTv(requested)) {
+                                    requestedPhoneFingerprint = null
+                                    keyPreview = null
+                                    phoneKeyApproved = false
                                 }
-                            }
-                        }
+                            },
+                        )
                         Text("Сравните отпечаток на телефоне с этим экраном ТВ. " +
                             "Сканирование пока не разрешает передачу M3U/Xtream или паролей.")
                     } else {
@@ -358,6 +325,56 @@ fun PhonePairingRoute(
                 text = "Закрыть",
                 onClick = onBack,
                 modifier = Modifier.focusRequester(closeFocus).testTag("local-pair-close"),
+            )
+        }
+    }
+}
+
+/**
+ * Independently testable TV-only consent surface.
+ * A valid QR and phone identity are *not* sufficient: the TV must explicitly
+ * accept the displayed exact fingerprint using a local D-pad action.
+ * Default D-pad focus is DENY on every new fingerprint.
+ */
+@Composable
+fun TvPhoneKeyConsentActions(
+    fingerprint: String?,
+    approved: Boolean,
+    onApprove: (String) -> Unit,
+    onDeny: (String) -> Unit,
+) {
+    if (fingerprint == null) return
+    val denyPhoneFocus = remember { FocusRequester() }
+    LaunchedEffect(fingerprint, approved) {
+        if (!approved) {
+            withFrameNanos { }
+            denyPhoneFocus.requestFocus()
+        }
+    }
+    Text(
+        text = "Телефон запрашивает подтверждение ключа. " +
+            "Сравните полный SHA-256 отпечаток со своим телефоном. " +
+            "Без совпадения нажмите «Отклонить».",
+        modifier = Modifier.testTag("local-tv-phone-consent-warning"),
+    )
+    Text(
+        text = "Отпечаток телефона: " + fingerprint.chunked(8).joinToString(" "),
+        modifier = Modifier.testTag("local-tv-phone-consent-fingerprint"),
+    )
+    if (approved) {
+        Text("Ключ подтверждён на ТВ. Для завершения необходимо доказательство владения ключом.")
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            MuxTvActionButton(
+                text = "Отклонить телефон",
+                onClick = { onDeny(fingerprint) },
+                modifier = Modifier.focusRequester(denyPhoneFocus)
+                    .testTag("local-tv-phone-consent-deny"),
+            )
+            MuxTvActionButton(
+                text = "Подтвердить отпечаток телефона",
+                onClick = { onApprove(fingerprint) },
+                modifier = Modifier.testTag("local-tv-phone-consent-approve"),
             )
         }
     }
