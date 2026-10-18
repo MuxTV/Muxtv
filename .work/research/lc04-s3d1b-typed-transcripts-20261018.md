@@ -62,9 +62,14 @@ The AES-GCM AAD input uses a distinct reverse-direction
 `MuxTV-LC04-TV-TO-PHONE-RECEIPT-v1\0` domain plus protocol
 magic/version, kind, all 4 context fields, counter, and request digest.
 The ciphertext is not in AAD because the GCM tag already authenticates it.
-The receiver **must** separately compare request_digest, TV/phone key pins,
-counter and session to its own outstanding signed request. An attacker-supplied
-digest is NEVER an authorization proof.
+The concrete `aadForOutstandingRequest(originalProbe, receipt)` gate now
+compares request_digest in constant time with SHA-256 of the caller's **exact
+canonical original signed probe**, including the Ed25519 signature, prefixed
+with a separate request-ID domain. It also compares both context IDs, both
+key fingerprints and the counter before releasing AAD for GCM verification.
+Changing the original probe signature, HPKE bytes or any context marker
+invalidates the gate. An attacker-supplied digest is NEVER an authorization
+proof; the phone must keep its own outstanding request bytes.
 
 The AES-GCM key and nonce derivation, unique-key use, IV uniqueness,
 expiry and replay guards are external requirements of the accepted #413
@@ -84,6 +89,8 @@ This payload codec does not generate or retain keys.
   and signature bytes.
 - Real JVM AES-256-GCM check accepts one original AAD context, but fails for
   any modified context, request digest, counter, nonce or ciphertext.
+- Receipt correlation rejects a forged reply referencing the wrong original
+  signed request even when the attacker controls all external frame fields.
 - Hostile fuzz corpus (2500 random opaque inputs) never crashes parsing
   or accepts a noncanonical encoding.
 - Only exact-HEAD GitHub-hosted JVM CI. No hardware requirement.
