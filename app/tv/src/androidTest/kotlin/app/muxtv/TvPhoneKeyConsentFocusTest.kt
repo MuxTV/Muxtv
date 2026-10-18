@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performClick
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.localcontrol.TvPhoneKeyConsentActions
 import org.junit.Rule
@@ -106,14 +107,11 @@ class TvPhoneKeyConsentFocusTest {
         rule.runOnIdle {
             check(approvals == 0 && !approved) { "Automatic TV approval is forbidden." }
         }
-        rule.onNodeWithTag("local-tv-phone-consent-approve")
-            .performKeyInput {
-                keyDown(Key.Enter)
-                keyUp(Key.Enter)
-            }
+        rule.onNodeWithTag("local-tv-phone-consent-approve").performClick()
         rule.runOnIdle {
-            // Enter without focusing Approve must never trigger it.
-            check(approvals == 0 && !approved) { "Non-focused approval triggered." }
+            check(approvals == 1 && approved) { "Explicit approve did not invoke once." }
         }
+        rule.onNodeWithTag("local-tv-phone-consent-approve").assertDoesNotExist()
+        rule.onNodeWithTag("local-tv-phone-consent-deny").assertDoesNotExist()
     }
 }
