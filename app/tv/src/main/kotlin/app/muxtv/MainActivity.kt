@@ -139,6 +139,10 @@ class MainActivity : ComponentActivity() {
                     },
                     revokePublicKeyQrPreview = pairingController::revokePublicKeyQrPreview,
                     publicKeyQrPreviewIsActive = pairingController::isPublicKeyQrPreviewActive,
+                    pendingPhonePublicKeyFingerprint =
+                        pairingController::pendingPhonePublicKeyFingerprint,
+                    approvePhonePublicKeyOnTv = pairingController::approvePhonePublicKeyOnTv,
+                    denyPhonePublicKeyOnTv = pairingController::denyPhonePublicKeyOnTv,
                     stopPhonePairing = ::stopPhonePairing,
                     pendingPhonePairing = { pairingController.pendingClaim() },
                     approvePhonePairing = pairingController::approve,

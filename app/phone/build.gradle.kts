@@ -14,6 +14,7 @@ android {
 
 dependencies {
     implementation(project(":local-control:qr-public"))
+    implementation(project(":local-control:enrollment"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)

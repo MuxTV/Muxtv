@@ -1,5 +1,6 @@
 package app.muxtv.localcontrol.tvqr
 
+import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
 import com.google.crypto.tink.HybridDecrypt
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.RegistryConfiguration
@@ -20,12 +21,14 @@ import java.util.Base64
  * close() releases references but cannot promise JVM heap zeroization of Tink key material.
  */
 class TvHpkeQrSession private constructor(
-    private var privateReceiver: KeysetHandle?,
+    @Volatile private var privateReceiver: KeysetHandle?,
     private val qr: String,
     private val fingerprint: String,
     private val createdAt: Long,
     val expiresAtElapsedMillis: Long,
 ) : AutoCloseable {
+    private var pendingPhoneEnrollment: TvPhoneEnrollment? = null
+
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
     @Synchronized
     fun presentation(nowElapsedMillis: Long): TvHpkeQrPresentation? {
@@ -37,8 +40,33 @@ class TvHpkeQrSession private constructor(
         return TvHpkeQrPresentation(qr, fingerprint, expiresAtElapsedMillis)
     }
 
+    /**
+     * The exact receiver that owns this public QR also owns the phone enrollment gate.
+     * A separate caller-supplied QR string cannot manufacture a TV-approved identity.
+     * This is intentionally NOT called by the legacy plaintext LAN server.
+     */
+    @Synchronized
+    fun phoneEnrollmentGate(elapsedMillis: () -> Long): TvPhoneEnrollment? {
+        if (presentation(elapsedMillis()) == null) return null
+        val existing = pendingPhoneEnrollment
+        if (existing != null) return existing
+        return TvPhoneEnrollment(
+            tvQr = qr,
+            elapsedMillis = elapsedMillis,
+            // Do not call a synchronized TV session method while holding the synchronized
+            // enrollment gate lock: session.close() takes locks in the opposite order.
+            tvReceiverIsAlive = {
+                val now = elapsedMillis()
+                privateReceiver != null &&
+                    now >= createdAt && now < expiresAtElapsedMillis
+            },
+        ).also { pendingPhoneEnrollment = it }
+    }
+
     @Synchronized
     override fun close() {
+        pendingPhoneEnrollment?.close()
+        pendingPhoneEnrollment = null
         privateReceiver = null
     }
 

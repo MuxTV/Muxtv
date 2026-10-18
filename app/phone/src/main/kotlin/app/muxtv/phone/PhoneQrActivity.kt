@@ -8,6 +8,7 @@ import android.util.Size
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,10 +19,12 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.qr.TvQrPublicKey
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Scan-only Android phone companion entry point.
@@ -32,8 +35,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PhoneQrActivity : ComponentActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val delivered = AtomicBoolean(false)
+    private val scanEpoch = AtomicLong(0)
     private var cameraProvider: ProcessCameraProvider? = null
     private var scanned: TvQrPublicKey? = null
+    private var phoneSigningIdentity: PhoneSigningIdentity? = null
     private var invalidNoticeSent = false
 
     private lateinit var preview: PreviewView
@@ -84,7 +89,10 @@ class PhoneQrActivity : ComponentActivity() {
             setText(R.string.scan_permission_button)
             setOnClickListener {
                 if (scanned != null) {
+                    phoneSigningIdentity?.close()
+                    phoneSigningIdentity = null
                     scanned = null
+                    scanEpoch.incrementAndGet()
                     delivered.set(false)
                     invalidNoticeSent = false
                     details.visibility = View.GONE
@@ -105,7 +113,11 @@ class PhoneQrActivity : ComponentActivity() {
         content.addView(retryButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(12) })
-        setContentView(content)
+        // Camera preview plus two long fingerprints must remain reachable on small phones.
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(content)
+        })
 
         if (hasCameraPermission()) retryButton.setText(R.string.scan_again)
     }
@@ -125,9 +137,11 @@ class PhoneQrActivity : ComponentActivity() {
 
         status.setText(R.string.scan_busy)
         retryButton.setText(R.string.scan_again)
+        val invocationEpoch = scanEpoch.get()
         val pending = ProcessCameraProvider.getInstance(this)
         pending.addListener({
             if (!hasCameraPermission() || scanned != null ||
+                scanEpoch.get() != invocationEpoch ||
                 !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@addListener
             try {
                 val provider = pending.get()
@@ -140,7 +154,7 @@ class PhoneQrActivity : ComponentActivity() {
                     .build()
                 analysis.setAnalyzer(cameraExecutor) { frame ->
                     try {
-                        if (delivered.get()) return@setAnalyzer
+                        if (scanEpoch.get() != invocationEpoch || delivered.get()) return@setAnalyzer
                         val plane = frame.planes.firstOrNull() ?: return@setAnalyzer
                         val bytes = ByteArray(plane.buffer.remaining())
                         plane.buffer.get(bytes)
@@ -154,7 +168,9 @@ class PhoneQrActivity : ComponentActivity() {
                             if (value.length > 900) return@setAnalyzer
                             val parsed = TvQrPublicKeyParser.parseOrNull(value)
                             if (parsed != null && delivered.compareAndSet(false, true)) {
-                                runOnUiThread { showScannedKey(parsed) }
+                                runOnUiThread {
+                                    if (scanEpoch.get() == invocationEpoch) showScannedKey(parsed)
+                                }
                             } else if (parsed == null && !invalidNoticeSent) {
                                 invalidNoticeSent = true
                                 runOnUiThread { status.setText(R.string.scan_not_supported) }
@@ -175,12 +191,27 @@ class PhoneQrActivity : ComponentActivity() {
     }
 
     private fun showScannedKey(key: TvQrPublicKey) {
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            delivered.set(false)
+            return
+        }
+        // No phone key or IPTV data is sent over legacy HTTP. The signing
+        // identity will be used only by a future reviewed protected transport.
+        val identity = try {
+            PhoneSigningIdentity.generate()
+        } catch (_: Exception) {
+            delivered.set(false)
+            status.setText(R.string.scan_signing_key_error)
+            return
+        }
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = identity
         scanned = key
         cameraProvider?.unbindAll()
         status.setText(R.string.scan_found)
         details.text = listOf(
             getString(R.string.scan_fingerprint, key.fingerprint),
+            getString(R.string.scan_phone_fingerprint, identity.fingerprint),
             getString(R.string.scan_invitation, key.invitationId),
             getString(R.string.scan_pairing, key.pairingId),
             getString(R.string.scan_warning),
@@ -191,12 +222,21 @@ class PhoneQrActivity : ComponentActivity() {
 
     override fun onStop() {
         cameraProvider?.unbindAll()
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = null
+        // Do not retain obsolete phone key material across foreground lifecycles.
+        scanned = null
+        scanEpoch.incrementAndGet()
+        delivered.set(false)
+        if (::details.isInitialized) details.visibility = View.GONE
         super.onStop()
     }
 
     override fun onDestroy() {
         cameraProvider?.unbindAll()
         cameraExecutor.shutdownNow()
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = null
         scanned = null
         super.onDestroy()
     }
