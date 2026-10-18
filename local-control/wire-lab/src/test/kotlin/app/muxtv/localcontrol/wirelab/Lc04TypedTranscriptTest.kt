@@ -118,11 +118,15 @@ class Lc04TypedTranscriptTest {
         val canonical = Lc04TypedTranscript.probeSigningStatement(frame, body)
         assertThat(canonical).isEqualTo(statement)
 
-        fun verified(otherFrame: Lc04WireFrame, otherBody: Lc04ProbeBody): Boolean {
+        fun verified(otherFrame: Lc04WireFrame, otherBody: Lc04ProbeBody): Boolean = try {
             val verify = Signature.getInstance("Ed25519")
             verify.initVerify(keys.public)
             verify.update(Lc04TypedTranscript.probeSigningStatement(otherFrame, otherBody))
-            return verify.verify(otherBody.signature())
+            verify.verify(otherBody.signature())
+        } catch (_: java.security.GeneralSecurityException) {
+            // Ed25519 providers may throw SignatureException on malformed input,
+            // instead of returning false. Both must be treated as rejection.
+            false
         }
         assertThat(verified(frame, body)).isTrue()
         val alternatives = listOf(
