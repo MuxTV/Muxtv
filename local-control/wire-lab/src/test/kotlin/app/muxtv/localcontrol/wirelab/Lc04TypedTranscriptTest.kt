@@ -199,10 +199,10 @@ class Lc04TypedTranscriptTest {
         assertThat(body.signature()).isNotEqualTo(copy)
         assertThat(body.toString()).contains("[REDACTED]")
         val nonce = ByteArray(12) { 12 }
-        val receipt = Lc04ReceiptBody(3, ByteArray(32), nonce, ByteArray(17))
+        val replyBody = Lc04ReceiptBody(3, ByteArray(32), nonce, ByteArray(17))
         nonce.fill(0)
-        assertThat(receipt.iv()).isNotEqualTo(nonce)
-        assertThat(Lc04TypedWire.decodeProbeFrame(receipt(receipt))).isNull()
+        assertThat(replyBody.iv()).isNotEqualTo(nonce)
+        assertThat(Lc04TypedWire.decodeProbeFrame(receipt(replyBody))).isNull()
         assertThat(Lc04TypedWire.decodeReceiptFrame(probe(body))).isNull()
     }
 
