@@ -186,6 +186,50 @@ class Lc04TypedTranscriptTest {
         ))
     }
 
+    @Test fun reverseAuthenticatedAadRequiresExactOutstandingSignedProbeNotClaimedDigest() {
+        val originalBody = Lc04ProbeBody(9, ByteArray(90) { (it + 7).toByte() },
+            ByteArray(64) { (it * 11).toByte() })
+        val original = probe(originalBody)
+        val actualId = Lc04TypedTranscript.originalSignedRequestDigest(original)
+        assertThat(actualId.size).isEqualTo(32)
+        val responseBody = Lc04ReceiptBody(9, actualId, ByteArray(12) { 4 },
+            ByteArray(40) { 5 })
+        val response = receipt(responseBody)
+        val checkedAad = Lc04TypedTranscript.aadForOutstandingRequest(original, response)
+        assertThat(checkedAad).isNotNull()
+        assertThat(checkedAad).isEqualTo(
+            Lc04TypedTranscript.receiptAad(response, responseBody),
+        )
+        val mutationCases = listOf(
+            probe(originalBody, invitation = flipped(invite)),
+            probe(originalBody, pairingId = flipped(pairing)),
+            probe(originalBody, tvFingerprint = flipped(tv)),
+            probe(originalBody, phoneFingerprint = flipped(phone)),
+            probe(Lc04ProbeBody(10, originalBody.ciphertext(), originalBody.signature())),
+            probe(Lc04ProbeBody(9, flipped(originalBody.ciphertext()), originalBody.signature())),
+            probe(Lc04ProbeBody(9, originalBody.ciphertext(), flipped(originalBody.signature()))),
+        )
+        for (alteredOriginal in mutationCases) {
+            assertThat(Lc04TypedTranscript.originalSignedRequestDigest(alteredOriginal))
+                .isNotEqualTo(actualId)
+            assertThat(Lc04TypedTranscript.aadForOutstandingRequest(alteredOriginal, response))
+                .isNull()
+        }
+        for (alteredReceipt in listOf(
+            receipt(responseBody, invitation = flipped(invite)),
+            receipt(responseBody, pairingId = flipped(pairing)),
+            receipt(responseBody, tvFingerprint = flipped(tv)),
+            receipt(responseBody, phoneFingerprint = flipped(phone)),
+            receipt(Lc04ReceiptBody(10, actualId, ByteArray(12) { 4 }, ByteArray(40) { 5 })),
+            receipt(Lc04ReceiptBody(9, flipped(actualId), ByteArray(12) { 4 }, ByteArray(40) { 5 })),
+        )) {
+            assertThat(Lc04TypedTranscript.aadForOutstandingRequest(original, alteredReceipt))
+                .isNull()
+        }
+        assertThat(Lc04TypedTranscript.aadForOutstandingRequest(response, original)).isNull()
+        assertThat(Lc04TypedTranscript.aadForOutstandingRequest(original, original)).isNull()
+    }
+
     @Test fun inputAliasingAndWrongFrameTypeAreRejected() {
         val sig = ByteArray(64) { 8 }
         val cipher = ByteArray(19) { 9 }
