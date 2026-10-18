@@ -40,8 +40,10 @@ class LabCanonicalTypedCryptoRoundTripTest {
         val secret: ByteArray,
         val challenge: ByteArray,
         val signedRequestBytes: ByteArray,
+        approvedKeyBytes: ByteArray,
+        val approvedPhoneFingerprint: String,
     ) {
-        val approvedPublicKey: ByteArray = phoneIdentity.publicKeyBytes()
+        val approvedPublicKey: ByteArray = approvedKeyBytes.clone()
 
         fun tvReply(inboundBytes: ByteArray): ByteArray? {
             // Only decoded bytes are received from the hostile byte relay.
@@ -50,7 +52,7 @@ class LabCanonicalTypedCryptoRoundTripTest {
                 !MessageDigest.isEqual(frame.tvInvitationId(), hex(binding.tvInvitationId)) ||
                 !MessageDigest.isEqual(frame.tvPairingId(), hex(binding.approvedPairingId)) ||
                 !MessageDigest.isEqual(frame.tvHpkeFingerprint(), hex(tvFingerprint)) ||
-                !MessageDigest.isEqual(frame.phoneKeyFingerprint(), hex(phoneIdentity.fingerprint))
+                !MessageDigest.isEqual(frame.phoneKeyFingerprint(), hex(approvedPhoneFingerprint))
             ) return null
             val body = Lc04TypedWire.decodeProbeFrame(frame) ?: return null
 
@@ -141,8 +143,9 @@ class LabCanonicalTypedCryptoRoundTripTest {
         val enrollment = LabTvPhoneEnrollment(binding, tvFingerprint, elapsedMillis = { 1_000 })
         val nonce = enrollment.beginEnrollment(identity.publicKeyBytes())
         assertThat(enrollment.approveOnTv(identity.fingerprint)).isTrue()
-        assertThat(enrollment.verifyProof(identity.sign(binding, tvFingerprint, nonce)))
-            .isInstanceOf(LabEnrollmentOutcome.ProofVerified::class.java)
+        val approved = enrollment.verifyProof(identity.sign(binding, tvFingerprint, nonce))
+            as LabEnrollmentOutcome.ProofVerified
+        assertThat(approved.approvedPhoneFingerprint).isEqualTo(identity.fingerprint)
 
         val secret = ByteArray(32).also(random::nextBytes)
         val challenge = ByteArray(16).also(random::nextBytes)
@@ -167,7 +170,8 @@ class LabCanonicalTypedCryptoRoundTripTest {
             Lc04TypedWire.encodeProbe(Lc04ProbeBody(hpke.counter, hpke.bytes, signature)),
         )
         return Fixture(identity, receiver, binding, tvFingerprint,
-            secret, challenge, Lc04WireLab.encode(signed))
+            secret, challenge, Lc04WireLab.encode(signed),
+            approved.publicKeyBytes, approved.approvedPhoneFingerprint)
     }
 
     @Test fun canonicalSignedWireAndReverseAadAuthenticateOnBothEnds() {
