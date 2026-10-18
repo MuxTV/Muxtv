@@ -50,7 +50,7 @@ class LabBinding(
     override fun toString(): String = "LabBinding([REDACTED])"
 }
 
-enum class LabOperation { SOURCE_PREPARE, SOURCE_ACTIVATE, SOURCE_CANCEL }
+enum class LabOperation { SOURCE_PREPARE, SOURCE_ACTIVATE, SOURCE_CANCEL, CHANNEL_PROBE }
 
 class LabCiphertext(
     val operation: LabOperation,
