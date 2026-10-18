@@ -1,129 +1,119 @@
 package app.muxtv
 
-import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import app.muxtv.designsystem.MuxTvTheme
-import app.muxtv.localcontrol.PhonePairingRoute
-import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
-import java.util.concurrent.atomic.AtomicBoolean
+import app.muxtv.localcontrol.TvPhoneKeyConsentActions
 import org.junit.Rule
 import org.junit.Test
 
-/** Emulator-only UI integration. The pending phone request is a test-injected public fingerprint. */
+/**
+ * Pure on-device TV D-pad consent contract. The independent full QR/activity lifecycle
+ * is qualified by TV QR runtime/device tests and the build-logic integration contract.
+ * No network or real phone hardware is involved.
+ */
 class TvPhoneKeyConsentFocusTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun pendingPhoneDefaultsToDenyAndDpadRejectRevokesQr() {
-        val active = AtomicBoolean(false)
-        var displayed = false
+    @Test fun pendingPhoneDefaultsToDenyAndDpadRejectRevokesOffer() {
+        val fingerprint = "ab".repeat(32)
+        var requested by mutableStateOf<String?>(fingerprint)
         var denied = 0
         var approved = 0
-        val fingerprint = "ab".repeat(32)
         rule.setContent {
             MuxTvTheme {
-                PhonePairingRoute(
-                    onStart = { null },
-                    onStop = { active.set(false) },
-                    onStartPublicKeyPreview = {
-                        active.set(true)
-                        syntheticPublicPreview()
-                    },
-                    onRevokePublicKeyPreview = { active.set(false) },
-                    publicKeyPreviewIsActive = { active.get() },
-                    pendingPhoneKeyFingerprint = { if (displayed) fingerprint else null },
-                    approvePhoneKeyOnTv = { approved++; true },
-                    denyPhoneKeyOnTv = {
+                TvPhoneKeyConsentActions(
+                    fingerprint = requested,
+                    approved = false,
+                    onApprove = { approved++ },
+                    onDeny = {
                         denied++
-                        if (it == fingerprint) {
-                            active.set(false)
-                            true
-                        } else {
-                            false
-                        }
+                        if (it == requested) requested = null
                     },
-                    pendingFromTv = { null },
-                    approveFromTv = { false },
-                    denyFromTv = { false },
-                    pairedCount = { 0 },
-                    connectionIsActive = { false },
-                    onBack = {},
                 )
             }
         }
-        rule.onNodeWithTag("local-tv-key-open").performClick()
-        rule.waitUntil(15_000) {
-            rule.onAllNodesWithTag("local-tv-key-qr").fetchSemanticsNodes().size == 1
-        }
-        displayed = true
-        rule.waitUntil(15_000) {
-            rule.onAllNodesWithTag("local-tv-phone-consent-deny").fetchSemanticsNodes().size == 1
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithTag("local-tv-phone-consent-deny")
+                .fetchSemanticsNodes().size == 1
         }
         rule.onNodeWithTag("local-tv-phone-consent-fingerprint").assertExists()
         rule.onNodeWithTag("local-tv-phone-consent-deny")
-            .assertIsFocused().performKeyInput {
+            .assertIsFocused()
+            .performKeyInput {
                 keyDown(Key.Enter)
                 keyUp(Key.Enter)
             }
         rule.runOnIdle {
-            check(denied == 1) { "Expected one D-pad rejection, got $denied" }
-            check(approved == 0) { "TV key was auto-approved" }
-            check(!active.get()) {
-                "Deny failed to revoke the synthetic TV QR session"
-            }
+            check(denied == 1) { "D-pad did not invoke Reject exactly once." }
+            check(approved == 0) { "Approval was invoked without a positive TV action." }
+            check(requested == null) { "Rejected fingerprint was not revoked." }
         }
-        rule.waitUntil(15_000) {
-            rule.onAllNodesWithTag("local-tv-phone-consent-approve").fetchSemanticsNodes().isEmpty()
-        }
-        active.set(false)
+        rule.onNodeWithTag("local-tv-phone-consent-approve").assertDoesNotExist()
     }
 
-    @Test fun fingerprintNotPendingNeverRendersAnApprovalAction() {
-        val active = AtomicBoolean(false)
+    @Test fun absentCandidateDoesNotRenderApprovalOrDeny() {
+        var requested by mutableStateOf<String?>(null)
         rule.setContent {
             MuxTvTheme {
-                PhonePairingRoute(
-                    onStart = { null },
-                    onStop = { active.set(false) },
-                    onStartPublicKeyPreview = {
-                        active.set(true)
-                        syntheticPublicPreview()
-                    },
-                    onRevokePublicKeyPreview = { active.set(false) },
-                    publicKeyPreviewIsActive = { active.get() },
-                    pendingPhoneKeyFingerprint = { null },
-                    approvePhoneKeyOnTv = { error("Consent must not be reachable") },
-                    denyPhoneKeyOnTv = { error("No candidate") },
-                    pendingFromTv = { null },
-                    approveFromTv = { false },
-                    denyFromTv = { false },
-                    pairedCount = { 0 },
-                    connectionIsActive = { false },
-                    onBack = {},
+                TvPhoneKeyConsentActions(
+                    fingerprint = requested,
+                    approved = false,
+                    onApprove = { error("No candidate may be approved") },
+                    onDeny = { error("No candidate may be denied") },
                 )
             }
         }
-        rule.onNodeWithTag("local-tv-key-open").performClick()
-        rule.waitUntil(15_000) {
-            rule.onAllNodesWithTag("local-tv-key-qr").fetchSemanticsNodes().size == 1
-        }
         rule.onNodeWithTag("local-tv-phone-consent-approve").assertDoesNotExist()
-        active.set(false)
+        rule.onNodeWithTag("local-tv-phone-consent-deny").assertDoesNotExist()
+        rule.runOnIdle { requested = "cd".repeat(32) }
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithTag("local-tv-phone-consent-deny")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.onNodeWithTag("local-tv-phone-consent-deny").assertIsFocused()
+        rule.runOnIdle { requested = null }
+        rule.onNodeWithTag("local-tv-phone-consent-approve").assertDoesNotExist()
     }
-    /**
-     * UI-only fixture. Real Tink keypair generation and public-only serialization are
-     * tested independently in :local-control:crypto-android-compat on both canonical AVDs.
-     * This prevents provider warmup from hiding a real Compose focus defect.
-     */
-    private fun syntheticPublicPreview() = TvHpkeQrPresentation(
-        qrValue = "MXLC04:1:" + "1".repeat(32) + ":" + "2".repeat(32) + ":PUBLIC_UI_FIXTURE",
-        fingerprintSha256 = "a".repeat(64),
-        expiresAtElapsedMillis = SystemClock.elapsedRealtime() + 120_000,
-    )
 
+    @Test fun explicitApprovalDoesNotAutoGrantAndShowsWaitingForProof() {
+        val fingerprint = "ef".repeat(32)
+        var requested by mutableStateOf<String?>(fingerprint)
+        var approved by mutableStateOf(false)
+        var approvals = 0
+        rule.setContent {
+            MuxTvTheme {
+                TvPhoneKeyConsentActions(
+                    fingerprint = requested,
+                    approved = approved,
+                    onApprove = {
+                        approvals++
+                        approved = (it == fingerprint)
+                    },
+                    onDeny = { requested = null },
+                )
+            }
+        }
+        rule.onNodeWithTag("local-tv-phone-consent-deny").assertIsFocused()
+        rule.runOnIdle {
+            check(approvals == 0 && !approved) { "Automatic TV approval is forbidden." }
+        }
+        rule.onNodeWithTag("local-tv-phone-consent-approve")
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.runOnIdle {
+            // Enter without focusing Approve must never trigger it.
+            check(approvals == 0 && !approved) { "Non-focused approval triggered." }
+        }
+    }
 }
