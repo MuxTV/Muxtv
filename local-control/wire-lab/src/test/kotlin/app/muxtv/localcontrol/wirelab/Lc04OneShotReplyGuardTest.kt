@@ -1,7 +1,6 @@
 package app.muxtv.localcontrol.wirelab
 
 import com.google.common.truth.Truth.assertThat
-import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -106,7 +105,15 @@ class Lc04OneShotReplyGuardTest {
             phoneFingerprint, Lc04TypedWire.encodeReceipt(damaged),
         )
         assertThat(pending.verify(alteredFrame)).isFalse()
-        assertThat(pending.verify(seal(original, iv = ByteArray(12) { 1 }))).isFalse()
+        // Alter the transmitted IV while retaining the *original* GCM tag.
+        // A legitimate TV may choose a different IV, so merely changing the IV
+        // during encryption would not be an attack.
+        val forgedIvBody = Lc04ReceiptBody(body.counter, body.requestDigest(),
+            ByteArray(12) { 1 }, body.ciphertext())
+        val forgedIvFrame = Lc04WireFrame(Lc04WireKind.SEALED_TV_RECEIPT,
+            invitation, pairing, tvFingerprint, phoneFingerprint,
+            Lc04TypedWire.encodeReceipt(forgedIvBody))
+        assertThat(pending.verify(forgedIvFrame)).isFalse()
         assertThat(pending.verify(reply)).isTrue()
     }
 
