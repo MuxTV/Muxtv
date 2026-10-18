@@ -59,6 +59,25 @@ TV app and LAN server gain **no dependency** on this research module.
 7. Truncated/overlong incoming frame or receipt is rejected without any
    fallback to a plaintext browser path.
 
+## Canonical transcript integration — additional JDK crypto regression
+
+`LabCanonicalTypedCryptoRoundTripTest` is a separate second test seam. It
+uses the **actual #415 canonical binary Ed25519 signing statement**, rather
+than #413's older lab envelope statement. The phone signs this precise
+binary statement; the simulated TV reconstructs the statement from bytes
+and verifies the signature with the TV-approved phone public key BEFORE
+Tink HPKE decryption. After decrypting the challenge/key, TV constructs a
+real AES-256-GCM receipt with #415's **reverse-direction receipt AAD** and
+the full original signed-probe SHA256 request ID. The phone uses
+`aadForOutstandingRequest` against the original locally held signed
+request before AES-GCM tag and challenge verification.
+
+It exercises tampering of source IDs, sender/counter, ciphertext and signed
+bytes, as well as changed reply digest, IV and authentication tag. This
+closes the **laboratory transcript-format mismatch** for the independently
+tested canonical path without changing/claiming production JDK or Android
+enrollment, wire routing or network transport.
+
 ## Explicit limitation — do not overstate protocol security
 
 #413's JDK17 `LabSignedHpkeEnvelope` and `LabAuthenticatedTvReply` use
