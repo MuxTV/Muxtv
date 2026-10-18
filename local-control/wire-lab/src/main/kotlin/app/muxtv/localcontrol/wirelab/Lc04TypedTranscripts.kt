@@ -1,5 +1,7 @@
 package app.muxtv.localcontrol.wirelab
 
+import java.security.MessageDigest
+
 /**
  * LC04-S3-D1B research only: strictly typed payloads and unambiguous crypto inputs.
  *
@@ -144,6 +146,8 @@ object Lc04TypedWire {
 object Lc04TypedTranscript {
     private val probeDomain = "MuxTV-LC04-PHONE-TO-TV-PROBE-v1\u0000".toByteArray(Charsets.US_ASCII)
     private val replyDomain = "MuxTV-LC04-TV-TO-PHONE-RECEIPT-v1\u0000".toByteArray(Charsets.US_ASCII)
+    private val requestIdDomain = "MuxTV-LC04-ORIGINAL-SIGNED-PROBE-v1\u0000"
+        .toByteArray(Charsets.US_ASCII)
     private val marker = byteArrayOf(0x4d, 0x58, 0x57, 0x31, 1) // MXW1 + version
 
     fun probeSigningStatement(frame: Lc04WireFrame, body: Lc04ProbeBody): ByteArray {
@@ -171,6 +175,51 @@ object Lc04TypedTranscript {
         return replyDomain + commonContext(frame) +
             byteArrayOf((body.counter ushr 8).toByte(), body.counter.toByte()) +
             body.requestDigest()
+    }
+
+    /**
+     * Compute the request ID from the EXACT canonical signed probe, including its
+     * Ed25519 signature. Never accept an attacker-supplied claimed request digest.
+     */
+    fun originalSignedRequestDigest(originalProbe: Lc04WireFrame): ByteArray {
+        require(originalProbe.kind == Lc04WireKind.SIGNED_CHANNEL_PROBE)
+        require(Lc04TypedWire.decodeProbeFrame(originalProbe) != null) {
+            "The original signed probe must have a canonical typed body."
+        }
+        val serialized = Lc04WireLab.encode(originalProbe)
+        val full = requestIdDomain + serialized
+        return MessageDigest.getInstance("SHA-256").digest(full)
+    }
+
+    /**
+     * Bind the TV receipt to the caller's OWN outstanding signed request before
+     * attempting AES-GCM verification. A syntactically valid receipt from another
+     * TV, phone, activation, operation or counter MUST be rejected even if a
+     * hostile LAN node chooses self-consistent outer fields.
+     *
+     * This is context matching, NOT actual Ed25519 or AES-GCM authentication.
+     * Callers must still verify the signed request and AEAD tag and enforce
+     * nonce uniqueness / expiry / replay protections independently.
+     */
+    fun aadForOutstandingRequest(
+        originalProbe: Lc04WireFrame,
+        receiptFrame: Lc04WireFrame,
+    ): ByteArray? {
+        if (originalProbe.kind != Lc04WireKind.SIGNED_CHANNEL_PROBE ||
+            receiptFrame.kind != Lc04WireKind.SEALED_TV_RECEIPT
+        ) return null
+        val request = Lc04TypedWire.decodeProbeFrame(originalProbe) ?: return null
+        val reply = Lc04TypedWire.decodeReceiptFrame(receiptFrame) ?: return null
+        if (request.counter != reply.counter) return null
+        if (!MessageDigest.isEqual(originalProbe.tvInvitationId(), receiptFrame.tvInvitationId()) ||
+            !MessageDigest.isEqual(originalProbe.tvPairingId(), receiptFrame.tvPairingId()) ||
+            !MessageDigest.isEqual(originalProbe.tvHpkeFingerprint(), receiptFrame.tvHpkeFingerprint()) ||
+            !MessageDigest.isEqual(originalProbe.phoneKeyFingerprint(), receiptFrame.phoneKeyFingerprint())
+        ) return null
+        if (!MessageDigest.isEqual(originalSignedRequestDigest(originalProbe), reply.requestDigest())) {
+            return null
+        }
+        return receiptAad(receiptFrame, reply)
     }
 
     private fun commonContext(frame: Lc04WireFrame): ByteArray =
