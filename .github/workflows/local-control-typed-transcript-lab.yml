@@ -1,0 +1,57 @@
+name: LC04 typed transcripts laboratory
+
+on:
+  pull_request:
+    branches:
+      - main
+      - research/401-lc04-bounded-wire-20261018
+    paths:
+      - '.github/workflows/local-control-typed-transcript-lab.yml'
+      - 'local-control/wire-lab/**'
+      - 'settings.gradle.kts'
+      - '.work/meta/modules.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-typed-transcript-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  signed-contexts:
+    name: Canonical typed signed request and AEAD response JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact source HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Confirm exact tested HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Test strict typed wire and crypto-binding attack cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:wire-lab:test --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload bounded, secret-free test XML
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-typed-transcripts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/wire-lab/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
