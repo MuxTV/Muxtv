@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performClick
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.localcontrol.TvPhoneKeyConsentActions
 import org.junit.Rule
@@ -106,9 +105,19 @@ class TvPhoneKeyConsentFocusTest {
         rule.runOnIdle {
             check(approvals == 0 && !approved) { "Automatic TV approval is forbidden." }
         }
-        rule.onNodeWithTag("local-tv-phone-consent-approve").performClick()
+        // androidx.tv.material3.Button requires TV focus for D-pad activation.
+        // Semantics performClick() on an unfocused TV control is NOT a real remote action.
+        rule.onNodeWithTag("local-tv-phone-consent-deny").performKeyInput {
+            keyDown(Key.DirectionRight)
+            keyUp(Key.DirectionRight)
+        }
+        rule.onNodeWithTag("local-tv-phone-consent-approve").assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
         rule.runOnIdle {
-            check(approvals == 1 && approved) { "Explicit approve did not invoke once." }
+            check(approvals == 1 && approved) { "D-pad approve did not invoke exactly once." }
         }
         rule.onNodeWithTag("local-tv-phone-consent-approve").assertDoesNotExist()
         rule.onNodeWithTag("local-tv-phone-consent-deny").assertDoesNotExist()
