@@ -40,12 +40,12 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-      - name: Test strict typed wire and crypto-binding attack cases
+      - name: Test typed crypto binding and compile real Android app consumers
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew :local-control:wire-lab:test --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew :local-control:wire-lab:test :app:tv:compileDebugKotlin :app:phone:assembleDebug --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload bounded, secret-free test XML
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
