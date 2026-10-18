@@ -70,6 +70,10 @@ actual_modules:
     gradle_path: :local-control:tv-qr
     type: pure_kotlin_library
     owns: [ephemeral_tv_hpke_receiver, public_only_canonical_qr_preview, local_key_revocation]
+  local-control-wire-lab:
+    gradle_path: :local-control:wire-lab
+    type: pure_kotlin_library
+    owns: [bounded_binary_enrollment_probe_reply_framing, hostile_input_corpus, no_authority_semantics]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
