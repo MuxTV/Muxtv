@@ -343,11 +343,15 @@ fun PhonePairingRoute(
                 if (keyPreviewError) {
                     Text("Не удалось подготовить публичный ключ. Повторите попытку.")
                 }
-                MuxTvActionButton(
-                    text = "Показать QR публичного ключа (предпросмотр)",
-                    onClick = ::showPublicKeyPreview,
-                    modifier = Modifier.testTag("local-tv-key-open"),
-                )
+                // The startup pairing lifecycle must finish before a second preview is
+                // allowed. Otherwise the initial restart() can revoke a newly shown QR.
+                if (!loading) {
+                    MuxTvActionButton(
+                        text = "Показать QR публичного ключа (предпросмотр)",
+                        onClick = ::showPublicKeyPreview,
+                        modifier = Modifier.testTag("local-tv-key-open"),
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             MuxTvActionButton(
