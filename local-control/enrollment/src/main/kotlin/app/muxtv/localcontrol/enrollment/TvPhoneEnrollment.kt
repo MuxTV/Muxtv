@@ -100,6 +100,7 @@ class TvPhoneEnrollment(
     @Synchronized
     fun verifyPublicProof(wire: ByteArray): PhoneEnrollmentResult {
         if (!live()) return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.EXPIRED_OR_REVOKED)
+        if (redeemed) return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.REPLAYED)
         val fingerprint = pendingFingerprintForTv()
             ?: return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.EXPIRED_OR_REVOKED)
         val signed = Lc04PublicEnrollmentWire.decodeProofForTv(
