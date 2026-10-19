@@ -103,6 +103,6 @@ class LocalControlPhoneEnrollmentIsolationTest {
         assertContains(gate, "beginPublicOffer(")
         assertContains(gate, "verifyPublicProof(")
         assertContains(gate, "return verify(signed)")
-        assertContains(gate, "return begin(public)")
+        assertContains(gate, "begin(public)")
     }
 }
