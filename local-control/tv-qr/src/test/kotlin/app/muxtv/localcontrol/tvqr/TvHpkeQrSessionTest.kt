@@ -1,5 +1,7 @@
 package app.muxtv.localcontrol.tvqr
 
+import app.muxtv.localcontrol.enrollment.PhoneEnrollmentResult
+import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import com.google.common.truth.Truth.assertThat
 import app.muxtv.localcontrol.cryptolab.LabTvQrKeyBinding
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
@@ -91,4 +93,33 @@ class TvHpkeQrSessionTest {
         closed.close()
         assertThat(closed.presentation(1L)).isNull()
     }
+    @Test fun enrollmentGateIsOwnedByOriginalEphemeralReceiverAndRevokedOnClose() {
+        var now = 1_000L
+        val session = TvHpkeQrSession.create(now)
+        val publicQr = session.presentation(now)!!.qrValue
+        val gate = session.phoneEnrollmentGate({ now })!!
+        assertThat(session.phoneEnrollmentGate({ now })).isSameInstanceAs(gate)
+        val phone = PhoneSigningIdentity.generate()
+        val challenge = gate.begin(phone.publicKeysetBytes())!!
+        assertThat(gate.approveOnTv(phone.fingerprint)).isTrue()
+        val signed = phone.prove(app.muxtv.localcontrol.qr.TvQrPublicKeyParser.parse(publicQr), challenge)
+        session.close()
+        assertThat(gate.verify(signed))
+            .isInstanceOf(PhoneEnrollmentResult.Denied::class.java)
+        assertThat(session.phoneEnrollmentGate({ now })).isNull()
+        phone.close()
+    }
+
+    @Test fun expirationRevokesPendingPhoneEnrollmentWithoutIndependentClockEscape() {
+        var now = 1_000L
+        val session = TvHpkeQrSession.create(now)
+        val gate = session.phoneEnrollmentGate({ now })!!
+        val phone = PhoneSigningIdentity.generate()
+        val nonce = gate.begin(phone.publicKeysetBytes())
+        assertThat(nonce).isNotNull()
+        now += TvHpkeQrSession.TTL_MILLIS
+        assertThat(gate.pendingFingerprintForTv()).isNull()
+        assertThat(session.phoneEnrollmentGate({ now })).isNull()
+    }
+
 }

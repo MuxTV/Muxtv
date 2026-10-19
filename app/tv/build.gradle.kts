@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":core:credentials"))
     implementation(project(":local-control:server"))
     implementation(project(":local-control:tv-qr"))
+    implementation(project(":local-control:enrollment"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:network"))

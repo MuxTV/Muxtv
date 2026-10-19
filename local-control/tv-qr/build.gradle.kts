@@ -2,6 +2,7 @@ plugins { id("muxtv.kotlin.library") }
 
 dependencies {
     implementation(libs.tink)
+    implementation(project(":local-control:enrollment"))
     testImplementation(libs.junit)
     testImplementation(libs.truth)
     testImplementation(project(":local-control:crypto-lab"))

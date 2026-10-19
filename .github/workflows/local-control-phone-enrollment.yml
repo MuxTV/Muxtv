@@ -1,0 +1,65 @@
+name: Local Control phone Ed25519 enrollment
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/local-control-phone-enrollment.yml'
+      - 'local-control/enrollment/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/qr-public/**'
+      - 'settings.gradle.kts'
+      - '.work/meta/modules.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-phone-enrollment-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  enrollment:
+    name: TV-approved phone enrollment JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Require exact tested HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Test enrollment, lifecycle and compile TV/phone apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:enrollment:test :local-control:tv-qr:test \
+            :app:tv:compileDebugKotlin :app:phone:assembleDebug \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Upload secret-free test XML
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-phone-enrollment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/enrollment/build/test-results/test/**
+            local-control/tv-qr/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
