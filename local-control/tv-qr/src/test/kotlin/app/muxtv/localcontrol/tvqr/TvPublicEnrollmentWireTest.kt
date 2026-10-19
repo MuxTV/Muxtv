@@ -56,12 +56,8 @@ class TvPublicEnrollmentWireTest {
             val bad = offer.clone()
             val i = if (offset < 0) bad.lastIndex else offset
             bad[i] = (bad[i].toInt() xor 1).toByte()
-            val gate = TvHpkeQrSession.create(10L).let {
-                // Different original TV QR always rejects even perfectly
-                // framed but cross-session public offers.
-                it.phoneEnrollmentGate({ 10L })!!
-            }
-            assertThat(gate.beginPublicOffer(bad)).isNull()
+            val actualGate = tv.phoneEnrollmentGate({ 10L })!!
+            assertThat(actualGate.beginPublicOffer(bad)).isNull()
         }
         val otherGate = other.phoneEnrollmentGate({ 10L })!!
         assertThat(otherGate.beginPublicOffer(offer)).isNull()
