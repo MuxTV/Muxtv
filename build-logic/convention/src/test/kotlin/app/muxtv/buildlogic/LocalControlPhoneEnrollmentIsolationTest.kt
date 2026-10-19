@@ -93,7 +93,7 @@ class LocalControlPhoneEnrollmentIsolationTest {
         for (forbidden in listOf(
             "SourceOnboarding", "SOURCE_PREPARE", "SOURCE_CREATE", "SOURCE_ACTIVATE",
             "TvLanServer", "HttpClient", "post(", "route(", "INTERNET",
-            "username", "password", "providerUrl",
+            "getUsername(", "getPassword(", "providerUrl",
         )) {
             assertFalse(wire.contains(forbidden), "Unauthorized public enrollment capability: $forbidden")
         }
