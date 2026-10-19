@@ -81,4 +81,28 @@ class LocalControlPhoneEnrollmentIsolationTest {
         assertContains(controller, "gate.pendingFingerprintForTv() != exactVisibleFingerprint")
         assertContains(controller, "revokePublicKeyQrPreview()")
     }
+
+    @Test fun `public enrollment framing cannot become a provider or HTTP transport`() {
+        val wire = root.resolve(
+            "local-control/enrollment/src/main/kotlin/app/muxtv/localcontrol/enrollment/Lc04PublicEnrollmentWire.kt",
+        ).readText()
+        assertContains(wire, "PHONE_PUBLIC_KEY")
+        assertContains(wire, "TV_CHALLENGE")
+        assertContains(wire, "PHONE_PROOF")
+        assertContains(wire, "MessageDigest.isEqual")
+        for (forbidden in listOf(
+            "SourceOnboarding", "SOURCE_PREPARE", "SOURCE_CREATE", "SOURCE_ACTIVATE",
+            "TvLanServer", "HttpClient", "post(", "route(", "INTERNET",
+            "username", "password", "providerUrl",
+        )) {
+            assertFalse(wire.contains(forbidden), "Unauthorized public enrollment capability: $forbidden")
+        }
+        val gate = root.resolve(
+            "local-control/enrollment/src/main/kotlin/app/muxtv/localcontrol/enrollment/TvPhoneEnrollment.kt",
+        ).readText()
+        assertContains(gate, "beginPublicOffer(")
+        assertContains(gate, "verifyPublicProof(")
+        assertContains(gate, "return verify(signed)")
+        assertContains(gate, "return begin(public)")
+    }
 }
