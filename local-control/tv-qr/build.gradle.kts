@@ -7,6 +7,7 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(project(":local-control:crypto-lab"))
     testImplementation(project(":local-control:qr-public"))
+    testImplementation(project(":local-control:wire-lab"))
 }
 
 tasks.test { useJUnit() }
