@@ -1,0 +1,63 @@
+name: LC04 native protected probe exact HEAD
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feat/401-lc04-public-enrollment-wire-20261019
+    paths:
+      - '.github/workflows/local-control-native-duplex-probe.yml'
+      - 'local-control/enrollment/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/wire-lab/**'
+      - 'local-control/crypto-android-compat/**'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-native-duplex-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  protected-probe:
+    name: Native QR-approved Tink HPKE signed duplex JVM and apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact source SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Assert tested SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Run native two-sided Tink/AEAD tests and Android compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:enrollment:test :local-control:tv-qr:test \
+            :local-control:wire-lab:test :app:tv:compileDebugKotlin :app:phone:assembleDebug \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload secret-free test evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-native-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/enrollment/build/test-results/test/**
+            local-control/tv-qr/build/test-results/test/**
+            local-control/wire-lab/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
