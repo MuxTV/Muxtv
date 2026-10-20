@@ -77,6 +77,27 @@ class TvProtectedProbeTest {
         } finally { f.close() }
     }
 
+    @Test fun differentPhoneCannotReplaceTvApprovedSignerAfterSuccessfulEnrollment() {
+        val f = paired()
+        val qr = TvQrPublicKeyParser.parse(f.tv.presentation(1_000L)!!.qrValue)
+        val intruder = PhoneSigningIdentity.generate()
+        val forgedSender = PhoneProtectedProbeFactory(qr, intruder, { 1_000L })
+        try {
+            val forged = forgedSender.create()
+            assertThat(f.tv.acceptProtectedProbe(forged.requestBytes(), 1_000L)).isNull()
+            val approved = f.phone.create()
+            val real = f.tv.acceptProtectedProbe(approved.requestBytes(), 1_000L)!!
+            assertThat(approved.verifyReply(real)).isTrue()
+            assertThat(f.tv.acceptProtectedProbe(forged.requestBytes(), 1_000L)).isNull()
+            forged.close()
+            approved.close()
+        } finally {
+            forgedSender.close()
+            intruder.close()
+            f.close()
+        }
+    }
+
     @Test fun crossQrSessionExpiredOrRevokedReceiverCannotAck() {
         val f = paired()
         val second = TvHpkeQrSession.create(1_000L)
