@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/401-lc04-public-enrollment-wire-20261019
     paths:
       - '.github/workflows/local-control-android-crypto-compat.yml'
       - 'local-control/crypto-android-compat/**'
