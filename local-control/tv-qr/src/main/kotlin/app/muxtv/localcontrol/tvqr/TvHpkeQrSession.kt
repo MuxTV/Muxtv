@@ -1,6 +1,21 @@
 package app.muxtv.localcontrol.tvqr
 
 import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
+import app.muxtv.localcontrol.enrollment.VerifiedPhoneIdentity
+import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
+import app.muxtv.localcontrol.wirelab.Lc04HpkeContext
+import app.muxtv.localcontrol.wirelab.Lc04ReceiptBody
+import app.muxtv.localcontrol.wirelab.Lc04TypedTranscript
+import app.muxtv.localcontrol.wirelab.Lc04TypedWire
+import app.muxtv.localcontrol.wirelab.Lc04WireFrame
+import app.muxtv.localcontrol.wirelab.Lc04WireKind
+import app.muxtv.localcontrol.wirelab.Lc04WireLab
+import com.google.crypto.tink.PublicKeyVerify
+import com.google.crypto.tink.signature.SignatureConfig
+import java.security.GeneralSecurityException
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import com.google.crypto.tink.HybridDecrypt
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.RegistryConfiguration
@@ -28,6 +43,10 @@ class TvHpkeQrSession private constructor(
     val expiresAtElapsedMillis: Long,
 ) : AutoCloseable {
     private var pendingPhoneEnrollment: TvPhoneEnrollment? = null
+    private var approvedPhoneFingerprint: String? = null
+    private var approvedPhoneVerifier: PublicKeyVerify? = null
+    private var lastVerifiedProbeCounter = 0
+
 
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
     @Synchronized
@@ -63,10 +82,132 @@ class TvHpkeQrSession private constructor(
         ).also { pendingPhoneEnrollment = it }
     }
 
+    /**
+     * Complete the TV-local enrollment handoff: only the identity actually
+     * redeemed by THIS QR receiver's consent/proof gate can activate the
+     * public-key verifier. A parsed phone offer alone cannot activate it.
+     */
+    @Synchronized
+    fun activateVerifiedPhone(identity: VerifiedPhoneIdentity, nowElapsedMillis: Long): Boolean {
+        if (presentation(nowElapsedMillis) == null || approvedPhoneVerifier != null) return false
+        val gate = pendingPhoneEnrollment ?: return false
+        if (gate.verifiedFingerprintForTv() != identity.fingerprint) return false
+        val tv = TvQrPublicKeyParser.parse(qr)
+        if (identity.tvInvitationId != tv.invitationId ||
+            identity.tvPairingId != tv.pairingId ||
+            identity.tvFingerprint != tv.fingerprint
+        ) return false
+        val verifier = try {
+            SignatureConfig.register()
+            TinkProtoKeysetFormat.parseKeysetWithoutSecret(identity.publicKeysetBytes())
+                .getPrimitive(RegistryConfiguration.get(), PublicKeyVerify::class.java)
+        } catch (_: GeneralSecurityException) {
+            return false
+        } catch (_: IllegalArgumentException) {
+            return false
+        }
+        approvedPhoneFingerprint = identity.fingerprint
+        approvedPhoneVerifier = verifier
+        lastVerifiedProbeCounter = 0
+        return true
+    }
+
+    /**
+     * In-process protected CHANNEL_PROBE receiver; NOT a network listener.
+     * Ed25519 signature and exact QR owner / approved phone binding are
+     * verified BEFORE invoking the ephemeral Tink HPKE private receiver.
+     * Reply contains only an authenticated receipt, no source capability.
+     */
+    @Synchronized
+    fun acceptProtectedProbe(wire: ByteArray, nowElapsedMillis: Long): ByteArray? {
+        if (presentation(nowElapsedMillis) == null) return null
+        val hpkeReceiver = privateReceiver ?: return null
+        val verifier = approvedPhoneVerifier ?: return null
+        val approvedFp = approvedPhoneFingerprint ?: return null
+        val frame = Lc04WireLab.decode(wire) ?: return null
+        if (frame.kind != Lc04WireKind.SIGNED_CHANNEL_PROBE) return null
+        val tv = TvQrPublicKeyParser.parse(qr)
+        if (!MessageDigest.isEqual(frame.tvInvitationId(), fromHex(tv.invitationId)) ||
+            !MessageDigest.isEqual(frame.tvPairingId(), fromHex(tv.pairingId)) ||
+            !MessageDigest.isEqual(frame.tvHpkeFingerprint(), fromHex(tv.fingerprint)) ||
+            !MessageDigest.isEqual(frame.phoneKeyFingerprint(), fromHex(approvedFp))
+        ) return null
+        val typed = Lc04TypedWire.decodeProbeFrame(frame) ?: return null
+        if (typed.counter <= lastVerifiedProbeCounter) return null
+        val signature = typed.signature()
+        val statement = Lc04TypedTranscript.probeSigningStatement(frame, typed)
+        val signed = try {
+            verifier.verify(signature, statement)
+            true
+        } catch (_: GeneralSecurityException) {
+            false
+        } finally {
+            signature.fill(0)
+            statement.fill(0)
+        }
+        if (!signed) return null
+        val contextInfo = Lc04HpkeContext.forProbe(frame, typed.counter)
+        val cipher = typed.ciphertext()
+        val plain = try {
+            hpkeReceiver.getPrimitive(RegistryConfiguration.get(), HybridDecrypt::class.java)
+                .decrypt(cipher, contextInfo)
+        } catch (_: GeneralSecurityException) {
+            return null
+        } finally {
+            contextInfo.fill(0)
+            cipher.fill(0)
+        }
+        if (plain.size != 48) {
+            plain.fill(0)
+            return null
+        }
+        try {
+            val key = plain.copyOfRange(0, 32)
+            val challenge = plain.copyOfRange(32, 48)
+            val iv = ByteArray(12).also(SecureRandom()::nextBytes)
+            val ack = "MuxTV-TV-RECEIVED-v1|".toByteArray(Charsets.US_ASCII) + challenge
+            val digest = Lc04TypedTranscript.originalSignedRequestDigest(frame)
+            try {
+                val placeholder = Lc04ReceiptBody(typed.counter, digest, iv,
+                    ByteArray(ack.size + 16))
+                val header = Lc04WireFrame(Lc04WireKind.SEALED_TV_RECEIPT,
+                    frame.tvInvitationId(), frame.tvPairingId(),
+                    frame.tvHpkeFingerprint(), frame.phoneKeyFingerprint(),
+                    Lc04TypedWire.encodeReceipt(placeholder))
+                val aad = Lc04TypedTranscript.receiptAad(header, placeholder)
+                val sealed = try {
+                    val encryptor = Cipher.getInstance("AES/GCM/NoPadding")
+                    encryptor.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"),
+                        GCMParameterSpec(128, iv))
+                    encryptor.updateAAD(aad)
+                    encryptor.doFinal(ack)
+                } finally { aad.fill(0) }
+                val reply = Lc04WireLab.encode(Lc04WireFrame(
+                    Lc04WireKind.SEALED_TV_RECEIPT,
+                    frame.tvInvitationId(), frame.tvPairingId(),
+                    frame.tvHpkeFingerprint(), frame.phoneKeyFingerprint(),
+                    Lc04TypedWire.encodeReceipt(
+                        Lc04ReceiptBody(typed.counter, digest, iv, sealed)),
+                ))
+                lastVerifiedProbeCounter = typed.counter
+                return reply
+            } finally {
+                key.fill(0)
+                challenge.fill(0)
+                iv.fill(0)
+                ack.fill(0)
+                digest.fill(0)
+            }
+        } finally { plain.fill(0) }
+    }
+
     @Synchronized
     override fun close() {
         pendingPhoneEnrollment?.close()
         pendingPhoneEnrollment = null
+        approvedPhoneFingerprint = null
+        approvedPhoneVerifier = null
+        lastVerifiedProbeCounter = 0
         privateReceiver = null
     }
 
@@ -130,6 +271,15 @@ class TvHpkeQrSession private constructor(
                 }
             }
         }
+    }
+}
+
+private fun fromHex(value: String): ByteArray {
+    require(value.length % 2 == 0 &&
+        value.all { it in '0'..'9' || it in 'a'..'f' })
+    return ByteArray(value.length / 2) { i ->
+        ((value[2 * i].digitToInt(16) shl 4) or
+            value[2 * i + 1].digitToInt(16)).toByte()
     }
 }
 
