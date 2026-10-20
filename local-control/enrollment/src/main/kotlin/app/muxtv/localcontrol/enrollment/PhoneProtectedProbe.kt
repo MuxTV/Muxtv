@@ -64,10 +64,11 @@ class PhoneProtectedProbeFactory(
             } finally {
                 context.fill(0)
             }
-            val signedRequest = signingPhone.signProtectedProbe(
-                scannedTv, currentCounter, encrypted,
-            )
-            encrypted.fill(0)
+            val signedRequest = try {
+                signingPhone.signProtectedProbe(scannedTv, currentCounter, encrypted)
+            } finally {
+                encrypted.fill(0)
+            }
             val frame = checkNotNull(Lc04WireLab.decode(signedRequest))
             val guard = Lc04OneShotReplyGuard(frame, secret, challenge, now, elapsedMillis)
             counter = currentCounter
