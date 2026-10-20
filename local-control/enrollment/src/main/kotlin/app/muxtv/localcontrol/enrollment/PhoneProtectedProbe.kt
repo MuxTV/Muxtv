@@ -14,7 +14,7 @@ import com.google.crypto.tink.hybrid.HybridConfig
 import java.security.SecureRandom
 
 /**
- * Native Android/JVM crypto component, NOT a socket or SourceOnboarding client.
+ * Native Android/JVM crypto component, NOT a socket or source-provisioning client.
  * An attacker may carry/rewrite serialized bytes, but cannot derive the random
  * AES-256-GCM reply key which is delivered ONLY under the scanned TV's HPKE key.
  *
