@@ -105,4 +105,41 @@ class LocalControlPhoneEnrollmentIsolationTest {
         assertContains(gate, "return verify(signed)")
         assertContains(gate, "begin(public)")
     }
+
+    @Test fun `native protected probe verifies enrolled phone before HPKE decrypt and cannot reach legacy server`() {
+        val tv = root.resolve(
+            "local-control/tv-qr/src/main/kotlin/app/muxtv/localcontrol/tvqr/TvHpkeQrSession.kt",
+        ).readText()
+        assertContains(tv, "gate.verifiedFingerprintForTv() != identity.fingerprint")
+        assertContains(tv, "approvedPhoneVerifier")
+        assertContains(tv, "verifier.verify(signature, statement)")
+        assertContains(tv, "lastVerifiedProbeCounter")
+        assertContains(tv, "Lc04TypedTranscript.originalSignedRequestDigest(frame)")
+        val signatureVerify = tv.indexOf("verifier.verify(signature, statement)")
+        val decrypt = tv.indexOf(".decrypt(cipher, contextInfo)")
+        assertTrue(signatureVerify >= 0 && decrypt > signatureVerify,
+            "TV must verify the enrolled Ed25519 signer before HPKE private decryption")
+
+        val phone = root.resolve(
+            "local-control/enrollment/src/main/kotlin/app/muxtv/localcontrol/enrollment/PhoneProtectedProbe.kt",
+        ).readText()
+        assertContains(phone, "HybridEncrypt::class.java")
+        assertContains(phone, "signingPhone.signProtectedProbe(")
+        assertContains(phone, "Lc04OneShotReplyGuard(")
+        for (forbidden in listOf(
+            "HttpClient", "TvLanServer", "SourceOnboarding", "SOURCE_CREATE",
+            "SOURCE_PREPARE", "SOURCE_ACTIVATE", "post(", "route(", "getPassword(",
+        )) {
+            assertFalse(phone.contains(forbidden), "Protected probe must have no network or source authority: $forbidden")
+        }
+
+        val server = root.resolve("local-control/server/src/main")
+            .walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        for (file in server) {
+            val code = file.readText()
+            assertFalse(code.contains("acceptProtectedProbe"), file.path)
+            assertFalse(code.contains("PhoneProtectedProbeFactory"), file.path)
+            assertFalse(code.contains("activateVerifiedPhone"), file.path)
+        }
+    }
 }
