@@ -44,6 +44,7 @@ class TvPhoneEnrollment(
     private var pending: Pending? = null
     private var closed = false
     private var redeemed = false
+    private var verifiedPhoneFingerprint: String? = null
 
     init {
         require(ttlMillis in 1_000..120_000)
@@ -171,6 +172,7 @@ class TvPhoneEnrollment(
         current.erase()
         pending = null
         redeemed = true
+        verifiedPhoneFingerprint = accepted.fingerprint
         return PhoneEnrollmentResult.Verified(accepted)
     }
 
@@ -179,7 +181,13 @@ class TvPhoneEnrollment(
         closed = true
         pending?.erase()
         pending = null
+        verifiedPhoneFingerprint = null
     }
+
+    /** TV-owner-only evidence: this SAME QR receiver really verified phone possession. */
+    @Synchronized
+    fun verifiedFingerprintForTv(): String? =
+        if (live() && redeemed) verifiedPhoneFingerprint else null
 
     private fun live(): Boolean {
         if (closed || !tvReceiverIsAlive()) {
