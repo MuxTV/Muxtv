@@ -2,6 +2,12 @@ package app.muxtv.localcontrol.enrollment
 
 import app.muxtv.localcontrol.qr.TvQrPublicKey
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
+import app.muxtv.localcontrol.wirelab.Lc04ProbeBody
+import app.muxtv.localcontrol.wirelab.Lc04TypedTranscript
+import app.muxtv.localcontrol.wirelab.Lc04TypedWire
+import app.muxtv.localcontrol.wirelab.Lc04WireFrame
+import app.muxtv.localcontrol.wirelab.Lc04WireKind
+import app.muxtv.localcontrol.wirelab.Lc04WireLab
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.PublicKeySign
 import com.google.crypto.tink.PublicKeyVerify
@@ -222,6 +228,36 @@ class PhoneSigningIdentity private constructor(
         ))
     }
 
+    /**
+     * Sign ONLY the canonical CHANNEL_PROBE statement for this phone and
+     * the physically scanned TV HPKE QR. Never sign an arbitrary LAN payload.
+     * No private signing key or provider data is included in the frame.
+     */
+    @Synchronized
+    fun signProtectedProbe(scannedTv: TvQrPublicKey, counter: Int, ciphertext: ByteArray): ByteArray {
+        val current = checkNotNull(signer) { "Phone signing identity is closed." }
+        require(counter in 1..128)
+        val tvFingerprint = scannedTv.fingerprint
+        val tvKey = hexBytes(tvFingerprint)
+        val phoneKey = hexBytes(fingerprint)
+        val invitation = hexBytes(scannedTv.invitationId)
+        val pairing = hexBytes(scannedTv.pairingId)
+        // The statement excludes the signature itself, avoiding circularity.
+        val placeholder = Lc04ProbeBody(counter, ciphertext, ByteArray(69))
+        val draft = Lc04WireFrame(Lc04WireKind.SIGNED_CHANNEL_PROBE,
+            invitation, pairing, tvKey, phoneKey, Lc04TypedWire.encodeProbe(placeholder))
+        val statement = Lc04TypedTranscript.probeSigningStatement(draft, placeholder)
+        val signature = try { current.sign(statement) } finally { statement.fill(0) }
+        try {
+            require(signature.size == 64 || signature.size == 69) { "Unexpected Tink signature format." }
+            return Lc04WireLab.encode(Lc04WireFrame(
+                Lc04WireKind.SIGNED_CHANNEL_PROBE,
+                invitation, pairing, tvKey, phoneKey,
+                Lc04TypedWire.encodeProbe(Lc04ProbeBody(counter, ciphertext, signature)),
+            ))
+        } finally { signature.fill(0) }
+    }
+
     @Synchronized
     override fun close() {
         signer = null // Tink private bytes cannot be guaranteed zeroized on managed heap.
@@ -326,6 +362,14 @@ private fun proofTranscript(binding: EnrollmentBinding, phoneFingerprint: String
     return ("MuxTV-LC04-PHONE-ENROLL-v1|" + binding.invitationId + "|" +
         binding.pairingId + "|" + binding.tvFingerprint + "|" +
         phoneFingerprint + "|" + hex(nonce)).toByteArray(Charsets.US_ASCII)
+}
+
+private fun hexBytes(value: String): ByteArray {
+    require(value.length % 2 == 0 && value.all { it in '0'..'9' || it in 'a'..'f' })
+    return ByteArray(value.length / 2) { index ->
+        (((value[index * 2].digitToInt(16) shl 4) or
+            value[index * 2 + 1].digitToInt(16))).toByte()
+    }
 }
 
 private fun sha256(bytes: ByteArray): String =
