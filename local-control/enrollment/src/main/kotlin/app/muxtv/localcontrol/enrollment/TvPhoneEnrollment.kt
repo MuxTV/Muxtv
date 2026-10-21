@@ -72,6 +72,43 @@ class TvPhoneEnrollment(
         return PhoneEnrollmentChallenge(binding, fingerprint, nonce)
     }
 
+    /**
+     * Accept ONLY a strict, context-pinned PUBLIC offer. This method must not
+     * be exposed from the existing untrusted HTTP /pair server. A remote offer
+     * creates pending UI state ONLY; it never approves itself.
+     */
+    @Synchronized
+    fun beginPublicOffer(wire: ByteArray): PhoneEnrollmentChallenge? {
+        if (!live() || pending != null || redeemed) return null
+        val public = Lc04PublicEnrollmentWire.decodeOfferForTv(wire, binding)
+            ?: return null
+        return try {
+            begin(public)
+        } catch (_: IllegalArgumentException) {
+            null
+        } catch (_: java.security.GeneralSecurityException) {
+            null
+        } finally {
+            public.fill(0)
+        }
+    }
+
+    /**
+     * TV may inspect a detached signed proof ONLY against its OWN pending
+     * fingerprint. The TV-local approveOnTv() gate still runs inside verify().
+     */
+    @Synchronized
+    fun verifyPublicProof(wire: ByteArray): PhoneEnrollmentResult {
+        if (!live()) return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.EXPIRED_OR_REVOKED)
+        if (redeemed) return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.REPLAYED)
+        val fingerprint = pendingFingerprintForTv()
+            ?: return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.EXPIRED_OR_REVOKED)
+        val signed = Lc04PublicEnrollmentWire.decodeProofForTv(
+            wire, binding, fingerprint,
+        ) ?: return PhoneEnrollmentResult.Denied(PhoneEnrollmentDenial.INVALID_PROOF)
+        return verify(signed)
+    }
+
     /** The TV UI must compare this fingerprint with the actual user-intended phone. */
     @Synchronized
     fun pendingFingerprintForTv(): String? =
