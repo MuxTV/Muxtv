@@ -93,6 +93,9 @@ class Lc04TcpPhoneExchange private constructor(private val ip: InetAddress, priv
                 socket.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS)
                 DataOutputStream(socket.getOutputStream()).use { output ->
                     Lc04LengthPrefix.write(output, request)
+                    // The protocol permits exactly ONE frame on this connection.
+                    // Half-close our request before waiting for the TV response.
+                    socket.shutdownOutput()
                     val reply = Lc04LengthPrefix.read(
                         DataInputStream(socket.getInputStream()), allowEmpty = true,
                     ) ?: return null
@@ -195,9 +198,17 @@ class Lc04TvTcpServer private constructor(
                             return@use
                         }
                         if (!rate.permit(ip.hostAddress)) return@use
+                        val input = DataInputStream(socket.getInputStream())
                         val incoming = Lc04LengthPrefix.read(
-                            DataInputStream(socket.getInputStream()), allowEmpty = false,
+                            input, allowEmpty = false,
                         ) ?: return@use
+                        // Require client half-close after exactly one frame: reject
+                        // smuggled extra bytes, pipelined messages or a peer that
+                        // never finishes the request within the socket deadline.
+                        if (input.read() != -1) {
+                            incoming.fill(0)
+                            return@use
+                        }
                         // Same response for all denied kinds/proofs: an empty frame.
                         val response = try {
                             dispatcher.handle(incoming)
