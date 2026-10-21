@@ -1,0 +1,63 @@
+name: LC04 isolated native TCP hostile network CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-control-native-tcp-ci.yml'
+      - 'local-control/native-transport/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/enrollment/**'
+      - 'local-control/wire-lab/**'
+      - 'settings.gradle.kts'
+      - '.work/meta/modules.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-native-tcp-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actual-tcp:
+    name: Bounded private TCP plus hostile real loopback JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact pull request HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Assert exact source revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Run real TCP hostile byte relay and cryptography tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:native-transport:test \
+            :local-control:tv-qr:test :local-control:enrollment:test \
+            :local-control:wire-lab:test :app:tv:compileDebugKotlin :app:phone:assembleDebug \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Publish secret-free hosted test results
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-real-tcp-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/native-transport/build/test-results/test/**
+            local-control/tv-qr/build/test-results/test/**
+            local-control/enrollment/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
