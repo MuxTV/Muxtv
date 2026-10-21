@@ -20,7 +20,7 @@ import org.junit.Test
 
 /** Real loopback TCP/byte streams on GitHub-hosted JVM only; no physical devices. */
 class Lc04NativeTcpTransportTest {
-    private var now = 1_000L
+    @Volatile private var now = 1_000L
     private val elapsed: () -> Long = { now }
 
     private class Fixture(
