@@ -1,6 +1,7 @@
 package app.muxtv.localcontrol.tvqr
 
 import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
+import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.enrollment.VerifiedPhoneIdentity
 import app.muxtv.localcontrol.wirelab.Lc04HpkeContext
 import app.muxtv.localcontrol.wirelab.Lc04ReceiptBody
