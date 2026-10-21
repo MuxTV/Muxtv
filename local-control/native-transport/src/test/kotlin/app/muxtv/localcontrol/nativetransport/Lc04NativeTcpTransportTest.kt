@@ -116,6 +116,9 @@ class Lc04NativeTcpTransportTest {
             for ((announced, body) in listOf(
                 (Lc04WireLab.MAX_FRAME_BYTES + 1) to byteArrayOf(),
                 clean.size to clean.copyOf(clean.size - 1),
+                // Framing request smuggling: a syntactically valid length/frame
+                // followed by a second unaccounted byte must NOT be processed.
+                clean.size to (clean + 0.toByte()),
             )) {
                 Socket(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), f.server.port).use { s ->
                     s.soTimeout = 1_500
