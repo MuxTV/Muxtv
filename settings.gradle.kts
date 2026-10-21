@@ -37,6 +37,7 @@ include(
     ":local-control:tv-qr",
     ":local-control:enrollment",
     ":local-control:wire-lab",
+    ":local-control:native-transport",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
