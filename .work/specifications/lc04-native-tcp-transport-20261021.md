@@ -35,6 +35,10 @@ record per connection:
 - Response: another size-prefixed canonical `MXW1` frame, or a 4-byte
   **zero length** (generic no response). Zero length is NEVER an
   authenticated success, approval or proof of physical TV possession.
+- The client **half-closes its TCP write side after exactly one request**. The
+  server must observe EOF immediately after the length-delimited frame;
+  appended bytes, pipelined requests or peers refusing EOF until timeout
+  are rejected before any enrollment/probe handler is called.
 - The socket is then closed. There is no streaming, chunked HTTP, batch,
   credential payload, migration fallback or renegotiation.
 - Incomplete header/body, out-of-range length, unknown kind, extra length,
