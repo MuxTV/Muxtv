@@ -82,6 +82,10 @@ actual_modules:
     gradle_path: :local-control:native-transport
     type: pure_kotlin_library
     owns: [isolated_private_ipv4_tcp_framing, qr_owned_public_enrollment_dispatch, bounded_peer_io, one_request_per_connection]
+  local-control-phone-flow:
+    gradle_path: :local-control:phone-flow
+    type: pure_kotlin_library
+    owns: [qr_pinned_phone_enrollment_state_machine, tv_local_consent_enforced_by_tv, one_shot_authenticated_receipt_verification, no_transport_or_source_authority]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
