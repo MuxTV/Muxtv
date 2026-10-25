@@ -12,6 +12,8 @@ import app.muxtv.localcontrol.PairingAuthority
 import app.muxtv.localcontrol.PairingClock
 import app.muxtv.localcontrol.PendingTvPairing
 import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
+import app.muxtv.localcontrol.nativetransport.Lc04PrivateIpv4
+import app.muxtv.localcontrol.nativetransport.Lc04TvTcpServer
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.localcontrol.server.LanAddressPolicy
 import app.muxtv.localcontrol.server.TvLanServer
@@ -40,12 +42,19 @@ class TvPairingController(
     private val lifecycleEpoch = AtomicLong()
     private val publicQrEpoch = AtomicLong()
     @Volatile private var publicQrSession: TvHpkeQrSession? = null
+    @Volatile private var nativeProbeServer: Lc04TvTcpServer? = null
+    @Volatile private var nativeProbeEndpoint: NativeProbeEndpoint? = null
     @Volatile private var observedNetwork: Network? = null
     @Volatile private var observedAddress: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     data class ScreenSession(val qrValue: String, val expiresAtElapsedMillis: Long) {
         override fun toString(): String = "ScreenSession(qrValue=[REDACTED])"
+    }
+
+    /** TV-visible transport locator only; not a trust assertion or a pairing token. */
+    data class NativeProbeEndpoint(val privateIpv4: String, val port: Int) {
+        override fun toString(): String = "NativeProbeEndpoint([PRIVATE_ADDRESS_REDACTED])"
     }
 
     /** Must be invoked from background dispatcher, AFTER runtime LAN permission grant. */
@@ -97,8 +106,7 @@ class TvPairingController(
         if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
         val lifecycle = lifecycleEpoch.get()
         val previewGeneration = publicQrEpoch.incrementAndGet()
-        publicQrSession?.close()
-        publicQrSession = null
+        revokePublicKeyQrPreview()
         val receiver = TvHpkeQrSession.create(SystemClock.elapsedRealtime())
         publishPublicKeyQr(receiver, lifecycle, previewGeneration)
     }
@@ -125,10 +133,64 @@ class TvPairingController(
         return view
     }
 
+    /**
+     * Separately opted-in LC04 native listener for the already-visible, short-lived QR.
+     * Reuses the active, permission-gated LC03 Wi-Fi/Ethernet network selection, but
+     * NEVER its HTTP bearer/session or routes. No listener starts with app/QR creation.
+     * Only public enrollment and authenticated synthetic CHANNEL_PROBE are permitted.
+     */
+    suspend fun enableNativeProbeForVisibleQr(): NativeProbeEndpoint = lifecycleMutex.withLock {
+        if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
+        val receiver = requireNotNull(publicQrSession) { "No TV public-key QR." }
+        requireNotNull(receiver.presentation(SystemClock.elapsedRealtime())) {
+            "TV public-key QR is expired or revoked."
+        }
+        nativeProbeEndpoint?.let { return@withLock it }
+        val generation = publicQrEpoch.get()
+        val lifecycle = lifecycleEpoch.get()
+        val network = requireNotNull(observedNetwork) {
+            "No permission-gated active LAN pairing session."
+        }
+        require(networkManager.activeNetwork == network) { "Active network changed." }
+        val capabilities = requireNotNull(networkManager.getNetworkCapabilities(network))
+        require((capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) &&
+            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+        ) { "Network is not eligible for private IPv4 listener." }
+        val properties = requireNotNull(networkManager.getLinkProperties(network))
+        val host = requireNotNull(selectPrivateAddress(properties))
+        require(host == observedAddress && Lc04PrivateIpv4.parse(host) != null) {
+            "Private IPv4 interface changed or is unavailable."
+        }
+
+        val listener = Lc04TvTcpServer.start(host, receiver, SystemClock::elapsedRealtime)
+        try {
+            synchronized(this@TvPairingController) {
+                if (!isTvVisible() || generation != publicQrEpoch.get() ||
+                    lifecycle != lifecycleEpoch.get() ||
+                    publicQrSession !== receiver ||
+                    receiver.presentation(SystemClock.elapsedRealtime()) == null ||
+                    networkManager.activeNetwork != network
+                ) throw CancellationException("Native listener activation was revoked.")
+                val endpoint = NativeProbeEndpoint(host, listener.port)
+                nativeProbeServer = listener
+                nativeProbeEndpoint = endpoint
+                endpoint
+            }
+        } catch (failure: Throwable) {
+            listener.close() // Closing transport also invalidates the QR receiver.
+            throw failure
+        }
+    }
+
     /** Safe to call on the UI thread and from Activity.onStop. */
     @Synchronized
     fun revokePublicKeyQrPreview() {
         publicQrEpoch.incrementAndGet()
+        nativeProbeEndpoint = null
+        nativeProbeServer?.close() // also revokes approved phone and QR receiver
+        nativeProbeServer = null
         publicQrSession?.close()
         publicQrSession = null
     }
