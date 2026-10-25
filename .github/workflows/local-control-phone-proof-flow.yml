@@ -1,0 +1,66 @@
+name: LC04 offline phone proof flow CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'local-control/phone-flow/**'
+      - 'local-control/enrollment/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/qr-public/**'
+      - 'local-control/wire-lab/**'
+      - 'local-control/native-transport/**'
+      - 'app/phone/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/LocalControlPhoneProofIsolationTest.kt'
+      - '.github/workflows/local-control-phone-proof-flow.yml'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-phone-proof-flow-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  guarded-phone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact phone proof HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Verify exact SHA and isolation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ! grep -q 'android.permission.INTERNET' app/phone/src/main/AndroidManifest.xml || \
+            test "$(grep -c '<uses-permission android:name="android.permission.INTERNET"' app/phone/src/main/AndroidManifest.xml || true)" = 0
+      - name: Run Tink proof, hostile TV relay and scan-only phone build
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:phone-flow:test \
+            :local-control:enrollment:test :local-control:tv-qr:test \
+            :local-control:native-transport:test :app:phone:assembleDebug \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload secret-free test evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-phone-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/phone-flow/build/test-results/test/**
+            local-control/phone-flow/build/reports/tests/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
