@@ -51,12 +51,22 @@ class TvNativeTcpLifecycleDeviceTest {
             owner.revokeImmediately()
             assertThat(owner.isPublicKeyQrPreviewActive()).isFalse()
             assertThat(owner.pendingPhonePublicKeyFingerprint()).isNull()
-            val refused = runCatching {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(endpoint.privateIpv4, endpoint.port), 1_500)
-                }
+            // The kernel can complete a TCP handshake from a queued SYN even
+            // after close() has returned; connect() success does not imply
+            // the revoked application listener accepted or processed a frame.
+            // Poll for bounded eventual refusal instead of asserting the
+            // impossible "every post-close SYN must be refused instantly".
+            var refused = false
+            for (attempt in 0 until 30) {
+                refused = runCatching {
+                    Socket().use { socket ->
+                        socket.connect(InetSocketAddress(endpoint.privateIpv4, endpoint.port), 300)
+                    }
+                }.isFailure
+                if (refused) break
+                kotlinx.coroutines.delay(100)
             }
-            assertThat(refused.isFailure).isTrue()
+            assertThat(refused).isTrue()
         } finally {
             visible = false
             owner.revokeImmediately()
