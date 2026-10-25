@@ -186,6 +186,45 @@ class Lc04NativeTcpTransportTest {
         }
     }
 
+    @Test fun nativeClientRejectsValidChallengeWithTrailingWireData() {
+        fixture().use { f ->
+            val offer = Lc04PublicEnrollmentWire.phoneOffer(f.scanned, f.phone)
+            val authenticChallenge = checkNotNull(f.client.exchange(offer))
+            // A hostile relay can forward a genuine, valid challenge, then append
+            // an unframed byte. The phone must not accept the valid prefix.
+            val listener = ServerSocket(0, 1,
+                InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
+            val failure = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+            val attacker = Thread({
+                try {
+                    listener.use {
+                        it.accept().use { socket ->
+                            socket.soTimeout = 2_500
+                            val input = DataInputStream(socket.getInputStream())
+                            check(Lc04LengthPrefix.read(input, false)?.contentEquals(offer) == true)
+                            check(input.read() == -1)
+                            val output = DataOutputStream(socket.getOutputStream())
+                            Lc04LengthPrefix.write(output, authenticChallenge)
+                            output.writeByte(0x7f)
+                            output.flush()
+                        }
+                    }
+                } catch (problem: Throwable) {
+                    failure.set(problem)
+                }
+            }, "muxtv-extra-response-byte").apply { isDaemon = true; start() }
+            try {
+                assertThat(Lc04TcpPhoneExchange.loopbackForTests(listener.localPort)
+                    .exchange(offer)).isNull()
+            } finally {
+                listener.close()
+                attacker.join(3_000)
+            }
+            assertThat(attacker.isAlive).isFalse()
+            assertThat(failure.get()).isNull()
+        }
+    }
+
     @Test fun explicitStopAndQrExpiryRevokeEvenWithRememberedIpPort() {
         fixture().use { f ->
             val offer = Lc04PublicEnrollmentWire.phoneOffer(f.scanned, f.phone)
