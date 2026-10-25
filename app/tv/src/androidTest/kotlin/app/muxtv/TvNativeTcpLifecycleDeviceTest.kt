@@ -24,9 +24,10 @@ class TvNativeTcpLifecycleDeviceTest {
     @Test fun nativePrivateListenerNeedsTvOptInAndClosesImmediatelyOnRevocation() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         var visible = true
+        var networkInvalidations = 0
         val owner = TvPairingController(
             context = context,
-            invalidated = { error("Unexpected network invalidation during controlled opt-in test") },
+            invalidated = { networkInvalidations++ },
             isTvVisible = { visible },
         )
         try {
@@ -38,6 +39,7 @@ class TvNativeTcpLifecycleDeviceTest {
             assertThat(endpoint.port).isAtLeast(1)
             assertThat(endpoint.port).isAtMost(65535)
             assertThat(owner.isPublicKeyQrPreviewActive()).isTrue()
+            assertThat(networkInvalidations).isEqualTo(0)
             Socket().use { socket ->
                 socket.connect(
                     InetSocketAddress(endpoint.privateIpv4, endpoint.port),
