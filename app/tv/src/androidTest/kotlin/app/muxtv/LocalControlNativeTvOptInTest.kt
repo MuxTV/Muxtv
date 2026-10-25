@@ -28,13 +28,14 @@ class LocalControlNativeTvOptInTest {
     @Test fun tvExplicitDpadActionAloneEnablesAndDisposingRevokesNativeEndpoint() {
         var screenVisible by mutableStateOf(true)
         var nativeStarts = 0
+        var legacyHttpStarts = 0
         var revocations = 0
         val expires = SystemClock.elapsedRealtime() + 120_000L
         rule.setContent {
             MuxTvTheme {
                 if (screenVisible) {
                     PhonePairingRoute(
-                        onStart = { null },
+                        onStart = { legacyHttpStarts++; null },
                         onStop = {},
                         onStartPublicKeyPreview = {
                             TvHpkeQrPresentation(
@@ -64,6 +65,10 @@ class LocalControlNativeTvOptInTest {
         }
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-key-open").fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle {
+            check(legacyHttpStarts == 0) { "Entering phone pairing opened HTTP implicitly." }
+            check(nativeStarts == 0) { "Entering phone pairing opened TCP implicitly." }
         }
         rule.onNodeWithTag("local-pair-close").assertIsFocused()
             .performKeyInput {
