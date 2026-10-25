@@ -38,6 +38,7 @@ include(
     ":local-control:enrollment",
     ":local-control:wire-lab",
     ":local-control:native-transport",
+    ":local-control:phone-flow",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
