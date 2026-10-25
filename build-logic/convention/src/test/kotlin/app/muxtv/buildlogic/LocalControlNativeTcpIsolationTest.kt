@@ -72,6 +72,14 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(controller, "nativeProbeServer?.close()")
         assertContains(controller, "revokePublicKeyQrPreview()")
         assertContains(controller, "networkManager.activeNetwork == network")
+        assertContains(controller, "watchDefaultNetworkForNative(")
+        assertContains(controller, "registerDefaultNetworkCallback(callback)")
+        val keyStart = controller.substringAfter("suspend fun startPublicKeyQrPreview()")
+            .substringBefore("private fun publishPublicKeyQr(")
+        assertContains(keyStart, "stopInternal()")
+        assertTrue(keyStart.indexOf("stopInternal()") <
+            keyStart.indexOf("TvHpkeQrSession.create("),
+            "LC03 HTTP must close before new native-mode QR is created")
         assertFalse(controller.contains("SourceOnboarding"))
         assertFalse(controller.contains("SOURCE_CREATE"))
 
