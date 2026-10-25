@@ -76,7 +76,9 @@ class LocalControlNativeTvOptInTest {
                 keyUp(Key.Enter)
             }
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithTag("local-tv-key-back").fetchSemanticsNodes().size == 1
+            rule.onAllNodesWithTag("local-tv-key-back").fetchSemanticsNodes().size == 1 &&
+                rule.onAllNodesWithTag("local-tv-native-opt-in")
+                    .fetchSemanticsNodes().size == 1
         }
         rule.onNodeWithTag("local-tv-key-back").assertIsFocused()
         rule.runOnIdle { check(nativeStarts == 0) { "QR preview silently opened TCP." } }
