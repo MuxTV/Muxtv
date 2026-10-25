@@ -71,7 +71,7 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(controller, "observedAddress")
         assertContains(controller, "nativeListener.close()")
         assertContains(controller, "revokePublicKeyQrPreview()")
-        assertContains(controller, "networkManager.activeNetwork == network")
+        assertContains(controller, "networkManager.activeNetwork != network")
         assertContains(controller, "watchDefaultNetworkForNative(")
         assertContains(controller, "registerDefaultNetworkCallback(callback)")
         val keyStart = controller.substringAfter("suspend fun startPublicKeyQrPreview()")
