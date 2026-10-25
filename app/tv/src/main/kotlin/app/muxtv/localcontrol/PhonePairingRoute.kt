@@ -69,7 +69,7 @@ fun PhonePairingRoute(
     onBack: () -> Unit,
 ) {
     var session by remember { mutableStateOf<TvPairingController.ScreenSession?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingTvPairing?>(null) }
     var secondsRemaining by remember { mutableLongStateOf(0L) }
@@ -159,7 +159,8 @@ fun PhonePairingRoute(
         }
     }
 
-    LaunchedEffect(restartRequest) { restart() }
+    // Neither legacy HTTP nor LC04 TCP is opened merely by navigating here.
+    LaunchedEffect(restartRequest) { if (restartRequest > 0) restart() }
     LaunchedEffect(session) {
         while (coroutineContext.isActive) {
             if (session != null && !connectionIsActive()) {
@@ -363,7 +364,11 @@ fun PhonePairingRoute(
                     }
                 }
                 if (!loading && secondsRemaining == 0L && !error) {
-                    MuxTvActionButton(text = "Новый QR", onClick = { restartRequest++ })
+                    MuxTvActionButton(
+                        text = if (session == null) "Включить обычное HTTP-сопряжение" else "Новый QR",
+                        onClick = { restartRequest++ },
+                        modifier = Modifier.testTag("local-tv-http-opt-in"),
+                    )
                 }
                 if (keyPreviewError) {
                     Text("Не удалось подготовить публичный ключ. Повторите попытку.")
