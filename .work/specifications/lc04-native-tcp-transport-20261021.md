@@ -26,7 +26,7 @@ service/Activity, legacy HTTP route, source type or credential input changes.
 
 ## On-wire framing (experimental)
 
-The accepted `MXW1` binary frame is encapsulated in exactly one TCP
+The experimental `MXW1` binary frame is encapsulated in exactly one TCP
 record per connection:
 
 - Prefix: 4-byte big-endian positive length (1..4200).
@@ -42,8 +42,11 @@ record per connection:
 - The socket is then closed. There is no streaming, chunked HTTP, batch,
   credential payload, migration fallback or renegotiation.
 - Incomplete header/body, out-of-range length, unknown kind, extra length,
-  incompatible reply kind, timeout and early EOF reject closed. Max
-  allocation of untrusted frame bytes = 4200.
+  incompatible reply kind, timeout and early EOF reject closed. Both peers
+  require EOF after their single frame, including the phone after the reply;
+  a syntactically valid authenticated-prefix reply followed by any appended
+  bytes is rejected before the authenticated reply is handed to the caller.
+  Max allocation of untrusted frame bytes = 4200.
 - Client connect timeout 1500 ms; both directions read timeout 2500 ms.
   An explicit phone endpoint is a private RFC1918 **numeric IPv4 literal**;
   no DNS, proxy, loopback/wildcard, mDNS or IPv6 parsing.
@@ -91,7 +94,9 @@ production factories require RFC1918 numeric IPv4.
 - An attacker with only the public TV QR cannot replace the approved
   phone signing key; genuine signer remains operational.
 - Tampered pinned-TV-key header, malformed content-length (including
-  4201), truncated body, replayed probe or reply are refused.
+  4201), truncated body, extra request or response bytes, replayed probe or
+  reply are refused. The native TCP tests compile against `qr-public` only
+  via `testImplementation`, not through a new production dependency.
 - A hostile fake TV listening on a different real TCP port can return a
   syntactically valid context-matching receipt, but cannot provide the
   correct GCM tag/request key and therefore cannot authenticate itself.
