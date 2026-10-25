@@ -6,6 +6,7 @@ dependencies {
     // Only public enrollment/probe facilities. No sockets, Android or IPTV source API.
     testImplementation(project(":local-control:tv-qr"))
     testImplementation(project(":local-control:native-transport"))
+    testImplementation(project(":local-control:wire-lab"))
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
