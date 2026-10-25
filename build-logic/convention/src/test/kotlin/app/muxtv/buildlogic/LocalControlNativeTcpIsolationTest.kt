@@ -15,6 +15,9 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(gradle, """project(":local-control:tv-qr")""")
         assertContains(gradle, """project(":local-control:enrollment")""")
         assertContains(gradle, """project(":local-control:wire-lab")""")
+        // The QR value is a test fixture, not an additional production authority.
+        assertContains(gradle, """testImplementation(project(":local-control:qr-public"))""")
+        assertFalse(gradle.contains("""implementation(project(":local-control:qr-public"))"""))
         for (forbidden in listOf(
             ":local-control:server", ":local-control:onboarding",
             ":catalog:", ":core:credentials", ":local-control:core",
