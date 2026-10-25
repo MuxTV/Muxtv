@@ -120,6 +120,10 @@ fun PhonePairingRoute(
             keyPreview = null
             nativeEndpoint = null
             nativeError = false
+            // Entering LC04 stops the legacy HTTP session; never present it as active.
+            session = null
+            pending = null
+            error = false
             requestedPhoneFingerprint = null
             phoneKeyApproved = false
             keyPreviewError = false
@@ -298,6 +302,8 @@ fun PhonePairingRoute(
                         onRevokePublicKeyPreview()
                         keyPreview = null
                         nativeEndpoint = null
+                        // Return to the legacy mode only by a new explicit startup.
+                        restartRequest++
                     },
                     modifier = Modifier.focusRequester(returnFocus).testTag("local-tv-key-back"),
                 )
