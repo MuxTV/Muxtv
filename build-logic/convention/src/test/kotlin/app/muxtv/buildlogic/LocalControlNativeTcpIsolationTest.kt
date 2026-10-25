@@ -94,6 +94,8 @@ class LocalControlNativeTcpIsolationTest {
             "app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt",
         ).readText()
         assertContains(route, "local-tv-native-opt-in")
+        assertContains(route, "local-tv-http-opt-in")
+        assertContains(route, "if (restartRequest > 0) restart()")
         assertContains(route, "local-tv-native-endpoint")
         assertContains(route, "onEnableNativeProbe()")
         assertContains(route, "onRevokePublicKeyPreview()")
