@@ -96,9 +96,16 @@ class Lc04TcpPhoneExchange private constructor(private val ip: InetAddress, priv
                     // The protocol permits exactly ONE frame on this connection.
                     // Half-close our request before waiting for the TV response.
                     socket.shutdownOutput()
-                    val reply = Lc04LengthPrefix.read(
-                        DataInputStream(socket.getInputStream()), allowEmpty = true,
-                    ) ?: return null
+                    val input = DataInputStream(socket.getInputStream())
+                    val reply = Lc04LengthPrefix.read(input, allowEmpty = true)
+                        ?: return null
+                    // A frame is not a complete reply until the peer closes.
+                    // Reject appended bytes, pipelined replies and peers that
+                    // withhold EOF; never return a possibly authenticated prefix.
+                    if (input.read() != -1) {
+                        reply.fill(0)
+                        return null
+                    }
                     val kind = Lc04WireLab.decode(reply)?.kind ?: return null
                     if ((frame.kind == Lc04WireKind.PHONE_PUBLIC_KEY &&
                             kind == Lc04WireKind.TV_CHALLENGE) ||
