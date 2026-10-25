@@ -12,6 +12,7 @@ on:
       - 'app/tv/src/main/kotlin/app/muxtv/sources/**'
       - 'app/tv/src/main/kotlin/app/muxtv/localcontrol/**'
       - 'app/tv/src/androidTest/kotlin/app/muxtv/LocalControlNativeTvOptInTest.kt'
+      - 'app/tv/src/androidTest/kotlin/app/muxtv/TvNativeTcpLifecycleDeviceTest.kt'
       - 'app/tv/build.gradle.kts'
       - 'local-control/native-transport/**'
       - 'player/api/**'
