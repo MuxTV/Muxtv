@@ -212,16 +212,55 @@ class ChannelSearchDaoTest {
         assertThat(candidateIds("конф*", now = 1_500)).isEmpty()
     }
 
+    // Every existing Search candidate-policy test also validates the independent v11
+    // membership eligibility, without routing any real Search read to the shadow DAO.
     private suspend fun candidateIds(
         expression: String,
         now: Long = 1_500,
         profileId: String = DatabaseDefaults.PRIMARY_PROFILE_ID,
-    ): List<String> = dao.searchCandidates(
-        profileId = profileId,
-        ftsExpression = expression,
-        nowEpochMillis = now,
-        fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
-    ).map(ChannelSearchCandidateRow::canonicalChannelId)
+    ): List<String> {
+        val authoritative = dao.searchCandidates(
+            profileId = profileId,
+            ftsExpression = expression,
+            nowEpochMillis = now,
+            fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
+        )
+        val shadow = database.catalogShadowSearchDao().searchCandidates(
+            profileId = profileId,
+            ftsExpression = expression,
+            nowEpochMillis = now,
+            fetchLimit = ChannelSearchLimits.CANDIDATE_FETCH_LIMIT,
+        )
+        assertThat(shadow).containsExactlyElementsIn(authoritative).inOrder()
+        return authoritative.map(ChannelSearchCandidateRow::canonicalChannelId)
+    }
+
+    @Test
+    fun restrictedCandidatesMatchShadowIncludingEmptyDuplicateAndMissingIds() = runTest {
+        val probes = listOf(
+            listOf(CHANNEL),
+            listOf("channel-does-not-exist"),
+            listOf(CHANNEL, CHANNEL),
+            emptyList(),
+        )
+        probes.forEach { restriction ->
+            val authoritative = dao.searchCandidates(
+                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                ftsExpression = "рос*",
+                nowEpochMillis = 1_500,
+                fetchLimit = 3,
+                restrictToCanonicalIds = restriction,
+            )
+            val shadow = database.catalogShadowSearchDao().searchCandidates(
+                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                ftsExpression = "рос*",
+                nowEpochMillis = 1_500,
+                fetchLimit = 3,
+                restrictToCanonicalIds = restriction,
+            )
+            assertThat(shadow).containsExactlyElementsIn(authoritative).inOrder()
+        }
+    }
 
     private suspend fun stageCatalogRevision(
         revision: Long,

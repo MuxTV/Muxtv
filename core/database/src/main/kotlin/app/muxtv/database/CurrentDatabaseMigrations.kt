@@ -2,7 +2,7 @@ package app.muxtv.database
 
 import androidx.room3.migration.Migration
 
-internal const val CURRENT_DATABASE_VERSION = 10
+internal const val CURRENT_DATABASE_VERSION = 11
 
 internal val CURRENT_DATABASE_MIGRATIONS: Array<Migration> = validateCurrentMigrationChain(
     migrations = listOf(
@@ -15,6 +15,7 @@ internal val CURRENT_DATABASE_MIGRATIONS: Array<Migration> = validateCurrentMigr
         MIGRATION_7_8,
         MIGRATION_8_9,
         MIGRATION_9_10,
+        MIGRATION_10_11,
     ),
     currentVersion = CURRENT_DATABASE_VERSION,
 ).toTypedArray()
