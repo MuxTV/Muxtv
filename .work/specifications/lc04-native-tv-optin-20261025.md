@@ -13,8 +13,10 @@ This is the **first Android TV composition-root** use of the isolated
 `:local-control:native-transport` accepted in #420. It is not yet a
 cross-device pairing product or source-credential channel.
 
-A TV user must first open the phone pairing screen, select a **separate
-public-key QR mode**, and then explicitly invoke **Enable experimental TCP**
+Opening the phone pairing screen starts **neither** the legacy HTTP listener
+nor the native TCP listener. Both require separate D-pad actions. A TV user
+selects a **separate public-key QR mode**, and then explicitly invokes
+**Enable experimental TCP**
 with the D-pad. Creating or merely showing the `MXLC04:1` public-key QR
 does not bind a network listener. The native port is an OS-assigned ephemeral
 TCP port bound to one validated RFC1918 numeric IPv4 address, never wildcard,
@@ -22,8 +24,9 @@ localhost, DNS or a proxy.
 
 ### No plaintext HTTP dependency
 
-Entering the public-key QR mode serially closes the legacy LC03 HTTP `/pair`
-server and revokes all LC03 bearer claims **before creating the new TV-owned
+Entering the public-key QR mode serially closes any previously user-enabled
+legacy LC03 HTTP `/pair` server and revokes all LC03 bearer claims **before
+creating the new TV-owned
 HPKE QR**. The native endpoint independently selects the active Wi-Fi/Ethernet
 interface after the Activity-owned Android local-network permission gate.
 There is no transfer of legacy claim/session/capability into LC04.
@@ -37,8 +40,8 @@ identity and integrity controls.
 
 ## Lifecycle guarantees
 
-1. No native TCP server in Application.onCreate, Activity.onCreate or QR
-   preview creation.
+1. Neither legacy HTTP nor native TCP opens on navigation. No native TCP
+   server in Application.onCreate, Activity.onCreate or QR preview creation.
 2. The TV Activity requires explicit D-pad opt-in and the same Android
    `ACCESS_LOCAL_NETWORK` runtime gate used for its legacy private LAN path.
 3. Native binding fails closed if TV is hidden, active network is not
