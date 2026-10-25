@@ -69,7 +69,7 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(controller, "isTvVisible()")
         assertContains(controller, "Lc04PrivateIpv4.parse(host)")
         assertContains(controller, "observedAddress")
-        assertContains(controller, "nativeProbeServer?.close()")
+        assertContains(controller, "nativeListener.close()")
         assertContains(controller, "revokePublicKeyQrPreview()")
         assertContains(controller, "networkManager.activeNetwork == network")
         assertContains(controller, "watchDefaultNetworkForNative(")
