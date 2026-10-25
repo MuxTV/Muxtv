@@ -47,6 +47,7 @@ class TvPairingController(
     @Volatile private var observedNetwork: Network? = null
     @Volatile private var observedAddress: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var nativeDefaultNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
     data class ScreenSession(val qrValue: String, val expiresAtElapsedMillis: Long) {
         override fun toString(): String = "ScreenSession(qrValue=[REDACTED])"
@@ -181,6 +182,7 @@ class TvPairingController(
                 observedNetwork = network
                 observedAddress = host
                 watchNetwork(network)
+                watchDefaultNetworkForNative(network, lifecycle, generation)
                 endpoint
             }
         } catch (failure: Throwable) {
@@ -200,6 +202,10 @@ class TvPairingController(
         val nativeListener = nativeProbeServer
         nativeProbeServer = null
         if (nativeListener != null) {
+            nativeDefaultNetworkCallback?.let {
+                runCatching { networkManager.unregisterNetworkCallback(it) }
+            }
+            nativeDefaultNetworkCallback = null
             networkCallback?.let { runCatching { networkManager.unregisterNetworkCallback(it) } }
             networkCallback = null
             observedNetwork = null
@@ -282,6 +288,40 @@ class TvPairingController(
         observedNetwork = null
         observedAddress = null
         pairing.stop()
+    }
+
+    /**
+     * A VPN can become the default without dropping Wi-Fi/Ethernet. The regular
+     * interface callback alone cannot revoke that transition. Native mode
+     * additionally observes default-network replacement and fails closed.
+     */
+    private fun watchDefaultNetworkForNative(
+        selected: Network,
+        lifecycle: Long,
+        qrGeneration: Long,
+    ) {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (network != selected) invalidateSelectedNativeNetwork()
+            }
+
+            override fun onLost(network: Network) {
+                if (network == selected) invalidateSelectedNativeNetwork()
+            }
+
+            private fun invalidateSelectedNativeNetwork() {
+                mainHandler.post {
+                    if (nativeProbeServer != null &&
+                        observedNetwork == selected &&
+                        lifecycleEpoch.get() == lifecycle &&
+                        publicQrEpoch.get() == qrGeneration &&
+                        networkManager.activeNetwork != selected
+                    ) invalidated()
+                }
+            }
+        }
+        networkManager.registerDefaultNetworkCallback(callback)
+        nativeDefaultNetworkCallback = callback
     }
 
     private fun watchNetwork(network: Network) {
