@@ -20,8 +20,19 @@ class MuxTvHttpResources(
 
 class MuxTvHttpClients(
     resources: MuxTvHttpResources = MuxTvHttpResources(),
+    sourceTimingSink: MuxTvNetworkTimingSink = MuxTvNetworkTimingSink.NONE,
 ) {
     val source: OkHttpClient = resources.baseClient.newBuilder()
+        .apply {
+            if (sourceTimingSink !== MuxTvNetworkTimingSink.NONE) {
+                eventListenerFactory(
+                    MuxTvNetworkTimingListenerFactory(
+                        clientKind = MuxTvNetworkClientKind.SOURCE,
+                        sink = sourceTimingSink,
+                    ),
+                )
+            }
+        }
         .addInterceptor(SecureRedirectInterceptor())
         .addInterceptor(ResponseSizeLimitInterceptor(ResponseSizeKind.Decoded))
         .addNetworkInterceptor(ResponseSizeLimitInterceptor(ResponseSizeKind.Compressed))
