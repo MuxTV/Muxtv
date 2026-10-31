@@ -32,6 +32,17 @@ class BaselineProfilePerformanceEvidenceContractTest {
             "Release comparison must fail closed when the packaged Baseline Profile is unavailable.",
         )
 
+        // AndroidX Benchmark upstream fix I48ccc shipped in 1.6.0-alpha01:
+        // Android 16 ART profile flush could fail with "Unable to flush profiles".
+        // The targeted upgrade must not silently upgrade the Baseline Profile
+        // Gradle plugin or weaken the required control/experimental comparison.
+        val catalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
+        assertContains(catalog, """benchmark = "1.5.0-rc02"""")
+        assertContains(catalog, """benchmark-macro-runtime = "1.6.0-alpha01"""")
+        assertContains(catalog,
+            """benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark-macro-runtime" }""")
+        assertContains(catalog, """androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }""")
+
         val runner = repositoryRoot.resolve("tools/ci/Run-HostedBaselineProfilePerformance.sh")
         assertTrue(runner.isFile, "Missing hosted Baseline Profile performance runner.")
         val runnerText = runner.readText()
