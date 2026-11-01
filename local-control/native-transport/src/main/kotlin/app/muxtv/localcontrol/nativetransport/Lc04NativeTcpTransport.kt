@@ -78,44 +78,87 @@ internal object Lc04LengthPrefix {
  * The caller MUST separately authenticate the returned data with existing
  * QR-pinned enrollment and one-shot AES-GCM verification components.
  */
-class Lc04TcpPhoneExchange private constructor(private val ip: InetAddress, private val port: Int) {
+class Lc04TcpPhoneExchange private constructor(
+    private val ip: InetAddress,
+    private val port: Int,
+) : AutoCloseable {
     init { require(port in 1..65535) }
 
+    /**
+     * Only one outstanding exchange belongs to this short-lived phone attempt.
+     * Closing from Activity.onStop must interrupt a blocked connect/read and
+     * permanently prevent subsequent TCP requests; no socket is persisted.
+     */
+    @Volatile private var revoked = false
+    private var activeSocket: Socket? = null
+
+    @Synchronized
+    private fun acquire(socket: Socket): Boolean {
+        if (revoked || activeSocket != null) return false
+        activeSocket = socket
+        return true
+    }
+
+    @Synchronized
+    private fun release(socket: Socket) {
+        if (activeSocket === socket) activeSocket = null
+    }
+
+    @Synchronized
+    override fun close() {
+        if (revoked) return
+        revoked = true
+        val current = activeSocket
+        activeSocket = null
+        try { current?.close() } catch (_: IOException) {}
+    }
+
     fun exchange(request: ByteArray): ByteArray? {
+        if (revoked) return null
         val frame = Lc04WireLab.decode(request) ?: return null
         if (frame.kind != Lc04WireKind.PHONE_PUBLIC_KEY &&
             frame.kind != Lc04WireKind.PHONE_PROOF &&
             frame.kind != Lc04WireKind.SIGNED_CHANNEL_PROBE
         ) return null
+        val socket = Socket()
+        if (!acquire(socket)) {
+            try { socket.close() } catch (_: IOException) {}
+            return null
+        }
         return try {
-            Socket().use { socket ->
+            socket.use {
+                if (revoked) return null
                 socket.soTimeout = READ_TIMEOUT_MS
                 socket.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS)
+                if (revoked) return null
                 DataOutputStream(socket.getOutputStream()).use { output ->
                     Lc04LengthPrefix.write(output, request)
-                    // The protocol permits exactly ONE frame on this connection.
-                    // Half-close our request before waiting for the TV response.
+                    // Exactly one request, then EOF. Never use plaintext HTTP.
                     socket.shutdownOutput()
                     val input = DataInputStream(socket.getInputStream())
                     val reply = Lc04LengthPrefix.read(input, allowEmpty = true)
                         ?: return null
-                    // A frame is not a complete reply until the peer closes.
-                    // Reject appended bytes, pipelined replies and peers that
-                    // withhold EOF; never return a possibly authenticated prefix.
+                    // A valid-looking prefix is not complete until peer EOF.
                     if (input.read() != -1) {
                         reply.fill(0)
                         return null
                     }
-                    val kind = Lc04WireLab.decode(reply)?.kind ?: return null
-                    if ((frame.kind == Lc04WireKind.PHONE_PUBLIC_KEY &&
+                    val kind = Lc04WireLab.decode(reply)?.kind
+                    val matchesRequest =
+                        (frame.kind == Lc04WireKind.PHONE_PUBLIC_KEY &&
                             kind == Lc04WireKind.TV_CHALLENGE) ||
                         (frame.kind == Lc04WireKind.SIGNED_CHANNEL_PROBE &&
                             kind == Lc04WireKind.SEALED_TV_RECEIPT)
-                    ) reply else null
+                    if (revoked || !matchesRequest) {
+                        reply.fill(0)
+                        null
+                    } else reply
                 }
             }
         } catch (_: IOException) {
-            null // no fallback to plaintext /pair, no raw reply and no peer trust
+            null // cancellation/peer disconnect/timeout always denies
+        } finally {
+            release(socket)
         }
     }
 
@@ -130,7 +173,7 @@ class Lc04TcpPhoneExchange private constructor(private val ip: InetAddress, priv
             return Lc04TcpPhoneExchange(parsed, port)
         }
 
-        /** Test-only loopback connector, not exposed as a public factory. */
+        /** Test-only loopback connector; never a product private LAN locator. */
         internal fun loopbackForTests(port: Int): Lc04TcpPhoneExchange =
             Lc04TcpPhoneExchange(loopbackAddress(), port)
     }
