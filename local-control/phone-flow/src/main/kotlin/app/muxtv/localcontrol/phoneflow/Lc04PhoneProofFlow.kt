@@ -12,8 +12,14 @@ import java.util.concurrent.atomic.AtomicReference
  * Nothing about the host/IP, an HTTP bearer or the transport result is an identity.
  * A production adapter MUST provide bounded deadlines and no plaintext fallback.
  */
-fun interface Lc04PhoneFrameExchange {
+/**
+ * Each phone attempt owns its injected transport. The default close is a no-op
+ * for offline scripted relays; a real socket adapter MUST override close() to
+ * interrupt any in-flight connect/read on Activity.onStop.
+ */
+fun interface Lc04PhoneFrameExchange : AutoCloseable {
     fun exchange(frame: ByteArray): ByteArray?
+    override fun close() {}
 }
 
 /** Display-only binding. This is NOT a confirmation, grant, or verified TV. */
@@ -69,7 +75,10 @@ class Lc04PhoneProofFlow(
                 response.fill(0)
             } ?: return null
             challenge = accepted
-            if (!state.compareAndSet(State.OFFERING, State.WAITING_FOR_TV)) return null
+            if (!state.compareAndSet(State.OFFERING, State.WAITING_FOR_TV)) {
+                challenge = null
+                return null
+            }
             return Lc04PhoneReview(scannedTv.fingerprint, signingPhone.fingerprint)
         } catch (_: Exception) {
             return null
@@ -94,6 +103,7 @@ class Lc04PhoneProofFlow(
             val signed = signingPhone.prove(scannedTv, bound)
             val proof = Lc04PublicEnrollmentWire.phoneProof(scannedTv, signingPhone, signed)
             try {
+                if (state.get() != State.VERIFYING) return false
                 // A malicious peer can silently discard this frame. Only the
                 // subsequent receipt proves the TV actually activated our key.
                 exchange.exchange(proof)?.fill(0)
@@ -104,6 +114,7 @@ class Lc04PhoneProofFlow(
             probes.create().use { pending ->
                 val probe = pending.requestBytes()
                 val reply = try {
+                    if (state.get() != State.VERIFYING) return false
                     exchange.exchange(probe)
                 } finally {
                     probe.fill(0)
@@ -135,6 +146,10 @@ class Lc04PhoneProofFlow(
     override fun close() {
         if (state.getAndSet(State.CLOSED) == State.CLOSED) return
         challenge = null
+        // Network cancellation happens before signer/key disposal. Closing an
+        // active Socket is synchronous and unblocks a pending read/connect.
+        // A hostile adapter's close failure cannot resurrect protocol state.
+        runCatching { exchange.close() }
         probes.close()
         signingPhone.close()
     }
