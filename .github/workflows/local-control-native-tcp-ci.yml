@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/local-control-native-tcp-ci.yml'
       - 'local-control/native-transport/**'
+      - 'local-control/phone-flow/**'
       - 'app/tv/src/main/kotlin/app/muxtv/localcontrol/**'
       - 'app/tv/src/main/kotlin/app/muxtv/MainActivity.kt'
       - 'app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt'
@@ -53,7 +54,7 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew :local-control:native-transport:test \
-            :local-control:tv-qr:test :local-control:enrollment:test \
+            :local-control:phone-flow:test :local-control:tv-qr:test :local-control:enrollment:test \
             :local-control:wire-lab:test :app:tv:compileDebugKotlin :app:phone:assembleDebug \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Publish secret-free hosted test results

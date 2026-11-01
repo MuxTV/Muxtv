@@ -17,6 +17,9 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(gradle, """project(":local-control:wire-lab")""")
         // The QR value is a test fixture, not an additional production authority.
         assertContains(gradle, """testImplementation(project(":local-control:qr-public"))""")
+        assertContains(gradle, """testImplementation(project(":local-control:phone-flow"))""")
+        assertFalse(gradle.contains("""implementation(project(":local-control:phone-flow"))"""),
+            "No phone proof dependency in production TV transport")
         assertFalse(gradle.contains("""implementation(project(":local-control:qr-public"))"""))
         for (forbidden in listOf(
             ":local-control:server", ":local-control:onboarding",
@@ -107,6 +110,16 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(flow, "runs-on: ubuntu-latest")
         assertContains(flow, "test \"\$(git rev-parse HEAD)\" = \"\$EXPECTED_SHA\"")
         assertContains(flow, ":local-control:native-transport:test")
+        assertContains(flow, ":local-control:phone-flow:test")
+        assertContains(flow, "'local-control/phone-flow/**'")
+        val e2e = root.resolve(
+            "local-control/native-transport/src/test/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativePhoneProofEndToEndTest.kt",
+        ).readText()
+        for (required in listOf("Lc04TcpPhoneExchange.loopbackForTests",
+            "Lc04PhoneProofFlow(", "finishAfterTvAction()", "approveOnTv()",
+            "hasAuthenticatedReceipt()", "f.server.close()", "wrongListener.close()")) {
+            assertContains(e2e, required)
+        }
         assertFalse(flow.contains("self-hosted"))
     }
 }
