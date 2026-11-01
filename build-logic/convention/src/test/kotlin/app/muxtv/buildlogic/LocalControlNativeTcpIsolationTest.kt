@@ -36,6 +36,14 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(source, "gate.verifyPublicProof(bytes)")
         assertContains(source, "tv.acceptProtectedProbe(bytes, now)")
         assertContains(source, "tv.close()")
+        // A TV-approved phone must not leave unowned Socket I/O running when
+        // Android stops the Activity. Keep cancellation independent of IPTV API.
+        assertContains(source, "class Lc04TcpPhoneExchange")
+        assertContains(source, "AutoCloseable")
+        assertContains(source, "activeSocket")
+        assertContains(source, "override fun close()")
+        assertContains(source, "if (revoked || activeSocket != null) return false")
+
         for (forbidden in listOf(
             "HttpClient", "TvLanServer", "PairingAuthority", "PairingGrant",
             "SourceOnboarding", "SourcePreparationHandle",
@@ -69,6 +77,13 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(flow, "test \"\$(git rev-parse HEAD)\" = \"\$EXPECTED_SHA\"")
         assertContains(flow, ":local-control:native-transport:test")
         assertContains(flow, ":local-control:phone-flow:test")
+        val cancellation = root.resolve(
+            "local-control/native-transport/src/test/kotlin/app/muxtv/localcontrol/nativetransport/Lc04CancellablePhoneTcpTest.kt",
+        ).readText()
+        assertContains(cancellation, "closeInterruptsBlockedTcpReadAndPermanentlyDeniesFurtherConnections")
+        assertContains(cancellation, "secondExchangeCannotRaceActiveConnectionOrReopenRevokedSocket")
+        assertContains(cancellation, "closingPhoneProofFlowCancelsItsOwnedRealTcpExchange")
+
         assertContains(flow, "'local-control/phone-flow/**'")
         val e2e = root.resolve(
             "local-control/native-transport/src/test/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativePhoneProofEndToEndTest.kt",
