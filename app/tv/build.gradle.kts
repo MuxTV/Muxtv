@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":core:credentials"))
     implementation(project(":local-control:server"))
     implementation(project(":local-control:tv-qr"))
+    implementation(project(":local-control:native-transport"))
     implementation(project(":local-control:enrollment"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
@@ -92,10 +93,17 @@ dependencies {
 }
 
 // The Baseline Profile plugin creates benchmarkRelease after the Android DSL is evaluated.
-// Bind the automatic tracing-wire initializer only to that generated evidence variant.
-// release/debug therefore keep the existing no-persisted-trace production behavior.
+// Keep tracing-wire ONLY in that evidence variant, and enabled by default for
+// the dedicated in-process trace CI. The standalone cold-start comparison opts
+// out: it measures real Perfetto startup timings and ART compilation modes,
+// not an in-process trace flush which can fail on Android TV API36 emulators.
+// This flag never changes normal release/debug app dependencies.
+val inProcessTraceFlag = providers.gradleProperty("muxtvBenchmarkInProcessTracing").orNull
+require(inProcessTraceFlag == null || inProcessTraceFlag == "true" || inProcessTraceFlag == "false") {
+    "muxtvBenchmarkInProcessTracing must be true or false."
+}
 configurations.configureEach {
-    if (name == "benchmarkReleaseImplementation") {
+    if (name == "benchmarkReleaseImplementation" && inProcessTraceFlag != "false") {
         dependencies.add(project.dependencies.create(libs.androidx.tracing.wire.get()))
     }
 }
