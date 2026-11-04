@@ -18,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec
  * Internal to an unreferenced JVM research module; no Android application
  * or IPTV provider module links it.
  */
-internal object Lc04SyntheticHandoffKeySchedule {
+object Lc04SyntheticHandoffKeySchedule {
     private val EXTRACT_DOMAIN = "MuxTV-LC04-SYNTHETIC-HANDOFF-HKDF-EXTRACT-v1\u0000"
         .toByteArray(Charsets.US_ASCII)
     private val EXPAND_DOMAIN = "MuxTV-LC04-SYNTHETIC-HANDOFF-HKDF-EXPAND-v1\u0000"
@@ -69,7 +69,7 @@ internal object Lc04SyntheticHandoffKeySchedule {
  * Bounded canonical transcript structure for the lab; all values below are
  * public bindings. Neither the TV nonce nor any digest is a bearer credential.
  */
-internal class Lc04SyntheticHandoffTranscript(
+class Lc04SyntheticHandoffTranscript(
     invitationId: ByteArray,
     pairingId: ByteArray,
     tvQrFingerprint: ByteArray,
@@ -106,7 +106,7 @@ internal class Lc04SyntheticHandoffTranscript(
  * Keys never leave the lab except as digests for negative tests. The confirmation
  * functions are deliberately limited to a fixed 32-byte MAC, not arbitrary data.
  */
-internal class Lc04SyntheticDerivedKeys(
+class Lc04SyntheticDerivedKeys(
     phoneToTv: ByteArray,
     tvToPhone: ByteArray,
     confirmTv: ByteArray,
