@@ -43,6 +43,8 @@ class LocalControlNativeTcpIsolationTest {
         assertContains(source, "activeSocket")
         assertContains(source, "override fun close()")
         assertContains(source, "if (revoked || activeSocket != null) return false")
+        assertContains(source, "fun forPrivateIpv4OnNetwork(")
+        assertContains(source, "bindBeforeConnect?.invoke(socket)")
 
         for (forbidden in listOf(
             "HttpClient", "TvLanServer", "PairingAuthority", "PairingGrant",
@@ -64,11 +66,11 @@ class LocalControlNativeTcpIsolationTest {
             assertFalse(code.contains("Lc04TvTcpServer"), file.path)
         }
         val manifest = root.resolve("app/phone/src/main/AndroidManifest.xml").readText()
-        assertFalse(manifest.contains("""<uses-permission android:name="android.permission.INTERNET" />"""))
+        assertContains(manifest, """<uses-permission android:name="android.permission.INTERNET" />""")
         val tvGradle = root.resolve("app/tv/build.gradle.kts").readText()
         val phoneGradle = root.resolve("app/phone/build.gradle.kts").readText()
         assertContains(tvGradle, """:local-control:native-transport""")
-        assertFalse(phoneGradle.contains(":local-control:native-transport"))
+        assertContains(phoneGradle, """implementation(project(":local-control:native-transport"))""")
     }
 
     @Test fun `TV native endpoint requires explicit consent and loses authority on lifecycle stop`() {
