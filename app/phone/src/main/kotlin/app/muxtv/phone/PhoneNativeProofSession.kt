@@ -36,7 +36,7 @@ internal class PhoneNativeProofSession(
 
     private enum class Phase { NEW, OFFERING, WAITING, VERIFYING, VERIFIED, CLOSED }
 
-    private val manager = context.getSystemService(ConnectivityManager::class.java)
+    private val manager: ConnectivityManager = requireNotNull(context.getSystemService(ConnectivityManager::class.java))
     private val appContext = context.applicationContext
     private val phase = AtomicReference(Phase.NEW)
     private val worker = Executors.newSingleThreadExecutor()
@@ -49,7 +49,7 @@ internal class PhoneNativeProofSession(
      */
     fun begin(endpoint: PhoneNativeEndpoint): Boolean {
         if (!phase.compareAndSet(Phase.NEW, Phase.OFFERING)) return false
-        val selected = manager?.activeNetwork ?: return failedToStart()
+        val selected = manager.activeNetwork ?: return failedToStart()
         val initial = manager.getLinkProperties(selected) ?: return failedToStart()
         val addresses = privateAddresses(initial)
         if (addresses.isEmpty() || !eligible(selected, addresses)) return failedToStart()
@@ -109,15 +109,19 @@ internal class PhoneNativeProofSession(
             return failedToStart()
         }
         publish(State.OFFERING)
-        worker.execute {
-            val review = created.offer()
-            if (review != null && phase.compareAndSet(Phase.OFFERING, Phase.WAITING)) {
-                // TV_CHALLENGE is UNAUTHENTICATED. Display phone fingerprint
-                // for D-pad comparison; only the final TV receipt proves identity.
-                publish(State.WAITING_FOR_TV)
-            } else if (phase.get() != Phase.CLOSED) {
-                fail()
+        try {
+            worker.execute {
+                val review = created.offer()
+                if (review != null && phase.compareAndSet(Phase.OFFERING, Phase.WAITING)) {
+                    // TV_CHALLENGE is UNAUTHENTICATED. Only a final authenticated
+                    // receipt can qualify the endpoint as the scanned TV.
+                    publish(State.WAITING_FOR_TV)
+                } else if (phase.get() != Phase.CLOSED) {
+                    fail()
+                }
             }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return failedToStart()
         }
         return true
     }
@@ -126,17 +130,21 @@ internal class PhoneNativeProofSession(
         if (!phase.compareAndSet(Phase.WAITING, Phase.VERIFYING)) return false
         val attempt = flow ?: return fail()
         publish(State.VERIFYING)
-        worker.execute {
-            if (attempt.finishAfterTvAction() &&
-                phase.compareAndSet(Phase.VERIFYING, Phase.VERIFIED)
-            ) publish(State.VERIFIED)
-            else if (phase.get() != Phase.CLOSED) fail()
+        try {
+            worker.execute {
+                if (attempt.finishAfterTvAction() &&
+                    phase.compareAndSet(Phase.VERIFYING, Phase.VERIFIED)
+                ) publish(State.VERIFIED)
+                else if (phase.get() != Phase.CLOSED) fail()
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return fail()
         }
         return true
     }
 
     private fun eligible(selected: Network, addresses: Set<String>): Boolean {
-        if (phase.get() == Phase.CLOSED || manager?.activeNetwork != selected) return false
+        if (phase.get() == Phase.CLOSED || manager.activeNetwork != selected) return false
         val caps = manager.getNetworkCapabilities(selected) ?: return false
         if ((!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
                 !caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) ||
@@ -177,7 +185,7 @@ internal class PhoneNativeProofSession(
     override fun close() {
         if (phase.getAndSet(Phase.CLOSED) == Phase.CLOSED) return
         networkCallback?.let { callback ->
-            runCatching { manager?.unregisterNetworkCallback(callback) }
+            runCatching { manager.unregisterNetworkCallback(callback) }
         }
         networkCallback = null
         flow?.close()
