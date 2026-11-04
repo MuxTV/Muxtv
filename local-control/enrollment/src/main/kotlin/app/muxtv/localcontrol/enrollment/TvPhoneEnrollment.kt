@@ -2,6 +2,9 @@ package app.muxtv.localcontrol.enrollment
 
 import app.muxtv.localcontrol.qr.TvQrPublicKey
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
+import app.muxtv.localcontrol.wirelab.Lc04HandoffFrame
+import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
+import app.muxtv.localcontrol.wirelab.Lc04HandoffWireLab
 import app.muxtv.localcontrol.wirelab.Lc04ProbeBody
 import app.muxtv.localcontrol.wirelab.Lc04TypedTranscript
 import app.muxtv.localcontrol.wirelab.Lc04TypedWire
@@ -262,6 +265,43 @@ class PhoneSigningIdentity private constructor(
                 Lc04WireKind.SIGNED_CHANNEL_PROBE,
                 invitation, pairing, tvKey, phoneKey,
                 Lc04TypedWire.encodeProbe(Lc04ProbeBody(counter, ciphertext, signature)),
+            ))
+        } finally { signature.fill(0) }
+    }
+
+    /**
+     * JVM research-only signing of a NEW MXH1 seed-offer grammar, never
+     * a legacy MXW1 probe or generic source/HTTP payload.
+     * The signer remains ephemeral and QR-pinned. The receiving TV still
+     * MUST check TV-local consent, own HPKE private key and confirmation MACs.
+     */
+    @Synchronized
+    fun signMxH1SyntheticSeedOffer(
+        scannedTv: TvQrPublicKey,
+        counter: Int,
+        encryptedSeed: ByteArray,
+    ): ByteArray {
+        val current = checkNotNull(signer) { "Phone signing identity is closed." }
+        require(counter in 1..128 && encryptedSeed.size in 17..2048)
+        val invitation = hexBytes(scannedTv.invitationId)
+        val pairing = hexBytes(scannedTv.pairingId)
+        val tv = hexBytes(scannedTv.fingerprint)
+        val phone = hexBytes(fingerprint)
+        val draft = Lc04HandoffFrame(
+            Lc04HandoffKind.SIGNED_SEED_OFFER,
+            invitation, pairing, tv, phone, ByteArray(32), counter,
+            Lc04HandoffWireLab.signedOfferBody(encryptedSeed, ByteArray(69)),
+        )
+        val draftWire = Lc04HandoffWireLab.encode(draft)
+        val statement = checkNotNull(Lc04HandoffWireLab.offerSigningStatement(draftWire))
+        val signature = try { current.sign(statement) }
+            finally { statement.fill(0); draftWire.fill(0) }
+        try {
+            require(signature.size == 69) { "Unexpected Tink Ed25519 key prefix." }
+            return Lc04HandoffWireLab.encode(Lc04HandoffFrame(
+                Lc04HandoffKind.SIGNED_SEED_OFFER,
+                invitation, pairing, tv, phone, ByteArray(32), counter,
+                Lc04HandoffWireLab.signedOfferBody(encryptedSeed, signature),
             ))
         } finally { signature.fill(0) }
     }
