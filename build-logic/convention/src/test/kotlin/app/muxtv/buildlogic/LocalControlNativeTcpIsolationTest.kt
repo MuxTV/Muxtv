@@ -67,8 +67,50 @@ class LocalControlNativeTcpIsolationTest {
         assertFalse(manifest.contains("""<uses-permission android:name="android.permission.INTERNET" />"""))
         val tvGradle = root.resolve("app/tv/build.gradle.kts").readText()
         val phoneGradle = root.resolve("app/phone/build.gradle.kts").readText()
-        assertFalse(tvGradle.contains(":local-control:native-transport"))
+        assertContains(tvGradle, """:local-control:native-transport""")
         assertFalse(phoneGradle.contains(":local-control:native-transport"))
+    }
+
+    @Test fun `TV native endpoint requires explicit consent and loses authority on lifecycle stop`() {
+        val controller = root.resolve(
+            "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt",
+        ).readText()
+        assertContains(controller, "enableNativeProbeForVisibleQr()")
+        assertContains(controller, "publicQrSession")
+        assertContains(controller, "isTvVisible()")
+        assertContains(controller, "Lc04PrivateIpv4.parse(host)")
+        assertContains(controller, "observedAddress")
+        assertContains(controller, "nativeListener.close()")
+        assertContains(controller, "revokePublicKeyQrPreview()")
+        assertContains(controller, "networkManager.activeNetwork != network")
+        assertContains(controller, "watchDefaultNetworkForNative(")
+        assertContains(controller, "registerDefaultNetworkCallback(callback)")
+        val keyStart = controller.substringAfter("suspend fun startPublicKeyQrPreview()")
+            .substringBefore("private fun publishPublicKeyQr(")
+        assertContains(keyStart, "stopInternal()")
+        assertTrue(keyStart.indexOf("stopInternal()") <
+            keyStart.indexOf("TvHpkeQrSession.create("),
+            "LC03 HTTP must close before new native-mode QR is created")
+        assertFalse(controller.contains("SourceOnboarding"))
+        assertFalse(controller.contains("SOURCE_CREATE"))
+
+        val activity = root.resolve("app/tv/src/main/kotlin/app/muxtv/MainActivity.kt")
+            .readText()
+        assertContains(activity, "enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr")
+        assertContains(activity, "requestLocalNetworkPermission()")
+        assertContains(activity, "override fun onStop()")
+        assertContains(activity, "stopPhonePairing()")
+
+        val route = root.resolve(
+            "app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt",
+        ).readText()
+        assertContains(route, "local-tv-native-opt-in")
+        assertContains(route, "local-tv-http-opt-in")
+        assertContains(route, "if (restartRequest > 0) restart()")
+        assertContains(route, "local-tv-native-endpoint")
+        assertContains(route, "onEnableNativeProbe()")
+        assertContains(route, "onRevokePublicKeyPreview()")
+        assertFalse(route.contains("SourceOnboarding"))
     }
 
     @Test fun `native TCP hosted test workflow pins HEAD and never self-hosts`() {

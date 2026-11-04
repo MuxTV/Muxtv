@@ -55,6 +55,7 @@ fun PhonePairingRoute(
     onStart: suspend () -> TvPairingController.ScreenSession?,
     onStop: () -> Unit,
     onStartPublicKeyPreview: suspend () -> TvHpkeQrPresentation?,
+    onEnableNativeProbe: suspend () -> TvPairingController.NativeProbeEndpoint?,
     onRevokePublicKeyPreview: () -> Unit,
     publicKeyPreviewIsActive: () -> Boolean,
     pendingPhoneKeyFingerprint: () -> String?,
@@ -68,7 +69,7 @@ fun PhonePairingRoute(
     onBack: () -> Unit,
 ) {
     var session by remember { mutableStateOf<TvPairingController.ScreenSession?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingTvPairing?>(null) }
     var secondsRemaining by remember { mutableLongStateOf(0L) }
@@ -78,6 +79,9 @@ fun PhonePairingRoute(
     var keyPreview by remember { mutableStateOf<TvHpkeQrPresentation?>(null) }
     var keyPreviewLoading by remember { mutableStateOf(false) }
     var keyPreviewError by remember { mutableStateOf(false) }
+    var nativeEndpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
+    var nativeLoading by remember { mutableStateOf(false) }
+    var nativeError by remember { mutableStateOf(false) }
     var keySecondsRemaining by remember { mutableLongStateOf(0L) }
     var requestedPhoneFingerprint by remember { mutableStateOf<String?>(null) }
     var phoneKeyApproved by remember { mutableStateOf(false) }
@@ -89,6 +93,8 @@ fun PhonePairingRoute(
     suspend fun restart() {
         onRevokePublicKeyPreview()
         keyPreview = null
+        nativeEndpoint = null
+        nativeError = false
         requestedPhoneFingerprint = null
         phoneKeyApproved = false
         loading = true
@@ -112,6 +118,12 @@ fun PhonePairingRoute(
         scope.launch {
             onRevokePublicKeyPreview()
             keyPreview = null
+            nativeEndpoint = null
+            nativeError = false
+            // Entering LC04 stops the legacy HTTP session; never present it as active.
+            session = null
+            pending = null
+            error = false
             requestedPhoneFingerprint = null
             phoneKeyApproved = false
             keyPreviewError = false
@@ -129,7 +141,26 @@ fun PhonePairingRoute(
         }
     }
 
-    LaunchedEffect(restartRequest) { restart() }
+    fun enableNativeProbe() {
+        if (nativeLoading || nativeEndpoint != null || keyPreview == null) return
+        scope.launch {
+            nativeLoading = true
+            nativeError = false
+            try {
+                nativeEndpoint = onEnableNativeProbe()
+                nativeError = nativeEndpoint == null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                nativeError = true
+            } finally {
+                nativeLoading = false
+            }
+        }
+    }
+
+    // Neither legacy HTTP nor LC04 TCP is opened merely by navigating here.
+    LaunchedEffect(restartRequest) { if (restartRequest > 0) restart() }
     LaunchedEffect(session) {
         while (coroutineContext.isActive) {
             if (session != null && !connectionIsActive()) {
@@ -159,6 +190,7 @@ fun PhonePairingRoute(
             }
             if (keyPreview != null && keySecondsRemaining == 0L) {
                 onRevokePublicKeyPreview()
+                nativeEndpoint = null
             }
             delay(700)
         }
@@ -200,8 +232,8 @@ fun PhonePairingRoute(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "Это отдельный QR для будущего защищённого соединения. " +
-                        "Он не устанавливает соединение и не подтверждает подлинность телефона.",
+                    text = "Это публичный ключ для экспериментального защищённого обмена. " +
+                        "Сам QR не открывает TCP listener и не подтверждает подлинность телефона.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 if (keyPreviewLoading) {
@@ -226,12 +258,36 @@ fun PhonePairingRoute(
                                 if (denyPhoneKeyOnTv(requested)) {
                                     requestedPhoneFingerprint = null
                                     keyPreview = null
+                                    nativeEndpoint = null
                                     phoneKeyApproved = false
                                 }
                             },
                         )
                         Text("Сравните отпечаток на телефоне с этим экраном ТВ. " +
-                            "Сканирование пока не разрешает передачу M3U/Xtream или паролей.")
+                            "Сканирование не разрешает передачу M3U/Xtream или паролей.")
+                        val endpoint = nativeEndpoint
+                        if (endpoint == null) {
+                            MuxTvActionButton(
+                                text = if (nativeLoading) "Запуск TCP…" else
+                                    "Включить экспериментальный TCP",
+                                onClick = ::enableNativeProbe,
+                                modifier = Modifier.testTag("local-tv-native-opt-in"),
+                            )
+                            if (nativeError) {
+                                Text("TCP не запущен. Проверьте LAN/разрешение и повторите.")
+                            }
+                        } else {
+                            Text(
+                                "TCP listener: ${endpoint.privateIpv4}:${endpoint.port}",
+                                modifier = Modifier.testTag("local-tv-native-endpoint"),
+                            )
+                            Text(
+                                "Адрес и порт — только способ связи, не подтверждение подлинности TV. " +
+                                    "Телефонный сетевой клиент ещё не подключён. " +
+                                    "Существующий HTTP /pair не используется этим TCP каналом.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     } else {
                         Text("Одноразовый ключ отозван или истёк. Создайте новый QR.")
                     }
@@ -246,6 +302,9 @@ fun PhonePairingRoute(
                     onClick = {
                         onRevokePublicKeyPreview()
                         keyPreview = null
+                        nativeEndpoint = null
+                        // Return to the legacy mode only by a new explicit startup.
+                        restartRequest++
                     },
                     modifier = Modifier.focusRequester(returnFocus).testTag("local-tv-key-back"),
                 )
@@ -305,7 +364,11 @@ fun PhonePairingRoute(
                     }
                 }
                 if (!loading && secondsRemaining == 0L && !error) {
-                    MuxTvActionButton(text = "Новый QR", onClick = { restartRequest++ })
+                    MuxTvActionButton(
+                        text = if (session == null) "Включить обычное HTTP-сопряжение" else "Новый QR",
+                        onClick = { restartRequest++ },
+                        modifier = Modifier.testTag("local-tv-http-opt-in"),
+                    )
                 }
                 if (keyPreviewError) {
                     Text("Не удалось подготовить публичный ключ. Повторите попытку.")

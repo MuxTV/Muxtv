@@ -32,6 +32,24 @@ class BaselineProfilePerformanceEvidenceContractTest {
             "Release comparison must fail closed when the packaged Baseline Profile is unavailable.",
         )
 
+        // AndroidX Benchmark upstream fix I48ccc shipped in 1.6.0-alpha01:
+        // Android 16 ART profile flush could fail with "Unable to flush profiles".
+        // The targeted upgrade must not silently upgrade the Baseline Profile
+        // Gradle plugin or weaken the required control/experimental comparison.
+        val catalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
+        assertContains(catalog, """benchmark = "1.5.0-rc02"""")
+        assertContains(catalog, """benchmark-macro-runtime = "1.6.0-alpha01"""")
+        assertContains(catalog,
+            """benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark-macro-runtime" }""")
+        assertContains(catalog, """androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }""")
+
+        val appGradle = repositoryRoot.resolve("app/tv/build.gradle.kts").readText()
+        assertContains(appGradle, """providers.gradleProperty("muxtvBenchmarkInProcessTracing")""")
+        assertContains(appGradle, """name == "benchmarkReleaseImplementation" && inProcessTraceFlag != "false"""")
+        assertContains(appGradle, "libs.androidx.tracing.wire.get()")
+        assertFalse(appGradle.contains("releaseImplementation(libs.androidx.tracing.wire)"))
+        assertFalse(appGradle.contains("debugImplementation(libs.androidx.tracing.wire)"))
+
         val runner = repositoryRoot.resolve("tools/ci/Run-HostedBaselineProfilePerformance.sh")
         assertTrue(runner.isFile, "Missing hosted Baseline Profile performance runner.")
         val runnerText = runner.readText()
@@ -43,6 +61,15 @@ class BaselineProfilePerformanceEvidenceContractTest {
             "MUXTV_BENCHMARK_EVIDENCE",
             "source_commit",
         ).forEach { token -> assertContains(runnerText, token) }
+        // StartupTimingMetric depends on real system Perfetto, NOT the separate
+        // in-process tracing-wire flush. Keep both real compilation modes.
+        assertContains(runnerText, "-PmuxtvBenchmarkInProcessTracing=false")
+        val traceRunner = repositoryRoot.resolve(
+            "tools/ci/Run-BenchmarkInProcessTraceEvidence.sh",
+        ).readText()
+        assertContains(traceRunner, "-PmuxtvBenchmarkInProcessTracing=true")
+        assertContains(traceRunner, "Assert-BenchmarkInProcessTraceEvidence.ps1")
+        assertFalse(traceRunner.contains("androidx.benchmark.dryRunMode.enable=true"))
         assertFalse(
             runnerText.contains("androidx.benchmark.dryRunMode.enable=true"),
             "Release performance evidence must execute real Macrobenchmark iterations, not dry-run mode.",

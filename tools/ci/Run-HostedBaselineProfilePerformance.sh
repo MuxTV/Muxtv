@@ -38,6 +38,7 @@ chmod +x ./gradlew
   --stacktrace \
   --console=plain \
   --no-problems-report \
+  -PmuxtvBenchmarkInProcessTracing=false \
   -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.benchmark.BaselineProfilePerformanceComparison \
   -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
   -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR

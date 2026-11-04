@@ -27,6 +27,11 @@ espresso = "3.7.0"
 # 1.5.0-rc02 is the current 1.5 release candidate and supports AGP 9.x plus
 # automatic merging of target-package AndroidX Tracing in-process traces.
 benchmark = "1.5.0-rc02"
+# AndroidX Benchmark 1.6.0-alpha01 fixes I48ccc: Android 16 ART profile flush
+# returning "Unable to flush profiles for <packagename>" during macrobenchmark.
+# Keep the Baseline Profile Gradle plugin on verified 1.5.0-rc02; only update
+# benchmark instrumentation until plugin 1.6 is separately qualified.
+benchmark-macro-runtime = "1.6.0-alpha01"
 profileinstaller = "1.4.1"
 tracing = "2.0.1"
 uiautomator = "2.4.0"
@@ -91,7 +96,7 @@ androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-te
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
+benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark-macro-runtime" }
 profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 

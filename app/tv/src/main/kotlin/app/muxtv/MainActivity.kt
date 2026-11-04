@@ -132,6 +132,7 @@ class MainActivity : ComponentActivity() {
                     sourceManagement = sourceManagement,
                     sourceOnboarding = sourceOnboarding,
                     startPhonePairing = ::startPhonePairing,
+                    enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr,
                     startPublicKeyQrPreview = {
                         withContext(Dispatchers.Default) {
                             pairingController.startPublicKeyQrPreview()
@@ -170,6 +171,19 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (_: Exception) {
                 null // Do not expose transport failures or pairing secrets in TV UI.
+            }
+        }
+    }
+
+    private suspend fun enableNativeProbeForVisibleQr(): TvPairingController.NativeProbeEndpoint? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.enableNativeProbeForVisibleQr()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // No endpoint, key or network address in diagnostics.
             }
         }
     }
