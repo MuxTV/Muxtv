@@ -136,6 +136,7 @@ class PhoneQrActivity : ComponentActivity() {
         ).apply { topMargin = dp(12) })
         nativePanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            tag = "lc04-phone-native-panel"
             visibility = View.GONE
         }
         val nativeIntro = TextView(this).apply {
@@ -158,10 +159,12 @@ class PhoneQrActivity : ComponentActivity() {
             contentDescription = getString(R.string.scan_native_port)
         }
         startNativeButton = Button(this).apply {
+            tag = "lc04-phone-native-opt-in"
             setText(R.string.scan_native_start)
             setOnClickListener { startNativeFromGesture() }
         }
         verifyNativeButton = Button(this).apply {
+            tag = "lc04-phone-native-verify"
             setText(R.string.scan_native_verify)
             visibility = View.GONE
             setOnClickListener {
