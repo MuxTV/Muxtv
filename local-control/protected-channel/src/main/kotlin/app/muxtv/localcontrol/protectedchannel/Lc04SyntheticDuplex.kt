@@ -188,8 +188,10 @@ internal class Lc04SyntheticDuplexEndpoint private constructor(
         private const val BINDING_BYTES = 32
         private const val HEADER_BYTES = 48
         private const val PROBE_BYTES = 32
-        // Tink AES256_GCM = 12-byte nonce + 32-byte probe + 16-byte tag.
-        private const val EXPECTED_CIPHERTEXT_BYTES = 60
+        // Tink TINK output = 5-byte key prefix + 12-byte random nonce +
+        // 32-byte synthetic probe + 16-byte authentication tag.
+        // Keep Tink's authenticated/key-identified ciphertext format intact.
+        private const val EXPECTED_CIPHERTEXT_BYTES = 65
         private const val MAX_PROBES = 64L
         private const val TTL_MILLIS = 120_000L
 
