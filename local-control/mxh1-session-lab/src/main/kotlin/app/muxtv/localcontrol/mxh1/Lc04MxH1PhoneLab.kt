@@ -146,6 +146,7 @@ class Lc04MxH1PhoneLab(
 
     @Synchronized
     fun hasAuthenticatedTvSyntheticProof(): Boolean {
+        if (phase == Phase.NEW || phase == Phase.REVOKED) return false
         if (!live()) {
             close()
             return false
