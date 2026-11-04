@@ -52,7 +52,9 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :local-control:protected-channel:test \
             :local-control:enrollment:test :local-control:wire-lab:test \
-            :build-logic:convention:test --tests '*Lc04SyntheticProtectedChannelIsolationTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04SyntheticProtectedChannelIsolationTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Publish isolated synthetic test evidence
         if: always()
