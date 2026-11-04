@@ -19,9 +19,10 @@ the fixed domain LC04-SYNTHETIC. There is no arbitrary plaintext interface.
 
 ## Envelope
 
-MXE1 frame, 108 bytes, big endian:
+MXE1 frame, 113 bytes, big endian:
 magic 4; version 1; direction 1; session binding 32; sequence 8;
-encrypted size 2; Tink output 60 (12 nonce, 32 payload, 16 tag).
+encrypted size 2; Tink output 65 (5-byte TINK key prefix, 12-byte random nonce,
+32-byte payload, 16-byte authentication tag).
 Associated data: MuxTV-LC04-MXE1-SEALED-v1| followed by the 48-byte header.
 
 Both directions use different random AES keys. Tink generates nonces.
