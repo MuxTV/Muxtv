@@ -1,4 +1,4 @@
-name: Local Control native phone QR scanner
+name: Local Control phone QR plus native proof
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   phone:
-    name: Offline phone scanner compile and parser tests
+    name: Phone QR scanner, endpoint parser and native proof-only build
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -36,14 +36,17 @@ jobs:
       - name: Set up repository JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
 
-      - name: Require exact source and offline manifest
+      - name: Require exact source and bounded native proof manifest
         shell: bash
         env:
           EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          ! grep -Eq '<uses-permission.*android.permission.(INTERNET|ACCESS_LOCAL_NETWORK)' app/phone/src/main/AndroidManifest.xml
+          grep -Fq '<uses-permission android:name="android.permission.INTERNET" />' app/phone/src/main/AndroidManifest.xml
+          grep -Fq '<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />' app/phone/src/main/AndroidManifest.xml
+          grep -Fq 'implementation(project(":local-control:phone-flow"))' app/phone/build.gradle.kts
+          grep -Fq 'implementation(project(":local-control:native-transport"))' app/phone/build.gradle.kts
           ! grep -Eq 'project\(":local-control:crypto-lab"\)' app/phone/build.gradle.kts
           ! grep -Eq 'project\(":local-control:server"\)' app/phone/build.gradle.kts
 
@@ -53,6 +56,7 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew :local-control:qr-public:test \
+            :local-control:phone-flow:test :local-control:native-transport:test \
             :app:phone:assembleDebug :app:phone:testDebugUnitTest \
             --no-daemon --stacktrace --console=plain --no-problems-report
 
