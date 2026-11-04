@@ -90,6 +90,10 @@ actual_modules:
     gradle_path: :local-control:protected-channel
     type: pure_kotlin_library
     owns: [synthetic_only_bidirectional_aead_lab, strict_direction_and_counter, fail_closed_expiry_and_revocation, no_production_handshake_or_provider_data]
+  local-control-mxh1-session-lab:
+    gradle_path: :local-control:mxh1-session-lab
+    type: pure_kotlin_library
+    owns: [tv_owned_mxh1_ephemeral_handshake_lab, approved_phone_ed25519_and_hpke_seed, bidirectional_synthetic_key_confirmations, no_android_or_source_authority]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
