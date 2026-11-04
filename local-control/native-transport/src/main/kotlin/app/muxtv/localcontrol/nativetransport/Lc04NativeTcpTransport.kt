@@ -197,8 +197,11 @@ class Lc04TcpPhoneExchange private constructor(
         }
 
         /** Test-only loopback connector; never a product private LAN locator. */
-        internal fun loopbackForTests(port: Int): Lc04TcpPhoneExchange =
-            Lc04TcpPhoneExchange(loopbackAddress(), port)
+        internal fun loopbackForTests(
+            port: Int,
+            bindBeforeConnect: ((Socket) -> Unit)? = null,
+        ): Lc04TcpPhoneExchange =
+            Lc04TcpPhoneExchange(loopbackAddress(), port, bindBeforeConnect)
     }
 }
 
