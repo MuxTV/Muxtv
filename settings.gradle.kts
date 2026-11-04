@@ -39,6 +39,7 @@ include(
     ":local-control:wire-lab",
     ":local-control:native-transport",
     ":local-control:phone-flow",
+    ":local-control:protected-channel",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
