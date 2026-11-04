@@ -1,0 +1,82 @@
+name: C03 PROD-A real Room v11 accounting
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/RefreshDeltaDatabaseMeasurementRunner.kt'
+      - 'core/database/src/androidTest/kotlin/app/muxtv/database/RefreshDeltaDatabaseMeasurementTest.kt'
+      - 'tools/ci/Run-HostedC03ProdAV11Accounting.sh'
+      - '.github/workflows/c03-prod-a-v11-accounting.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: c03-prod-a-v11-accounting-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  real-v11-api36:
+    name: Real v11 physical SQL and WAL API36 repeat
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      MUXTV_EVIDENCE_DIR: .work/evidence/c03-prod-a-v11
+
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ env.MUXTV_SOURCE_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$MUXTV_SOURCE_COMMIT"
+
+      - name: Enable KVM for Android Emulator
+        shell: bash
+        env:
+          MUXTV_KVM_EVIDENCE: .work/evidence/c03-prod-a-v11/kvm
+        run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Run threshold-free 3-round real Room v11 evidence on API36
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05
+        with:
+          api-level: 36
+          target: android-tv
+          arch: x86_64
+          profile: tv_1080p
+          avd-name: MuxTV_TV_CURRENT_API36
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          enable-hw-keyboard: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedC03ProdAV11Accounting.sh
+
+      - name: Publish bounded, SHA-pinned pilot artifact
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: c03-prod-a-v11-accounting-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .work/evidence/c03-prod-a-v11/**
+            core/database/build/outputs/androidTest-results/**
+          retention-days: 7
+          github-token: ${{ github.token }}
