@@ -20,7 +20,7 @@ import java.security.MessageDigest
  * access token. Domain, kind, identities, counter, signature width and HPKE
  * bytes are part of the detached Ed25519 signing statement.
  */
-internal enum class Lc04HandoffKind(val id: Int, val min: Int, val max: Int) {
+enum class Lc04HandoffKind(val id: Int, val min: Int, val max: Int) {
     SIGNED_SEED_OFFER(0x11, 84, 2120),
     TV_KEY_CONFIRM(0x12, 64, 64),
     PHONE_KEY_CONFIRM(0x13, 32, 32);
@@ -30,7 +30,7 @@ internal enum class Lc04HandoffKind(val id: Int, val min: Int, val max: Int) {
     }
 }
 
-internal class Lc04HandoffFrame(
+class Lc04HandoffFrame(
     val kind: Lc04HandoffKind,
     tvInvitationId: ByteArray,
     tvPairingId: ByteArray,
@@ -64,7 +64,7 @@ internal class Lc04HandoffFrame(
     override fun toString(): String = "Lc04HandoffFrame(kind=${kind.name}, [REDACTED])"
 }
 
-internal object Lc04HandoffWireLab {
+object Lc04HandoffWireLab {
     const val HEADER_BYTES = 138
     const val MAX_PAYLOAD_BYTES = 2120
     const val MAX_FRAME_BYTES = HEADER_BYTES + MAX_PAYLOAD_BYTES
