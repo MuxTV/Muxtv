@@ -25,7 +25,7 @@ class Lc04SyntheticDuplexTest {
         assertThat(phoneWire.copyOfRange(0, 4)).isEqualTo(
             byteArrayOf(0x4d, 0x58, 0x45, 0x31),
         )
-        assertThat(phoneWire.size).isEqualTo(108)
+        assertThat(phoneWire.size).isEqualTo(113)
         assertThat(tv.receiveSyntheticProbe(phoneWire)).isTrue()
         val tvWire = checkNotNull(tv.sendSyntheticProbe())
         assertThat(phone.receiveSyntheticProbe(tvWire)).isTrue()
@@ -76,7 +76,7 @@ class Lc04SyntheticDuplexTest {
     }
 
     @Test fun changingDirectionSessionCounterOrLengthInvalidatesTagOrHeader() {
-        for (index in listOf(5, 6, 37, 38, 45, 46, 47, 48, 86, 107)) {
+        for (index in listOf(5, 6, 37, 38, 45, 46, 47, 48, 53, 86, 107, 112)) {
             withPair { phone, tv ->
                 val packet = checkNotNull(phone.sendSyntheticProbe())
                 packet[index] = (packet[index].toInt() xor 1).toByte()
@@ -103,7 +103,7 @@ class Lc04SyntheticDuplexTest {
         withPair { phone, tv ->
             monotonic.addAndGet(120_000)
             assertThat(phone.sendSyntheticProbe()).isNull()
-            assertThat(tv.receiveSyntheticProbe(ByteArray(108))).isFalse()
+            assertThat(tv.receiveSyntheticProbe(ByteArray(113))).isFalse()
         }
         monotonic.set(10_000)
         withPair { phone, tv ->
@@ -121,7 +121,7 @@ class Lc04SyntheticDuplexTest {
                     .isTrue()
             }
             assertThat(phone.sendSyntheticProbe()).isNull()
-            assertThat(tv.receiveSyntheticProbe(ByteArray(108))).isFalse()
+            assertThat(tv.receiveSyntheticProbe(ByteArray(113))).isFalse()
         }
 
     @Test fun cancellationIsPermanentAndDoesNotReleaseKeysOrProbeBytes() =
