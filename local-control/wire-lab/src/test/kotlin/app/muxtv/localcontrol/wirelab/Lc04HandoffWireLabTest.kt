@@ -233,9 +233,9 @@ class Lc04HandoffWireLabTest {
             0 to 0, 1 to 0, 2 to 0, 3 to 0,
             4 to 0, 4 to 2,
             5 to 0, 5 to 4, 5 to 0x7f, 5 to 0x12,
-            134 to 0, 135 to 0, 134 to 1, 135 to 129,
-            136 to 0, 137 to 0, 136 to 255, 137 to 0,
-            138 to 0, 139 to 0,
+            134 to 1, 135 to 0, 135 to 129,
+            136 to 1, 137 to 0, 136 to 255, 137 to 1,
+            138 to 1, 139 to 0,
         )) {
             val changed = original.clone()
             changed[index] = replacement.toByte()
@@ -244,7 +244,7 @@ class Lc04HandoffWireLabTest {
         assertThat(Lc04HandoffWireLab.decode(ByteArray(5_000))).isNull()
         val noise = Random(10072)
         repeat(500) {
-            val junk = ByteArray(noise.nextInt(0, 2700)).also(noise::nextBytes)
+            val junk = ByteArray(noise.nextInt(0, 2700)).also { noise.nextBytes(it) }
             assertThat(Lc04HandoffWireLab.decode(junk)).isNull()
         }
     }
