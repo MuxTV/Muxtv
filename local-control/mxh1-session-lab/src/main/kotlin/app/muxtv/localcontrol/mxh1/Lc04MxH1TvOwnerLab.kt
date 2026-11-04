@@ -29,7 +29,7 @@ import java.util.Base64
  * seed may activate the cryptographic state.
  *
  * This is deliberately NOT connected to TV Android, phone Android, native
- * TCP, provider operations or SourceOnboarding. Its final boolean signals
+ * TCP, provider operations or source ingestion. Its final boolean signals
  * synthetic mutual proof ONLY, not any durable grant or data-plane authority.
  */
 class Lc04MxH1TvOwnerLab private constructor(
