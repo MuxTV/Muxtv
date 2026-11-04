@@ -6,7 +6,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Keep the phone cryptographic proof flow offline until the network slice is accepted. */
+/** Keep the pure phone proof module socket-free; Android owns native LAN opt-in. */
 class LocalControlPhoneProofIsolationTest {
     private val root = File(System.getProperty("user.dir")).parentFile.parentFile
 
@@ -35,13 +35,13 @@ class LocalControlPhoneProofIsolationTest {
         )) assertFalse(impl.contains(blocked), "Unauthorized phone proof capability: $blocked")
     }
 
-    @Test fun `phone Android app remains scan-only and manifest without network permission`() {
+    @Test fun `phone Android app has only reviewed native proof and no source API`() {
         val manifest = root.resolve("app/phone/src/main/AndroidManifest.xml").readText()
-        assertFalse(manifest.contains("""<uses-permission android:name="android.permission.INTERNET" />"""))
-        assertFalse(manifest.contains("""<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />"""))
+        assertContains(manifest, """<uses-permission android:name="android.permission.INTERNET" />""")
+        assertContains(manifest, """<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />""")
         val appGradle = root.resolve("app/phone/build.gradle.kts").readText()
-        assertFalse(appGradle.contains(":local-control:phone-flow"))
-        assertFalse(appGradle.contains(":local-control:native-transport"))
+        assertContains(appGradle, """implementation(project(":local-control:phone-flow"))""")
+        assertContains(appGradle, """implementation(project(":local-control:native-transport"))""")
         val settings = root.resolve("settings.gradle.kts").readText()
         assertContains(settings, """":local-control:phone-flow"""")
     }
@@ -52,6 +52,8 @@ class LocalControlPhoneProofIsolationTest {
         assertContains(workflow, "test \"\$(git rev-parse HEAD)\" = \"\$EXPECTED_SHA\"")
         assertContains(workflow, ":local-control:phone-flow:test")
         assertContains(workflow, ":app:phone:assembleDebug")
+        assertContains(workflow, "android.permission.INTERNET")
+        assertContains(workflow, "android.permission.ACCESS_LOCAL_NETWORK")
         assertFalse(workflow.contains("self-hosted"))
         assertFalse(workflow.contains("android-emulator-runner"))
     }
