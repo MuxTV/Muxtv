@@ -17,4 +17,17 @@
     <string name="scan_again">Сканировать ещё раз</string>
     <string name="scan_phone_fingerprint">SHA-256 ключа телефона: %1$s. Сравните с отпечатком на ТВ перед подтверждением.</string>
     <string name="scan_signing_key_error">Не удалось создать временный ключ телефона. Сканируйте QR повторно.</string>
+    <string name="scan_native_intro">Экспериментальный защищённый канал: включите TCP на ТВ, вручную введите показанные IPv4 и порт. Адрес не подтверждает личность ТВ. Пароли и IPTV-источники не передаются.</string>
+    <string name="scan_native_host">Частный IPv4 с экрана ТВ</string>
+    <string name="scan_native_port">TCP-порт с экрана ТВ</string>
+    <string name="scan_native_start">Запросить проверку ТВ по LAN</string>
+    <string name="scan_native_verify">Подтвердил на ТВ — проверить защищённый ответ</string>
+    <string name="scan_native_endpoint_invalid">Допустимы только числовой RFC1918 IPv4 и TCP-порт 1–65535. URL и имена хостов запрещены.</string>
+    <string name="scan_native_permission_denied">Доступ к локальной сети не разрешён. Соединение не выполнялось.</string>
+    <string name="scan_native_offering">Запрос отправляется. Сетевой ответ пока не подтверждает подлинность ТВ.</string>
+    <string name="scan_native_waiting">Проверьте отпечаток телефона на настоящем ТВ и подтвердите его пультом. Затем нажмите кнопку проверки.</string>
+    <string name="scan_native_verifying">Проверка Ed25519 и защищённого одноразового ответа ТВ…</string>
+    <string name="scan_native_verified">Подлинность ТВ подтверждена QR-привязанным зашифрованным ответом. Передача IPTV-данных всё ещё отключена.</string>
+    <string name="scan_native_failed">Подтвердить ТВ не удалось. Текущая попытка отозвана. Сканируйте новый QR.</string>
+    <string name="scan_native_revoked">Сеть или разрешение изменились. Ключ и TCP-соединение отозваны. Сканируйте новый QR.</string>
 </resources>
