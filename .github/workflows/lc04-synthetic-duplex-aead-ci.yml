@@ -1,0 +1,63 @@
+name: LC04 synthetic-only duplex Tink AEAD protocol CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-synthetic-duplex-aead-ci.yml'
+      - 'local-control/protected-channel/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SyntheticProtectedChannelIsolationTest.kt'
+      - 'settings.gradle.kts'
+      - '.work/meta/modules.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-synthetic-duplex-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  synthetic-only:
+    name: Tink synthetic duplex hostile JVM security matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact protocol lab HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Require exact SHA and deny unreviewed app/source integration
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -Fq '":local-control:protected-channel",' settings.gradle.kts
+          ! grep -Fq ':local-control:protected-channel' app/phone/build.gradle.kts
+          ! grep -Fq ':local-control:protected-channel' app/tv/build.gradle.kts
+          ! grep -Eq ':catalog:|:core:credentials|:local-control:onboarding|libs.okhttp|libs.ktor' local-control/protected-channel/build.gradle.kts
+          ! grep -Eq 'SourceOnboarding|SourcePreparationRequest|SourcePreparationHandle|Socket\(|HttpClient' local-control/protected-channel/src/main/kotlin/app/muxtv/localcontrol/protectedchannel/Lc04SyntheticDuplex.kt
+      - name: Run synthetic-only hostile duplex Tink AEAD tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:protected-channel:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Publish isolated synthetic test evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-synthetic-duplex-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/protected-channel/build/test-results/test/**
+            local-control/protected-channel/build/reports/tests/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
