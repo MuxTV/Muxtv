@@ -86,6 +86,10 @@ actual_modules:
     gradle_path: :local-control:phone-flow
     type: pure_kotlin_library
     owns: [qr_pinned_phone_enrollment_state_machine, tv_local_consent_enforced_by_tv, one_shot_authenticated_receipt_verification, no_transport_or_source_authority]
+  local-control-protected-channel:
+    gradle_path: :local-control:protected-channel
+    type: pure_kotlin_library
+    owns: [synthetic_only_bidirectional_aead_lab, strict_direction_and_counter, fail_closed_expiry_and_revocation, no_production_handshake_or_provider_data]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
