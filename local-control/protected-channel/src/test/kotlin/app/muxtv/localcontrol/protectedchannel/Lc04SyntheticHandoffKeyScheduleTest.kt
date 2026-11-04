@@ -218,10 +218,31 @@ class Lc04SyntheticHandoffKeyScheduleTest {
             ).getPrimitive(RegistryConfiguration.get(), PublicKeyVerify::class.java)
             val statement = Lc04TypedTranscript.probeSigningStatement(signedFrame, signedBody)
             verifier.verify(signedBody.signature(), statement)
+            val alteredStatement = statement.clone()
+            alteredStatement[alteredStatement.lastIndex] =
+                (alteredStatement.last().toInt() xor 1).toByte()
+            assertThat(runCatching {
+                verifier.verify(signedBody.signature(), alteredStatement)
+            }.isFailure).isTrue()
+            alteredStatement.fill(0)
 
             val tvDecryptor = receiverKeys.getPrimitive(
                 RegistryConfiguration.get(), HybridDecrypt::class.java,
             )
+            val alteredHpkeContext = hpkeContext.clone()
+            alteredHpkeContext[alteredHpkeContext.lastIndex] =
+                (alteredHpkeContext.last().toInt() xor 1).toByte()
+            assertThat(runCatching {
+                tvDecryptor.decrypt(signedBody.ciphertext(), alteredHpkeContext)
+            }.isFailure).isTrue()
+            alteredHpkeContext.fill(0)
+            val alteredCiphertext = signedBody.ciphertext()
+            alteredCiphertext[alteredCiphertext.lastIndex] =
+                (alteredCiphertext.last().toInt() xor 1).toByte()
+            assertThat(runCatching {
+                tvDecryptor.decrypt(alteredCiphertext, hpkeContext)
+            }.isFailure).isTrue()
+            alteredCiphertext.fill(0)
             tvRecovered = tvDecryptor.decrypt(signedBody.ciphertext(), hpkeContext)
             assertThat(tvRecovered).isEqualTo(independentSeed)
             val transcript = Lc04SyntheticHandoffTranscript(
