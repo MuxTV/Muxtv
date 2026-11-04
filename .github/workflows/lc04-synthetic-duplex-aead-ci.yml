@@ -7,6 +7,7 @@ on:
       - '.github/workflows/lc04-synthetic-duplex-aead-ci.yml'
       - 'local-control/protected-channel/**'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SyntheticProtectedChannelIsolationTest.kt'
+      - '.work/specifications/lc04-synthetic-handoff-schedule-20261104.md'
       - 'settings.gradle.kts'
       - '.work/meta/modules.yaml'
   workflow_dispatch:
@@ -50,6 +51,10 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew :local-control:protected-channel:test \
+            :local-control:enrollment:test :local-control:wire-lab:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04SyntheticProtectedChannelIsolationTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Publish isolated synthetic test evidence
         if: always()
@@ -59,5 +64,8 @@ jobs:
           path: |
             local-control/protected-channel/build/test-results/test/**
             local-control/protected-channel/build/reports/tests/test/**
+            local-control/enrollment/build/test-results/test/**
+            local-control/wire-lab/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
           retention-days: 7
           github-token: ${{ github.token }}

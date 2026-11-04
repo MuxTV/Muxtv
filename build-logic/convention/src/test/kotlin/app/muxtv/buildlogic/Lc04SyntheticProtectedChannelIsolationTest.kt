@@ -13,9 +13,16 @@ class Lc04SyntheticProtectedChannelIsolationTest {
     @Test fun `synthetic only module cannot be called from Android applications`() {
         val gradle = root.resolve("local-control/protected-channel/build.gradle.kts").readText()
         assertContains(gradle, "implementation(libs.tink)")
-        for (forbidden in listOf("project(", ":catalog:", ":core:credentials",
-            ":local-control:onboarding", "libs.okhttp", "libs.ktor")) {
+        // Test-only canonical QR, TV-local Ed25519 approval and signed
+        // transcripts must NOT become production dependencies.
+        for (forbidden in listOf("implementation(project(", "api(project(",
+            ":catalog:", ":core:credentials", ":local-control:onboarding",
+            "libs.okhttp", "libs.ktor")) {
             assertFalse(gradle.contains(forbidden), forbidden)
+        }
+        for (testOnly in listOf(":local-control:qr-public",
+            ":local-control:enrollment", ":local-control:wire-lab")) {
+            assertContains(gradle, """testImplementation(project("$testOnly"))""")
         }
         val settings = root.resolve("settings.gradle.kts").readText()
         assertContains(settings, "\":local-control:protected-channel\"")
@@ -31,6 +38,25 @@ class Lc04SyntheticProtectedChannelIsolationTest {
             "EXPECTED_CIPHERTEXT_BYTES", "MessageDigest.isEqual",
             "nextIn + 1L", "MAX_PROBES", "TTL_MILLIS", "override fun close()")) {
             assertContains(src, required)
+        }
+        val handoff = root.resolve(
+            "local-control/protected-channel/src/main/kotlin/" +
+                "app/muxtv/localcontrol/protectedchannel/Lc04SyntheticHandoffKeySchedule.kt",
+        ).readText()
+        assertContains(handoff, "Lc04Rfc5869HkdfSha256")
+        assertContains(handoff, "HmacSHA256")
+        assertContains(handoff, "private val EXTRACT_DOMAIN")
+        assertContains(handoff, "private val EXPAND_DOMAIN")
+        assertContains(handoff, "phone-to-tv|")
+        assertContains(handoff, "tv-to-phone|")
+        assertContains(handoff, "confirm-tv|")
+        assertContains(handoff, "confirm-phone|")
+        assertContains(handoff, "MessageDigest.isEqual")
+        assertContains(handoff, "override fun close()")
+        for (blocked in listOf("SourceOnboarding", "SourcePreparationRequest",
+            "SourcePreparationHandle", "Socket(", "HttpClient",
+            "android.content.", "SharedPreferences")) {
+            assertFalse(handoff.contains(blocked), "Forbidden handoff lab authority: $blocked")
         }
         for (forbidden in listOf("SourceOnboarding", "SourcePreparationHandle",
             "SourcePreparationRequest", "Socket(", "HttpClient", "M3u(", "Xtream(",
@@ -57,6 +83,24 @@ class Lc04SyntheticProtectedChannelIsolationTest {
             "counterCapacityIsBounded", "cancellationIsPermanent")) {
             assertContains(tests, required)
         }
+        val handoffTests = root.resolve(
+            "local-control/protected-channel/src/test/kotlin/" +
+                "app/muxtv/localcontrol/protectedchannel/Lc04SyntheticHandoffKeyScheduleTest.kt",
+        ).readText()
+        for (expected in listOf(
+            "hkdfSha256MatchesRfc5869TestCaseOne",
+            "sameIndependentSeedAndExactTranscriptYieldSameKeys",
+            "exactQrIdsBothFingerprintsSignedDigestAndTvNonce",
+            "wrongDedicatedSeedAndReceiptKeyConfusion",
+            "invalidEntropyLengthAndTranscriptLengthsReject",
+            "closeIsTerminalAndRejectsAllConfirmations",
+            "tvLocalApprovedEd25519SignedHpkeSeedEnablesMutualSyntheticKeyConfirmation",
+            "gate.approveOnTv(phone.fingerprint)",
+            "verifier.verify(signedBody.signature(), statement)",
+        )) assertContains(handoffTests, expected)
+        assertTrue(root.resolve(
+            ".work/specifications/lc04-synthetic-handoff-schedule-20261104.md",
+        ).isFile)
         assertTrue(root.resolve(
             ".work/specifications/lc04-synthetic-duplex-aead-20261104.md",
         ).isFile)
