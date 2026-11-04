@@ -262,7 +262,7 @@ class Lc04HandoffWireLabTest {
         }
         val actual = offer()
         for ((index, value) in listOf(
-            138 to 0, 139 to 1, 138 to 0x08, 139 to 0x01,
+            138 to 1, 139 to 1, 138 to 0x08, 139 to 0x01,
             (138 + 2 + 111) to 0, (138 + 2 + 111) to 68,
         )) {
             val changed = actual.clone()
