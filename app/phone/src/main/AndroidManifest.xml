@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- SCAN-ONLY. INTERNET/ACCESS_LOCAL_NETWORK MUST NOT be added until a reviewed
-         mutually authenticated, bidirectional source-transfer channel exists. -->
+    <!-- Native RFC1918 socket ONLY after QR scan, explicit phone opt-in, TV-local
+         approval, QR-pinned Ed25519/HPKE proof and authenticated AES-GCM receipt.
+         INTERNET is install-time; API37+ ACCESS_LOCAL_NETWORK is runtime-gated.
+         No HTTP routes, provider credentials, cloud or source capability. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
     <application android:allowBackup="false"

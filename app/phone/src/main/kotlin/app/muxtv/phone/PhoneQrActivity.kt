@@ -3,10 +3,14 @@ package app.muxtv.phone
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
+import android.text.InputFilter
+import android.text.InputType
 import android.os.Bundle
 import android.util.Size
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -27,10 +31,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Scan-only Android phone companion entry point.
- *
- * No INTERNET permission, browser, external QR decoder, provider input or persisted
- * pairing key. Scanning a public key is NOT the same as authenticating the real TV.
+ * QR-pinned phone companion. The camera never opens a network connection.
+ * A separate explicit button may start ONLY the native one-shot proof path
+ * after scanning the actual TV key and passing the Android LAN permission gate.
+ * No browser, provider fields, credentials, legacy /pair or persisted grant.
  */
 class PhoneQrActivity : ComponentActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -40,6 +44,14 @@ class PhoneQrActivity : ComponentActivity() {
     private var scanned: TvQrPublicKey? = null
     private var phoneSigningIdentity: PhoneSigningIdentity? = null
     private var invalidNoticeSent = false
+    private var nativeSession: PhoneNativeProofSession? = null
+    private data class PendingNative(val generation: Long, val endpoint: PhoneNativeEndpoint)
+    private var pendingNative: PendingNative? = null
+    private lateinit var nativePanel: LinearLayout
+    private lateinit var hostInput: EditText
+    private lateinit var portInput: EditText
+    private lateinit var startNativeButton: Button
+    private lateinit var verifyNativeButton: Button
 
     private lateinit var preview: PreviewView
     private lateinit var status: TextView
@@ -51,6 +63,21 @@ class PhoneQrActivity : ComponentActivity() {
     ) { granted ->
         if (granted) startCameraIfAllowed()
         else status.setText(R.string.scan_permission_denied)
+    }
+
+    private val networkPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val pending = pendingNative
+        pendingNative = null
+        if (!granted) {
+            if (::status.isInitialized) status.setText(R.string.scan_native_permission_denied)
+        } else if (pending != null && pending.generation == scanEpoch.get() &&
+            scanned != null && phoneSigningIdentity != null &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) {
+            beginNativeProof(pending.endpoint)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,13 +116,7 @@ class PhoneQrActivity : ComponentActivity() {
             setText(R.string.scan_permission_button)
             setOnClickListener {
                 if (scanned != null) {
-                    phoneSigningIdentity?.close()
-                    phoneSigningIdentity = null
-                    scanned = null
-                    scanEpoch.incrementAndGet()
-                    delivered.set(false)
-                    invalidNoticeSent = false
-                    details.visibility = View.GONE
+                    resetScannedSession()
                 }
                 if (hasCameraPermission()) startCameraIfAllowed()
                 else cameraPermission.launch(Manifest.permission.CAMERA)
@@ -113,6 +134,54 @@ class PhoneQrActivity : ComponentActivity() {
         content.addView(retryButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(12) })
+        nativePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            tag = "lc04-phone-native-panel"
+            visibility = View.GONE
+        }
+        val nativeIntro = TextView(this).apply {
+            setText(R.string.scan_native_intro)
+            textSize = 14f
+            setPadding(0, dp(14), 0, dp(10))
+        }
+        hostInput = EditText(this).apply {
+            setSingleLine(true)
+            hint = getString(R.string.scan_native_host)
+            inputType = InputType.TYPE_CLASS_TEXT
+            filters = arrayOf(InputFilter.LengthFilter(15))
+            contentDescription = getString(R.string.scan_native_host)
+        }
+        portInput = EditText(this).apply {
+            setSingleLine(true)
+            hint = getString(R.string.scan_native_port)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(5))
+            contentDescription = getString(R.string.scan_native_port)
+        }
+        startNativeButton = Button(this).apply {
+            tag = "lc04-phone-native-opt-in"
+            setText(R.string.scan_native_start)
+            setOnClickListener { startNativeFromGesture() }
+        }
+        verifyNativeButton = Button(this).apply {
+            tag = "lc04-phone-native-verify"
+            setText(R.string.scan_native_verify)
+            visibility = View.GONE
+            setOnClickListener {
+                if (nativeSession?.finishAfterTvButton() == true) {
+                    isEnabled = false
+                    status.setText(R.string.scan_native_verifying)
+                }
+            }
+        }
+        nativePanel.addView(nativeIntro)
+        nativePanel.addView(hostInput)
+        nativePanel.addView(portInput)
+        nativePanel.addView(startNativeButton)
+        nativePanel.addView(verifyNativeButton)
+        content.addView(nativePanel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(10) })
         // Camera preview plus two long fingerprints must remain reachable on small phones.
         setContentView(ScrollView(this).apply {
             isFillViewport = true
@@ -195,8 +264,8 @@ class PhoneQrActivity : ComponentActivity() {
             delivered.set(false)
             return
         }
-        // No phone key or IPTV data is sent over legacy HTTP. The signing
-        // identity will be used only by a future reviewed protected transport.
+        // No network activity during scan. Signing key stays process-local
+        // until an explicit user opt-in to the QR-pinned native proof only.
         val identity = try {
             PhoneSigningIdentity.generate()
         } catch (_: Exception) {
@@ -218,23 +287,117 @@ class PhoneQrActivity : ComponentActivity() {
         ).joinToString("\n\n")
         details.visibility = View.VISIBLE
         retryButton.setText(R.string.scan_again)
+        nativePanel.visibility = View.VISIBLE
+        startNativeButton.isEnabled = true
+        hostInput.isEnabled = true
+        portInput.isEnabled = true
+        verifyNativeButton.visibility = View.GONE
+    }
+
+    private fun startNativeFromGesture() {
+        if (nativeSession != null || scanned == null || phoneSigningIdentity == null) return
+        val endpoint = PhoneNativeEndpoint.parseOrNull(
+            hostInput.text.toString(), portInput.text.toString(),
+        )
+        if (endpoint == null) {
+            status.setText(R.string.scan_native_endpoint_invalid)
+            return
+        }
+        // Android 17 / API37+ target 37: runtime local-network permission.
+        // API26..36: do not request ACCESS_LOCAL_NETWORK at runtime.
+        if (Build.VERSION.SDK_INT >= 37 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingNative = PendingNative(scanEpoch.get(), endpoint)
+            networkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            return
+        }
+        beginNativeProof(endpoint)
+    }
+
+    private fun beginNativeProof(endpoint: PhoneNativeEndpoint) {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
+            nativeSession != null
+        ) return
+        val key = scanned ?: return
+        val identity = phoneSigningIdentity ?: return
+        val epoch = scanEpoch.get()
+        // The flow owns the signing identity and must close it on onStop.
+        phoneSigningIdentity = null
+        val session = PhoneNativeProofSession(
+            context = this,
+            scannedTv = key,
+            signingPhone = identity,
+            postToUi = { action -> runOnUiThread(action) },
+            onState = { state ->
+                if (scanEpoch.get() == epoch &&
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                ) {
+                    when (state) {
+                        PhoneNativeProofSession.State.OFFERING ->
+                            status.setText(R.string.scan_native_offering)
+                        PhoneNativeProofSession.State.WAITING_FOR_TV -> {
+                            status.setText(R.string.scan_native_waiting)
+                            verifyNativeButton.visibility = View.VISIBLE
+                            verifyNativeButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.VERIFYING ->
+                            status.setText(R.string.scan_native_verifying)
+                        PhoneNativeProofSession.State.VERIFIED -> {
+                            status.setText(R.string.scan_native_verified)
+                            verifyNativeButton.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.FAILED,
+                        PhoneNativeProofSession.State.REVOKED -> {
+                            status.setText(if (state == PhoneNativeProofSession.State.REVOKED)
+                                R.string.scan_native_revoked else R.string.scan_native_failed)
+                            verifyNativeButton.visibility = View.GONE
+                        }
+                    }
+                }
+            },
+        )
+        nativeSession = session
+        startNativeButton.isEnabled = false
+        hostInput.isEnabled = false
+        portInput.isEnabled = false
+        if (!session.begin(endpoint)) {
+            status.setText(R.string.scan_native_failed)
+        }
+    }
+
+    private fun resetScannedSession() {
+        // Invalidate callbacks BEFORE closing a blocked connect/read.
+        scanEpoch.incrementAndGet()
+        pendingNative = null
+        nativeSession?.close()
+        nativeSession = null
+        phoneSigningIdentity?.close()
+        phoneSigningIdentity = null
+        scanned = null
+        delivered.set(false)
+        invalidNoticeSent = false
+        details.visibility = View.GONE
+        nativePanel.visibility = View.GONE
+        hostInput.text?.clear()
+        portInput.text?.clear()
+        verifyNativeButton.visibility = View.GONE
     }
 
     override fun onStop() {
         cameraProvider?.unbindAll()
-        phoneSigningIdentity?.close()
-        phoneSigningIdentity = null
-        // Do not retain obsolete phone key material across foreground lifecycles.
-        scanned = null
-        scanEpoch.incrementAndGet()
-        delivered.set(false)
-        if (::details.isInitialized) details.visibility = View.GONE
+        // The active TCP Socket is synchronously closed; stale worker or
+        // permission callbacks cannot revive this ephemeral attempt.
+        if (::nativePanel.isInitialized) resetScannedSession()
         super.onStop()
     }
 
     override fun onDestroy() {
         cameraProvider?.unbindAll()
         cameraExecutor.shutdownNow()
+        nativeSession?.close()
+        nativeSession = null
         phoneSigningIdentity?.close()
         phoneSigningIdentity = null
         scanned = null

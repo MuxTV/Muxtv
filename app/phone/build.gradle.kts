@@ -15,6 +15,8 @@ android {
 dependencies {
     implementation(project(":local-control:qr-public"))
     implementation(project(":local-control:enrollment"))
+    implementation(project(":local-control:phone-flow"))
+    implementation(project(":local-control:native-transport"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
@@ -22,4 +24,8 @@ dependencies {
     implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.truth)
 }

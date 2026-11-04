@@ -1,0 +1,106 @@
+name: LC04 phone native proof Android device matrix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-phone-native-proof-device-matrix.yml'
+      - 'app/phone/**'
+      - 'local-control/phone-flow/**'
+      - 'local-control/native-transport/**'
+      - 'local-control/enrollment/**'
+      - 'local-control/qr-public/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/LocalPhoneQrScannerContractTest.kt'
+      - 'gradle/**'
+      - 'settings.gradle.kts'
+      - 'tools/ci/Run-HostedPhoneNativeProofTests.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lc04-phone-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  phone-emulator:
+    name: Native phone opt-in API${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            arch: x86
+            avd: MuxTV_PHONE_API26
+          - api: 36
+            arch: x86_64
+            avd: MuxTV_PHONE_API36
+    steps:
+      - name: Checkout exact phone source HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Require source revision and enable KVM
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          bash ./tools/ci/Enable-HostedAndroidKvm.sh
+      - name: Install bounded hosted ADB retry shim
+        shell: bash
+        run: bash ./tools/ci/Install-HostedAdbRetryShim.sh
+      - name: Run native phone opt-in lifecycle tests on API${{ matrix.api }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          MUXTV_SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          MUXTV_PHONE_API: ${{ matrix.api }}
+          MUXTV_EXPECTED_AVD: ${{ matrix.avd }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: ${{ matrix.arch }}
+          profile: pixel_2
+          avd-name: ${{ matrix.avd }}
+          force-avd-creation: true
+          cores: 2
+          ram-size: 2048M
+          heap-size: 256M
+          disk-size: 4G
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect -camera-back none -camera-front none -netdelay none -netspeed full
+          script: bash ./tools/ci/Run-HostedPhoneNativeProofTests.sh
+      - name: Upload phone test evidence API${{ matrix.api }}
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-native-phone-api${{ matrix.api }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/phone/build/outputs/androidTest-results/**
+            app/phone/build/reports/androidTests/**
+            .work/evidence/lc04-phone-native-api${{ matrix.api }}/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+  gate:
+    if: always()
+    name: Native phone Android API26 and API36 gate
+    needs: [phone-emulator]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail closed unless both phone emulators passed
+        env:
+          MATRIX_RESULT: ${{ needs.phone-emulator.result }}
+        run: |
+          test "$MATRIX_RESULT" = "success"

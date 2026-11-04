@@ -81,6 +81,7 @@ internal object Lc04LengthPrefix {
 class Lc04TcpPhoneExchange private constructor(
     private val ip: InetAddress,
     private val port: Int,
+    private val bindBeforeConnect: ((Socket) -> Unit)? = null,
 ) : AutoCloseable {
     init { require(port in 1..65535) }
 
@@ -128,6 +129,11 @@ class Lc04TcpPhoneExchange private constructor(
         return try {
             socket.use {
                 if (revoked) return null
+                // Android's selected Wi-Fi/Ethernet Network binds this unconnected
+                // socket before any bytes leave. A VPN/default-route change cannot
+                // silently redirect a new request through an arbitrary interface.
+                bindBeforeConnect?.invoke(socket)
+                if (revoked) return null
                 socket.soTimeout = READ_TIMEOUT_MS
                 socket.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS)
                 if (revoked) return null
@@ -173,9 +179,29 @@ class Lc04TcpPhoneExchange private constructor(
             return Lc04TcpPhoneExchange(parsed, port)
         }
 
+        /**
+         * Production Android opt-in connector. The caller must bind the raw
+         * unconnected Socket to its explicitly selected Network before connect.
+         * This is a locator, NOT authenticated TV identity; QR-pinned proof
+         * and TV-local approval remain independently mandatory.
+         */
+        fun forPrivateIpv4OnNetwork(
+            address: String,
+            port: Int,
+            bindUnconnectedSocket: (Socket) -> Unit,
+        ): Lc04TcpPhoneExchange {
+            val parsed = requireNotNull(Lc04PrivateIpv4.parse(address)) {
+                "Only numeric RFC1918 IPv4 may be used."
+            }
+            return Lc04TcpPhoneExchange(parsed, port, bindUnconnectedSocket)
+        }
+
         /** Test-only loopback connector; never a product private LAN locator. */
-        internal fun loopbackForTests(port: Int): Lc04TcpPhoneExchange =
-            Lc04TcpPhoneExchange(loopbackAddress(), port)
+        internal fun loopbackForTests(
+            port: Int,
+            bindBeforeConnect: ((Socket) -> Unit)? = null,
+        ): Lc04TcpPhoneExchange =
+            Lc04TcpPhoneExchange(loopbackAddress(), port, bindBeforeConnect)
     }
 }
 

@@ -7,19 +7,21 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Prevent an incomplete QR-only Android companion from silently becoming
- * a credential-uploading LAN client before #401 bidirectional-auth review.
+ * Allow ONLY the reviewed QR-pinned, user-triggered native proof transport.
+ * Provider secrets, browsers and legacy HTTP are still forbidden.
  */
 class LocalPhoneQrScannerContractTest {
     private val root = File(System.getProperty("user.dir")).parentFile.parentFile
 
     @Test
-    fun `phone camera app is offline and cannot reach pairing server or credential stores`() {
+    fun `phone runtime has only QR-pinned proof and no provider credential dependencies`() {
         val app = root.resolve("app/phone/build.gradle.kts").readText()
         assertContains(app, """project(":local-control:qr-public")""")
         assertContains(app, "libs.camera.camera2")
         assertContains(app, "libs.camera.lifecycle")
         assertContains(app, "libs.camera.view")
+        assertContains(app, """implementation(project(":local-control:phone-flow"))""")
+        assertContains(app, """implementation(project(":local-control:native-transport"))""")
         for (prohibited in listOf(
             """:local-control:crypto-lab""", """:local-control:server""",
             """:local-control:onboarding""", """:core:credentials""",
@@ -29,8 +31,9 @@ class LocalPhoneQrScannerContractTest {
         }
         val manifest = root.resolve("app/phone/src/main/AndroidManifest.xml").readText()
         assertContains(manifest, """android.permission.CAMERA""")
-        assertFalse(Regex("""<uses-permission[^>]*android.permission.INTERNET""").containsMatchIn(manifest))
-        assertFalse(Regex("""<uses-permission[^>]*android.permission.ACCESS_LOCAL_NETWORK""").containsMatchIn(manifest))
+        for (required in listOf("INTERNET", "ACCESS_NETWORK_STATE", "ACCESS_LOCAL_NETWORK")) {
+            assertContains(manifest, """<uses-permission android:name="android.permission.$required" />""")
+        }
         assertContains(manifest, """android:usesCleartextTraffic="false" """.trim())
         assertContains(manifest, """android:allowBackup="false" """.trim())
     }
@@ -44,7 +47,22 @@ class LocalPhoneQrScannerContractTest {
             "local-control/qr-public/src/main/kotlin/app/muxtv/localcontrol/qr/TvQrPublicKey.kt"
         ).readText()
         assertContains(scanner, "TvQrPublicKeyParser.parseOrNull(value)")
-        assertContains(scanner, "Scan-only Android phone companion entry point.")
+        assertContains(scanner, "QR-pinned phone companion.")
+        assertContains(scanner, "startNativeFromGesture()")
+        assertContains(scanner, "Manifest.permission.ACCESS_LOCAL_NETWORK")
+        assertContains(scanner, "Build.VERSION.SDK_INT >= 37")
+        assertContains(scanner, "nativeSession?.close()")
+        val client = root.resolve(
+            "app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt",
+        ).readText()
+        assertContains(client, "Lc04TcpPhoneExchange.forPrivateIpv4OnNetwork(")
+        assertContains(client, "selected.bindSocket(socket)")
+        assertContains(client, "manager.registerDefaultNetworkCallback(callback)")
+        assertContains(client, "phase.getAndSet(Phase.CLOSED)")
+        assertContains(client, "attempt.finishAfterTvAction()")
+        assertFalse(client.contains("SourceOnboarding"))
+        assertFalse(client.contains("http://"))
+        assertFalse(client.contains("SharedPreferences"))
         assertContains(parser, """private const val PREFIX = "MXLC04:1:"""")
         assertContains(parser, "parseKeysetWithoutSecret(raw)")
         assertContains(parser, "HpkeAead.AES_256_GCM")
