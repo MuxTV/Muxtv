@@ -1,0 +1,78 @@
+name: LC04 MXH1 original TV QR/HPKE consent owner CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-original-tv-mxh1-qr-owner-ci.yml'
+      - 'local-control/tv-qr/**'
+      - 'local-control/wire-lab/**'
+      - 'local-control/protected-channel/**'
+      - 'local-control/mxh1-session-lab/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1OriginalTvQrOwnerContractTest.kt'
+      - '.work/specifications/lc04-mxh1-existing-tv-qr-owner-20261105.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-original-tv-mxh1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  original-tv-owner:
+    name: Same TV QR owner Tink MXH1 hostile JVM lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Exact HEAD and disallow separate production TV/phone handshake
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -Fq 'fun acceptSyntheticMxH1SeedOffer(' local-control/tv-qr/src/main/kotlin/app/muxtv/localcontrol/tvqr/TvHpkeQrSession.kt
+          grep -Fq 'mxh1Keys?.close()' local-control/tv-qr/src/main/kotlin/app/muxtv/localcontrol/tvqr/TvHpkeQrSession.kt
+          ! grep -Fq ':local-control:mxh1-session-lab' app/tv/build.gradle.kts
+          ! grep -Fq ':local-control:mxh1-session-lab' app/phone/build.gradle.kts
+          ! grep -Eq 'SourcePreparationHandle|SourcePreparationRequest|Socket\(' local-control/tv-qr/src/main/kotlin/app/muxtv/localcontrol/tvqr/TvHpkeQrSession.kt
+          ! grep -Eq 'Lc04MxH1|SIGNED_SEED_OFFER' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
+      - name: Test original TV owner with real Tink and previous MXW1/MXH1 labs
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:tv-qr:test \
+            :local-control:mxh1-session-lab:test \
+            :local-control:wire-lab:test \
+            :local-control:protected-channel:test \
+            :local-control:enrollment:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1OriginalTvQrOwnerContractTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload exact HEAD original-owner proof
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-original-tv-mxh1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/tv-qr/build/test-results/test/**
+            local-control/tv-qr/build/reports/tests/test/**
+            local-control/mxh1-session-lab/build/test-results/test/**
+            local-control/wire-lab/build/test-results/test/**
+            local-control/protected-channel/build/test-results/test/**
+            local-control/enrollment/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}

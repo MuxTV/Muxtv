@@ -3,6 +3,13 @@ package app.muxtv.localcontrol.tvqr
 import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.enrollment.VerifiedPhoneIdentity
+import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticDerivedKeys
+import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffKeySchedule
+import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffTranscript
+import app.muxtv.localcontrol.wirelab.Lc04HandoffFrame
+import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
+import app.muxtv.localcontrol.wirelab.Lc04HandoffWireLab
+import app.muxtv.localcontrol.wirelab.Lc04MxH1HpkeContext
 import app.muxtv.localcontrol.wirelab.Lc04HpkeContext
 import app.muxtv.localcontrol.wirelab.Lc04ReceiptBody
 import app.muxtv.localcontrol.wirelab.Lc04TypedTranscript
@@ -46,6 +53,13 @@ class TvHpkeQrSession private constructor(
     private var approvedPhoneFingerprint: String? = null
     private var approvedPhoneVerifier: PublicKeyVerify? = null
     private var lastVerifiedProbeCounter = 0
+
+    private enum class MxH1Phase { NEW, WAIT_PHONE, VERIFIED, REVOKED }
+    // Same QR, private HPKE receiver and TV-approved Ed25519 verifier as MXW1.
+    // These fields NEVER grant SourceOnboarding, bearer or application authority.
+    private var mxh1Phase = MxH1Phase.NEW
+    private var mxh1AcceptedOffer: ByteArray? = null
+    private var mxh1Keys: Lc04SyntheticDerivedKeys? = null
 
 
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
@@ -113,6 +127,152 @@ class TvHpkeQrSession private constructor(
     }
 
     /**
+     * LC04-S2F, in-process SYNTHETIC ONLY. Reuse THIS installed TV QR owner's
+     * HPKE private key and exact TV-local-approved Ed25519 phone identity.
+     * No alternative QR, TV consent gate, LAN socket, source or credentials.
+     *
+     * One MXH1 offer may be authenticated for this QR lifetime. All malicious
+     * inputs fail closed and revoke the entire QR owner, including MXW1.
+     */
+    @Synchronized
+    fun acceptSyntheticMxH1SeedOffer(wire: ByteArray, nowElapsedMillis: Long): ByteArray? {
+        if (presentation(nowElapsedMillis) == null ||
+            mxh1Phase != MxH1Phase.NEW
+        ) return revokeMxH1()
+        val receiver = privateReceiver ?: return revokeMxH1()
+        val verifier = approvedPhoneVerifier ?: return revokeMxH1()
+        val approved = approvedPhoneFingerprint ?: return revokeMxH1()
+        if (pendingPhoneEnrollment?.verifiedFingerprintForTv() != approved) {
+            return revokeMxH1()
+        }
+        val frame = Lc04HandoffWireLab.decode(wire) ?: return revokeMxH1()
+        val tv = TvQrPublicKeyParser.parse(qr)
+        if (frame.kind != Lc04HandoffKind.SIGNED_SEED_OFFER ||
+            !MessageDigest.isEqual(frame.invitation(), fromHex(tv.invitationId)) ||
+            !MessageDigest.isEqual(frame.pairing(), fromHex(tv.pairingId)) ||
+            !MessageDigest.isEqual(frame.tv(), fromHex(tv.fingerprint)) ||
+            !MessageDigest.isEqual(frame.phone(), fromHex(approved))
+        ) return revokeMxH1()
+
+        val offerBody = Lc04HandoffWireLab.decodeSignedOfferBody(frame.payload())
+            ?: return revokeMxH1()
+        val ciphertext = offerBody.first
+        val signature = offerBody.second
+        val statement = Lc04HandoffWireLab.offerSigningStatement(wire)
+            ?: return revokeMxH1()
+        val signed = try {
+            verifier.verify(signature, statement)
+            true
+        } catch (_: GeneralSecurityException) {
+            false
+        } finally {
+            signature.fill(0)
+            statement.fill(0)
+        }
+        if (!signed) {
+            ciphertext.fill(0)
+            return revokeMxH1()
+        }
+
+        val info = Lc04MxH1HpkeContext.forOffer(frame)
+        val seed = try {
+            receiver.getPrimitive(RegistryConfiguration.get(), HybridDecrypt::class.java)
+                .decrypt(ciphertext, info)
+        } catch (_: GeneralSecurityException) {
+            return revokeMxH1()
+        } finally {
+            info.fill(0)
+            ciphertext.fill(0)
+        }
+        try {
+            if (seed.size != 32 || seed.all { it == 0.toByte() }) return revokeMxH1()
+            val digest = Lc04HandoffWireLab.digestOfSignedOffer(wire)
+                ?: return revokeMxH1()
+            val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
+            try {
+                val transcript = Lc04SyntheticHandoffTranscript(
+                    frame.invitation(), frame.pairing(), frame.tv(), frame.phone(),
+                    digest, nonce,
+                )
+                val newKeys = Lc04SyntheticHandoffKeySchedule.derive(seed, transcript)
+                val tvTag = newKeys.syntheticTvConfirmation()
+                    ?: run { newKeys.close(); return revokeMxH1() }
+                try {
+                    val confirmation = Lc04HandoffWireLab.encode(Lc04HandoffFrame(
+                        Lc04HandoffKind.TV_KEY_CONFIRM,
+                        frame.invitation(), frame.pairing(), frame.tv(), frame.phone(),
+                        digest, frame.counter,
+                        Lc04HandoffWireLab.tvConfirmationBody(nonce, tvTag),
+                    ))
+                    mxh1AcceptedOffer = wire.clone()
+                    mxh1Keys = newKeys
+                    mxh1Phase = MxH1Phase.WAIT_PHONE
+                    return confirmation
+                } finally { tvTag.fill(0) }
+            } catch (_: GeneralSecurityException) {
+                return revokeMxH1()
+            } catch (_: IllegalArgumentException) {
+                return revokeMxH1()
+            } finally {
+                digest.fill(0)
+                nonce.fill(0)
+            }
+        } finally { seed.fill(0) }
+    }
+
+    /**
+     * Verify the real independent phone key-confirmation MAC, never just the
+     * public MXH1 digest. Success is a SYNTHETIC proof bit only. The derived
+     * keys are immediately revoked: this method provides no data-plane key.
+     */
+    @Synchronized
+    fun acceptSyntheticMxH1PhoneConfirmation(
+        confirmation: ByteArray,
+        nowElapsedMillis: Long,
+    ): Boolean {
+        if (presentation(nowElapsedMillis) == null ||
+            mxh1Phase != MxH1Phase.WAIT_PHONE
+        ) return revokeMxH1Boolean()
+        val original = mxh1AcceptedOffer ?: return revokeMxH1Boolean()
+        if (!Lc04HandoffWireLab.structurallyMatchesOffer(
+                original, confirmation, Lc04HandoffKind.PHONE_KEY_CONFIRM,
+            )
+        ) return revokeMxH1Boolean()
+        val parsed = Lc04HandoffWireLab.decode(confirmation)
+            ?: return revokeMxH1Boolean()
+        val tag = parsed.payload()
+        return try {
+            if (mxh1Keys?.verifySyntheticPhoneConfirmation(tag) != true) {
+                revokeMxH1Boolean()
+            } else {
+                // No production MXH1 data transport exists: discard the
+                // derived keys rather than retaining a dormant capability.
+                mxh1Keys?.close()
+                mxh1Keys = null
+                mxh1AcceptedOffer?.fill(0)
+                mxh1AcceptedOffer = null
+                mxh1Phase = MxH1Phase.VERIFIED
+                true
+            }
+        } finally { tag.fill(0) }
+    }
+
+    /** Read-only diagnostic, not a pairing grant or source authorization. */
+    @Synchronized
+    fun hasSyntheticMxH1Proof(nowElapsedMillis: Long): Boolean =
+        presentation(nowElapsedMillis) != null && mxh1Phase == MxH1Phase.VERIFIED
+
+    private fun revokeMxH1(): ByteArray? {
+        close()
+        return null
+    }
+
+    private fun revokeMxH1Boolean(): Boolean {
+        close()
+        return false
+    }
+
+    /**
      * In-process protected CHANNEL_PROBE receiver; NOT a network listener.
      * Ed25519 signature and exact QR owner / approved phone binding are
      * verified BEFORE invoking the ephemeral Tink HPKE private receiver.
@@ -120,7 +280,9 @@ class TvHpkeQrSession private constructor(
      */
     @Synchronized
     fun acceptProtectedProbe(wire: ByteArray, nowElapsedMillis: Long): ByteArray? {
-        if (presentation(nowElapsedMillis) == null) return null
+        if (presentation(nowElapsedMillis) == null ||
+            mxh1Phase != MxH1Phase.NEW
+        ) return null
         val hpkeReceiver = privateReceiver ?: return null
         val verifier = approvedPhoneVerifier ?: return null
         val approvedFp = approvedPhoneFingerprint ?: return null
@@ -203,6 +365,11 @@ class TvHpkeQrSession private constructor(
 
     @Synchronized
     override fun close() {
+        mxh1Phase = MxH1Phase.REVOKED
+        mxh1Keys?.close()
+        mxh1Keys = null
+        mxh1AcceptedOffer?.fill(0)
+        mxh1AcceptedOffer = null
         pendingPhoneEnrollment?.close()
         pendingPhoneEnrollment = null
         approvedPhoneFingerprint = null
