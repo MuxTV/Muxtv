@@ -23,7 +23,7 @@ class Lc04MxH1LoopbackTcpIsolationTest {
             "app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt").readText()
         for (required in listOf("class Lc04MxH1LoopbackTv",
             "class Lc04MxH1LoopbackPhone",
-            "class Lc04MxH1LengthFrame", "fun startLoopbackForTests(",
+            "object Lc04MxH1LengthFrame", "fun startLoopbackForTests(",
             "fun loopbackForTests(port:", "ServerSocket(0, 1, loopback())",
             "Lc04HandoffKind.SIGNED_SEED_OFFER", "Lc04HandoffKind.TV_KEY_CONFIRM",
             "Lc04HandoffKind.PHONE_KEY_CONFIRM", "socket.shutdownOutput()",
