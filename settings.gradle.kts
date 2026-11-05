@@ -41,6 +41,7 @@ include(
     ":local-control:phone-flow",
     ":local-control:protected-channel",
     ":local-control:mxh1-session-lab",
+    ":local-control:mxh1-tcp-lab",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",
