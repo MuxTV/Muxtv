@@ -68,7 +68,7 @@ class Lc04MxH1LoopbackTcpLabTest {
     private fun awaitCondition(description: String, predicate: () -> Boolean) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
         while (!predicate() && System.nanoTime() < deadline) Thread.sleep(10)
-        assertThat(predicate()).named(description).isTrue()
+        if (!predicate()) throw AssertionError(description)
     }
 
     private fun rawSend(port: Int, length: Int, payload: ByteArray) {
