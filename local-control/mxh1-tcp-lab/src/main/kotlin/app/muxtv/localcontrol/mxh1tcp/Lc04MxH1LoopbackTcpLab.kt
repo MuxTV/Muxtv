@@ -196,6 +196,7 @@ internal class Lc04MxH1LoopbackPhone private constructor(
             try { socket.close() } catch (_: IOException) {}
             return false
         }
+        var completed = false
         return try {
             socket.use {
                 if (revoked) return false
@@ -226,8 +227,9 @@ internal class Lc04MxH1LoopbackPhone private constructor(
 
                 socket.shutdownOutput()
                 val marker = input.readInt()
-                marker == 0 && input.read() == -1 &&
+                completed = marker == 0 && input.read() == -1 &&
                     !revoked && phone.hasAuthenticatedTvSyntheticProof()
+                completed
             }
         } catch (_: IOException) {
             false
@@ -235,7 +237,9 @@ internal class Lc04MxH1LoopbackPhone private constructor(
             false
         } finally {
             release(socket)
-            if (revoked) phone.close()
+            // Any failed network path terminates the phone-owned seed and
+            // derived key references, including timeouts and hostile peers.
+            if (!completed || revoked) phone.close()
         }
     }
 
