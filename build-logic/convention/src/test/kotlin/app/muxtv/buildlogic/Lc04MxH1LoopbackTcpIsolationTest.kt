@@ -86,6 +86,7 @@ class Lc04MxH1LoopbackTcpIsolationTest {
             "phoneLifecycleCloseInterruptsPeerThatNeverAnswers",
             "expiryClosesListenerAndNeverAcceptsLateOffer",
             "forgedFinalTvHmacAfterValidRealPhoneProofNeverCompletes",
+            "missingFinalFrameAfterRealPhoneProofNeverAuthenticates",
             "zeroLengthLegacyTransportMarkerNoLongerCountsAsFinalProof",
             "authenticatedFinishedWithTrailingSmuggledByteIsNotAccepted",
             "authenticatedFinishedTruncatedBeforeLastMacByteIsNotAccepted",
