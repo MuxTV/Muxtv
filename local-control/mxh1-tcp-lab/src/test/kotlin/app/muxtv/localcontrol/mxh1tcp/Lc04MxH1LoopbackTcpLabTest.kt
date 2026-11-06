@@ -355,7 +355,7 @@ class Lc04MxH1LoopbackTcpLabTest {
         f.approve()
         val listener = ServerSocket(0, 1, loopback())
         val finished = CountDownLatch(1)
-        val error = AtomicReference<Throwable?>(null)
+        val failureRef = AtomicReference<Throwable?>(null)
         val serverThread = Thread({
             try {
                 listener.use {
@@ -392,7 +392,7 @@ class Lc04MxH1LoopbackTcpLabTest {
                     }
                 }
             } catch (failure: Throwable) {
-                error.set(failure)
+                failureRef.set(failure)
             } finally { finished.countDown() }
         }, "lc04-hostile-finished").apply { isDaemon = true }
         serverThread.start()
@@ -401,7 +401,7 @@ class Lc04MxH1LoopbackTcpLabTest {
             assertThat(client.completeSyntheticExchange(f.phone)).isFalse()
             assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
             assertThat(finished.await(5, TimeUnit.SECONDS)).isTrue()
-            assertThat(error.get()).isNull()
+            assertThat(failureRef.get()).isNull()
         } finally {
             listener.close()
             serverThread.join(2_000)
