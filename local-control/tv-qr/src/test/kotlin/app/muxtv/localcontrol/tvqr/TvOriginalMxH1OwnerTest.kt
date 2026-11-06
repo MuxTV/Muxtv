@@ -77,6 +77,67 @@ class TvOriginalMxH1OwnerTest {
             offer.fill(0); tvConfirm.fill(0); phoneConfirm.fill(0)
         }
 
+    @Test fun authenticatedFourthTvFinishedIsRequiredBeforePhoneReportsNetworkProof() =
+        withFixture { f ->
+            f.approveRealPhone()
+            val offer = f.offer()
+            val tvConfirm = f.tvConfirm(offer)
+            val phoneConfirm = checkNotNull(
+                f.phone.acceptTvConfirmationAwaitingFinished(tvConfirm),
+            )
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            val final = checkNotNull(
+                f.tv.finishSyntheticMxH1PhoneConfirmation(phoneConfirm, f.now),
+            )
+            assertThat(Lc04HandoffWireLab.decode(final)?.kind)
+                .isEqualTo(Lc04HandoffKind.TV_FINISHED)
+            assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+                offer, final, Lc04HandoffKind.TV_FINISHED,
+            )).isTrue()
+            assertThat(f.phone.acceptTvFinished(final)).isTrue()
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isTrue()
+            assertThat(f.tv.hasSyntheticMxH1Proof(f.now)).isTrue()
+            // A duplicate terminal proof revokes the phone's state.
+            assertThat(f.phone.acceptTvFinished(final)).isFalse()
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            offer.fill(0); tvConfirm.fill(0); phoneConfirm.fill(0); final.fill(0)
+        }
+
+    @Test fun forgedFinishedWithValidPublicOfferBindingNeverAuthenticatesPhone() =
+        withFixture { f ->
+            f.approveRealPhone()
+            val offered = f.offer()
+            val phoneTag = checkNotNull(
+                f.phone.acceptTvConfirmationAwaitingFinished(f.tvConfirm(offered)),
+            )
+            val actual = checkNotNull(
+                f.tv.finishSyntheticMxH1PhoneConfirmation(phoneTag, f.now),
+            )
+            val forged = actual.clone().also {
+                it[it.lastIndex] = (it.last().toInt() xor 1).toByte()
+            }
+            assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+                offered, forged, Lc04HandoffKind.TV_FINISHED,
+            )).isTrue()
+            assertThat(f.phone.acceptTvFinished(forged)).isFalse()
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            assertThat(f.phone.acceptTvFinished(actual)).isFalse()
+        }
+
+    @Test fun missingFinishedOnLifecycleCloseRevokesPendingPhoneAndTvKeys() =
+        withFixture { f ->
+            f.approveRealPhone()
+            val phoneTag = checkNotNull(
+                f.phone.acceptTvConfirmationAwaitingFinished(f.tvConfirm(f.offer())),
+            )
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            f.tv.close()
+            f.phone.close()
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            assertThat(f.tv.finishSyntheticMxH1PhoneConfirmation(phoneTag, f.now)).isNull()
+            assertThat(f.tv.presentation(f.now)).isNull()
+        }
+
     @Test fun mxh1OfferBeforeExactTvConsentRevokesOriginalQrAndGate() =
         withFixture { f ->
             val offer = f.offer()
