@@ -23,7 +23,9 @@ import java.security.MessageDigest
 enum class Lc04HandoffKind(val id: Int, val min: Int, val max: Int) {
     SIGNED_SEED_OFFER(0x11, 84, 2120),
     TV_KEY_CONFIRM(0x12, 64, 64),
-    PHONE_KEY_CONFIRM(0x13, 32, 32);
+    PHONE_KEY_CONFIRM(0x13, 32, 32),
+    // Authenticated TV acceptance of the exact PHONE_KEY_CONFIRM frame.
+    TV_FINISHED(0x14, 32, 32);
 
     companion object {
         fun fromId(id: Int): Lc04HandoffKind? = entries.firstOrNull { it.id == id }
@@ -165,7 +167,8 @@ object Lc04HandoffWireLab {
                     true
                 } == true
             Lc04HandoffKind.TV_KEY_CONFIRM,
-            Lc04HandoffKind.PHONE_KEY_CONFIRM -> !zero
+            Lc04HandoffKind.PHONE_KEY_CONFIRM,
+            Lc04HandoffKind.TV_FINISHED -> !zero
         }
     }
 
