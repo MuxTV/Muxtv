@@ -13,6 +13,7 @@ import com.google.crypto.tink.HybridEncrypt
 import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.hybrid.HybridConfig
 import java.security.GeneralSecurityException
+import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
@@ -27,12 +28,13 @@ class Lc04MxH1PhoneLab(
     private val elapsedMillis: () -> Long,
     private val random: SecureRandom = SecureRandom(),
 ) : AutoCloseable {
-    private enum class Phase { NEW, WAIT_TV, VERIFIED, REVOKED }
+    private enum class Phase { NEW, WAIT_TV, WAIT_FINISH, VERIFIED, REVOKED }
 
     private var phase = Phase.NEW
     private var born: Long = -1L
     private var pendingSeed: ByteArray? = null
     private var offered: ByteArray? = null
+    private var pendingPhoneFrameDigest: ByteArray? = null
     private var keys: Lc04SyntheticDerivedKeys? = null
 
     private fun live(): Boolean {
@@ -91,7 +93,23 @@ class Lc04MxH1PhoneLab(
      * envelope, public QR fields and SHA-256 digest are all valid.
      */
     @Synchronized
-    fun acceptTvConfirmation(confirmation: ByteArray): ByteArray? {
+    fun acceptTvConfirmation(confirmation: ByteArray): ByteArray? =
+        processTvConfirmation(confirmation, requireFinished = false)
+
+    /**
+     * Four-frame TCP-only proof: do NOT report verification after sending
+     * PHONE_KEY_CONFIRM. Retain keys only until the authenticated TV_FINISHED
+     * is checked; missing/forged finished, replay, stop or expiry are terminal.
+     * Legacy S2E in-process proof retains its original three-message API.
+     */
+    @Synchronized
+    fun acceptTvConfirmationAwaitingFinished(confirmation: ByteArray): ByteArray? =
+        processTvConfirmation(confirmation, requireFinished = true)
+
+    private fun processTvConfirmation(
+        confirmation: ByteArray,
+        requireFinished: Boolean,
+    ): ByteArray? {
         if (phase != Phase.WAIT_TV || !live()) return reject()
         val offeredBytes = offered ?: return reject()
         val secret = pendingSeed ?: return reject()
@@ -129,9 +147,15 @@ class Lc04MxH1PhoneLab(
                 keys = derived
                 pendingSeed?.fill(0)
                 pendingSeed = null
-                offered?.fill(0)
-                offered = null
-                phase = Phase.VERIFIED
+                if (requireFinished) {
+                    pendingPhoneFrameDigest =
+                        MessageDigest.getInstance("SHA-256").digest(reply)
+                    phase = Phase.WAIT_FINISH
+                } else {
+                    offered?.fill(0)
+                    offered = null
+                    phase = Phase.VERIFIED
+                }
                 reply
             } finally { ourTag.fill(0) }
         } catch (_: IllegalArgumentException) {
@@ -142,6 +166,48 @@ class Lc04MxH1PhoneLab(
             tvNonce.fill(0)
             tvTag.fill(0)
         }
+    }
+
+    /**
+     * Accept only the exact, session-bound TV_FINISHED HMAC generated *after*
+     * the TV verified our PHONE_KEY_CONFIRM. A valid-looking MXH1 header or
+     * zero-size legacy TCP marker cannot advance this state.
+     */
+    @Synchronized
+    fun acceptTvFinished(finished: ByteArray): Boolean {
+        if (phase != Phase.WAIT_FINISH || !live()) {
+            close()
+            return false
+        }
+        val original = offered ?: run { close(); return false }
+        val digest = pendingPhoneFrameDigest ?: run { close(); return false }
+        if (!Lc04HandoffWireLab.structurallyMatchesOffer(
+                original, finished, Lc04HandoffKind.TV_FINISHED,
+            )
+        ) {
+            close()
+            return false
+        }
+        val frame = Lc04HandoffWireLab.decode(finished) ?: run {
+            close()
+            return false
+        }
+        val tag = frame.payload()
+        return try {
+            if (keys?.verifySyntheticTvFinished(digest, tag) != true) {
+                close()
+                false
+            } else {
+                keys?.close()
+                keys = null
+                offered?.fill(0)
+                offered = null
+                digest.fill(0)
+                pendingPhoneFrameDigest = null
+                phase = Phase.VERIFIED
+                true
+            }
+        } finally { tag.fill(0) }
     }
 
     @Synchronized
@@ -167,6 +233,8 @@ class Lc04MxH1PhoneLab(
         pendingSeed = null
         offered?.fill(0)
         offered = null
+        pendingPhoneFrameDigest?.fill(0)
+        pendingPhoneFrameDigest = null
         keys?.close()
         keys = null
         signingPhone.close()
