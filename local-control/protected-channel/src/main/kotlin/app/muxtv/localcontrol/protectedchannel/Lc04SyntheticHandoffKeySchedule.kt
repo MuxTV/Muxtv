@@ -155,6 +155,35 @@ class Lc04SyntheticDerivedKeys(
         finally { expected.fill(0) }
     }
 
+    /**
+     * Fourth MXH1 frame: TV proves it processed the EXACT authenticated
+     * PHONE_KEY_CONFIRM frame. The caller must first verify that phone MAC.
+     *
+     * A separate HMAC domain is used under the TV-confirm key; the input is
+     * ONLY the 32-byte SHA-256 of the canonical signed-session-bound phone
+     * confirmation, never arbitrary application data. The transcript binding
+     * already covers the exact signed offer and fresh TV nonce.
+     */
+    @Synchronized
+    fun syntheticTvFinishedForPhoneFrameDigest(phoneFrameDigest: ByteArray): ByteArray? {
+        if (closed || phoneFrameDigest.size != 32) return null
+        val key = tvConfirmationKey ?: return null
+        val input = TV_FINISHED_DOMAIN + binding + phoneFrameDigest
+        return try { Lc04Rfc5869HkdfSha256.hmac(key, input) }
+        finally { input.fill(0) }
+    }
+
+    @Synchronized
+    fun verifySyntheticTvFinished(
+        phoneFrameDigest: ByteArray,
+        receivedTag: ByteArray,
+    ): Boolean {
+        if (closed || phoneFrameDigest.size != 32 || receivedTag.size != 32) return false
+        val expected = syntheticTvFinishedForPhoneFrameDigest(phoneFrameDigest) ?: return false
+        return try { MessageDigest.isEqual(expected, receivedTag) }
+        finally { expected.fill(0) }
+    }
+
     @Synchronized
     override fun close() {
         if (closed) return
@@ -176,6 +205,8 @@ class Lc04SyntheticDerivedKeys(
         val TV_CONFIRM_DOMAIN = "MuxTV-LC04-SYNTHETIC-TV-KEY-CONFIRM-v1\u0000"
             .toByteArray(Charsets.US_ASCII)
         val PHONE_CONFIRM_DOMAIN = "MuxTV-LC04-SYNTHETIC-PHONE-KEY-CONFIRM-v1\u0000"
+            .toByteArray(Charsets.US_ASCII)
+        val TV_FINISHED_DOMAIN = "MuxTV-LC04-MXH1-TV-FINISHED-v1\u0000"
             .toByteArray(Charsets.US_ASCII)
     }
 }
