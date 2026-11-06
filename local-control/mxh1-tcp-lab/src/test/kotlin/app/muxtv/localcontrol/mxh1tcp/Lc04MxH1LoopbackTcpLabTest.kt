@@ -417,6 +417,12 @@ class Lc04MxH1LoopbackTcpLabTest {
             forged.fill(0)
         }
 
+    @Test fun missingFinalFrameAfterRealPhoneProofNeverAuthenticates() =
+        injectHostileFinished { _, _ ->
+            // The TV accepted PHONE_CONFIRM, but the TCP peer never sends
+            // final key confirmation. Phone must deny, not guess success.
+        }
+
     @Test fun zeroLengthLegacyTransportMarkerNoLongerCountsAsFinalProof() =
         injectHostileFinished { out, _ ->
             out.writeInt(0)
