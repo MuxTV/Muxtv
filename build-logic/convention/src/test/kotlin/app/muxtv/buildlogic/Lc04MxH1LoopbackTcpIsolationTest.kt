@@ -26,7 +26,11 @@ class Lc04MxH1LoopbackTcpIsolationTest {
             "object Lc04MxH1LengthFrame", "fun startLoopbackForTests(",
             "fun loopbackForTests(port:", "ServerSocket(0, 1, loopback())",
             "Lc04HandoffKind.SIGNED_SEED_OFFER", "Lc04HandoffKind.TV_KEY_CONFIRM",
-            "Lc04HandoffKind.PHONE_KEY_CONFIRM", "socket.shutdownOutput()",
+            "Lc04HandoffKind.PHONE_KEY_CONFIRM", "Lc04HandoffKind.TV_FINISHED",
+            "tv.finishSyntheticMxH1PhoneConfirmation(",
+            "phone.acceptTvConfirmationAwaitingFinished(",
+            "phone.acceptTvFinished(finished)",
+            "socket.shutdownOutput()",
             "input.read() == -1", "socket.soTimeout = FRAME_TIMEOUT_MS",
             "fun hasSyntheticNetworkProof()", "tv.close()")) {
             assertContains(source, required)
@@ -38,6 +42,8 @@ class Lc04MxH1LoopbackTcpIsolationTest {
             "Socket(\"0.0.0.0\"", "InetAddress.getByName(")) {
             assertFalse(source.contains(blocked), blocked)
         }
+        assertFalse(source.contains("output.writeInt(0)"),
+            "Unauthenticated terminal marker must not return")
         assertContains(root.resolve("settings.gradle.kts").readText(),
             """:local-control:mxh1-tcp-lab""")
         assertContains(root.resolve(".work/meta/modules.yaml").readText(),
@@ -79,6 +85,11 @@ class Lc04MxH1LoopbackTcpIsolationTest {
             "tvLifecycleCloseInterruptsPeerWaitingOnPartialFirstFrame",
             "phoneLifecycleCloseInterruptsPeerThatNeverAnswers",
             "expiryClosesListenerAndNeverAcceptsLateOffer",
+            "forgedFinalTvHmacAfterValidRealPhoneProofNeverCompletes",
+            "zeroLengthLegacyTransportMarkerNoLongerCountsAsFinalProof",
+            "authenticatedFinishedWithTrailingSmuggledByteIsNotAccepted",
+            "authenticatedFinishedTruncatedBeforeLastMacByteIsNotAccepted",
+            "finalFrameWithWrongKindCounterOrOfferBindingFailsClosed",
         )) assertContains(tests, case)
         val workflow = root.resolve(
             ".github/workflows/lc04-mxh1-loopback-tcp-ci.yml",
