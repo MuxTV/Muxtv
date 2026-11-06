@@ -1,0 +1,84 @@
+name: LC04 synthetic MXH1 one-use loopback TCP security CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-mxh1-loopback-tcp-ci.yml'
+      - 'local-control/mxh1-tcp-lab/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/mxh1-session-lab/**'
+      - 'local-control/wire-lab/**'
+      - 'local-control/protected-channel/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1LoopbackTcpIsolationTest.kt'
+      - '.work/specifications/lc04-mxh1-one-use-tcp-loopback-20261105.md'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-mxh1-loopback-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  mxh1-loopback:
+    name: One-connection three-frame MXH1 hostile real TCP JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact security lab HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Exact SHA and no production app, HTTP or source integration
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -Fq '":local-control:mxh1-tcp-lab",' settings.gradle.kts
+          ! grep -Fq ':local-control:mxh1-tcp-lab' app/phone/build.gradle.kts
+          ! grep -Fq ':local-control:mxh1-tcp-lab' app/tv/build.gradle.kts
+          ! grep -Fq ':local-control:mxh1-tcp-lab' local-control/native-transport/build.gradle.kts
+          ! grep -Eq 'SourceOnboarding|SourcePreparationHandle|HttpClient|SharedPreferences|android.content.' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/*.kt
+          ! grep -Eq 'SIGNED_SEED_OFFER|TV_KEY_CONFIRM|PHONE_KEY_CONFIRM' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
+          grep -Fq 'ServerSocket(0, 1, loopback())' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt
+      - name: Exercise real loopback sockets, Tink MACs, close and hostile framing
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:mxh1-tcp-lab:test \
+            :local-control:tv-qr:test \
+            :local-control:mxh1-session-lab:test \
+            :local-control:wire-lab:test \
+            :local-control:protected-channel:test \
+            :local-control:enrollment:test \
+            :local-control:native-transport:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1LoopbackTcpIsolationTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload exact-HEAD TCP hostile evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-mxh1-loopback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/mxh1-tcp-lab/build/test-results/test/**
+            local-control/mxh1-tcp-lab/build/reports/tests/test/**
+            local-control/tv-qr/build/test-results/test/**
+            local-control/mxh1-session-lab/build/test-results/test/**
+            local-control/wire-lab/build/test-results/test/**
+            local-control/protected-channel/build/test-results/test/**
+            local-control/native-transport/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
