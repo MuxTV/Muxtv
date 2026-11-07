@@ -53,6 +53,7 @@ class Lc04MxH1AndroidPrivateLanContractTest {
             "suspend fun enableMxH1ForApprovedVisibleQr()",
             "requireNotNull(nativeProbeServer)",
             "receiver.hasApprovedPhoneForSyntheticMxH1(",
+            "fun isApprovedMxH1PhoneReady()",
             "nativeEndpoint.privateIpv4", "networkManager.activeNetwork",
             "Lc04MxH1PrivateLanTv.startOnApprovedPrivateIpv4(",
             "mxh1Listener?.close()", "publicQrSession?.close()",
@@ -64,6 +65,7 @@ class Lc04MxH1AndroidPrivateLanContractTest {
         assertContains(tv, "local-tv-native-opt-in")
         assertContains(tv, "local-tv-mxh1-second-opt-in")
         assertContains(tv, "onEnableMxH1()")
+        assertContains(tv, "mxh1PhoneIsVerified()")
         assertContains(tv, "phoneKeyApproved")
         val phone = root.resolve("app/phone/src/main/kotlin/" +
             "app/muxtv/phone/PhoneNativeProofSession.kt").readText()
