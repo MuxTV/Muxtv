@@ -56,6 +56,7 @@ fun PhonePairingRoute(
     onStop: () -> Unit,
     onStartPublicKeyPreview: suspend () -> TvHpkeQrPresentation?,
     onEnableNativeProbe: suspend () -> TvPairingController.NativeProbeEndpoint?,
+    onEnableMxH1: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
     onRevokePublicKeyPreview: () -> Unit,
     publicKeyPreviewIsActive: () -> Boolean,
     pendingPhoneKeyFingerprint: () -> String?,
@@ -82,6 +83,9 @@ fun PhonePairingRoute(
     var nativeEndpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
     var nativeLoading by remember { mutableStateOf(false) }
     var nativeError by remember { mutableStateOf(false) }
+    var mxh1Endpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
+    var mxh1Loading by remember { mutableStateOf(false) }
+    var mxh1Error by remember { mutableStateOf(false) }
     var keySecondsRemaining by remember { mutableLongStateOf(0L) }
     var requestedPhoneFingerprint by remember { mutableStateOf<String?>(null) }
     var phoneKeyApproved by remember { mutableStateOf(false) }
@@ -94,6 +98,8 @@ fun PhonePairingRoute(
         onRevokePublicKeyPreview()
         keyPreview = null
         nativeEndpoint = null
+        mxh1Endpoint = null
+        mxh1Error = false
         nativeError = false
         requestedPhoneFingerprint = null
         phoneKeyApproved = false
@@ -119,6 +125,8 @@ fun PhonePairingRoute(
             onRevokePublicKeyPreview()
             keyPreview = null
             nativeEndpoint = null
+            mxh1Endpoint = null
+            mxh1Error = false
             nativeError = false
             // Entering LC04 stops the legacy HTTP session; never present it as active.
             session = null
@@ -159,6 +167,24 @@ fun PhonePairingRoute(
         }
     }
 
+    fun enableMxH1AfterTvApproval() {
+        if (mxh1Loading || mxh1Endpoint != null ||
+            nativeEndpoint == null || !phoneKeyApproved
+        ) return
+        scope.launch {
+            mxh1Loading = true
+            mxh1Error = false
+            try {
+                mxh1Endpoint = onEnableMxH1()
+                mxh1Error = mxh1Endpoint == null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                mxh1Error = true
+            } finally { mxh1Loading = false }
+        }
+    }
+
     // Neither legacy HTTP nor LC04 TCP is opened merely by navigating here.
     LaunchedEffect(restartRequest) { if (restartRequest > 0) restart() }
     LaunchedEffect(session) {
@@ -191,6 +217,7 @@ fun PhonePairingRoute(
             if (keyPreview != null && keySecondsRemaining == 0L) {
                 onRevokePublicKeyPreview()
                 nativeEndpoint = null
+                mxh1Endpoint = null
             }
             delay(700)
         }
@@ -259,6 +286,7 @@ fun PhonePairingRoute(
                                     requestedPhoneFingerprint = null
                                     keyPreview = null
                                     nativeEndpoint = null
+                                    mxh1Endpoint = null
                                     phoneKeyApproved = false
                                 }
                             },
@@ -281,6 +309,29 @@ fun PhonePairingRoute(
                                 "TCP listener: ${endpoint.privateIpv4}:${endpoint.port}",
                                 modifier = Modifier.testTag("local-tv-native-endpoint"),
                             )
+                            if (phoneKeyApproved) {
+                                val finished = mxh1Endpoint
+                                if (finished == null) {
+                                    MuxTvActionButton(
+                                        text = if (mxh1Loading) "Запуск MXH1…" else
+                                            "Включить MXH1 после подтверждения телефона",
+                                        onClick = ::enableMxH1AfterTvApproval,
+                                        modifier = Modifier.testTag("local-tv-mxh1-second-opt-in"),
+                                    )
+                                    if (mxh1Error) Text(
+                                        "MXH1 не открыт: дождитесь завершения проверки телефона и проверьте LAN.",
+                                    )
+                                } else {
+                                    Text(
+                                        "MXH1: ${finished.privateIpv4}:${finished.port}",
+                                        modifier = Modifier.testTag("local-tv-mxh1-endpoint"),
+                                    )
+                                    Text(
+                                        "Введите этот второй порт на телефоне. MXH1 требует отдельного " +
+                                            "подтверждения и финального HMAC, без IPTV-паролей.",
+                                    )
+                                }
+                            }
                             Text(
                                 "Адрес и порт — только способ связи, не подтверждение подлинности TV. " +
                                     "На телефоне: сканируйте этот QR, вручную введите IP и порт " +
