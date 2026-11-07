@@ -52,6 +52,8 @@ class PhoneQrActivity : ComponentActivity() {
     private lateinit var portInput: EditText
     private lateinit var startNativeButton: Button
     private lateinit var verifyNativeButton: Button
+    private lateinit var mxh1PortInput: EditText
+    private lateinit var mxh1Button: Button
 
     private lateinit var preview: PreviewView
     private lateinit var status: TextView
@@ -179,6 +181,21 @@ class PhoneQrActivity : ComponentActivity() {
         nativePanel.addView(portInput)
         nativePanel.addView(startNativeButton)
         nativePanel.addView(verifyNativeButton)
+        mxh1PortInput = EditText(this).apply {
+            setSingleLine(true)
+            hint = getString(R.string.scan_mxh1_port)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(5))
+            visibility = View.GONE
+        }
+        mxh1Button = Button(this).apply {
+            tag = "lc04-phone-mxh1-second-opt-in"
+            setText(R.string.scan_mxh1_start)
+            visibility = View.GONE
+            setOnClickListener { startMxH1FromGesture() }
+        }
+        nativePanel.addView(mxh1PortInput)
+        nativePanel.addView(mxh1Button)
         content.addView(nativePanel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(10) })
@@ -292,6 +309,27 @@ class PhoneQrActivity : ComponentActivity() {
         hostInput.isEnabled = true
         portInput.isEnabled = true
         verifyNativeButton.visibility = View.GONE
+        mxh1PortInput.visibility = View.GONE
+        mxh1Button.visibility = View.GONE
+    }
+
+    /** Always a second, separate gesture after successful MXW1 proof. */
+    private fun startMxH1FromGesture() {
+        val session = nativeSession ?: return
+        val endpoint = PhoneNativeEndpoint.parseOrNull(
+            hostInput.text.toString(), mxh1PortInput.text.toString(),
+        )
+        if (endpoint == null) {
+            status.setText(R.string.scan_native_endpoint_invalid)
+            return
+        }
+        if (session.beginMxH1(endpoint)) {
+            mxh1Button.isEnabled = false
+            mxh1PortInput.isEnabled = false
+            status.setText(R.string.scan_mxh1_verifying)
+        } else {
+            status.setText(R.string.scan_native_failed)
+        }
     }
 
     private fun startNativeFromGesture() {
@@ -347,12 +385,25 @@ class PhoneQrActivity : ComponentActivity() {
                         PhoneNativeProofSession.State.VERIFIED -> {
                             status.setText(R.string.scan_native_verified)
                             verifyNativeButton.visibility = View.GONE
+                            mxh1PortInput.visibility = View.VISIBLE
+                            mxh1Button.visibility = View.VISIBLE
+                            mxh1Button.isEnabled = true
+                            mxh1PortInput.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.MXH1_VERIFYING ->
+                            status.setText(R.string.scan_mxh1_verifying)
+                        PhoneNativeProofSession.State.MXH1_VERIFIED -> {
+                            status.setText(R.string.scan_mxh1_verified)
+                            mxh1Button.visibility = View.GONE
+                            mxh1PortInput.visibility = View.GONE
                         }
                         PhoneNativeProofSession.State.FAILED,
                         PhoneNativeProofSession.State.REVOKED -> {
                             status.setText(if (state == PhoneNativeProofSession.State.REVOKED)
                                 R.string.scan_native_revoked else R.string.scan_native_failed)
                             verifyNativeButton.visibility = View.GONE
+                            mxh1Button.visibility = View.GONE
+                            mxh1PortInput.visibility = View.GONE
                         }
                     }
                 }
@@ -383,6 +434,9 @@ class PhoneQrActivity : ComponentActivity() {
         hostInput.text?.clear()
         portInput.text?.clear()
         verifyNativeButton.visibility = View.GONE
+        mxh1Button.visibility = View.GONE
+        mxh1PortInput.visibility = View.GONE
+        mxh1PortInput.text?.clear()
     }
 
     override fun onStop() {
