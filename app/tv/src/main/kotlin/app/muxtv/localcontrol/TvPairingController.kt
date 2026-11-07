@@ -282,6 +282,17 @@ class TvPairingController(
         publicQrSession?.presentation(SystemClock.elapsedRealtime()) != null
 
     /**
+     * Read-only user-interface qualification after REAL native Ed25519 proof.
+     * A D-pad approval flag alone is not proof: the enrollment gate must have
+     * verified and redeemed the exact phone identity for the ORIGINAL TV QR.
+     */
+    fun isApprovedMxH1PhoneReady(): Boolean =
+        isTvVisible() && nativeProbeServer != null &&
+            publicQrSession?.hasApprovedPhoneForSyntheticMxH1(
+                SystemClock.elapsedRealtime(),
+            ) == true
+
+    /**
      * Display-only TV-local read: never expose the pending fingerprint via legacy LAN routes.
      * A pending identity has no authority until the TV owner explicitly accepts it.
      */
