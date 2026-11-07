@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   mxh1-loopback:
-    name: One-connection three-frame MXH1 hostile real TCP JVM
+    name: Four-frame authenticated MXH1 TV_FINISHED hostile real TCP JVM
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -50,6 +50,9 @@ jobs:
           ! grep -Eq 'SourceOnboarding|SourcePreparationHandle|HttpClient|SharedPreferences|android.content.' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/*.kt
           ! grep -Eq 'SIGNED_SEED_OFFER|TV_KEY_CONFIRM|PHONE_KEY_CONFIRM' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
           grep -Fq 'ServerSocket(0, 1, loopback())' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt
+          grep -Fq 'Lc04HandoffKind.TV_FINISHED' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt
+          grep -Fq 'phone.acceptTvFinished(finished)' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt
+          ! grep -Fq 'output.writeInt(0)' local-control/mxh1-tcp-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1tcp/Lc04MxH1LoopbackTcpLab.kt
       - name: Exercise real loopback sockets, Tink MACs, close and hostile framing
         shell: bash
         run: |

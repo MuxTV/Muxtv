@@ -343,6 +343,116 @@ class Lc04MxH1LoopbackTcpLabTest {
                 .isFalse()
         }
 
+    /**
+     * A hostile loopback peer first performs the REAL original-TV-owned
+     * Ed25519/HPKE/HKDF and both valid HMAC confirmations, then changes
+     * ONLY the final TCP bytes. This isolates the final-message trust gate
+     * from earlier signature/key-confirmation failures.
+     */
+    private fun injectHostileFinished(
+        send: (DataOutputStream, ByteArray) -> Unit,
+    ) = withFixture { f ->
+        f.approve()
+        val listener = ServerSocket(0, 1, loopback())
+        val finished = CountDownLatch(1)
+        val failureRef = AtomicReference<Throwable?>(null)
+        val serverThread = Thread({
+            try {
+                listener.use {
+                    it.accept().use { socket ->
+                        socket.soTimeout = 3_000
+                        val input = DataInputStream(socket.getInputStream())
+                        val output = DataOutputStream(socket.getOutputStream())
+                        val offer = Lc04MxH1LengthFrame.read(
+                            input, Lc04HandoffKind.SIGNED_SEED_OFFER,
+                        )
+                        val tvReply = checkNotNull(
+                            f.tv.acceptSyntheticMxH1SeedOffer(offer, f.now.get()),
+                        )
+                        Lc04MxH1LengthFrame.write(
+                            output, tvReply, Lc04HandoffKind.TV_KEY_CONFIRM,
+                        )
+                        val phoneReply = Lc04MxH1LengthFrame.read(
+                            input, Lc04HandoffKind.PHONE_KEY_CONFIRM,
+                        )
+                        if (input.read() != -1) error("Client did not half-close")
+                        val authenticFinished = checkNotNull(
+                            f.tv.finishSyntheticMxH1PhoneConfirmation(
+                                phoneReply, f.now.get(),
+                            ),
+                        )
+                        try {
+                            send(output, authenticFinished)
+                            output.flush()
+                            socket.shutdownOutput()
+                        } finally {
+                            offer.fill(0); tvReply.fill(0); phoneReply.fill(0)
+                            authenticFinished.fill(0)
+                        }
+                    }
+                }
+            } catch (failure: Throwable) {
+                failureRef.set(failure)
+            } finally { finished.countDown() }
+        }, "lc04-hostile-finished").apply { isDaemon = true }
+        serverThread.start()
+        try {
+            val client = f.phoneConnector(listener.localPort)
+            assertThat(client.completeSyntheticExchange(f.phone)).isFalse()
+            assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isFalse()
+            assertThat(finished.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(failureRef.get()).isNull()
+        } finally {
+            listener.close()
+            serverThread.join(2_000)
+        }
+    }
+
+    @Test fun forgedFinalTvHmacAfterValidRealPhoneProofNeverCompletes() =
+        injectHostileFinished { out, authentic ->
+            val forged = authentic.clone()
+            forged[forged.lastIndex] = (forged.last().toInt() xor 1).toByte()
+            out.writeInt(forged.size)
+            out.write(forged)
+            forged.fill(0)
+        }
+
+    @Test fun missingFinalFrameAfterRealPhoneProofNeverAuthenticates() =
+        injectHostileFinished { _, _ ->
+            // The TV accepted PHONE_CONFIRM, but the TCP peer never sends
+            // final key confirmation. Phone must deny, not guess success.
+        }
+
+    @Test fun zeroLengthLegacyTransportMarkerNoLongerCountsAsFinalProof() =
+        injectHostileFinished { out, _ ->
+            out.writeInt(0)
+        }
+
+    @Test fun authenticatedFinishedWithTrailingSmuggledByteIsNotAccepted() =
+        injectHostileFinished { out, authentic ->
+            out.writeInt(authentic.size)
+            out.write(authentic)
+            out.writeByte(0x7f)
+        }
+
+    @Test fun authenticatedFinishedTruncatedBeforeLastMacByteIsNotAccepted() =
+        injectHostileFinished { out, authentic ->
+            out.writeInt(authentic.size)
+            out.write(authentic, 0, authentic.size - 1)
+        }
+
+    @Test fun finalFrameWithWrongKindCounterOrOfferBindingFailsClosed() {
+        for (offset in listOf(5, 6, 22, 38, 70, 102, 135)) {
+            injectHostileFinished { out, authentic ->
+                val changed = authentic.clone()
+                changed[offset] = (changed[offset].toInt() xor 1).toByte()
+                out.writeInt(changed.size)
+                out.write(changed)
+                changed.fill(0)
+            }
+        }
+    }
+
     @Test fun noIpRouteOrCredentialApisAreExposedByTestOnlyTransport() =
         withFixture { f ->
             assertThat(f.tv.toString()).contains("[EPHEMERAL_KEY_REDACTED]")

@@ -78,6 +78,42 @@ class Lc04SyntheticHandoffKeyScheduleTest {
         } finally { a.close(); b.close(); seed.fill(0) }
     }
 
+    @Test fun tvFinishedUsesIndependentMacDomainAndExactPhoneConfirmationDigest() {
+        val seed = ByteArray(32).also(random::nextBytes)
+        val tv = Lc04SyntheticHandoffKeySchedule.derive(seed, context())
+        val phone = Lc04SyntheticHandoffKeySchedule.derive(seed, context())
+        val differentSession = Lc04SyntheticHandoffKeySchedule.derive(
+            seed, context(nonce = ByteArray(32) { 9 }),
+        )
+        val phoneFrameDigest = ByteArray(32).also(random::nextBytes)
+        val alteredFrameDigest = phoneFrameDigest.clone().also {
+            it[31] = (it[31].toInt() xor 1).toByte()
+        }
+        try {
+            val finished = checkNotNull(
+                tv.syntheticTvFinishedForPhoneFrameDigest(phoneFrameDigest),
+            )
+            assertThat(finished.size).isEqualTo(32)
+            assertThat(phone.verifySyntheticTvFinished(phoneFrameDigest, finished)).isTrue()
+            assertThat(phone.verifySyntheticTvFinished(alteredFrameDigest, finished)).isFalse()
+            assertThat(differentSession.verifySyntheticTvFinished(phoneFrameDigest, finished))
+                .isFalse()
+            assertThat(phone.verifySyntheticTvConfirmation(finished)).isFalse()
+            assertThat(phone.verifySyntheticTvFinished(
+                phoneFrameDigest, checkNotNull(tv.syntheticTvConfirmation()),
+            )).isFalse()
+            assertThat(phone.verifySyntheticTvFinished(ByteArray(31), finished)).isFalse()
+            assertThat(phone.verifySyntheticTvFinished(phoneFrameDigest, ByteArray(31)))
+                .isFalse()
+            finished.fill(0)
+        } finally {
+            tv.close(); phone.close(); differentSession.close()
+            seed.fill(0); phoneFrameDigest.fill(0); alteredFrameDigest.fill(0)
+        }
+        assertThat(phone.verifySyntheticTvFinished(ByteArray(32), ByteArray(32))).isFalse()
+        assertThat(tv.syntheticTvFinishedForPhoneFrameDigest(ByteArray(32))).isNull()
+    }
+
     @Test fun exactQrIdsBothFingerprintsSignedDigestAndTvNonceAreIndependentBindings() {
         val seed = ByteArray(32).also(random::nextBytes)
         val base = Lc04SyntheticHandoffKeySchedule.derive(seed, context())

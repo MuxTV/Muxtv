@@ -221,39 +221,71 @@ class TvHpkeQrSession private constructor(
     }
 
     /**
-     * Verify the real independent phone key-confirmation MAC, never just the
-     * public MXH1 digest. Success is a SYNTHETIC proof bit only. The derived
-     * keys are immediately revoked: this method provides no data-plane key.
+     * Legacy three-message in-process synthetic confirmation (S2F). Keep
+     * its read-only Boolean for existing tests, but immediately discard
+     * the separately authenticated final frame after generating it.
      */
     @Synchronized
     fun acceptSyntheticMxH1PhoneConfirmation(
         confirmation: ByteArray,
         nowElapsedMillis: Long,
     ): Boolean {
+        val finished = finishSyntheticMxH1PhoneConfirmation(
+            confirmation, nowElapsedMillis,
+        ) ?: return false
+        finished.fill(0)
+        return true
+    }
+
+    /**
+     * TV_FINISHED is only possible after authenticating the actual
+     * PHONE_KEY_CONFIRM MAC, not merely its publicly matching digest.
+     * HMAC input includes SHA-256 of the exact canonical phone frame,
+     * plus the previously established signed-offer/QR/TV-nonce binding.
+     *
+     * This emits no bearer, keys or data-plane capability. Keys are closed
+     * before the frame is returned; no persistent TV grant is created.
+     */
+    @Synchronized
+    fun finishSyntheticMxH1PhoneConfirmation(
+        confirmation: ByteArray,
+        nowElapsedMillis: Long,
+    ): ByteArray? {
         if (presentation(nowElapsedMillis) == null ||
             mxh1Phase != MxH1Phase.WAIT_PHONE
-        ) return revokeMxH1Boolean()
-        val original = mxh1AcceptedOffer ?: return revokeMxH1Boolean()
+        ) return revokeMxH1()
+        val original = mxh1AcceptedOffer ?: return revokeMxH1()
         if (!Lc04HandoffWireLab.structurallyMatchesOffer(
                 original, confirmation, Lc04HandoffKind.PHONE_KEY_CONFIRM,
             )
-        ) return revokeMxH1Boolean()
-        val parsed = Lc04HandoffWireLab.decode(confirmation)
-            ?: return revokeMxH1Boolean()
+        ) return revokeMxH1()
+        val parsed = Lc04HandoffWireLab.decode(confirmation) ?: return revokeMxH1()
         val tag = parsed.payload()
         return try {
             if (mxh1Keys?.verifySyntheticPhoneConfirmation(tag) != true) {
-                revokeMxH1Boolean()
-            } else {
-                // No production MXH1 data transport exists: discard the
-                // derived keys rather than retaining a dormant capability.
-                mxh1Keys?.close()
-                mxh1Keys = null
-                mxh1AcceptedOffer?.fill(0)
-                mxh1AcceptedOffer = null
-                mxh1Phase = MxH1Phase.VERIFIED
-                true
+                return revokeMxH1()
             }
+            val digest = MessageDigest.getInstance("SHA-256").digest(confirmation)
+            try {
+                val finishedTag = mxh1Keys
+                    ?.syntheticTvFinishedForPhoneFrameDigest(digest)
+                    ?: return revokeMxH1()
+                try {
+                    val offer = Lc04HandoffWireLab.decode(original) ?: return revokeMxH1()
+                    val finished = Lc04HandoffWireLab.encode(Lc04HandoffFrame(
+                        Lc04HandoffKind.TV_FINISHED,
+                        offer.invitation(), offer.pairing(), offer.tv(), offer.phone(),
+                        checkNotNull(Lc04HandoffWireLab.digestOfSignedOffer(original)),
+                        offer.counter, finishedTag,
+                    ))
+                    mxh1Keys?.close()
+                    mxh1Keys = null
+                    mxh1AcceptedOffer?.fill(0)
+                    mxh1AcceptedOffer = null
+                    mxh1Phase = MxH1Phase.VERIFIED
+                    finished
+                } finally { finishedTag.fill(0) }
+            } finally { digest.fill(0) }
         } finally { tag.fill(0) }
     }
 

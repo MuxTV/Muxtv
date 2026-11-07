@@ -18,9 +18,9 @@ import java.net.SocketTimeoutException
  * loopback ONLY and is not referenced by either installed Android APK.
  *
  * The deployed MXW1 listener remains unchanged. This class owns precisely
- * one socket, three canonical MXH1 frames and a terminal zero-length
- * TRANSPORT acknowledgement. The acknowledgement is NOT key confirmation,
- * source permission, a TV identity proof, or an encrypted data channel.
+ * one socket and four canonical MXH1 frames: signed seed, authenticated
+ * TV/phone confirmation and authenticated TV_FINISHED. No unauthenticated
+ * zero-length transport marker, source grant or encrypted data channel.
  *
  * The caller provides the ORIGINAL TvHpkeQrSession after its TV-local
  * Ed25519 approval; this lab does not mint a second receiver or consent gate.
@@ -84,16 +84,22 @@ internal class Lc04MxH1LoopbackTv private constructor(
                         // or pipelined fourth frame MUST fail closed, including
                         // a client that refuses to half-close by the deadline.
                         val ended = input.read() == -1
-                        val verified = try {
-                            if (!ended || stopped) false else
-                                tv.acceptSyntheticMxH1PhoneConfirmation(
+                        val finished = try {
+                            if (!ended || stopped) null else
+                                tv.finishSyntheticMxH1PhoneConfirmation(
                                     phoneReply, elapsedMillis(),
                                 )
                         } finally { phoneReply.fill(0) }
-                        if (!verified || stopped) return@use false
-                        output.writeInt(0)
-                        output.flush()
-                        socket.shutdownOutput()
+                        if (finished == null || stopped) {
+                            finished?.fill(0)
+                            return@use false
+                        }
+                        try {
+                            Lc04MxH1LengthFrame.write(
+                                output, finished, Lc04HandoffKind.TV_FINISHED,
+                            )
+                            socket.shutdownOutput()
+                        } finally { finished.fill(0) }
                         true
                     }
                 } catch (_: IOException) {
@@ -186,8 +192,8 @@ internal class Lc04MxH1LoopbackPhone private constructor(
 
     /**
      * True means only that an already HMAC-authenticated TV sent the
-     * expected terminal transport marker and EOF. No data-plane key is
-     * exported, persistent pairing authorized or source prepared.
+     * a genuine HMAC-authenticated TV_FINISHED frame and exact EOF.
+     * No data-plane key is exported or source permission granted.
      */
     fun completeSyntheticExchange(phone: Lc04MxH1PhoneLab): Boolean {
         if (revoked) return false
@@ -216,7 +222,7 @@ internal class Lc04MxH1LoopbackPhone private constructor(
                     input, Lc04HandoffKind.TV_KEY_CONFIRM,
                 )
                 val phoneConfirmation = try {
-                    phone.acceptTvConfirmation(tvConfirmation)
+                    phone.acceptTvConfirmationAwaitingFinished(tvConfirmation)
                 } finally { tvConfirmation.fill(0) }
                 if (phoneConfirmation == null || revoked) return false
                 try {
@@ -226,10 +232,18 @@ internal class Lc04MxH1LoopbackPhone private constructor(
                 } finally { phoneConfirmation.fill(0) }
 
                 socket.shutdownOutput()
-                val marker = input.readInt()
-                completed = marker == 0 && input.read() == -1 &&
-                    !revoked && phone.hasAuthenticatedTvSyntheticProof()
-                completed
+                val finished = Lc04MxH1LengthFrame.read(
+                    input, Lc04HandoffKind.TV_FINISHED,
+                )
+                try {
+                    // Must see canonical terminal frame + EOF before state
+                    // can advance. Valid frame bytes without an actual HMAC
+                    // remain unauthenticated and are rejected by the phone.
+                    completed = input.read() == -1 && !revoked &&
+                        phone.acceptTvFinished(finished) &&
+                        phone.hasAuthenticatedTvSyntheticProof()
+                    completed
+                } finally { finished.fill(0) }
             }
         } catch (_: IOException) {
             false

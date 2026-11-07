@@ -67,6 +67,48 @@ class Lc04HandoffWireLabTest {
         ))
     }
 
+    @Test fun fourthTvFinishedFrameIsCanonicalBoundedAndNeverAuthenticatedByCodec() {
+        val signedOffer = offer()
+        val digest = checkNotNull(Lc04HandoffWireLab.digestOfSignedOffer(signedOffer))
+        val forgedTag = ByteArray(32) { 7 }
+        val finished = Lc04HandoffWireLab.encode(frame(
+            Lc04HandoffKind.TV_FINISHED, forgedTag, digest = digest,
+        ))
+        assertThat(finished.size).isEqualTo(138 + 32)
+        assertThat(Lc04HandoffWireLab.decode(finished)?.kind)
+            .isEqualTo(Lc04HandoffKind.TV_FINISHED)
+        assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+            signedOffer, finished, Lc04HandoffKind.TV_FINISHED,
+        )).isTrue()
+        // This is intentionally UNAUTHENTICATED; only the separate HMAC
+        // verifier may accept TV_FINISHED, never this structural check.
+        val tamperedTag = finished.clone().also {
+            it[it.lastIndex] = (it.last().toInt() xor 1).toByte()
+        }
+        assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+            signedOffer, tamperedTag, Lc04HandoffKind.TV_FINISHED,
+        )).isTrue()
+        assertThat(Lc04HandoffWireLab.offerSigningStatement(finished)).isNull()
+        assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+            signedOffer, finished, Lc04HandoffKind.TV_KEY_CONFIRM,
+        )).isFalse()
+        for (wrongSize in listOf(0, 31, 33, 64)) {
+            assertThat(runCatching {
+                frame(Lc04HandoffKind.TV_FINISHED, ByteArray(wrongSize), digest = digest)
+            }.isFailure).isTrue()
+        }
+        for (index in listOf(6, 22, 38, 70, 102, 135, 137)) {
+            val changed = finished.clone()
+            changed[index] = (changed[index].toInt() xor 1).toByte()
+            assertThat(Lc04HandoffWireLab.structurallyMatchesOffer(
+                signedOffer, changed, Lc04HandoffKind.TV_FINISHED,
+            )).isFalse()
+        }
+        val forbiddenZeroDigest = finished.clone()
+        forbiddenZeroDigest.fill(0, 102, 134)
+        assertThat(Lc04HandoffWireLab.decode(forbiddenZeroDigest)).isNull()
+    }
+
     @Test fun canonicalMaxAndMinOfferAndConfirmBoundariesRoundTrip() {
         for (sig in listOf(64, 69)) {
             for (cipher in listOf(17, 111, 2048)) {
