@@ -134,6 +134,8 @@ class MainActivity : ComponentActivity() {
                     startPhonePairing = ::startPhonePairing,
                     enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr,
                     enableMxH1ForApprovedVisibleQr = ::enableMxH1ForApprovedVisibleQr,
+                    mxh1VerifiedOriginalPhoneIsReady =
+                        pairingController::isApprovedMxH1PhoneReady,
                     startPublicKeyQrPreview = {
                         withContext(Dispatchers.Default) {
                             pairingController.startPublicKeyQrPreview()
