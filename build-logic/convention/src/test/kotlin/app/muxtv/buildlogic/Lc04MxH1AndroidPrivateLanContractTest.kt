@@ -42,7 +42,7 @@ class Lc04MxH1AndroidPrivateLanContractTest {
             assertFalse(src.contains(blocked), blocked)
         }
         assertContains(root.resolve("settings.gradle.kts").readText(),
-            "":local-control:mxh1-lan"")
+            """:local-control:mxh1-lan""")
     }
 
     @Test fun `Android MXH1 requires two explicit gestures and same network owner`() {
