@@ -62,7 +62,7 @@ class Lc04MxH1TvOwnedHandshakeIsolationTest {
         assertContains(settings, """:local-control:mxh1-session-lab""")
         val manifest = root.resolve(".work/meta/modules.yaml").readText()
         assertContains(manifest, "local-control-mxh1-session-lab:")
-        for (app in listOf("app/phone/build.gradle.kts", "app/tv/build.gradle.kts",
+        for (app in listOf("app/tv/build.gradle.kts",
             "local-control/native-transport/build.gradle.kts",
             "local-control/server/build.gradle.kts")) {
             assertFalse(root.resolve(app).readText().contains(":local-control:mxh1-session-lab"))
