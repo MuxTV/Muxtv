@@ -57,6 +57,7 @@ fun PhonePairingRoute(
     onStartPublicKeyPreview: suspend () -> TvHpkeQrPresentation?,
     onEnableNativeProbe: suspend () -> TvPairingController.NativeProbeEndpoint?,
     onEnableMxH1: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
+    mxh1PhoneIsVerified: () -> Boolean = { false },
     onRevokePublicKeyPreview: () -> Unit,
     publicKeyPreviewIsActive: () -> Boolean,
     pendingPhoneKeyFingerprint: () -> String?,
@@ -169,7 +170,7 @@ fun PhonePairingRoute(
 
     fun enableMxH1AfterTvApproval() {
         if (mxh1Loading || mxh1Endpoint != null ||
-            nativeEndpoint == null || !phoneKeyApproved
+            nativeEndpoint == null || !mxh1PhoneIsVerified()
         ) return
         scope.launch {
             mxh1Loading = true
@@ -309,7 +310,7 @@ fun PhonePairingRoute(
                                 "TCP listener: ${endpoint.privateIpv4}:${endpoint.port}",
                                 modifier = Modifier.testTag("local-tv-native-endpoint"),
                             )
-                            if (phoneKeyApproved) {
+                            if (mxh1PhoneIsVerified()) {
                                 val finished = mxh1Endpoint
                                 if (finished == null) {
                                     MuxTvActionButton(
