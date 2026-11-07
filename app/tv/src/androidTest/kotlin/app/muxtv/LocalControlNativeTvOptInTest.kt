@@ -111,11 +111,11 @@ class LocalControlNativeTvOptInTest {
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-native-endpoint").fetchSemanticsNodes().size == 1
         }
+        check(rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
+            .fetchSemanticsNodes().isEmpty()) { "MXH1 visible before verified Ed25519." }
         rule.runOnIdle {
             check(nativeStarts == 1) { "Native transport must start on exactly one TV action." }
             check(mxh1Starts == 0) { "MXH1 must not start during MXW1 QR/proof." }
-            check(rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
-                .fetchSemanticsNodes().isEmpty()) { "MXH1 visible before verified Ed25519." }
             mxh1Verified = true // Simulates the verified TV-owner read, NOT remote approval
         }
         rule.waitUntil(10_000) {
