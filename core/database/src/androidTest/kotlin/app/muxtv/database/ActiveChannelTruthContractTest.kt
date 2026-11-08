@@ -29,6 +29,7 @@ class ActiveChannelTruthContractTest {
     private lateinit var playback: RoomPlaybackCatalog
     private lateinit var guide: RoomEpgGuideRepository
     private lateinit var search: RoomChannelSearchRepository
+    private lateinit var shadowSearch: RoomChannelSearchRepository
     private lateinit var recent: RoomRecentChannelsRepository
 
     @Before
@@ -55,6 +56,10 @@ class ActiveChannelTruthContractTest {
         guide = RoomEpgGuideRepository(database.epgGuideDao())
         search = RoomChannelSearchRepository(
             dataSource = database.channelSearchDao(),
+            guideRepository = guide,
+        )
+        shadowSearch = RoomChannelSearchRepository(
+            dataSource = ShadowSearchParityDataSource(database),
             guideRepository = guide,
         )
         recent = RoomRecentChannelsRepository(database.recentChannelsDao())
@@ -164,6 +169,28 @@ class ActiveChannelTruthContractTest {
         assertRetainedRecentHistory()
     }
 
+    private suspend fun assertSearchSnapshotParity(
+        profileId: String,
+        text: String,
+        limit: Int,
+    ) {
+        val query = ChannelSearchQuery(
+            profileId = profileId,
+            text = text,
+            nowEpochMillis = NOW,
+            limit = limit,
+        )
+        val authoritative = search.observe(query).first()
+        val shadow = shadowSearch.observe(query).first()
+        assertThat(shadow).isEqualTo(authoritative)
+        assertThat(shadow.results.map { it.channel.channelId }).containsNoDuplicates()
+        if (shadow.results.isNotEmpty()) {
+            assertThat(shadow.nextBoundaryEpochMillis).isEqualTo(NOW + 500L)
+            assertThat(shadow.results.map { it.currentProgrammeTitle })
+                .doesNotContain(null)
+        }
+    }
+
     private suspend fun assertProfileMembership(
         profileId: String,
         expectedChannelIds: Set<String>,
@@ -199,6 +226,22 @@ class ActiveChannelTruthContractTest {
         assertThat(searchIds).containsExactlyElementsIn(expectedChannelIds)
         assertThat(recentIds).containsExactlyElementsIn(expectedChannelIds)
         assertThat(readyGuideIds).containsExactlyElementsIn(expectedChannelIds)
+
+        // Compare the *entire* result, not merely candidate IDs: token intersection,
+        // origin-aware ranking, profile-hidden policy, bounded truncation, published
+        // EPG title and next programme boundary both before and after revision swap.
+        listOf("Truth", "Programme", "Truth Programme", "unmatchedtoken", "").forEach { text ->
+            listOf(1, 10).forEach { limit ->
+                assertSearchSnapshotParity(profileId, text, limit)
+            }
+        }
+        if (expectedChannelIds.size > 1) {
+            val truncated = shadowSearch.observe(
+                ChannelSearchQuery(profileId, "Truth", NOW, limit = 1),
+            ).first()
+            assertThat(truncated.results).hasSize(1)
+            assertThat(truncated.isTruncated).isTrue()
+        }
     }
 
     private suspend fun assertDirectPlayback(

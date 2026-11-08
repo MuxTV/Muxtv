@@ -238,9 +238,11 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
                 scenarios = scenarioReports,
                 redactionPassed = true,
                 limitations = listOf(
+                    "A is the real additive Room v11 dual-write path, audited across both authoritative v10-compatible and new immutable v11 tables.",
                     "A and B row mutations are counted in separate untimed audit-trigger passes so counters cannot inflate timed WAL evidence.",
                     "B is a benchmark-only immutable payload plus revision-membership schema; it is not the production Room schema or read path.",
                     "WAL bytes are physical file growth proxies; catalog-table row mutations do not count SQLite index or FTS page writes.",
+                    "Mutation totals between A and B include structurally different table sets and must not be interpreted as equal per-write I/O cost.",
                 ),
             )
         }
@@ -977,7 +979,7 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
     private fun Cursor.nullableString(index: Int): String? = if (isNull(index)) null else getString(index)
 
     private companion object {
-        const val METHOD_VERSION = "c03-room-delta-v1"
+        const val METHOD_VERSION = "c03-room-delta-v2-v11-physical-audit"
         const val SOURCE_ID = "c03-source"
         const val BASELINE_REVISION = 1L
         const val REFRESH_REVISION = 2L
@@ -986,6 +988,10 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
         const val REFRESH_STARTED_AT = 3_000L
         const val REFRESH_ACTIVATED_AT = 4_000L
         const val BATCH_SIZE = 250
+        // A_CURRENT_MUXTV now writes the additive v11 payload and membership tables in
+        // the same real RoomSourceRevisionStore transaction as its v10-compatible rows.
+        // Omitting these would undercount A's physical SQL row mutations and invalidate
+        // any comparison with the benchmark-only immutable-COW candidate.
         val AUDITED_TABLES = listOf(
             "sources",
             "source_revisions",
@@ -993,6 +999,9 @@ internal class RefreshDeltaDatabaseMeasurementRunner(
             "provider_channels",
             "stream_variants",
             "search_documents",
+            "catalog_search_payloads",
+            "catalog_payloads",
+            "source_revision_memberships",
         )
         val CANDIDATE_AUDITED_TABLES = listOf(
             "c03_b_sources",

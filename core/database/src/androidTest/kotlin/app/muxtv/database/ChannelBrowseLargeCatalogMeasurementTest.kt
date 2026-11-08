@@ -1,5 +1,6 @@
 package app.muxtv.database
 
+import android.os.SystemClock
 import androidx.paging.PagingSource
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
@@ -10,6 +11,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.time.Duration.Companion.minutes
 
 @RunWith(AndroidJUnit4::class)
 class ChannelBrowseLargeCatalogTest {
@@ -30,22 +32,34 @@ class ChannelBrowseLargeCatalogTest {
     fun tearDown() = database.close()
 
     @Test
-    fun channelFiftyThousandIsReachableWithoutLoadingWholeCatalog() = runTest {
+    // Large-corpus correctness is not a one-minute benchmark. Room v11 dual-write expands
+    // the write workload; capture phase timings separately for performance qualification.
+    fun channelFiftyThousandIsReachableWithoutLoadingWholeCatalog() = runTest(timeout = 5.minutes) {
+        val startedAt = SystemClock.elapsedRealtime()
         revisionStore.upsertSource(SourceDefinition(SOURCE_ID, "Provider"))
         revisionStore.beginRevision(SOURCE_ID, 1L, 1_000L)
-        (1..50_000).chunked(500).forEach { indexes ->
+        (1..50_000).chunked(500).forEachIndexed { batchIndex, indexes ->
             revisionStore.stageBatch(
                 sourceId = SOURCE_ID,
                 revisionNumber = 1L,
                 entries = indexes.map(::stagedEntry),
             )
+            if ((batchIndex + 1) % 20 == 0) {
+                println(
+                    "largeCatalogReachability: staged=${(batchIndex + 1) * 500} " +
+                        "elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+                )
+            }
         }
-        revisionStore.activate(
+        val stageElapsedMs = SystemClock.elapsedRealtime() - startedAt
+        val activation = revisionStore.activate(
             sourceId = SOURCE_ID,
             revisionNumber = 1L,
             activatedAtEpochMillis = 2_000L,
             statistics = SourceRevisionStatistics(50_000, 0, 0),
         )
+        assertThat(activation).isInstanceOf(SourceRevisionActivationResult.Activated::class.java)
+        val activationElapsedMs = SystemClock.elapsedRealtime() - startedAt - stageElapsedMs
 
         val source = database.channelBrowseDao().pageActiveChannels(PROFILE_ID, false)
         val page = source.load(
@@ -58,6 +72,12 @@ class ChannelBrowseLargeCatalogTest {
 
         assertThat(page.data).hasSize(64)
         assertThat(page.data.last().channelId).isEqualTo("channel-50000")
+        val pageElapsedMs =
+            SystemClock.elapsedRealtime() - startedAt - stageElapsedMs - activationElapsedMs
+        println(
+            "largeCatalogReachability: entries=50000 stageMs=$stageElapsedMs " +
+                "activateMs=$activationElapsedMs lastPageMs=$pageElapsedMs",
+        )
     }
 
     private fun stagedEntry(index: Int): StagedCatalogEntry {

@@ -1,7 +1,11 @@
 package app.muxtv.database
 
+import app.muxtv.common.catalog.CatalogFingerprintCodec
+import app.muxtv.common.catalog.CatalogPayloadFingerprintInput
 import app.muxtv.common.tracing.MuxTvTrace
 import app.muxtv.common.tracing.MuxTvTraceSection
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 internal class RoomSourceRevisionStore(
     private val dao: SourceRevisionDao,
@@ -47,6 +51,10 @@ internal class RoomSourceRevisionStore(
             val canonicalChannels = ArrayList<CanonicalChannelEntity>(entries.size)
             val providerChannels = ArrayList<ProviderChannelEntity>(entries.size)
             val streamVariants = ArrayList<StreamVariantEntity>(entries.size)
+            val catalogSearchPayloads = ArrayList<CatalogSearchPayloadEntity>(entries.size)
+            val catalogPayloads = ArrayList<CatalogPayloadEntity>(entries.size)
+            val membershipDrafts = ArrayList<SourceRevisionMembershipDraft>(entries.size)
+            val fingerprintCodec = CatalogFingerprintCodec()
 
             entries.forEach { entry ->
                 canonicalChannels += CanonicalChannelEntity(
@@ -77,12 +85,89 @@ internal class RoomSourceRevisionStore(
                     userAgent = entry.userAgent,
                     referrer = entry.referrer,
                 )
+
+                val logicalChannelId = fingerprintCodec.logicalChannelId(
+                    sourceId = sourceId,
+                    providerKey = entry.providerKey,
+                )
+                val fingerprint = fingerprintCodec.fingerprint(
+                    CatalogPayloadFingerprintInput(
+                        providerKey = entry.providerKey,
+                        canonicalChannelId = entry.canonicalChannelId,
+                        rawName = entry.rawName,
+                        tvgId = entry.tvgId,
+                        tvgName = entry.tvgName,
+                        logoUrl = entry.logoUrl,
+                        groupTitle = entry.groupTitle,
+                        channelNumber = entry.channelNumber,
+                        catchupMode = entry.catchupMode,
+                        catchupSource = entry.catchupSource,
+                        catchupDays = entry.catchupDays,
+                        catchupCorrection = entry.catchupCorrection,
+                        locator = entry.locator,
+                        userAgent = entry.userAgent,
+                        referrer = entry.referrer,
+                    ),
+                )
+                val searchPayloadId = fingerprintCodec.searchPayloadId(
+                    searchHashVersion = fingerprint.searchHashVersion,
+                    searchContentHash = fingerprint.searchContentHash,
+                )
+                val payloadId = fingerprintCodec.payloadId(
+                    sourceId = sourceId,
+                    logicalChannelId = logicalChannelId,
+                    contentHashVersion = fingerprint.contentHashVersion,
+                    contentHash = fingerprint.contentHash,
+                )
+
+                catalogSearchPayloads += CatalogSearchPayloadEntity(
+                    searchPayloadId = searchPayloadId,
+                    searchContentHash = fingerprint.searchContentHash,
+                    searchHashVersion = fingerprint.searchHashVersion,
+                    canonicalChannelId = entry.canonicalChannelId,
+                    rawName = entry.rawName,
+                    groupTitle = entry.groupTitle,
+                    channelNumber = entry.channelNumber,
+                )
+                catalogPayloads += CatalogPayloadEntity(
+                    payloadId = payloadId,
+                    sourceId = sourceId,
+                    logicalChannelId = logicalChannelId,
+                    contentHash = fingerprint.contentHash,
+                    contentHashVersion = fingerprint.contentHashVersion,
+                    canonicalChannelId = entry.canonicalChannelId,
+                    providerKey = entry.providerKey,
+                    rawName = entry.rawName,
+                    tvgId = entry.tvgId,
+                    tvgName = entry.tvgName,
+                    logoUrl = entry.logoUrl,
+                    groupTitle = entry.groupTitle,
+                    channelNumber = entry.channelNumber,
+                    catchupMode = entry.catchupMode,
+                    catchupSource = entry.catchupSource,
+                    catchupDays = entry.catchupDays,
+                    catchupCorrection = entry.catchupCorrection,
+                    locator = entry.locator,
+                    userAgent = entry.userAgent,
+                    referrer = entry.referrer,
+                    searchPayloadId = searchPayloadId,
+                )
+                membershipDrafts += SourceRevisionMembershipDraft(
+                    logicalChannelId = logicalChannelId,
+                    payloadId = payloadId,
+                    variantId = entry.streamVariantId,
+                )
             }
 
             dao.stageCatalogBatch(
+                sourceId = sourceId,
+                revisionNumber = revisionNumber,
                 canonicalChannels = canonicalChannels,
                 providerChannels = providerChannels,
                 streamVariants = streamVariants,
+                catalogSearchPayloads = catalogSearchPayloads,
+                catalogPayloads = catalogPayloads,
+                membershipDrafts = membershipDrafts,
             )
         }
     }
@@ -92,11 +177,13 @@ internal class RoomSourceRevisionStore(
         revisionNumber: Long,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevision(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevision(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun activateIfCredentialMatches(
@@ -105,12 +192,14 @@ internal class RoomSourceRevisionStore(
         expectedCredentialRef: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevisionIfCredentialMatches(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        expectedCredentialRef = expectedCredentialRef,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevisionIfCredentialMatches(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            expectedCredentialRef = expectedCredentialRef,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun activateIfRefreshOwnerMatches(
@@ -120,13 +209,15 @@ internal class RoomSourceRevisionStore(
         expectedRunToken: String,
         activatedAtEpochMillis: Long,
         statistics: SourceRevisionStatistics,
-    ): SourceRevisionActivationResult = dao.activateRevisionIfRefreshOwnerMatches(
-        sourceId = sourceId,
-        revisionNumber = revisionNumber,
-        expectedCredentialRef = expectedCredentialRef,
-        expectedRunToken = expectedRunToken,
-        activatedAtEpochMillis = activatedAtEpochMillis,
-        statistics = statistics,
+    ): SourceRevisionActivationResult = finalizeTerminalMutation(
+        dao.activateRevisionIfRefreshOwnerMatches(
+            sourceId = sourceId,
+            revisionNumber = revisionNumber,
+            expectedCredentialRef = expectedCredentialRef,
+            expectedRunToken = expectedRunToken,
+            activatedAtEpochMillis = activatedAtEpochMillis,
+            statistics = statistics,
+        ),
     )
 
     override suspend fun discard(
@@ -134,6 +225,7 @@ internal class RoomSourceRevisionStore(
         revisionNumber: Long,
     ) {
         dao.discardRevision(sourceId, revisionNumber)
+        drainCatalogPayloadOrphans()
     }
 
     override suspend fun removeInactiveSource(
@@ -142,10 +234,41 @@ internal class RoomSourceRevisionStore(
     ): InactiveSourceRemovalResult {
         require(sourceId.isNotBlank())
         require(expectedCredentialRef.isNotBlank())
-        return dao.removeInactiveSource(
+        val result = dao.removeInactiveSource(
             sourceId = sourceId,
             expectedCredentialRef = expectedCredentialRef,
         )
+        if (result == InactiveSourceRemovalResult.Removed) {
+            drainCatalogPayloadOrphans()
+        }
+        return result
+    }
+
+    private suspend fun finalizeTerminalMutation(
+        result: SourceRevisionActivationResult,
+    ): SourceRevisionActivationResult {
+        if (
+            result is SourceRevisionActivationResult.Activated ||
+            result == SourceRevisionActivationResult.Superseded
+        ) {
+            drainCatalogPayloadOrphans()
+        }
+        return result
+    }
+
+    private suspend fun drainCatalogPayloadOrphans() {
+        // Publication/discard is already committed before this helper runs. Cleanup therefore uses
+        // independent bounded transactions and can drain arbitrarily large unreachable backlogs
+        // without extending the atomic active-pointer transaction.
+        withContext(NonCancellable) {
+            while (dao.compactCatalogPayloadOrphansBatch().totalRowsDeleted > 0) {
+                // Each batch is capped by SourceRevisionDao and remains below old-edge SQLite
+                // variable limits. Continue until storage is bounded by reachable revisions.
+            }
+            // Payload RESTRICT FKs intentionally pin canonical identities until the payload drain
+            // has completed. Re-run canonical/Search metadata cleanup afterward.
+            dao.cleanupUnreferencedCanonicalMetadata()
+        }
     }
 
     private companion object {
