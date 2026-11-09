@@ -8,10 +8,13 @@ on:
       - 'local-control/mxh1-lan/**'
       - 'local-control/tv-qr/**'
       - 'local-control/mxh1-session-lab/**'
+      - 'local-control/protected-channel/**'
       - 'app/tv/**'
       - 'app/phone/**'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1AndroidPrivateLanContractTest.kt'
       - '.work/specifications/lc04-mxh1-android-private-lan-20261107.md'
+      - '.work/specifications/lc04-mxr1-synthetic-sealed-records-20261109.md'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SyntheticSealedRecordsContractTest.kt'
       - 'settings.gradle.kts'
   workflow_dispatch:
 
@@ -66,6 +69,7 @@ jobs:
             :app:tv:compileDebugKotlin :app:phone:compileDebugKotlin \
             --no-daemon --stacktrace --console=plain --no-problems-report
           ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SyntheticSealedRecordsContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence
