@@ -167,6 +167,7 @@ internal class Lc04MxH1SealedLoopbackTv private constructor(
 /** Single-attempt, fixed-domain synthetic phone. No generic plaintext or credential API. */
 internal class Lc04MxH1SealedLoopbackPhone private constructor(
     private val port: Int,
+    private val now: () -> Long,
 ) : AutoCloseable {
     @Volatile private var stopped = false
     @Volatile private var active: Socket? = null
@@ -212,7 +213,7 @@ internal class Lc04MxH1SealedLoopbackPhone private constructor(
                 )
                 val verified = try {
                     !stopped && phone.acceptTvFinishedForProbeLab(
-                        finished, { System.nanoTime() / 1_000_000L },
+                        finished, now,
                     )
                 } finally { finished.fill(0) }
                 if (!verified || stopped) return false
@@ -265,9 +266,11 @@ internal class Lc04MxH1SealedLoopbackPhone private constructor(
     companion object {
         private const val IO_TIMEOUT_MS = 2_500
         private const val CONNECT_TIMEOUT_MS = 1_500
-        fun loopbackForTests(port: Int): Lc04MxH1SealedLoopbackPhone {
+        fun loopbackForTests(
+            port: Int, now: () -> Long,
+        ): Lc04MxH1SealedLoopbackPhone {
             require(port in 1..65535)
-            return Lc04MxH1SealedLoopbackPhone(port)
+            return Lc04MxH1SealedLoopbackPhone(port, now)
         }
     }
 }
@@ -279,7 +282,7 @@ internal object Lc04MxH1SealedFrameIo {
     fun read(input: DataInputStream): ByteArray {
         val length = input.readInt()
         if (length != SYNTHETIC_RECORD_BYTES) throw IOException("Wrong sealed frame length.")
-        return ByteArray(length).also(input::readFully)
+        return ByteArray(length).also { input.readFully(it) }
     }
 
     fun write(output: DataOutputStream, wire: ByteArray) {
