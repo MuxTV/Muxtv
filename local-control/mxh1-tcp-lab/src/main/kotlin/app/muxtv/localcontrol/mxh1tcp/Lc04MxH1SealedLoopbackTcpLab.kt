@@ -16,7 +16,7 @@ import java.net.SocketTimeoutException
  * S2J2B: one-use HOSTILE-TEST-ONLY TCP loopback exercising the *actual*
  * original TV/phone signed MXH1 state machine followed by one sealed MXR1
  * probe each way. This is NOT linked from either Android app, native LAN,
- * SourceOnboarding, or any provider/credential-bearing API.
+ * any source activation or any provider/credential-bearing API.
  *
  * Separate from legacy four-frame lab: phone MUST NOT half-close until after
  * sending the fifth authenticated record. TV requires input EOF after the
