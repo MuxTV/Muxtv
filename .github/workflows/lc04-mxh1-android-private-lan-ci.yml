@@ -17,6 +17,8 @@ on:
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SyntheticSealedRecordsContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1VerifiedOwnerTransitionContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SelectedNetworkLeaseContractTest.kt'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1LeasedSealedPhoneContractTest.kt'
+      - '.work/specifications/lc04-mxh1-leased-sealed-phone-20261110.md'
       - '.work/specifications/lc04-mxh1-selected-network-lease-20261109.md'
       - '.work/specifications/lc04-mxh1-verified-record-owner-transition-20261109.md'
       - 'settings.gradle.kts'
@@ -76,6 +78,7 @@ jobs:
             --tests 'app.muxtv.buildlogic.Lc04MxH1SyntheticSealedRecordsContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1VerifiedOwnerTransitionContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1SelectedNetworkLeaseContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1LeasedSealedPhoneContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence
