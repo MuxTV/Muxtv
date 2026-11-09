@@ -170,7 +170,7 @@ class Lc04MxH1LeasedSealedPhoneTest {
                 selectedRouteEligible = allowed::get,
                 bindUnconnectedToSelectedNetwork = fakeBinder,
                 revokeOriginalQrAndKeys = { revokes.incrementAndGet() },
-                testSocketFactory = {
+                testSocketSupplier = {
                     object : Socket() {
                         override fun connect(endpoint: SocketAddress, timeout: Int) {
                             val original = endpoint as InetSocketAddress
