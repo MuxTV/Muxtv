@@ -42,6 +42,7 @@ include(
     ":local-control:protected-channel",
     ":local-control:mxh1-session-lab",
     ":local-control:mxh1-tcp-lab",
+    ":local-control:mxh1-lan",
     ":catalog:api",
     ":catalog:ingest",
     ":catalog:importer",

@@ -127,6 +127,20 @@ class TvHpkeQrSession private constructor(
     }
 
     /**
+     * The ONLY LAN MXH1 readiness gate: existing private QR receiver and
+     * the TV-local *verified* Ed25519 enrollment, never a claimed fingerprint.
+     * This is a read-only preflight, NOT a pairing grant or source authority.
+     */
+    @Synchronized
+    fun hasApprovedPhoneForSyntheticMxH1(nowElapsedMillis: Long): Boolean {
+        val accepted = approvedPhoneFingerprint ?: return false
+        return presentation(nowElapsedMillis) != null &&
+            mxh1Phase == MxH1Phase.NEW &&
+            approvedPhoneVerifier != null &&
+            pendingPhoneEnrollment?.verifiedFingerprintForTv() == accepted
+    }
+
+    /**
      * LC04-S2F, in-process SYNTHETIC ONLY. Reuse THIS installed TV QR owner's
      * HPKE private key and exact TV-local-approved Ed25519 phone identity.
      * No alternative QR, TV consent gate, LAN socket, source or credentials.

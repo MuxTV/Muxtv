@@ -17,6 +17,8 @@ dependencies {
     implementation(project(":local-control:enrollment"))
     implementation(project(":local-control:phone-flow"))
     implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:mxh1-lan"))
+    implementation(project(":local-control:mxh1-session-lab"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
