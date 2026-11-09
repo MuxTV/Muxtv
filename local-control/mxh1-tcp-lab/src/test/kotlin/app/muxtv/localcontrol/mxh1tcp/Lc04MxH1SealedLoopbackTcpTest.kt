@@ -15,7 +15,6 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import org.junit.Test
 
@@ -81,7 +80,7 @@ class Lc04MxH1SealedLoopbackTcpTest {
             } finally { finished.fill(0) }
         }
 
-        fun dial(port: Int) = Socket(loopback(), port)
+        fun dial(port: Int) = Socket(sealedTestLoopback(), port)
 
         fun awaitTvRevoked() {
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
@@ -245,13 +244,13 @@ class Lc04MxH1SealedLoopbackTcpTest {
     @Test fun activeMitmFifthTagCorruptionIsNotAccepted() = fixture { f ->
         f.approve()
         val tv = f.start()
-        val relay = ServerSocket(0, 1, loopback())
+        val relay = ServerSocket(0, 1, sealedTestLoopback())
         val finished = CountDownLatch(1)
         val mediator = Thread {
             try {
                 relay.use { listener ->
                     listener.accept().use { incoming ->
-                        Socket(loopback(), tv.port).use { outgoing ->
+                        Socket(sealedTestLoopback(), tv.port).use { outgoing ->
                             incoming.soTimeout = 4_000
                             outgoing.soTimeout = 4_000
                             val pi = DataInputStream(incoming.getInputStream())
@@ -315,6 +314,6 @@ class Lc04MxH1SealedLoopbackTcpTest {
         }
     }
 
-    private fun loopback(): InetAddress =
-        InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
 }
+private fun sealedTestLoopback(): InetAddress =
+    InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
