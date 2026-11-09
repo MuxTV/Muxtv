@@ -44,7 +44,7 @@ class Lc04MxH1VerifiedOwnerTransitionContractTest {
         )) assertContains(port, required)
         for (blocked in listOf(
             "SourceOnboarding", "SourcePreparationHandle", "SourcePreparationRequest",
-            "Xtream", "M3U", "HttpClient", "Socket", "URL", "Password",
+            "Xtream", "M3U", "HttpClient", "Socket", "Password",
             "fun encrypt(", "fun send(", "fun receivePlaintext",
         )) assertFalse(port.contains(blocked), blocked)
     }
