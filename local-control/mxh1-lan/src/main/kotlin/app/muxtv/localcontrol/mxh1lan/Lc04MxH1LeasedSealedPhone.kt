@@ -169,11 +169,11 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
             selectedRouteEligible: () -> Boolean,
             bindUnconnectedToSelectedNetwork: (Socket) -> Unit,
             revokeOriginalQrAndKeys: () -> Unit,
-            testSocketFactory: () -> Socket,
+            testSocketSupplier: () -> Socket,
         ): Lc04MxH1LeasedSealedPhone = create(
             privateIpv4, port, originalPhone, elapsedMillis,
             selectedRouteEligible, bindUnconnectedToSelectedNetwork,
-            revokeOriginalQrAndKeys, testSocketFactory,
+            revokeOriginalQrAndKeys, testSocketSupplier,
         )
 
         private fun create(
