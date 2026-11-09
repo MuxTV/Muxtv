@@ -120,6 +120,14 @@ class Lc04MxH1SyntheticSealedRecordsTest {
         }
     }
 
+    @Test fun authenticSealedRecordCannotBeAcceptedAfterSessionExpiry() =
+        fixture { f ->
+            val valid = checkNotNull(f.phone.sealSyntheticProbe())
+            f.clock.addAndGet(120_000L)
+            assertThat(f.tv.acceptSyntheticProbe(valid)).isFalse()
+            assertThat(f.tv.acceptSyntheticProbe(valid)).isFalse()
+        }
+
     @Test fun derivedKeyOwnerCannotReopenAndReuseTheSameNonce() {
         val now = AtomicLong(50L)
         val seed = ByteArray(32) { (it + 1).toByte() }
