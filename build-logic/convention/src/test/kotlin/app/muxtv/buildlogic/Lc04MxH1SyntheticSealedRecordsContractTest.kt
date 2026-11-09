@@ -18,7 +18,9 @@ class Lc04MxH1SyntheticSealedRecordsContractTest {
             "app/muxtv/localcontrol/protectedchannel/Lc04MxH1SyntheticSealedRecords.kt")
             .readText()
         for (required in listOf(
-            "enum class Lc04SyntheticRecordRole",
+            "internal enum class Lc04SyntheticRecordRole",
+            "internal class Lc04MxH1SyntheticSealedRecords private constructor(",
+            "internal fun fromDerivedLabKeys(",
             "fun sealSyntheticProbe(): ByteArray?",
             "fun acceptSyntheticProbe(wire: ByteArray): Boolean",
             "keys.claimSyntheticRecordLabOwner()",
