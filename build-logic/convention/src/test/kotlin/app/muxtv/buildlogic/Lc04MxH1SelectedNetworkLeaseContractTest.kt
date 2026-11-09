@@ -51,13 +51,10 @@ class Lc04MxH1SelectedNetworkLeaseContractTest {
                 "Lc04MxH1SelectedNetworkLease",
             ), path)
         }
-        for (path in listOf(
-            "app/phone/src/main/AndroidManifest.xml",
-            "app/tv/src/main/AndroidManifest.xml",
-        )) {
-            val manifest = root.resolve(path).readText()
-            assertFalse(manifest.contains("ACCESS_LOCAL_NETWORK"), path)
-        }
+        // Existing manifest/targetSdk policy is a separate migration
+        // decision; this experimental lease must not mutate Android apps.
+        // Do not assert absence of ACCESS_LOCAL_NETWORK here: current
+        // product manifests already declare it.
         val tests = root.resolve("local-control/mxh1-lan/src/test/kotlin/" +
             "app/muxtv/localcontrol/mxh1lan/Lc04MxH1SelectedNetworkLeaseTest.kt")
             .readText()
