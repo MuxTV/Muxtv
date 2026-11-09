@@ -54,6 +54,10 @@ internal class Lc04MxH1SelectedNetworkLease private constructor(
             }
         }
         if (!acquired) {
+            // A rejected caller socket is not the tracked active socket.
+            // Close it too: a pre-bound or second untracked socket must
+            // never survive rejection as an alternate network path.
+            runCatching { unconnected.close() }
             close()
             return false
         }
