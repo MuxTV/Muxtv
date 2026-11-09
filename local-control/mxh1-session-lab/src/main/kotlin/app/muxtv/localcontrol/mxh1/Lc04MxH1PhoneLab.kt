@@ -2,6 +2,7 @@ package app.muxtv.localcontrol.mxh1
 
 import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticDerivedKeys
+import app.muxtv.localcontrol.protectedchannel.Lc04MxH1SyntheticProbePort
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffKeySchedule
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffTranscript
 import app.muxtv.localcontrol.qr.TvQrPublicKey
@@ -36,6 +37,8 @@ class Lc04MxH1PhoneLab(
     private var offered: ByteArray? = null
     private var pendingPhoneFrameDigest: ByteArray? = null
     private var keys: Lc04SyntheticDerivedKeys? = null
+    // Remains null in all installed-product and legacy synthetic paths.
+    private var mxh1ProbePort: Lc04MxH1SyntheticProbePort? = null
 
     private fun live(): Boolean {
         val now = elapsedMillis()
@@ -174,7 +177,24 @@ class Lc04MxH1PhoneLab(
      * zero-size legacy TCP marker cannot advance this state.
      */
     @Synchronized
-    fun acceptTvFinished(finished: ByteArray): Boolean {
+    fun acceptTvFinished(finished: ByteArray): Boolean =
+        acceptTvFinishedInternal(finished, null)
+
+    /**
+     * S2J2A lab-only transfer: retain an opaque synthetic probe port ONLY
+     * after independently authenticating the EXACT TV_FINISHED HMAC and EOF
+     * contract. No installed app path calls this; no source/credential API.
+     */
+    @Synchronized
+    fun acceptTvFinishedForProbeLab(
+        finished: ByteArray,
+        clock: () -> Long,
+    ): Boolean = acceptTvFinishedInternal(finished, clock)
+
+    private fun acceptTvFinishedInternal(
+        finished: ByteArray,
+        labClock: (() -> Long)?,
+    ): Boolean {
         if (phase != Phase.WAIT_FINISH || !live()) {
             close()
             return false
@@ -198,7 +218,13 @@ class Lc04MxH1PhoneLab(
                 close()
                 false
             } else {
-                keys?.close()
+                if (labClock != null) {
+                    mxh1ProbePort = keys?.handOffToSyntheticProbeLab(
+                        phoneSide = true, clock = labClock,
+                    ) ?: run { close(); return false }
+                } else {
+                    keys?.close()
+                }
                 keys = null
                 offered?.fill(0)
                 offered = null
@@ -208,6 +234,36 @@ class Lc04MxH1PhoneLab(
                 true
             }
         } finally { tag.fill(0) }
+    }
+
+    /**
+     * The first encrypted phone-to-TV probe proves that the phone accepted
+     * TV_FINISHED. An invalid inbound reply revokes signer and traffic keys.
+     */
+    @Synchronized
+    fun sealMxH1SyntheticProbeForLab(): ByteArray? {
+        if (phase != Phase.VERIFIED || !live()) {
+            close()
+            return null
+        }
+        val port = mxh1ProbePort ?: return null
+        val frame = port.sealSyntheticProbe()
+        if (frame == null) close()
+        return frame
+    }
+
+    @Synchronized
+    fun acceptMxH1SyntheticProbeForLab(wire: ByteArray): Boolean {
+        if (phase != Phase.VERIFIED || !live()) {
+            close()
+            return false
+        }
+        val port = mxh1ProbePort ?: return false
+        if (!port.acceptSyntheticProbe(wire)) {
+            close()
+            return false
+        }
+        return true
     }
 
     @Synchronized
@@ -235,6 +291,8 @@ class Lc04MxH1PhoneLab(
         offered = null
         pendingPhoneFrameDigest?.fill(0)
         pendingPhoneFrameDigest = null
+        mxh1ProbePort?.close()
+        mxh1ProbePort = null
         keys?.close()
         keys = null
         signingPhone.close()
