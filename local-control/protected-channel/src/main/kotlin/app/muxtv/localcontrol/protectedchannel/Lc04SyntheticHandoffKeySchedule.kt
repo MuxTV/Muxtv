@@ -200,6 +200,32 @@ class Lc04SyntheticDerivedKeys(
         return binding.clone()
     }
 
+    /**
+     * Synthetic-only ownership transfer after the original caller verifies
+     * every authenticated MXH1 frame, including TV_FINISHED on the phone.
+     * The key schedule itself makes NO assertion about that proof.
+     *
+     * This method exposes no raw traffic key and can succeed only once.
+     * Every error revokes this key owner rather than permitting nonce reset.
+     */
+    @Synchronized
+    fun handOffToSyntheticProbeLab(
+        phoneSide: Boolean,
+        clock: () -> Long,
+    ): Lc04MxH1SyntheticProbePort? {
+        if (closed || syntheticRecordLabClaimed) return null
+        return try {
+            Lc04MxH1SyntheticSealedRecords.fromDerivedLabKeys(
+                this,
+                if (phoneSide) Lc04SyntheticRecordRole.PHONE else Lc04SyntheticRecordRole.TV,
+                clock,
+            )
+        } catch (_: RuntimeException) {
+            close()
+            null
+        }
+    }
+
     /** AES-256-GCM is deliberately private to this module; callers cannot submit app data. */
     @Synchronized
     internal fun sealSyntheticLabRecord(
