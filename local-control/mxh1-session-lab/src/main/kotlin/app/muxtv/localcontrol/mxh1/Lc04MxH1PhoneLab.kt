@@ -182,8 +182,10 @@ class Lc04MxH1PhoneLab(
 
     /**
      * S2J2A lab-only transfer: retain an opaque synthetic probe port ONLY
-     * after independently authenticating the EXACT TV_FINISHED HMAC and EOF
-     * contract. No installed app path calls this; no source/credential API.
+     * after independently authenticating the EXACT TV_FINISHED HMAC.
+     * This in-process lab has NO socket/EOF observation: an eventual network
+     * adapter must check EOF and cancellation separately before calling it.
+     * No installed app path calls this; no source/credential API.
      */
     @Synchronized
     fun acceptTvFinishedForProbeLab(
