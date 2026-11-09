@@ -83,6 +83,8 @@ jobs:
             local-control/mxh1-tcp-lab/build/test-results/test/**
             local-control/tv-qr/build/test-results/test/**
             local-control/mxh1-session-lab/build/test-results/test/**
+            local-control/protected-channel/build/test-results/test/**
+            local-control/protected-channel/build/reports/tests/test/**
             local-control/wire-lab/build/test-results/test/**
             local-control/native-transport/build/test-results/test/**
             build-logic/convention/build/test-results/test/**
