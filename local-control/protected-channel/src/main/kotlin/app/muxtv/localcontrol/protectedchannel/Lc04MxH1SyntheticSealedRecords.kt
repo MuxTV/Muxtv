@@ -16,9 +16,9 @@ import java.security.SecureRandom
  * exclusive ownership here. The factory itself does NOT authenticate a handshake.
  * No TCP, UI, Android permissions, source backend or persistent grant is exposed.
  */
-enum class Lc04SyntheticRecordRole { PHONE, TV }
+internal enum class Lc04SyntheticRecordRole { PHONE, TV }
 
-class Lc04MxH1SyntheticSealedRecords private constructor(
+internal class Lc04MxH1SyntheticSealedRecords private constructor(
     private val keys: Lc04SyntheticDerivedKeys,
     private val role: Lc04SyntheticRecordRole,
     private val clock: () -> Long,
@@ -181,7 +181,7 @@ class Lc04MxH1SyntheticSealedRecords private constructor(
          * One derived-key owner can create only ONE channel for its lifetime,
          * avoiding counter reuse on reopen with the same AES-GCM key.
          */
-        fun fromDerivedLabKeys(
+        internal fun fromDerivedLabKeys(
             keys: Lc04SyntheticDerivedKeys,
             role: Lc04SyntheticRecordRole,
             clock: () -> Long,
