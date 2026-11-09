@@ -2,7 +2,9 @@ package app.muxtv.localcontrol.mxh1lan
 
 import com.google.common.truth.Truth.assertThat
 import java.io.IOException
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -126,6 +128,50 @@ class Lc04MxH1SelectedNetworkLeaseTest {
         } finally { lease.close(); socket.close() }
     }
 
+    @Test fun `binder cannot silently connect to an unrelated destination`() {
+        // Hostile callback pretends to bind Android's Network but connects an
+        // ordinary socket to a different local service before returning.
+        // A selected-network lease must never become BOUND in this state.
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { listener ->
+            val socket = Socket()
+            val lease = newLease(bind = {
+                binderCalls.incrementAndGet()
+                it.connect(
+                    InetSocketAddress(InetAddress.getLoopbackAddress(), listener.localPort),
+                    500,
+                )
+            })
+            try {
+                assertThat(lease.bindOnce(socket)).isFalse()
+                assertThat(binderCalls.get()).isEqualTo(1)
+                assertThat(socket.isClosed).isTrue()
+                assertThat(lease.endpointIfBoundAndEligible()).isNull()
+                assertThat(revocations.get()).isEqualTo(1)
+            } finally { lease.close(); socket.close() }
+        }
+    }
+
+    @Test fun `binder that closes socket cannot produce an eligible lease`() {
+        val socket = Socket()
+        val lease = newLease(bind = { it.close() })
+        try {
+            assertThat(lease.bindOnce(socket)).isFalse()
+            assertThat(lease.checkpoint()).isFalse()
+            assertThat(revocations.get()).isEqualTo(1)
+        } finally { lease.close(); socket.close() }
+    }
+
+    @Test fun `permission predicate throwing SecurityException revokes original owner`() {
+        val socket = Socket()
+        val lease = newLease(permitted = { throw SecurityException("LAN denied") })
+        try {
+            assertThat(lease.bindOnce(socket)).isFalse()
+            assertThat(socket.isClosed).isTrue()
+            assertThat(binderCalls.get()).isEqualTo(0)
+            assertThat(revocations.get()).isEqualTo(1)
+        } finally { lease.close(); socket.close() }
+    }
+
     @Test fun `network disappears during bind is rejected after callback returns`() {
         val socket = Socket()
         val lease = newLease(bind = {
@@ -203,6 +249,9 @@ class Lc04MxH1SelectedNetworkLeaseTest {
             assertThat(lease.bindOnce(first)).isTrue()
             assertThat(lease.bindOnce(second)).isFalse()
             assertThat(first.isClosed).isTrue()
+            // The denied second socket also must not survive as an
+            // untracked alternate connection route.
+            assertThat(second.isClosed).isTrue()
             assertThat(revocations.get()).isEqualTo(1)
         } finally { lease.close(); first.close(); second.close() }
     }
