@@ -25,7 +25,7 @@ internal class Lc04MxH1SyntheticSealedRecords private constructor(
     private val createdAt: Long,
     bindingDigest: ByteArray,
     private val random: SecureRandom,
-) : AutoCloseable {
+) : Lc04MxH1SyntheticProbePort {
     private val binding = bindingDigest.clone()
     private var lastObserved = createdAt
     private var sent = 0
@@ -40,7 +40,7 @@ internal class Lc04MxH1SyntheticSealedRecords private constructor(
      * per independently authenticated, fresh MXH1 offer/TV nonce.
      */
     @Synchronized
-    fun sealSyntheticProbe(): ByteArray? {
+    override fun sealSyntheticProbe(): ByteArray? {
         if (!alive() || sent >= MAX_RECORDS) return failSeal()
         val sequence = sent + 1
         val direction = if (role == Lc04SyntheticRecordRole.PHONE) PHONE_TO_TV else TV_TO_PHONE
@@ -66,7 +66,7 @@ internal class Lc04MxH1SyntheticSealedRecords private constructor(
 
     /** Any invalid, replayed, reflected, out-of-order or forged record closes both keys. */
     @Synchronized
-    fun acceptSyntheticProbe(wire: ByteArray): Boolean {
+    override fun acceptSyntheticProbe(wire: ByteArray): Boolean {
         if (!alive() || received >= MAX_RECORDS) return reject()
         if (wire.size != WIRE_BYTES) return reject()
         // Snapshot untrusted bytes once; no mutation between validation and AEAD.
