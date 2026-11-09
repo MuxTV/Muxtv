@@ -12,6 +12,8 @@ on:
       - 'local-control/protected-channel/**'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1LoopbackTcpIsolationTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1VerifiedOwnerTransitionContractTest.kt'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SealedLoopbackTcpContractTest.kt'
+      - '.work/specifications/lc04-mxh1-sealed-loopback-tcp-20261109.md'
       - '.work/specifications/lc04-mxh1-verified-record-owner-transition-20261109.md'
       - '.work/specifications/lc04-mxh1-one-use-tcp-loopback-20261105.md'
       - 'settings.gradle.kts'
@@ -70,6 +72,7 @@ jobs:
             --no-daemon --stacktrace --console=plain --no-problems-report
           ./gradlew -p build-logic :convention:test \
             --tests 'app.muxtv.buildlogic.Lc04MxH1VerifiedOwnerTransitionContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SealedLoopbackTcpContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1LoopbackTcpIsolationTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-HEAD TCP hostile evidence
