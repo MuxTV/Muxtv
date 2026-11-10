@@ -13,6 +13,8 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(project(":local-control:crypto-lab"))
     testImplementation(project(":local-control:mxh1-session-lab"))
+    // Only integration tests decode typed source requests; no TV runtime dependency.
+    testImplementation(project(":local-control:source-command-wire"))
 }
 
 tasks.test { useJUnit() }
