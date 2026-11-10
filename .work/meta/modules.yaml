@@ -90,6 +90,10 @@ actual_modules:
     gradle_path: :local-control:protected-channel
     type: pure_kotlin_library
     owns: [synthetic_only_bidirectional_aead_lab, strict_direction_and_counter, fail_closed_expiry_and_revocation, no_production_handshake_or_provider_data]
+  local-control-source-command-wire:
+    gradle_path: :local-control:source-command-wire
+    type: pure_kotlin_library
+    owns: [canonical_bounded_source_command_plaintext, m3u_xtream_command_schema, secret_free_status_reply, no_crypto_keys_or_network_authority]
   local-control-mxh1-session-lab:
     gradle_path: :local-control:mxh1-session-lab
     type: pure_kotlin_library
