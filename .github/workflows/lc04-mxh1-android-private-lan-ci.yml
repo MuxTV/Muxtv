@@ -1,0 +1,121 @@
+name: LC04 Android TV and phone private LAN MXH1 opt-in CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-mxh1-android-private-lan-ci.yml'
+      - 'local-control/mxh1-lan/**'
+      - 'local-control/tv-qr/**'
+      - 'local-control/mxh1-session-lab/**'
+      - 'local-control/protected-channel/**'
+      - 'local-control/onboarding/**'
+      - 'local-control/source-command-wire/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceCommandBoundaryContractTest.kt'
+      - '.work/specifications/lc04-s2j3a-source-command-boundary-20261110.md'
+      - 'app/tv/**'
+      - 'app/phone/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1AndroidPrivateLanContractTest.kt'
+      - '.work/specifications/lc04-mxh1-android-private-lan-20261107.md'
+      - '.work/specifications/lc04-mxr1-synthetic-sealed-records-20261109.md'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SyntheticSealedRecordsContractTest.kt'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1VerifiedOwnerTransitionContractTest.kt'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SelectedNetworkLeaseContractTest.kt'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1LeasedSealedPhoneContractTest.kt'
+      - '.work/specifications/lc04-mxh1-leased-sealed-phone-20261110.md'
+      - '.work/specifications/lc04-mxh1-sealed-private-tv-20261110.md'
+      - '.work/specifications/lc04-mxh1-android-sealed-network-20261110.md'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SealedAndroidIntegrationContractTest.kt'
+      - '.work/specifications/lc04-mxh1-selected-network-lease-20261109.md'
+      - '.work/specifications/lc04-mxh1-verified-record-owner-transition-20261109.md'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-mxh1-android-lan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  owner-and-socket:
+    name: Android opt-in MXH1 LAN original TV owner and phone-binding JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact PR source HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Enforce exact HEAD and fail-close MXW1/source separation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -Fq '":local-control:mxh1-lan",' settings.gradle.kts
+          grep -Fq 'selected.bindSocket(unconnected)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt
+          grep -Fq 'session.beginSealedMxH1(endpoint)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneQrActivity.kt
+          # Source commands must remain INERT until a separately authenticated AEAD app owner exists.
+          grep -Fq 'internal class Lc04TvSourceCommandSession(' local-control/onboarding/src/main/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSession.kt
+          grep -Fq 'class Lc04SourceCommandCodecTest' local-control/source-command-wire/src/test/kotlin/app/muxtv/localcontrol/sourcecommandwire/Lc04SourceCommandCodecTest.kt
+          grep -Fq 'class Lc04TvSourceCommandSessionTest' local-control/onboarding/src/test/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSessionTest.kt
+          ! grep -R -Eq 'Lc04TvSourceCommandSession|Lc04SourceCommandCodec' local-control/server/src/main/ app/phone/src/main/ app/tv/src/main/ 
+          grep -Fq 'pairingController.enableSealedMxH1ForApprovedVisibleQr()' app/tv/src/main/kotlin/app/muxtv/MainActivity.kt
+          grep -Fq 'receiver.hasApprovedPhoneForSyntheticMxH1(' app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt
+          grep -Fq 'local-tv-mxh1-second-opt-in' app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt
+          grep -Fq 'lc04-phone-mxh1-second-opt-in' app/phone/src/main/kotlin/app/muxtv/phone/PhoneQrActivity.kt
+          ! grep -Eq 'SourceOnboarding|SourcePreparationHandle|SourcePreparationRequest|HttpClient|SharedPreferences' local-control/mxh1-lan/src/main/kotlin/app/muxtv/localcontrol/mxh1lan/*.kt
+          ! grep -Eq 'Lc04MxH1PrivateLan|TV_FINISHED' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
+      - name: Run real TCP and legacy crypto regressions and compile installed Android APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:mxh1-lan:test \
+            :local-control:mxh1-tcp-lab:test \
+            :local-control:tv-qr:test \
+            :local-control:mxh1-session-lab:test \
+            :local-control:wire-lab:test \
+            :local-control:enrollment:test \
+            :local-control:protected-channel:test \
+            :local-control:onboarding:test \
+            :local-control:source-command-wire:test \
+            :local-control:native-transport:test \
+            :app:tv:compileDebugKotlin :app:phone:compileDebugKotlin \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SyntheticSealedRecordsContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1VerifiedOwnerTransitionContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SelectedNetworkLeaseContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1LeasedSealedPhoneContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SealedAndroidIntegrationContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04SourceCommandBoundaryContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload exact-head LAN and app compile evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-mxh1-android-private-lan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/mxh1-lan/build/test-results/test/**
+            local-control/mxh1-lan/build/reports/tests/test/**
+            local-control/mxh1-tcp-lab/build/test-results/test/**
+            local-control/tv-qr/build/test-results/test/**
+            local-control/mxh1-session-lab/build/test-results/test/**
+            local-control/protected-channel/build/test-results/test/**
+            local-control/onboarding/build/test-results/test/**
+            local-control/source-command-wire/build/test-results/test/**
+            local-control/protected-channel/build/reports/tests/test/**
+            local-control/wire-lab/build/test-results/test/**
+            local-control/native-transport/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}

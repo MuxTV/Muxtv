@@ -154,6 +154,41 @@ class ProtectedSourceStagingTest {
     }
 
     @Test
+    fun exceptionDuringActivationIsUnknownAndCannotReusePreparedHandle() = runBlocking {
+        val (principal, _) = PairingFixture().pair()
+        val port = FakeOnboarding()
+        val stage = ProtectedSourceStaging(port)
+        assertThat(stage.prepare(principal, SourcePreparationRequest.M3u("https://iptv.invalid")))
+            .isEqualTo(SourceStagingResult.PREPARED)
+        port.onActivate = { throw IllegalStateException("failure after possible durable commit") }
+        assertThat(stage.activate(principal, "Channels"))
+            .isEqualTo(SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN)
+        assertThat(port.activations).isEqualTo(1)
+        assertThat(port.cancellations).isEqualTo(0)
+        assertThat(stage.activate(principal, "Channels")).isEqualTo(SourceStagingResult.EMPTY)
+        assertThat(port.activations).isEqualTo(1)
+    }
+
+    @Test
+    fun cancellationDuringActivationCannotAllowBlindRetry() = runBlocking {
+        val (principal, _) = PairingFixture().pair()
+        val port = FakeOnboarding()
+        val stage = ProtectedSourceStaging(port)
+        assertThat(stage.prepare(principal, SourcePreparationRequest.M3u("https://iptv.invalid")))
+            .isEqualTo(SourceStagingResult.PREPARED)
+        port.onActivate = { throw kotlinx.coroutines.CancellationException("unknown commit") }
+        try {
+            stage.activate(principal, "Channels")
+            throw AssertionError("Expected cancellation")
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            // Terminal handle removal prevents silent duplicate activation.
+        }
+        assertThat(port.activations).isEqualTo(1)
+        assertThat(stage.activate(principal, "Channels")).isEqualTo(SourceStagingResult.EMPTY)
+        assertThat(port.cancellations).isEqualTo(0)
+    }
+
+    @Test
     fun revokedWhilePreparingCannotRetainNewHandle() = runBlocking {
         val fixture = PairingFixture()
         val (principal, grant) = fixture.pair()
