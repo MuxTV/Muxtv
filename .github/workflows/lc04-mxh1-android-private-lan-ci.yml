@@ -9,6 +9,9 @@ on:
       - 'local-control/tv-qr/**'
       - 'local-control/mxh1-session-lab/**'
       - 'local-control/protected-channel/**'
+      - 'local-control/onboarding/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceCommandBoundaryContractTest.kt'
+      - '.work/specifications/lc04-s2j3a-source-command-boundary-20261110.md'
       - 'app/tv/**'
       - 'app/phone/**'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1AndroidPrivateLanContractTest.kt'
@@ -58,6 +61,11 @@ jobs:
           grep -Fq '":local-control:mxh1-lan",' settings.gradle.kts
           grep -Fq 'selected.bindSocket(unconnected)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt
           grep -Fq 'session.beginSealedMxH1(endpoint)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneQrActivity.kt
+          # Source commands must remain INERT until a separately authenticated AEAD app owner exists.
+          grep -Fq 'internal class Lc04TvSourceCommandSession(' local-control/onboarding/src/main/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSession.kt
+          grep -Fq 'class Lc04SourceCommandCodecTest' local-control/protected-channel/src/test/kotlin/app/muxtv/localcontrol/protectedchannel/Lc04SourceCommandCodecTest.kt
+          grep -Fq 'class Lc04TvSourceCommandSessionTest' local-control/onboarding/src/test/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSessionTest.kt
+          ! grep -R -Eq 'Lc04TvSourceCommandSession|Lc04SourceCommandCodec' local-control/server/src/main/ app/phone/src/main/ app/tv/src/main/ 
           grep -Fq 'pairingController.enableSealedMxH1ForApprovedVisibleQr()' app/tv/src/main/kotlin/app/muxtv/MainActivity.kt
           grep -Fq 'receiver.hasApprovedPhoneForSyntheticMxH1(' app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt
           grep -Fq 'local-tv-mxh1-second-opt-in' app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt
@@ -76,6 +84,7 @@ jobs:
             :local-control:wire-lab:test \
             :local-control:enrollment:test \
             :local-control:protected-channel:test \
+            :local-control:onboarding:test \
             :local-control:native-transport:test \
             :app:tv:compileDebugKotlin :app:phone:compileDebugKotlin \
             --no-daemon --stacktrace --console=plain --no-problems-report
@@ -85,6 +94,7 @@ jobs:
             --tests 'app.muxtv.buildlogic.Lc04MxH1SelectedNetworkLeaseContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1LeasedSealedPhoneContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1SealedAndroidIntegrationContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04SourceCommandBoundaryContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence
@@ -99,6 +109,7 @@ jobs:
             local-control/tv-qr/build/test-results/test/**
             local-control/mxh1-session-lab/build/test-results/test/**
             local-control/protected-channel/build/test-results/test/**
+            local-control/onboarding/build/test-results/test/**
             local-control/protected-channel/build/reports/tests/test/**
             local-control/wire-lab/build/test-results/test/**
             local-control/native-transport/build/test-results/test/**
