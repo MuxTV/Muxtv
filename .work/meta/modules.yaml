@@ -97,7 +97,7 @@ actual_modules:
   local-control-source-aead:
     gradle_path: :local-control:source-aead
     type: pure_kotlin_library
-    owns: [isolated_aes256gcm_source_command_records, app_key_domain_separation, request_reply_counters, terminal_fail_closed_records, no_production_owner_yet]
+    owns: [isolated_aes256gcm_source_command_records, app_key_domain_separation, verified_original_mxh1_candidate_export, request_reply_counters, terminal_fail_closed_records, no_native_data_plane_yet]
   local-control-mxh1-session-lab:
     gradle_path: :local-control:mxh1-session-lab
     type: pure_kotlin_library

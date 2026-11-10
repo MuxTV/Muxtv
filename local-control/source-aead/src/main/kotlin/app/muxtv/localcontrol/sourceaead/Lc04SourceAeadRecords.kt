@@ -33,7 +33,7 @@ internal class Lc04SourceAeadRecords private constructor(
     bindingDigest: ByteArray,
     private val now: () -> Long,
     private val routeEligible: () -> Boolean,
-) : AutoCloseable {
+) : Lc04SourceAeadPort {
     private enum class Role { PHONE, TV }
 
     private var outboundKey: ByteArray? =
@@ -56,7 +56,7 @@ internal class Lc04SourceAeadRecords private constructor(
 
     /** The phone sends exactly one outstanding typed command at a time. */
     @Synchronized
-    fun sealRequest(command: Lc04SourceCommand): ByteArray? {
+    override fun sealRequest(command: Lc04SourceCommand): ByteArray? {
         if (role != Role.PHONE || !alive() || responsePending ||
             command.sequence != nextOutgoing || nextOutgoing > MAX_COMMANDS
         ) return fail()
@@ -76,7 +76,7 @@ internal class Lc04SourceAeadRecords private constructor(
      * direction, exact next sequence and original transcript binding.
      */
     @Synchronized
-    fun openRequest(untrusted: ByteArray): Lc04SourceCommand? {
+    override fun openRequest(untrusted: ByteArray): Lc04SourceCommand? {
         if (role != Role.TV || !alive() || responsePending ||
             nextIncoming > MAX_COMMANDS
         ) return failOpen()
@@ -96,7 +96,7 @@ internal class Lc04SourceAeadRecords private constructor(
 
     /** TV response carries ONLY the fixed source staging result code. */
     @Synchronized
-    fun sealReply(reply: Lc04SourceReply): ByteArray? {
+    override fun sealReply(reply: Lc04SourceReply): ByteArray? {
         if (role != Role.TV || !alive() || !responsePending ||
             reply.sequence != nextOutgoing || nextOutgoing > MAX_COMMANDS
         ) return fail()
@@ -113,7 +113,7 @@ internal class Lc04SourceAeadRecords private constructor(
 
     /** Reply must match the one pending command and authenticate TV direction. */
     @Synchronized
-    fun openReply(untrusted: ByteArray): Lc04SourceReply? {
+    override fun openReply(untrusted: ByteArray): Lc04SourceReply? {
         if (role != Role.PHONE || !alive() || !responsePending ||
             nextIncoming >= nextOutgoing || nextIncoming > MAX_COMMANDS
         ) return failOpen()
@@ -279,6 +279,34 @@ internal class Lc04SourceAeadRecords private constructor(
         private const val REPLY_CIPHERTEXT_BYTES = 32
         private const val MAX_COMMANDS = 16L
         private const val TTL_MS = 120_000L
+
+        /**
+         * Only the original QR/approved phone handshake OWNER may invoke this
+         * after validating the exact signed offer, F4, F5, F6 and applicable
+         * TCP EOF. This method creates NO SourceOnboarding principal/grant.
+         * Do not call from an Activity, HTTP endpoint or synthetic proof bit.
+         */
+        internal fun fromAuthenticatedOriginalCandidate(
+            dedicatedAppSeed: ByteArray,
+            bindingDigest: ByteArray,
+            phoneSide: Boolean,
+            now: () -> Long,
+            routeEligible: () -> Boolean,
+        ): Lc04SourceAeadPort {
+            require(dedicatedAppSeed.size == KEY_BYTES &&
+                dedicatedAppSeed.any { it != 0.toByte() })
+            require(bindingDigest.size == KEY_BYTES)
+            val keys = deriveKeys(dedicatedAppSeed, bindingDigest)
+            return try {
+                Lc04SourceAeadRecords(
+                    if (phoneSide) Role.PHONE else Role.TV,
+                    keys.first, keys.second, bindingDigest, now, routeEligible,
+                )
+            } finally {
+                keys.first.fill(0)
+                keys.second.fill(0)
+            }
+        }
 
         /**
          * NOT a production credential/key exchange. Only the module's tests

@@ -1,5 +1,7 @@
 package app.muxtv.localcontrol.tvqr
 
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAppKeyCandidate
 import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.enrollment.VerifiedPhoneIdentity
@@ -58,12 +60,15 @@ class TvHpkeQrSession private constructor(
     private enum class MxH1Phase { NEW, WAIT_PHONE, VERIFIED, REVOKED }
     // Same QR, private HPKE receiver and TV-approved Ed25519 verifier as MXW1.
     // These fields NEVER grant SourceOnboarding, bearer or application authority.
-    private var mxh1Phase = MxH1Phase.NEW
+    @Volatile private var mxh1Phase = MxH1Phase.NEW
     private var mxh1AcceptedOffer: ByteArray? = null
     private var mxh1Keys: Lc04SyntheticDerivedKeys? = null
     // Lab-only. No installed native listener ever calls the transition method.
     private var mxh1ProbePort: Lc04MxH1SyntheticProbePort? = null
     private var mxh1PhoneProvedFinalFrame = false
+    private var pendingSourceExport: Lc04SourceAppKeyCandidate? = null
+    private var authenticSixth: ByteArray? = null
+    private var sourceRecordPort: Lc04SourceAeadPort? = null
 
 
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
@@ -213,6 +218,17 @@ class TvHpkeQrSession private constructor(
                     digest, nonce,
                 )
                 val newKeys = Lc04SyntheticHandoffKeySchedule.derive(seed, transcript)
+                // Separate app exporter from this ORIGINAL signed HPKE seed,
+                // independent from spent synthetic MXR1 traffic keys.
+                val appDigest = transcript.digest()
+                val exporter = try {
+                    Lc04SourceAppKeyCandidate.prepareFromOriginalHpkeSeed(
+                        seed, appDigest,
+                    )
+                } finally { appDigest.fill(0) }
+                // Hand ownership to the original QR session before any
+                // subsequent fallible operation; revokeMxH1 closes it.
+                pendingSourceExport = exporter
                 val tvTag = newKeys.syntheticTvConfirmation()
                     ?: run { newKeys.close(); return revokeMxH1() }
                 try {
@@ -322,6 +338,8 @@ class TvHpkeQrSession private constructor(
                         ) ?: return revokeMxH1()
                         mxh1PhoneProvedFinalFrame = false
                     } else {
+                        pendingSourceExport?.close()
+                        pendingSourceExport = null
                         mxh1Keys?.close()
                     }
                     mxh1Keys = null
@@ -359,10 +377,49 @@ class TvHpkeQrSession private constructor(
             mxh1Phase != MxH1Phase.VERIFIED ||
             !mxh1PhoneProvedFinalFrame
         ) return null
+        if (authenticSixth != null) { close(); return null }
         val port = mxh1ProbePort ?: return null
         val result = port.sealSyntheticProbe()
-        if (result == null) close()
+        if (result == null) {
+            close()
+        } else {
+            authenticSixth?.fill(0)
+            authenticSixth = result.clone()
+        }
         return result
+    }
+
+    /**
+     * One-use TV original-QR key-owner transition. The native private-LAN
+     * adapter MUST call only AFTER F6 was successfully written and output
+     * was closed. The first authenticated app request proves the phone saw
+     * F6; this method alone NEVER grants catalog/source authority.
+     */
+    @Synchronized
+    fun claimSourceRecordsAfterSixthWritten(
+        clock: () -> Long,
+        routeEligible: () -> Boolean,
+    ): Lc04SourceAeadPort? {
+        if (mxh1Phase != MxH1Phase.VERIFIED ||
+            !mxh1PhoneProvedFinalFrame || sourceRecordPort != null ||
+            presentation(clock()) == null
+        ) return null
+        val candidate = pendingSourceExport ?: return null
+        val sixth = authenticSixth ?: return null
+        pendingSourceExport = null
+        authenticSixth = null
+        return try {
+            candidate.finishAfterAuthenticatedSixth(
+                sixth, phoneSide = false, now = clock,
+                routeEligible = {
+                    mxh1Phase == MxH1Phase.VERIFIED &&
+                        privateReceiver != null && routeEligible()
+                },
+            ).also { sourceRecordPort = it }
+        } finally {
+            sixth.fill(0)
+            candidate.close()
+        }
     }
 
     /** Read-only diagnostic, not a pairing grant or source authorization. */
@@ -476,6 +533,12 @@ class TvHpkeQrSession private constructor(
         mxh1Phase = MxH1Phase.REVOKED
         mxh1ProbePort?.close()
         mxh1ProbePort = null
+        pendingSourceExport?.close()
+        pendingSourceExport = null
+        authenticSixth?.fill(0)
+        authenticSixth = null
+        sourceRecordPort?.close()
+        sourceRecordPort = null
         mxh1PhoneProvedFinalFrame = false
         mxh1Keys?.close()
         mxh1Keys = null
