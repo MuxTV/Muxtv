@@ -68,6 +68,17 @@ class Lc04MxH1PrivateLanTest {
         assertThat(f.tv.presentation(f.clock.get())).isNull()
     }
 
+    private fun awaitServerProof(tv: Lc04MxH1PrivateLanTv) {
+        // TV_FINISHED reaches the phone before the TV worker publishes
+        // 'completed' after socket shutdown. Wait for that asynchronous
+        // server boundary, not for a second handshake or a fixed sleep.
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4)
+        while (!tv.hasSyntheticNetworkProof() &&
+            System.nanoTime() < deadline
+        ) Thread.sleep(10)
+        assertThat(tv.hasSyntheticNetworkProof()).isTrue()
+    }
+
     @Test fun noTcpListenerBeforeExactTvLocalEd25519Approval() =
         withFixture { f ->
             assertThat(f.tv.hasApprovedPhoneForSyntheticMxH1(f.clock.get())).isFalse()
@@ -90,7 +101,7 @@ class Lc04MxH1PrivateLanTest {
             }
             assertThat(phone.complete(f.phone)).isTrue()
             assertThat(bindCalled.get()).isTrue()
-            assertThat(tv.hasSyntheticNetworkProof()).isTrue()
+            awaitServerProof(tv)
             assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isTrue()
             assertThat(checkNotNull(f.tv.presentation(f.clock.get())).qrValue)
                 .isEqualTo(publicQr)
