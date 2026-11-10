@@ -120,8 +120,11 @@ class Lc04TvSourceCommandSessionTest {
         assertThat(result.toString()).doesNotContain("SECRET")
         assertThat(f.port.lastName).isEqualTo("Каналы")
         assertThat(f.port.activates).isEqualTo(1)
+        // A second activation must not disclose source state or call the
+        // onboarding backend without a fresh TV-local approval.
         assertThat(f.send(Lc04SourceCommand.Activate(4, "Каналы"))?.code)
-            .isEqualTo(Lc04SourceReplyCode.EMPTY)
+            .isEqualTo(Lc04SourceReplyCode.TV_CONFIRMATION_REQUIRED)
+        assertThat(f.port.activates).isEqualTo(1)
     }
 
     @Test fun xtreamCredentialsReachOnlyExistingPortAndNeverReply() = runBlocking {
