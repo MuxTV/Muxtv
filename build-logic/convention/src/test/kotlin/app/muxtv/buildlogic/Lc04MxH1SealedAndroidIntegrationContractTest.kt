@@ -96,6 +96,7 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
         assertContains(runner, "PhoneSealedAndroidNetworkDeviceTest")
         assertContains(runner, "PhoneNativeProofDeviceTest")
         assertContains(runner, "-ne 6 -or")
+        assertContains(runner, ".skipped -ne 0")
         assertContains(runner, "git rev-parse HEAD")
         val workflow = source(".github/workflows/lc04-phone-native-proof-device-matrix.yml")
         assertContains(workflow, "api: 26")

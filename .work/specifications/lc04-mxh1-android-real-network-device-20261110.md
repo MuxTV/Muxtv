@@ -61,8 +61,10 @@ now demanding **exactly six passed, zero skipped, zero failed** tests.
 - API37 `ACCESS_LOCAL_NETWORK` permission grant, denial, revocation
   and platform-specific routing remain unqualified, since the
   currently accepted GitHub-hosted AVD matrix is only API26/API36.
-- Physical two-device original QR / TV approval / concurrent
-  LAN handshake must be explicitly tested before shipping.
+- A physical two-device original QR / TV approval / concurrent LAN
+  handshake is **recommended**, but is **not a release prerequisite** under
+  #401. Until it is actually tested, do not claim physical two-device
+  interoperability evidence or certify particular OEM/router behavior.
 - No arbitrary application-data frames, provider URL, credentials,
   source permissions, persistent grants or HTTP fallback are added.
   The six-frame return value is only a synthetic diagnostic.
