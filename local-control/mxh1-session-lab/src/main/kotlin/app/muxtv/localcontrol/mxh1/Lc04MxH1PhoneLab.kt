@@ -294,7 +294,7 @@ class Lc04MxH1PhoneLab(
      * One-use owner handoff. The selected-Network socket adapter MUST call
      * this ONLY after an authenticated F6, its exact TV EOF and an eligible
      * route. The method itself cannot attest a kernel EOF and conveys NO
-     * TV SourceOnboarding authority. Original owner close revokes the port.
+     * TV catalog activation authority. Original owner close revokes the port.
      */
     @Synchronized
     fun claimSourceRecordsAfterVerifiedTvEof(

@@ -10,7 +10,7 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * A typed, ephemeral record port, not a pairing grant or an IPC endpoint.
  * It can only process the bounded source-command vocabulary. Any access to
- * SourceOnboarding still requires a separate original-TV-owned principal and
+ * catalog activation still requires a separate original-TV-owned principal and
  * explicit local TV approval; no key owner may mint that authority.
  */
 interface Lc04SourceAeadPort : AutoCloseable {

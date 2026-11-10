@@ -283,7 +283,7 @@ internal class Lc04SourceAeadRecords private constructor(
         /**
          * Only the original QR/approved phone handshake OWNER may invoke this
          * after validating the exact signed offer, F4, F5, F6 and applicable
-         * TCP EOF. This method creates NO SourceOnboarding principal/grant.
+         * TCP EOF. This method creates NO catalog activation principal/grant.
          * Do not call from an Activity, HTTP endpoint or synthetic proof bit.
          */
         internal fun fromAuthenticatedOriginalCandidate(
