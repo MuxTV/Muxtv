@@ -98,6 +98,10 @@ actual_modules:
     gradle_path: :local-control:mxh1-tcp-lab
     type: pure_kotlin_library
     owns: [loopback_only_three_frame_tcp_hostile_lab, original_tv_qr_owner, no_android_endpoint_or_source_capability]
+  local-control-mxh1-lan:
+    gradle_path: :local-control:mxh1-lan
+    type: pure_kotlin_library
+    owns: [bounded_private_ipv4_mxh1_tcp, selected_android_network_socket_binding, owner_scoped_tv_finished, no_source_data_plane]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
