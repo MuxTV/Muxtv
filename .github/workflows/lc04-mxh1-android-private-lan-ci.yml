@@ -19,6 +19,9 @@ on:
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SelectedNetworkLeaseContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1LeasedSealedPhoneContractTest.kt'
       - '.work/specifications/lc04-mxh1-leased-sealed-phone-20261110.md'
+      - '.work/specifications/lc04-mxh1-sealed-private-tv-20261110.md'
+      - '.work/specifications/lc04-mxh1-android-sealed-network-20261110.md'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1SealedAndroidIntegrationContractTest.kt'
       - '.work/specifications/lc04-mxh1-selected-network-lease-20261109.md'
       - '.work/specifications/lc04-mxh1-verified-record-owner-transition-20261109.md'
       - 'settings.gradle.kts'
@@ -54,6 +57,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           grep -Fq '":local-control:mxh1-lan",' settings.gradle.kts
           grep -Fq 'selected.bindSocket(unconnected)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt
+          grep -Fq 'session.beginSealedMxH1(endpoint)' app/phone/src/main/kotlin/app/muxtv/phone/PhoneQrActivity.kt
+          grep -Fq 'pairingController.enableSealedMxH1ForApprovedVisibleQr()' app/tv/src/main/kotlin/app/muxtv/MainActivity.kt
           grep -Fq 'receiver.hasApprovedPhoneForSyntheticMxH1(' app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt
           grep -Fq 'local-tv-mxh1-second-opt-in' app/tv/src/main/kotlin/app/muxtv/localcontrol/PhonePairingRoute.kt
           grep -Fq 'lc04-phone-mxh1-second-opt-in' app/phone/src/main/kotlin/app/muxtv/phone/PhoneQrActivity.kt
@@ -79,6 +84,7 @@ jobs:
             --tests 'app.muxtv.buildlogic.Lc04MxH1VerifiedOwnerTransitionContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1SelectedNetworkLeaseContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1LeasedSealedPhoneContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1SealedAndroidIntegrationContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence

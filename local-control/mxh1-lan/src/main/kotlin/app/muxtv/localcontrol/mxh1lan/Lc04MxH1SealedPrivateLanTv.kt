@@ -21,7 +21,7 @@ import java.net.SocketTimeoutException
  * numeric private IPv4 address; callers must independently guard the
  * selected Android Network and TV visibility before constructing it.
  */
-internal class Lc04MxH1SealedPrivateLanTv private constructor(
+class Lc04MxH1SealedPrivateLanTv private constructor(
     private val tv: TvHpkeQrSession,
     private val now: () -> Long,
     private val listener: ServerSocket,

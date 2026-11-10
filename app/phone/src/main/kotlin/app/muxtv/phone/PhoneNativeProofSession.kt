@@ -13,6 +13,7 @@ import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.nativetransport.Lc04TcpPhoneExchange
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1PrivateLanPhone
+import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanPhone
 import app.muxtv.localcontrol.phoneflow.Lc04PhoneFrameExchange
 import app.muxtv.localcontrol.phoneflow.Lc04PhoneProofFlow
 import app.muxtv.localcontrol.qr.TvQrPublicKey
@@ -53,6 +54,7 @@ internal class PhoneNativeProofSession(
     @Volatile private var selectedNetwork: Network? = null
     @Volatile private var selectedAddresses: Set<String>? = null
     @Volatile private var mxh1Client: Lc04MxH1PrivateLanPhone? = null
+    @Volatile private var sealedMxH1Client: Lc04MxH1SealedPrivateLanPhone? = null
     @Volatile private var mxh1Phone: Lc04MxH1PhoneLab? = null
 
     /**
@@ -205,6 +207,73 @@ internal class PhoneNativeProofSession(
         return true
     }
 
+    /**
+     * S2J2C2C: the phone's SECOND user opt-in uses the already authenticated
+     * original MXW1 QR/Ed25519 identity, but sends six actual MXH1/MXR1
+     * frames to the TV listener. This is a synthetic transport proof ONLY.
+     *
+     * Real Android Network.bindSocket is invoked on the unconnected raw
+     * socket and the chosen route is checked before/after binding and
+     * every frame. No network fallback or source/credential transfer.
+     */
+    fun beginSealedMxH1(endpoint: PhoneNativeEndpoint): Boolean {
+        if (!phase.compareAndSet(Phase.VERIFIED, Phase.MXH1_RUNNING)) return false
+        if (flow?.hasAuthenticatedReceipt() != true) return failedToStart()
+        val selected = selectedNetwork ?: return failedToStart()
+        val addresses = selectedAddresses ?: return failedToStart()
+        if (!eligible(selected, addresses)) return failedToStart()
+        val phone = try {
+            Lc04MxH1PhoneLab(scannedTv, signingPhone, SystemClock::elapsedRealtime)
+        } catch (_: RuntimeException) {
+            return failedToStart()
+        }
+        val client = try {
+            Lc04MxH1SealedPrivateLanPhone.forSelectedPrivateIpv4(
+                privateIpv4 = endpoint.privateIpv4,
+                port = endpoint.port,
+                originalPhone = phone,
+                elapsedMillis = SystemClock::elapsedRealtime,
+                selectedRouteEligible = {
+                    phase.get() == Phase.MXH1_RUNNING && eligible(selected, addresses)
+                },
+                bindUnconnectedToSelectedNetwork = { unconnected ->
+                    if (phase.get() != Phase.MXH1_RUNNING ||
+                        !eligible(selected, addresses)
+                    ) throw IOException("Selected Wi-Fi/Ethernet LAN Network revoked.")
+                    selected.bindSocket(unconnected)
+                    if (!eligible(selected, addresses)) {
+                        throw IOException("Selected route changed after binding.")
+                    }
+                },
+                revokeOriginalQrAndKeys = {
+                    // The original QR-signing identity is terminal after
+                    // the six-frame attempt, whether authenticated or not.
+                    signingPhone.close()
+                },
+            )
+        } catch (_: IllegalArgumentException) {
+            phone.close()
+            return failedToStart()
+        } catch (_: RuntimeException) {
+            phone.close()
+            return failedToStart()
+        }
+        mxh1Phone = phone
+        sealedMxH1Client = client
+        publish(State.MXH1_VERIFYING)
+        try {
+            worker.execute {
+                if (client.completeSyntheticExchange() &&
+                    phase.compareAndSet(Phase.MXH1_RUNNING, Phase.MXH1_VERIFIED)
+                ) publish(State.MXH1_VERIFIED)
+                else if (phase.get() != Phase.CLOSED) fail()
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return failedToStart()
+        }
+        return true
+    }
+
     private fun eligible(selected: Network, addresses: Set<String>): Boolean {
         if (phase.get() == Phase.CLOSED || manager.activeNetwork != selected) return false
         val caps = manager.getNetworkCapabilities(selected) ?: return false
@@ -252,6 +321,8 @@ internal class PhoneNativeProofSession(
         networkCallback = null
         mxh1Client?.close()
         mxh1Client = null
+        sealedMxH1Client?.close()
+        sealedMxH1Client = null
         mxh1Phone?.close()
         mxh1Phone = null
         selectedNetwork = null

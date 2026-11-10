@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
         if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
         return withContext(Dispatchers.IO) {
             try {
-                pairingController.enableMxH1ForApprovedVisibleQr()
+                pairingController.enableSealedMxH1ForApprovedVisibleQr()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

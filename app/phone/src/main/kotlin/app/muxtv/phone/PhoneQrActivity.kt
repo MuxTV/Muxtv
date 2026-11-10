@@ -323,7 +323,7 @@ class PhoneQrActivity : ComponentActivity() {
             status.setText(R.string.scan_native_endpoint_invalid)
             return
         }
-        if (session.beginMxH1(endpoint)) {
+        if (session.beginSealedMxH1(endpoint)) {
             mxh1Button.isEnabled = false
             mxh1PortInput.isEnabled = false
             status.setText(R.string.scan_mxh1_verifying)

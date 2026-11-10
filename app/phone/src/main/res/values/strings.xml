@@ -31,7 +31,7 @@
     <string name="scan_native_failed">Подтвердить ТВ не удалось. Текущая попытка отозвана. Сканируйте новый QR.</string>
     <string name="scan_native_revoked">Сеть или разрешение изменились. Ключ и TCP-соединение отозваны. Сканируйте новый QR.</string>
     <string name="scan_mxh1_port">Новый MXH1 TCP-порт с экрана ТВ</string>
-    <string name="scan_mxh1_start">Подтвердить MXH1 — отдельный защищённый обмен</string>
-    <string name="scan_mxh1_verifying">Проверка четырёх сообщений MXH1 и финального HMAC ТВ…</string>
-    <string name="scan_mxh1_verified">MXH1: обе стороны подтвердили одноразовый сеанс. IPTV-источники и пароли не передаются.</string>
+    <string name="scan_mxh1_start">Проверить MXH1/MXR1 — 6 защищённых кадров</string>
+    <string name="scan_mxh1_verifying">MXH1/MXR1: HMAC и двусторонние AES-GCM кадры, ожидаем EOF…</string>
+    <string name="scan_mxh1_verified">Шесть кадров MXH1/MXR1 аутентифицированы. Это проверка канала; IPTV-источники и пароли пока не передаются.</string>
 </resources>

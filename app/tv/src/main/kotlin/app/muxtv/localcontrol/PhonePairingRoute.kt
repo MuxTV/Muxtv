@@ -315,7 +315,7 @@ fun PhonePairingRoute(
                                 if (finished == null) {
                                     MuxTvActionButton(
                                         text = if (mxh1Loading) "Запуск MXH1…" else
-                                            "Включить MXH1 после подтверждения телефона",
+                                            "Включить MXH1/MXR1 (6 кадров) после подтверждения телефона",
                                         onClick = ::enableMxH1AfterTvApproval,
                                         modifier = Modifier.testTag("local-tv-mxh1-second-opt-in"),
                                     )
@@ -324,12 +324,12 @@ fun PhonePairingRoute(
                                     )
                                 } else {
                                     Text(
-                                        "MXH1: ${finished.privateIpv4}:${finished.port}",
+                                        "MXH1/MXR1: ${finished.privateIpv4}:${finished.port}",
                                         modifier = Modifier.testTag("local-tv-mxh1-endpoint"),
                                     )
                                     Text(
-                                        "Введите этот второй порт на телефоне. MXH1 требует отдельного " +
-                                            "подтверждения и финального HMAC, без IPTV-паролей.",
+                                        "Введите этот второй порт на телефоне. MXH1/MXR1 требует " +
+                                            "проверки HMAC и двух AES-GCM кадров, без IPTV-паролей.",
                                     )
                                 }
                             }
