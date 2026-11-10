@@ -41,6 +41,7 @@ include(
     ":local-control:phone-flow",
     ":local-control:protected-channel",
     ":local-control:source-command-wire",
+    ":local-control:source-aead",
     ":local-control:mxh1-session-lab",
     ":local-control:mxh1-tcp-lab",
     ":local-control:mxh1-lan",

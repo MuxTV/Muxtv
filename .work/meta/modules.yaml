@@ -94,6 +94,10 @@ actual_modules:
     gradle_path: :local-control:source-command-wire
     type: pure_kotlin_library
     owns: [canonical_bounded_source_command_plaintext, m3u_xtream_command_schema, secret_free_status_reply, no_crypto_keys_or_network_authority]
+  local-control-source-aead:
+    gradle_path: :local-control:source-aead
+    type: pure_kotlin_library
+    owns: [isolated_aes256gcm_source_command_records, app_key_domain_separation, request_reply_counters, terminal_fail_closed_records, no_production_owner_yet]
   local-control-mxh1-session-lab:
     gradle_path: :local-control:mxh1-session-lab
     type: pure_kotlin_library

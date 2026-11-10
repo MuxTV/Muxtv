@@ -11,6 +11,9 @@ on:
       - 'local-control/protected-channel/**'
       - 'local-control/onboarding/**'
       - 'local-control/source-command-wire/**'
+      - 'local-control/source-aead/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceAeadBoundaryContractTest.kt'
+      - '.work/specifications/lc04-s2j3b-source-aead-records-20261110.md'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceCommandBoundaryContractTest.kt'
       - '.work/specifications/lc04-s2j3a-source-command-boundary-20261110.md'
       - 'app/tv/**'
@@ -66,6 +69,8 @@ jobs:
           grep -Fq 'internal class Lc04TvSourceCommandSession(' local-control/onboarding/src/main/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSession.kt
           grep -Fq 'class Lc04SourceCommandCodecTest' local-control/source-command-wire/src/test/kotlin/app/muxtv/localcontrol/sourcecommandwire/Lc04SourceCommandCodecTest.kt
           grep -Fq 'class Lc04TvSourceCommandSessionTest' local-control/onboarding/src/test/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvSourceCommandSessionTest.kt
+          grep -Fq 'internal class Lc04SourceAeadRecords private constructor(' local-control/source-aead/src/main/kotlin/app/muxtv/localcontrol/sourceaead/Lc04SourceAeadRecords.kt
+          ! grep -R -Eq 'Lc04SourceAeadRecords' app/phone/src/main/ app/tv/src/main/ local-control/server/src/main/
           ! grep -R -Eq 'Lc04TvSourceCommandSession|Lc04SourceCommandCodec' local-control/server/src/main/ app/phone/src/main/ app/tv/src/main/ 
           grep -Fq 'pairingController.enableSealedMxH1ForApprovedVisibleQr()' app/tv/src/main/kotlin/app/muxtv/MainActivity.kt
           grep -Fq 'receiver.hasApprovedPhoneForSyntheticMxH1(' app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt
@@ -87,6 +92,7 @@ jobs:
             :local-control:protected-channel:test \
             :local-control:onboarding:test \
             :local-control:source-command-wire:test \
+            :local-control:source-aead:test \
             :local-control:native-transport:test \
             :app:tv:compileDebugKotlin :app:phone:compileDebugKotlin \
             --no-daemon --stacktrace --console=plain --no-problems-report
@@ -97,6 +103,7 @@ jobs:
             --tests 'app.muxtv.buildlogic.Lc04MxH1LeasedSealedPhoneContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1SealedAndroidIntegrationContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04SourceCommandBoundaryContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04SourceAeadBoundaryContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence
@@ -113,6 +120,8 @@ jobs:
             local-control/protected-channel/build/test-results/test/**
             local-control/onboarding/build/test-results/test/**
             local-control/source-command-wire/build/test-results/test/**
+            local-control/source-aead/build/test-results/test/**
+            local-control/source-aead/build/reports/tests/test/**
             local-control/protected-channel/build/reports/tests/test/**
             local-control/wire-lab/build/test-results/test/**
             local-control/native-transport/build/test-results/test/**
