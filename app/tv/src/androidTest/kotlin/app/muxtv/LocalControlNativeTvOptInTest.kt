@@ -28,6 +28,8 @@ class LocalControlNativeTvOptInTest {
     @Test fun tvExplicitDpadActionAloneEnablesAndDisposingRevokesNativeEndpoint() {
         var screenVisible by mutableStateOf(true)
         var nativeStarts = 0
+        var mxh1Starts = 0
+        var mxh1Verified by mutableStateOf(false)
         var legacyHttpStarts = 0
         var revocations = 0
         val expires = SystemClock.elapsedRealtime() + 120_000L
@@ -48,6 +50,11 @@ class LocalControlNativeTvOptInTest {
                             nativeStarts++
                             TvPairingController.NativeProbeEndpoint("192.168.1.2", 43210)
                         },
+                        onEnableMxH1 = {
+                            mxh1Starts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43211)
+                        },
+                        mxh1PhoneIsVerified = { mxh1Verified },
                         onRevokePublicKeyPreview = { revocations++ },
                         publicKeyPreviewIsActive = { true },
                         pendingPhoneKeyFingerprint = { null },
@@ -104,8 +111,19 @@ class LocalControlNativeTvOptInTest {
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-native-endpoint").fetchSemanticsNodes().size == 1
         }
+        check(rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
+            .fetchSemanticsNodes().isEmpty()) { "MXH1 visible before verified Ed25519." }
         rule.runOnIdle {
             check(nativeStarts == 1) { "Native transport must start on exactly one TV action." }
+            check(mxh1Starts == 0) { "MXH1 must not start during MXW1 QR/proof." }
+            mxh1Verified = true // Simulates the verified TV-owner read, NOT remote approval
+        }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle {
+            check(mxh1Starts == 0) { "Verified state must not auto-start MXH1 TCP." }
             screenVisible = false
         }
         rule.waitForIdle()
