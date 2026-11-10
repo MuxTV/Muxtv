@@ -1,4 +1,4 @@
-package app.muxtv.localcontrol.protectedchannel
+package app.muxtv.localcontrol.sourcecommandwire
 
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream

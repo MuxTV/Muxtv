@@ -17,8 +17,8 @@ class Lc04SourceCommandBoundaryContractTest {
 
     @Test fun `typed bounded source records are not an unauthenticated transport`() {
         val code = source(
-            "local-control/protected-channel/src/main/kotlin/" +
-                "app/muxtv/localcontrol/protectedchannel/Lc04SourceCommandCodec.kt",
+            "local-control/source-command-wire/src/main/kotlin/" +
+                "app/muxtv/localcontrol/sourcecommandwire/Lc04SourceCommandCodec.kt",
         )
         for (required in listOf(
             "sealed class Lc04SourceCommand",
@@ -73,6 +73,11 @@ class Lc04SourceCommandBoundaryContractTest {
         assertContains(stage, "prepared.remove(principal.sessionId)")
         assertContains(stage, "return@withLock SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN")
         val app = source("app/phone/build.gradle.kts")
+        val onboardingBuild = source("local-control/onboarding/build.gradle.kts")
+        assertContains(onboardingBuild, ":local-control:source-command-wire")
+        assertFalse(onboardingBuild.contains(":local-control:protected-channel"))
+        val neutralBuild = source("local-control/source-command-wire/build.gradle.kts")
+        assertFalse(neutralBuild.contains("implementation(libs.tink)"))
         assertFalse(app.contains("project(\":local-control:onboarding\")"))
         val legacy = source(
             "local-control/server/src/main/kotlin/app/muxtv/localcontrol/server/LanTransport.kt",

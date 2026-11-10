@@ -1,10 +1,10 @@
 package app.muxtv.localcontrol.onboarding
 
 import app.muxtv.catalog.SourcePreparationRequest
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceCommand
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceCommandCodec
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceReply
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceReplyCode
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceCommand
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceCommandCodec
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReply
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReplyCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

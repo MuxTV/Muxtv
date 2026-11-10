@@ -3,8 +3,8 @@ plugins { id("muxtv.kotlin.library") }
 dependencies {
     implementation(project(":catalog:api"))
     implementation(project(":local-control:core"))
-    // Typed application plaintext schema ONLY; no raw TCP/HTTP route.
-    implementation(project(":local-control:protected-channel"))
+    // Neutral bounded plaintext schema ONLY; historical crypto lab stays isolated.
+    implementation(project(":local-control:source-command-wire"))
     implementation(libs.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.truth)

@@ -24,7 +24,7 @@ potential commit must also be terminal.
 
 ## Implemented: stable bounded source-command plaintext schema
 
-`local-control/protected-channel/.../Lc04SourceCommandCodec.kt`:
+`local-control/source-command-wire/.../Lc04SourceCommandCodec.kt`:
 
 - Four typed operations: `PrepareM3u(locator)`,
   `PrepareXtream(endpoint,username,password)`,
@@ -124,3 +124,15 @@ binding, per-direction counters, terminal failures and TV consent.
 Then wire this dispatcher to the production TV lifecycle, design the
 phone M3U/Xtream entry form and complete activation to catalog/Media3
 with a precise no-duplicate-commit test.
+
+
+## Architectural isolation correction
+
+The repo's historical `Lc04HandoffWireIsolationContractTest` forbids
+`:local-control:onboarding` from depending on `:local-control:protected-channel`.
+This is intentional: protected-channel contains synthetic cryptographic
+probes, NOT an application-data privilege layer. The source-command
+schema therefore lives in its own **crypto-free**
+`:local-control:source-command-wire` module, and onboarding depends
+only on that neutral module. The existing handshake isolation gate
+remains unchanged and enforced on hosted CI.

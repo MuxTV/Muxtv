@@ -1,4 +1,4 @@
-package app.muxtv.localcontrol.protectedchannel
+package app.muxtv.localcontrol.sourcecommandwire
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
