@@ -10,10 +10,10 @@ import app.muxtv.localcontrol.PairingAuthority
 import app.muxtv.localcontrol.PairingClaim
 import app.muxtv.localcontrol.PairingGrant
 import app.muxtv.localcontrol.PairingRedemption
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceCommand
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceCommandCodec
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceReply
-import app.muxtv.localcontrol.protectedchannel.Lc04SourceReplyCode
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceCommand
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceCommandCodec
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReply
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReplyCode
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
