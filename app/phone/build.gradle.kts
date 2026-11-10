@@ -26,6 +26,8 @@ dependencies {
     implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    // Only for an on-emulator, REAL selected-Network/TV-owner six-frame test.
+    androidTestImplementation(project(":local-control:tv-qr"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)

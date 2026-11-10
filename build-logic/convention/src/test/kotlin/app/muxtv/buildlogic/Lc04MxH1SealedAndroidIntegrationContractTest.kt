@@ -71,6 +71,83 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
         assertContains(phoneUi, "nativeSession?.close()")
     }
 
+    @Test fun `real Android bound socket evidence must run without a test redirect`() {
+        val device = source(
+            "app/phone/src/androidTest/kotlin/app/muxtv/phone/" +
+                "PhoneSealedAndroidNetworkDeviceTest.kt",
+        )
+        for (required in listOf(
+            "class PhoneSealedAndroidNetworkDeviceTest",
+            "selectedAndroidNetworkBoundSocketCompletesAllSixAuthenticatedFrames",
+            "noOriginalTvLocalApprovalCannotExposeSixFramePrivateListener",
+            "deniedSelectedRouteNeverBindsSocketOrAuthenticates",
+            "network.bindSocket(unconnected)",
+            "Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4(",
+            "Lc04MxH1SealedPrivateLanPhone.forSelectedPrivateIpv4(",
+            "client.completeSyntheticExchange()",
+            "server.hasAuthenticatedSyntheticExchange()",
+        )) assertContains(device, required)
+        for (forbidden in listOf(
+            "withTestSocketForHostileJVM", "127.0.0.1", "InetAddress.getLoopbackAddress",
+            "Assume.assume", "org.junit.Assume", "Thread.sleep(3000)",
+        )) assertFalse(device.contains(forbidden), forbidden)
+
+        val runner = source("tools/ci/Run-HostedPhoneNativeProofTests.sh")
+        assertContains(runner, "PhoneSealedAndroidNetworkDeviceTest")
+        assertContains(runner, "PhoneNativeProofDeviceTest")
+        assertContains(runner, "-ne 6 -or")
+        assertContains(runner, "${'
+        val facade = source(
+            "local-control/mxh1-lan/src/main/kotlin/" +
+                "app/muxtv/localcontrol/mxh1lan/Lc04MxH1SealedPrivateLanPhone.kt",
+        )
+        for (required in listOf(
+            "class Lc04MxH1SealedPrivateLanPhone",
+            "Lc04MxH1LeasedSealedPhone.forSelectedPrivateIpv4(",
+            "fun completeSyntheticExchange(): Boolean",
+            "privateIpv4: String",
+            "bindUnconnectedToSelectedNetwork: (Socket) -> Unit",
+            "revokeOriginalQrAndKeys: () -> Unit",
+        )) assertContains(facade, required)
+        val tv = source(
+            "local-control/mxh1-lan/src/main/kotlin/" +
+                "app/muxtv/localcontrol/mxh1lan/Lc04MxH1SealedPrivateLanTv.kt",
+        )
+        for (required in listOf(
+            "class Lc04MxH1SealedPrivateLanTv",
+            "originalTvQrOwner.hasApprovedPhoneForSyntheticMxH1(now())",
+            "Lc04PrivateIpv4.parse(address)",
+            "tv.acceptMxH1SyntheticProbeForLab(fifth, now())",
+            "input.read() == -1",
+            "Lc04MxH1LeasedSealedFrameIo.write(output, sixth)",
+            "socket.shutdownOutput()",
+            "tv.close()",
+        )) assertContains(tv, required)
+        for (file in listOf(facade, tv)) for (forbidden in listOf(
+            "SourceOnboarding", "SourcePreparationRequest", "SourcePreparationHandle",
+            "HttpClient", "SharedPreferences", "getPassword(", "getUsername(",
+            "InetAddress.getByName(", "bindProcessToNetwork",
+        )) assertFalse(file.contains(forbidden), forbidden)
+        val setup = source(".github/workflows/lc04-mxh1-android-private-lan-ci.yml")
+        assertContains(setup, "Lc04MxH1SealedAndroidIntegrationContractTest")
+        assertContains(setup, ":local-control:mxh1-lan:test")
+        assertContains(setup, ":app:tv:compileDebugKotlin :app:phone:compileDebugKotlin")
+        assertTrue(root.resolve(
+            ".work/specifications/lc04-mxh1-android-sealed-network-20261110.md",
+        ).isFile)
+    }
+}
+}MUXTV_SOURCE_COMMIT")
+        val workflow = source(".github/workflows/lc04-phone-native-proof-device-matrix.yml")
+        assertContains(workflow, "api: 26")
+        assertContains(workflow, "api: 36")
+        assertContains(workflow, "bash ./tools/ci/Run-HostedPhoneNativeProofTests.sh")
+        assertFalse(workflow.contains("self-hosted"))
+        assertTrue(root.resolve(
+            ".work/specifications/lc04-mxh1-android-real-network-device-20261110.md",
+        ).isFile)
+    }
+
     @Test fun `synthetic facade cannot become an HTTP, source or plaintext transport`() {
         val facade = source(
             "local-control/mxh1-lan/src/main/kotlin/" +
