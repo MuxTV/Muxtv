@@ -1,9 +1,12 @@
 package app.muxtv.localcontrol.tvqr
 
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAppKeyCandidate
 import app.muxtv.localcontrol.enrollment.TvPhoneEnrollment
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.enrollment.VerifiedPhoneIdentity
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticDerivedKeys
+import app.muxtv.localcontrol.protectedchannel.Lc04MxH1SyntheticProbePort
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffKeySchedule
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffTranscript
 import app.muxtv.localcontrol.wirelab.Lc04HandoffFrame
@@ -57,9 +60,15 @@ class TvHpkeQrSession private constructor(
     private enum class MxH1Phase { NEW, WAIT_PHONE, VERIFIED, REVOKED }
     // Same QR, private HPKE receiver and TV-approved Ed25519 verifier as MXW1.
     // These fields NEVER grant SourceOnboarding, bearer or application authority.
-    private var mxh1Phase = MxH1Phase.NEW
+    @Volatile private var mxh1Phase = MxH1Phase.NEW
     private var mxh1AcceptedOffer: ByteArray? = null
     private var mxh1Keys: Lc04SyntheticDerivedKeys? = null
+    // Lab-only. No installed native listener ever calls the transition method.
+    private var mxh1ProbePort: Lc04MxH1SyntheticProbePort? = null
+    private var mxh1PhoneProvedFinalFrame = false
+    private var pendingSourceExport: Lc04SourceAppKeyCandidate? = null
+    private var authenticSixth: ByteArray? = null
+    private var sourceRecordPort: Lc04SourceAeadPort? = null
 
 
     /** Do not expose the private key, decryptor, or unauthenticated channel endpoint. */
@@ -124,6 +133,20 @@ class TvHpkeQrSession private constructor(
         approvedPhoneVerifier = verifier
         lastVerifiedProbeCounter = 0
         return true
+    }
+
+    /**
+     * The ONLY LAN MXH1 readiness gate: existing private QR receiver and
+     * the TV-local *verified* Ed25519 enrollment, never a claimed fingerprint.
+     * This is a read-only preflight, NOT a pairing grant or source authority.
+     */
+    @Synchronized
+    fun hasApprovedPhoneForSyntheticMxH1(nowElapsedMillis: Long): Boolean {
+        val accepted = approvedPhoneFingerprint ?: return false
+        return presentation(nowElapsedMillis) != null &&
+            mxh1Phase == MxH1Phase.NEW &&
+            approvedPhoneVerifier != null &&
+            pendingPhoneEnrollment?.verifiedFingerprintForTv() == accepted
     }
 
     /**
@@ -195,6 +218,17 @@ class TvHpkeQrSession private constructor(
                     digest, nonce,
                 )
                 val newKeys = Lc04SyntheticHandoffKeySchedule.derive(seed, transcript)
+                // Separate app exporter from this ORIGINAL signed HPKE seed,
+                // independent from spent synthetic MXR1 traffic keys.
+                val appDigest = transcript.digest()
+                val exporter = try {
+                    Lc04SourceAppKeyCandidate.prepareFromOriginalHpkeSeed(
+                        seed, appDigest,
+                    )
+                } finally { appDigest.fill(0) }
+                // Hand ownership to the original QR session before any
+                // subsequent fallible operation; revokeMxH1 closes it.
+                pendingSourceExport = exporter
                 val tvTag = newKeys.syntheticTvConfirmation()
                     ?: run { newKeys.close(); return revokeMxH1() }
                 try {
@@ -250,6 +284,26 @@ class TvHpkeQrSession private constructor(
     fun finishSyntheticMxH1PhoneConfirmation(
         confirmation: ByteArray,
         nowElapsedMillis: Long,
+    ): ByteArray? = finishMxH1Internal(confirmation, nowElapsedMillis, null)
+
+    /**
+     * Separate opt-in S2J2A laboratory path. Existing Android MXH1 keeps
+     * consuming all keys after TV_FINISHED, unchanged.
+     *
+     * This TV may only reply with a synthetic AEAD probe AFTER verifying the
+     * phone's first authentic post-FINISHED sealed probe: sending TV_FINISHED
+     * is NOT evidence that the phone actually received/accepted that frame.
+     */
+    @Synchronized
+    fun finishSyntheticMxH1ForProbeLab(
+        confirmation: ByteArray,
+        clock: () -> Long,
+    ): ByteArray? = finishMxH1Internal(confirmation, clock(), clock)
+
+    private fun finishMxH1Internal(
+        confirmation: ByteArray,
+        nowElapsedMillis: Long,
+        labClock: (() -> Long)?,
     ): ByteArray? {
         if (presentation(nowElapsedMillis) == null ||
             mxh1Phase != MxH1Phase.WAIT_PHONE
@@ -278,7 +332,16 @@ class TvHpkeQrSession private constructor(
                         checkNotNull(Lc04HandoffWireLab.digestOfSignedOffer(original)),
                         offer.counter, finishedTag,
                     ))
-                    mxh1Keys?.close()
+                    if (labClock != null) {
+                        mxh1ProbePort = mxh1Keys?.handOffToSyntheticProbeLab(
+                            phoneSide = false, clock = labClock,
+                        ) ?: return revokeMxH1()
+                        mxh1PhoneProvedFinalFrame = false
+                    } else {
+                        pendingSourceExport?.close()
+                        pendingSourceExport = null
+                        mxh1Keys?.close()
+                    }
                     mxh1Keys = null
                     mxh1AcceptedOffer?.fill(0)
                     mxh1AcceptedOffer = null
@@ -287,6 +350,76 @@ class TvHpkeQrSession private constructor(
                 } finally { finishedTag.fill(0) }
             } finally { digest.fill(0) }
         } finally { tag.fill(0) }
+    }
+
+    /**
+     * Lab-only fifth (encrypted) proof. Only the exact original TV QR owner
+     * can accept it. Invalid/replayed records revoke the entire QR owner.
+     */
+    @Synchronized
+    fun acceptMxH1SyntheticProbeForLab(wire: ByteArray, nowElapsedMillis: Long): Boolean {
+        if (presentation(nowElapsedMillis) == null ||
+            mxh1Phase != MxH1Phase.VERIFIED
+        ) return false
+        val port = mxh1ProbePort ?: return false
+        if (!port.acceptSyntheticProbe(wire)) {
+            close()
+            return false
+        }
+        mxh1PhoneProvedFinalFrame = true
+        return true
+    }
+
+    /** TV synthetic replies are prohibited until the phone's first post-FINISHED proof. */
+    @Synchronized
+    fun sealMxH1SyntheticProbeForLab(nowElapsedMillis: Long): ByteArray? {
+        if (presentation(nowElapsedMillis) == null ||
+            mxh1Phase != MxH1Phase.VERIFIED ||
+            !mxh1PhoneProvedFinalFrame
+        ) return null
+        if (authenticSixth != null) { close(); return null }
+        val port = mxh1ProbePort ?: return null
+        val result = port.sealSyntheticProbe()
+        if (result == null) {
+            close()
+        } else {
+            authenticSixth?.fill(0)
+            authenticSixth = result.clone()
+        }
+        return result
+    }
+
+    /**
+     * One-use TV original-QR key-owner transition. The native private-LAN
+     * adapter MUST call only AFTER F6 was successfully written and output
+     * was closed. The first authenticated app request proves the phone saw
+     * F6; this method alone NEVER grants catalog/source authority.
+     */
+    @Synchronized
+    fun claimSourceRecordsAfterSixthWritten(
+        clock: () -> Long,
+        routeEligible: () -> Boolean,
+    ): Lc04SourceAeadPort? {
+        if (mxh1Phase != MxH1Phase.VERIFIED ||
+            !mxh1PhoneProvedFinalFrame || sourceRecordPort != null ||
+            presentation(clock()) == null
+        ) return null
+        val candidate = pendingSourceExport ?: return null
+        val sixth = authenticSixth ?: return null
+        pendingSourceExport = null
+        authenticSixth = null
+        return try {
+            candidate.finishAfterAuthenticatedSixth(
+                sixth, phoneSide = false, now = clock,
+                routeEligible = {
+                    mxh1Phase == MxH1Phase.VERIFIED &&
+                        privateReceiver != null && routeEligible()
+                },
+            ).also { sourceRecordPort = it }
+        } finally {
+            sixth.fill(0)
+            candidate.close()
+        }
     }
 
     /** Read-only diagnostic, not a pairing grant or source authorization. */
@@ -398,6 +531,15 @@ class TvHpkeQrSession private constructor(
     @Synchronized
     override fun close() {
         mxh1Phase = MxH1Phase.REVOKED
+        mxh1ProbePort?.close()
+        mxh1ProbePort = null
+        pendingSourceExport?.close()
+        pendingSourceExport = null
+        authenticSixth?.fill(0)
+        authenticSixth = null
+        sourceRecordPort?.close()
+        sourceRecordPort = null
+        mxh1PhoneProvedFinalFrame = false
         mxh1Keys?.close()
         mxh1Keys = null
         mxh1AcceptedOffer?.fill(0)
