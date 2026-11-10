@@ -33,7 +33,7 @@ class Lc04SourceAeadBoundaryContractTest {
             "TTL_MS = 120_000L",
             "APPDATA-EXTRACT-v1",
             "APPDATA-AEAD-v1",
-            "return \"Lc04SourceAeadRecords([REDACTED])\"",
+            "override fun toString(): String = \"Lc04SourceAeadRecords([REDACTED])\"",
         )) assertContains(code, required)
         for (forbidden in listOf(
             "SourceOnboarding", "PairingAuthority", "PairingGrant",
