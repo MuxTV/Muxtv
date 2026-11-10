@@ -5,7 +5,9 @@ import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
+import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
 import com.google.common.truth.Truth.assertThat
+import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
 import java.net.InetAddress
@@ -187,6 +189,60 @@ class Lc04MxH1SealedPrivateLanTvTest {
             f.approveOnOriginalTv()
             f.now.addAndGet(TvHpkeQrSession.TTL_MILLIS)
             assertThat(runCatching { f.listen() }.isFailure).isTrue()
+        }
+
+    @Test fun forgedSealedFifthFrameCannotElicitTvReply() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listen()
+            Socket(loopback(), listener.port).use { socket ->
+                socket.soTimeout = 3_000
+                val input = DataInputStream(socket.getInputStream())
+                val output = DataOutputStream(socket.getOutputStream())
+                val offer = checkNotNull(f.phone.createSignedSeedOffer())
+                try {
+                    Lc04MxH1FrameIo.write(
+                        output, offer, Lc04HandoffKind.SIGNED_SEED_OFFER,
+                    )
+                } finally { offer.fill(0) }
+
+                val tvConfirm = Lc04MxH1FrameIo.read(
+                    input, Lc04HandoffKind.TV_KEY_CONFIRM,
+                )
+                val phoneConfirm = try {
+                    checkNotNull(f.phone.acceptTvConfirmationAwaitingFinished(tvConfirm))
+                } finally { tvConfirm.fill(0) }
+                try {
+                    Lc04MxH1FrameIo.write(
+                        output, phoneConfirm, Lc04HandoffKind.PHONE_KEY_CONFIRM,
+                    )
+                } finally { phoneConfirm.fill(0) }
+
+                val finished = Lc04MxH1FrameIo.read(
+                    input, Lc04HandoffKind.TV_FINISHED,
+                )
+                try {
+                    assertThat(f.phone.acceptTvFinishedForProbeLab(finished, f.now::get))
+                        .isTrue()
+                } finally { finished.fill(0) }
+
+                val forgedFifth = checkNotNull(f.phone.sealMxH1SyntheticProbeForLab())
+                try {
+                    forgedFifth[forgedFifth.lastIndex] =
+                        (forgedFifth.last().toInt() xor 1).toByte()
+                    Lc04MxH1LeasedSealedFrameIo.write(output, forgedFifth)
+                    socket.shutdownOutput()
+                } finally { forgedFifth.fill(0) }
+
+                // The TV must not emit ANY sixth record after an invalid F5.
+                try {
+                    assertThat(input.read()).isEqualTo(-1)
+                } catch (_: IOException) {
+                    // A peer reset is also a safe terminal rejection.
+                }
+            }
+            awaitRevoked(f)
+            assertThat(listener.hasAuthenticatedSyntheticExchange()).isFalse()
         }
 
     private companion object {
