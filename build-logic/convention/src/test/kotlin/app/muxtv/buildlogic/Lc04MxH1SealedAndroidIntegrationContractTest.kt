@@ -96,48 +96,7 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
         assertContains(runner, "PhoneSealedAndroidNetworkDeviceTest")
         assertContains(runner, "PhoneNativeProofDeviceTest")
         assertContains(runner, "-ne 6 -or")
-        assertContains(runner, "${'
-        val facade = source(
-            "local-control/mxh1-lan/src/main/kotlin/" +
-                "app/muxtv/localcontrol/mxh1lan/Lc04MxH1SealedPrivateLanPhone.kt",
-        )
-        for (required in listOf(
-            "class Lc04MxH1SealedPrivateLanPhone",
-            "Lc04MxH1LeasedSealedPhone.forSelectedPrivateIpv4(",
-            "fun completeSyntheticExchange(): Boolean",
-            "privateIpv4: String",
-            "bindUnconnectedToSelectedNetwork: (Socket) -> Unit",
-            "revokeOriginalQrAndKeys: () -> Unit",
-        )) assertContains(facade, required)
-        val tv = source(
-            "local-control/mxh1-lan/src/main/kotlin/" +
-                "app/muxtv/localcontrol/mxh1lan/Lc04MxH1SealedPrivateLanTv.kt",
-        )
-        for (required in listOf(
-            "class Lc04MxH1SealedPrivateLanTv",
-            "originalTvQrOwner.hasApprovedPhoneForSyntheticMxH1(now())",
-            "Lc04PrivateIpv4.parse(address)",
-            "tv.acceptMxH1SyntheticProbeForLab(fifth, now())",
-            "input.read() == -1",
-            "Lc04MxH1LeasedSealedFrameIo.write(output, sixth)",
-            "socket.shutdownOutput()",
-            "tv.close()",
-        )) assertContains(tv, required)
-        for (file in listOf(facade, tv)) for (forbidden in listOf(
-            "SourceOnboarding", "SourcePreparationRequest", "SourcePreparationHandle",
-            "HttpClient", "SharedPreferences", "getPassword(", "getUsername(",
-            "InetAddress.getByName(", "bindProcessToNetwork",
-        )) assertFalse(file.contains(forbidden), forbidden)
-        val setup = source(".github/workflows/lc04-mxh1-android-private-lan-ci.yml")
-        assertContains(setup, "Lc04MxH1SealedAndroidIntegrationContractTest")
-        assertContains(setup, ":local-control:mxh1-lan:test")
-        assertContains(setup, ":app:tv:compileDebugKotlin :app:phone:compileDebugKotlin")
-        assertTrue(root.resolve(
-            ".work/specifications/lc04-mxh1-android-sealed-network-20261110.md",
-        ).isFile)
-    }
-}
-}MUXTV_SOURCE_COMMIT")
+        assertContains(runner, "git rev-parse HEAD")
         val workflow = source(".github/workflows/lc04-phone-native-proof-device-matrix.yml")
         assertContains(workflow, "api: 26")
         assertContains(workflow, "api: 36")
