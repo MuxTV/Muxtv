@@ -412,7 +412,13 @@ class TvHpkeQrSession private constructor(
             candidate.finishAfterAuthenticatedSixth(
                 sixth, phoneSide = false, now = clock,
                 routeEligible = {
-                    mxh1Phase == MxH1Phase.VERIFIED &&
+                    // The app-data port may be created near the QR deadline.
+                    // Its own TTL must never extend the original TV QR authority.
+                    // Use a lock-free read here: synchronizing via presentation()
+                    // could invert owner/record locks during concurrent onStop.
+                    val elapsed = clock()
+                    elapsed >= createdAt && elapsed < expiresAtElapsedMillis &&
+                        mxh1Phase == MxH1Phase.VERIFIED &&
                         privateReceiver != null && routeEligible()
                 },
             ).also { sourceRecordPort = it }

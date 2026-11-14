@@ -200,6 +200,51 @@ class TvOriginalMxH1SourceKeyHandoffTest {
         }
     }
 
+    @Test fun originalTvQrExpiryDeniesValidAeadFrameWithoutPresentationPolling() =
+        fixture { f ->
+            f.approve()
+            val fifth = f.prepareFirstFour()
+            val sixth = f.finishAuthenticatedFifthAndSixth(fifth)
+            try {
+                assertThat(f.phone.acceptMxH1SyntheticProbeForLab(sixth)).isTrue()
+                // Complete the owner handoff one millisecond before the original
+                // QR deadline. The new APPDATA port has a fresh 120s clock.
+                f.now += TvHpkeQrSession.TTL_MILLIS - 1L
+                val tvPort = checkNotNull(f.tvPort())
+                val phonePort = checkNotNull(f.phonePort())
+
+                // Positive control: a genuine authenticated request/reply works
+                // before expiry, so the next denial cannot be blamed on bad wire.
+                val first = checkNotNull(
+                    phonePort.sealRequest(Lc04SourceCommand.Cancel(1)),
+                )
+                try {
+                    assertThat(tvPort.openRequest(first)).isNotNull()
+                    val reply = checkNotNull(tvPort.sealReply(
+                        Lc04SourceReply(1, Lc04SourceReplyCode.CANCELED),
+                    ))
+                    try {
+                        assertThat(phonePort.openReply(reply)?.code)
+                            .isEqualTo(Lc04SourceReplyCode.CANCELED)
+                    } finally { reply.fill(0) }
+                } finally { first.fill(0) }
+
+                val second = checkNotNull(
+                    phonePort.sealRequest(Lc04SourceCommand.Cancel(2)),
+                )
+                try {
+                    // Do NOT call tv.presentation() or tv.close(): the port must
+                    // enforce the original QR deadline on every actual frame.
+                    f.now += 1L
+                    assertThat(tvPort.openRequest(second)).isNull()
+                    assertThat(tvPort.openRequest(second)).isNull()
+                } finally { second.fill(0) }
+            } finally {
+                fifth.fill(0)
+                sixth.fill(0)
+            }
+        }
+
     @Test fun routeLossOrExpiredQrClosesApplicationKeyAfterHandoff() =
         fixture { f ->
             f.approve()
