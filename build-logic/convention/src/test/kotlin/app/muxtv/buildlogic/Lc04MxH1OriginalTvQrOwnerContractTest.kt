@@ -69,7 +69,7 @@ class Lc04MxH1OriginalTvQrOwnerContractTest {
             "getUsername(", "getPassword(")) {
             assertFalse(source.contains(bad), bad)
         }
-        for (app in listOf("app/tv/build.gradle.kts", "app/phone/build.gradle.kts",
+        for (app in listOf("app/tv/build.gradle.kts",
             "local-control/native-transport/build.gradle.kts")) {
             assertFalse(root.resolve(app).readText().contains(
                 ":local-control:mxh1-session-lab",

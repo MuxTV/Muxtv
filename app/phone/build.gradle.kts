@@ -17,6 +17,8 @@ dependencies {
     implementation(project(":local-control:enrollment"))
     implementation(project(":local-control:phone-flow"))
     implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:mxh1-lan"))
+    implementation(project(":local-control:mxh1-session-lab"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
@@ -24,6 +26,8 @@ dependencies {
     implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    // Only for an on-emulator, REAL selected-Network/TV-owner six-frame test.
+    androidTestImplementation(project(":local-control:tv-qr"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
