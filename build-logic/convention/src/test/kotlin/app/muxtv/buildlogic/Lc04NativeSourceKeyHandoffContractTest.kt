@@ -34,11 +34,17 @@ class Lc04NativeSourceKeyHandoffContractTest {
         for (required in listOf(
             "Phase.SOURCE_HANDOFF",
             "fun detachHandshakeSocketAfterVerifiedTvEof()",
-            "fun sourceHandoffEligible(): Boolean = check(Phase.SOURCE_HANDOFF)",
-            "runCatching { completedSocket.close() }",
+            "fun sourceHandoffEligible(): Boolean {",
+            "completedSocket.close()",
+            "if (!retired || !sourceHandoffEligible())",
             "selectedRouteEligible()",
             "revokeOriginalQrAndKeys()",
         )) assertContains(lease, required)
+        val readOnly = lease.substringAfter("fun sourceHandoffEligible(): Boolean {")
+            .substringBefore("fun revokeSelectedNetwork()")
+        assertFalse(readOnly.contains("\n            close()"))
+        assertContains(readOnly, "selectedRouteEligible()")
+        assertContains(readOnly, "phase == Phase.SOURCE_HANDOFF")
     }
 
     @Test fun `TV claims only after output half close and never grants a source`() {

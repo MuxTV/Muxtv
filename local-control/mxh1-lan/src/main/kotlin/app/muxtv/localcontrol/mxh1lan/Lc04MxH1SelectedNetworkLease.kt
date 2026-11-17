@@ -117,12 +117,43 @@ internal class Lc04MxH1SelectedNetworkLease private constructor(
             close()
             return false
         }
-        runCatching { completedSocket.close() }
-        return sourceHandoffEligible()
+        // Do not export a port if retiring the spent handshake socket fails.
+        val retired = try {
+            completedSocket.close()
+            true
+        } catch (_: IOException) { false } catch (_: RuntimeException) { false }
+        if (!retired || !sourceHandoffEligible()) {
+            close()
+            return false
+        }
+        return true
     }
 
-    /** The key owner stays on the original monotonic route/permission lease. */
-    fun sourceHandoffEligible(): Boolean = check(Phase.SOURCE_HANDOFF)
+    /**
+     * Read-only APPDATA eligibility: the AEAD engine invokes this while its
+     * record monitor is held. NEVER call lease.close()/phone.close() here:
+     * Android onStop can hold the phone-owner lock while closing this port.
+     * Failed eligibility closes the record keys; Android lifecycle callbacks
+     * separately close the lease to revoke the original QR owner.
+     */
+    fun sourceHandoffEligible(): Boolean {
+        val clockOk = try {
+            synchronized(mutex) {
+                val now = elapsedMillis()
+                if (phase != Phase.SOURCE_HANDOFF || activeSocket != null ||
+                    now < lastObserved || now < started ||
+                    now - started >= TTL_MILLIS
+                ) false else {
+                    lastObserved = now
+                    true
+                }
+            }
+        } catch (_: RuntimeException) { false }
+        val routeOk = clockOk && try {
+            selectedRouteEligible()
+        } catch (_: RuntimeException) { false }
+        return routeOk && phase == Phase.SOURCE_HANDOFF
+    }
 
     /** Invoke synchronously from onStop, onLost, default route/IP/permission changes. */
     fun revokeSelectedNetwork() = close()

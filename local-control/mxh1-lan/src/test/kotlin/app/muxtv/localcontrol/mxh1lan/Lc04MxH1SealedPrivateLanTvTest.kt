@@ -318,6 +318,10 @@ class Lc04MxH1SealedPrivateLanTvTest {
                 f.routeEligible.set(false)
                 assertThat(tvPort.openRequest(authenticated)).isNull()
                 assertThat(phonePort.sealRequest(Lc04SourceCommand.Cancel(2))).isNull()
+                // AEAD eligibility cannot call owner.close() from inside
+                // a record-monitor operation (ABBA with Android onStop).
+                assertThat(f.revoked.get()).isEqualTo(0)
+                phone.close() // explicit Android onLost/onStop revocation
                 assertThat(f.revoked.get()).isEqualTo(1)
             } finally { authenticated.fill(0) }
         }

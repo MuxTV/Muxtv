@@ -31,7 +31,11 @@ are separate from cryptographic key possession.
 - The lease has NO second network connect, arbitrary payload operations,
   or retained socket. Every APPDATA operation calls the SAME selected
   Wi-Fi/Ethernet/VPN/API37 permission callback and the original lease
-  monotonic deadline. `close()` or route loss revokes key owner.
+  monotonic deadline. The per-record route predicate is read-only to
+  prevent a record-monitor / original-phone-owner lock inversion; a
+  failed predicate immediately zeroizes the AEAD record port. Android
+  onStop/onLost/default-route events must explicitly call `close()`
+  on the lease to revoke the original phone QR/key owner.
 - Add explicit TV source-key listener factory with a required
   selected-route checker. It invokes the original TV owner
   `claimSourceRecordsAfterSixthWritten` only after authentic F5,
