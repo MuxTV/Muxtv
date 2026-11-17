@@ -1,7 +1,10 @@
 package app.muxtv.localcontrol.mxh1
 
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAppKeyCandidate
 import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticDerivedKeys
+import app.muxtv.localcontrol.protectedchannel.Lc04MxH1SyntheticProbePort
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffKeySchedule
 import app.muxtv.localcontrol.protectedchannel.Lc04SyntheticHandoffTranscript
 import app.muxtv.localcontrol.qr.TvQrPublicKey
@@ -30,12 +33,17 @@ class Lc04MxH1PhoneLab(
 ) : AutoCloseable {
     private enum class Phase { NEW, WAIT_TV, WAIT_FINISH, VERIFIED, REVOKED }
 
-    private var phase = Phase.NEW
+    @Volatile private var phase = Phase.NEW
     private var born: Long = -1L
     private var pendingSeed: ByteArray? = null
     private var offered: ByteArray? = null
     private var pendingPhoneFrameDigest: ByteArray? = null
     private var keys: Lc04SyntheticDerivedKeys? = null
+    // Remains null in all installed-product and legacy synthetic paths.
+    private var mxh1ProbePort: Lc04MxH1SyntheticProbePort? = null
+    private var pendingSourceExport: Lc04SourceAppKeyCandidate? = null
+    private var verifiedSixth: ByteArray? = null
+    private var sourceRecordPort: Lc04SourceAeadPort? = null
 
     private fun live(): Boolean {
         val now = elapsedMillis()
@@ -144,6 +152,17 @@ class Lc04MxH1PhoneLab(
                     source.invitation(), source.pairing(), source.tv(), source.phone(),
                     digest, source.counter, ourTag,
                 ))
+                if (requireFinished) {
+                    // Derive candidate while the original signed HPKE seed is
+                    // still held by THIS QR-pinned phone owner, never MXR1.
+                    val originalDigest = transcript.digest()
+                    try {
+                        pendingSourceExport =
+                            Lc04SourceAppKeyCandidate.prepareFromOriginalHpkeSeed(
+                                secret, originalDigest,
+                            )
+                    } finally { originalDigest.fill(0) }
+                }
                 keys = derived
                 pendingSeed?.fill(0)
                 pendingSeed = null
@@ -174,7 +193,26 @@ class Lc04MxH1PhoneLab(
      * zero-size legacy TCP marker cannot advance this state.
      */
     @Synchronized
-    fun acceptTvFinished(finished: ByteArray): Boolean {
+    fun acceptTvFinished(finished: ByteArray): Boolean =
+        acceptTvFinishedInternal(finished, null)
+
+    /**
+     * S2J2A lab-only transfer: retain an opaque synthetic probe port ONLY
+     * after independently authenticating the EXACT TV_FINISHED HMAC.
+     * This in-process lab has NO socket/EOF observation: an eventual network
+     * adapter must check EOF and cancellation separately before calling it.
+     * No installed app path calls this; no source/credential API.
+     */
+    @Synchronized
+    fun acceptTvFinishedForProbeLab(
+        finished: ByteArray,
+        clock: () -> Long,
+    ): Boolean = acceptTvFinishedInternal(finished, clock)
+
+    private fun acceptTvFinishedInternal(
+        finished: ByteArray,
+        labClock: (() -> Long)?,
+    ): Boolean {
         if (phase != Phase.WAIT_FINISH || !live()) {
             close()
             return false
@@ -198,7 +236,13 @@ class Lc04MxH1PhoneLab(
                 close()
                 false
             } else {
-                keys?.close()
+                if (labClock != null) {
+                    mxh1ProbePort = keys?.handOffToSyntheticProbeLab(
+                        phoneSide = true, clock = labClock,
+                    ) ?: run { close(); return false }
+                } else {
+                    keys?.close()
+                }
                 keys = null
                 offered?.fill(0)
                 offered = null
@@ -208,6 +252,69 @@ class Lc04MxH1PhoneLab(
                 true
             }
         } finally { tag.fill(0) }
+    }
+
+    /**
+     * The first encrypted phone-to-TV probe proves that the phone accepted
+     * TV_FINISHED. An invalid inbound reply revokes signer and traffic keys.
+     */
+    @Synchronized
+    fun sealMxH1SyntheticProbeForLab(): ByteArray? {
+        if (phase != Phase.VERIFIED || !live()) {
+            close()
+            return null
+        }
+        val port = mxh1ProbePort ?: return null
+        val frame = port.sealSyntheticProbe()
+        if (frame == null) close()
+        return frame
+    }
+
+    @Synchronized
+    fun acceptMxH1SyntheticProbeForLab(wire: ByteArray): Boolean {
+        if (phase != Phase.VERIFIED || !live()) {
+            close()
+            return false
+        }
+        // Exactly one F6 is valid for the original selected-network socket.
+        if (verifiedSixth != null) { close(); return false }
+        val port = mxh1ProbePort ?: return false
+        if (!port.acceptSyntheticProbe(wire)) {
+            close()
+            return false
+        }
+        // The exact authentic F6, not the public handshake Boolean, becomes
+        // part of the final app key binding. This does NOT attest TCP EOF yet.
+        verifiedSixth?.fill(0)
+        verifiedSixth = wire.clone()
+        return true
+    }
+
+    /**
+     * One-use owner handoff. The selected-Network socket adapter MUST call
+     * this ONLY after an authenticated F6, its exact TV EOF and an eligible
+     * route. The method itself cannot attest a kernel EOF and conveys NO
+     * TV catalog activation authority. Original owner close revokes the port.
+     */
+    @Synchronized
+    fun claimSourceRecordsAfterVerifiedTvEof(
+        clock: () -> Long,
+        routeEligible: () -> Boolean,
+    ): Lc04SourceAeadPort? {
+        if (phase != Phase.VERIFIED || !live() || sourceRecordPort != null) return null
+        val candidate = pendingSourceExport ?: return null
+        val sixth = verifiedSixth ?: return null
+        pendingSourceExport = null
+        verifiedSixth = null
+        return try {
+            candidate.finishAfterAuthenticatedSixth(
+                sixth, phoneSide = true, now = clock,
+                routeEligible = { phase == Phase.VERIFIED && live() && routeEligible() },
+            ).also { sourceRecordPort = it }
+        } finally {
+            sixth.fill(0)
+            candidate.close()
+        }
     }
 
     @Synchronized
@@ -235,6 +342,14 @@ class Lc04MxH1PhoneLab(
         offered = null
         pendingPhoneFrameDigest?.fill(0)
         pendingPhoneFrameDigest = null
+        mxh1ProbePort?.close()
+        mxh1ProbePort = null
+        pendingSourceExport?.close()
+        pendingSourceExport = null
+        verifiedSixth?.fill(0)
+        verifiedSixth = null
+        sourceRecordPort?.close()
+        sourceRecordPort = null
         keys?.close()
         keys = null
         signingPhone.close()

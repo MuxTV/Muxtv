@@ -133,6 +133,9 @@ class MainActivity : ComponentActivity() {
                     sourceOnboarding = sourceOnboarding,
                     startPhonePairing = ::startPhonePairing,
                     enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr,
+                    enableMxH1ForApprovedVisibleQr = ::enableMxH1ForApprovedVisibleQr,
+                    mxh1VerifiedOriginalPhoneIsReady =
+                        pairingController::isApprovedMxH1PhoneReady,
                     startPublicKeyQrPreview = {
                         withContext(Dispatchers.Default) {
                             pairingController.startPublicKeyQrPreview()
@@ -184,6 +187,21 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (_: Exception) {
                 null // No endpoint, key or network address in diagnostics.
+            }
+        }
+    }
+
+    private suspend fun enableMxH1ForApprovedVisibleQr(): TvPairingController.NativeProbeEndpoint? {
+        // Separate explicit TV-screen action with the SAME API37 permission gate
+        // as the original native proof listener. No implicit startup/HTTP path.
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.enableSealedMxH1ForApprovedVisibleQr()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // no private address or handshake material in diagnostics
             }
         }
     }

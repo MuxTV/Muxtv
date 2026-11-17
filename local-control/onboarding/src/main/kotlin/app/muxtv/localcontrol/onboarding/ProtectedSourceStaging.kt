@@ -121,9 +121,16 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
         val result = try {
             onboarding.activate(handle, sourceName)
         } catch (cancelled: CancellationException) {
+            // A commit may have happened before cancellation. Never retain a
+            // replayable handle or claim that the activation rolled back.
+            prepared.remove(principal.sessionId)
             throw cancelled
         } catch (_: Exception) {
-            return@withLock SourceStagingResult.FAILED
+            // Exceptions can happen AFTER a durable commit; the outcome is
+            // unknown, not a safe retryable FAILED. Drop the handle without
+            // calling cancel, which might destroy a committed source.
+            prepared.remove(principal.sessionId)
+            return@withLock SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN
         }
         if (!principal.canWrite()) {
             prepared.remove(principal.sessionId)
