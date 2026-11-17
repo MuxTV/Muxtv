@@ -1,6 +1,7 @@
 package app.muxtv.localcontrol.mxh1lan
 
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
 import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -28,6 +29,24 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
     private val newUnconnectedSocket: () -> Socket,
 ) : AutoCloseable {
     private val consumed = AtomicBoolean(false)
+    @Volatile private var sourceRecordPort: Lc04SourceAeadPort? = null
+
+    /**
+     * Existing diagnostic path. On success it still revokes the original
+     * QR/phone owner: no source keys, sockets or authority survive.
+     */
+    fun completeSyntheticExchange(): Boolean = completeExchange(retainSourceKey = false)
+
+    /**
+     * Independent S2J3D1 key-owner transition. A real selected-Network F6,
+     * exact kernel TV EOF and all route checkpoints are mandatory. This only
+     * returns typed authenticated APPDATA records, never source permission
+     * or a socket capable of sending provider credentials.
+     *
+     * Lifecycle owner must retain this adapter and call close() onStop/loss.
+     */
+    fun completeSourceKeyHandoffAfterTvEof(): Lc04SourceAeadPort? =
+        if (completeExchange(retainSourceKey = true)) sourceRecordPort else null
 
     /**
      * Exactly one attempt, using ONLY the lease's vetted numeric RFC1918
@@ -37,7 +56,7 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
      * Returns a diagnostic Boolean for a fixed synthetic probe only, never
      * an authorization token, paired capability or retained encryption key.
      */
-    fun completeSyntheticExchange(): Boolean {
+    private fun completeExchange(retainSourceKey: Boolean): Boolean {
         if (!consumed.compareAndSet(false, true)) {
             close()
             return false
@@ -49,6 +68,7 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
             return false
         }
         var authenticated = false
+        var sourceKeyRetained = false
         try {
             socket.use { connected ->
                 if (!lease.bindOnce(connected)) return false
@@ -115,6 +135,17 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
                         phone.acceptMxH1SyntheticProbeForLab(sixth) &&
                         lease.checkpoint() &&
                         phone.hasAuthenticatedTvSyntheticProof()
+                    if (authenticated && retainSourceKey) {
+                        // The single handshake socket has reached real EOF;
+                        // no app key can be exported before retiring it.
+                        if (!lease.detachHandshakeSocketAfterVerifiedTvEof()) return false
+                        val port = phone.claimSourceRecordsAfterVerifiedTvEof(
+                            clock = elapsedMillis,
+                            routeEligible = lease::sourceHandoffEligible,
+                        ) ?: return false
+                        sourceRecordPort = port
+                        sourceKeyRetained = true
+                    }
                     return authenticated
                 } finally { sixth.fill(0) }
             }
@@ -123,13 +154,16 @@ internal class Lc04MxH1LeasedSealedPhone private constructor(
         } catch (_: RuntimeException) {
             return false
         } finally {
-            // Terminal even after authenticated probe: never retain a pairing
-            // session, raw traffic key, socket or original QR/phone identity.
-            close()
+            // Preserve the historical diagnostic behavior. Only the
+            // explicit, successfully authenticated source-key handoff keeps
+            // the original QR owner and route lease alive for APPDATA.
+            if (!sourceKeyRetained) close()
         }
     }
 
     override fun close() {
+        sourceRecordPort?.close()
+        sourceRecordPort = null
         lease.close() // closes any in-flight socket and QR/key owner
         phone.close()
     }

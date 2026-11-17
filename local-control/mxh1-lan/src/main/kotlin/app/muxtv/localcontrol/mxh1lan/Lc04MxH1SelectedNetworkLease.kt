@@ -27,7 +27,7 @@ internal class Lc04MxH1SelectedNetworkLease private constructor(
     private val bindToSelectedNetwork: (Socket) -> Unit,
     private val revokeOriginalQrAndKeys: () -> Unit,
 ) : AutoCloseable {
-    private enum class Phase { NEW, BINDING, BOUND, CLOSED }
+    private enum class Phase { NEW, BINDING, BOUND, SOURCE_HANDOFF, CLOSED }
     private val mutex = Any()
     private val started = elapsedMillis()
     private var lastObserved = started
@@ -98,6 +98,32 @@ internal class Lc04MxH1SelectedNetworkLease private constructor(
     fun endpointIfBoundAndEligible(): InetSocketAddress? =
         if (checkpoint()) endpoint else null
 
+    /**
+     * S2J3D1: invoked ONLY after genuine F6 authentication and TV TCP EOF.
+     * Retire the completed handshake socket but retain the same route lease
+     * and original QR/Ed25519 owner for the separately derived APPDATA port.
+     * This is never a permission to send plaintext or use a new network.
+     */
+    fun detachHandshakeSocketAfterVerifiedTvEof(): Boolean {
+        if (!checkpoint()) return false
+        val completedSocket = synchronized(mutex) {
+            if (phase != Phase.BOUND || activeSocket?.isClosed != false) null
+            else {
+                phase = Phase.SOURCE_HANDOFF
+                activeSocket.also { activeSocket = null }
+            }
+        }
+        if (completedSocket == null) {
+            close()
+            return false
+        }
+        runCatching { completedSocket.close() }
+        return sourceHandoffEligible()
+    }
+
+    /** The key owner stays on the original monotonic route/permission lease. */
+    fun sourceHandoffEligible(): Boolean = check(Phase.SOURCE_HANDOFF)
+
     /** Invoke synchronously from onStop, onLost, default route/IP/permission changes. */
     fun revokeSelectedNetwork() = close()
 
@@ -116,7 +142,9 @@ internal class Lc04MxH1SelectedNetworkLease private constructor(
         val networkOk = timeOk && try {
             selectedRouteEligible()
         } catch (_: RuntimeException) { false }
-        if (!networkOk || phase != required || activeSocket?.isClosed != false) {
+        val socketOk = if (required == Phase.SOURCE_HANDOFF) activeSocket == null
+            else activeSocket?.isClosed == false
+        if (!networkOk || phase != required || !socketOk) {
             close()
             return false
         }

@@ -5,6 +5,9 @@ import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceCommand
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReply
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReplyCode
 import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
 import com.google.common.truth.Truth.assertThat
 import java.io.DataInputStream
@@ -30,6 +33,7 @@ class Lc04MxH1SealedPrivateLanTvTest {
         val phone = Lc04MxH1PhoneLab(qr, signer, now::get)
         val gate = checkNotNull(tv.phoneEnrollmentGate(now::get))
         val bindCalled = AtomicBoolean(false)
+        val routeEligible = AtomicBoolean(true)
         val revoked = AtomicInteger()
         var listener: Lc04MxH1SealedPrivateLanTv? = null
         var client: Lc04MxH1LeasedSealedPhone? = null
@@ -46,13 +50,18 @@ class Lc04MxH1SealedPrivateLanTvTest {
             Lc04MxH1SealedPrivateLanTv.startLoopbackForHostTests(tv, now::get)
                 .also { listener = it }
 
+        fun listenWithSourceKeyHandoff(): Lc04MxH1SealedPrivateLanTv =
+            Lc04MxH1SealedPrivateLanTv.startLoopbackWithSourceKeyHandoffForHostTests(
+                tv, now::get, routeEligible::get,
+            ).also { listener = it }
+
         fun clientFor(port: Int): Lc04MxH1LeasedSealedPhone =
             Lc04MxH1LeasedSealedPhone.withTestSocketForHostileJVM(
                 privateIpv4 = "192.168.52.17",
                 port = port,
                 originalPhone = phone,
                 elapsedMillis = now::get,
-                selectedRouteEligible = { true },
+                selectedRouteEligible = routeEligible::get,
                 bindUnconnectedToSelectedNetwork = { socket ->
                     assertThat(socket.isConnected).isFalse()
                     bindCalled.set(true)
@@ -243,6 +252,107 @@ class Lc04MxH1SealedPrivateLanTvTest {
             }
             awaitRevoked(f)
             assertThat(listener.hasAuthenticatedSyntheticExchange()).isFalse()
+        }
+
+
+    @Test fun nativeSixthAndActualTcpEofRetainOriginalSourceKeysExactlyOnce() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listenWithSourceKeyHandoff()
+            val phone = f.clientFor(listener.port)
+
+            // This is the REAL original QR, signed HPKE and six-frame kernel
+            // socket, not a host-created random source key fixture.
+            val phonePort = checkNotNull(phone.completeSourceKeyHandoffAfterTvEof())
+            awaitTvProof(listener)
+            val tvPort = checkNotNull(listener.takeSourceKeyPortAfterRealF6OutputClose())
+            assertThat(listener.takeSourceKeyPortAfterRealF6OutputClose()).isNull()
+            assertThat(f.bindCalled.get()).isTrue()
+            assertThat(f.revoked.get()).isEqualTo(0)
+
+            val first = checkNotNull(phonePort.sealRequest(Lc04SourceCommand.Cancel(1)))
+            try {
+                val parsed = tvPort.openRequest(first)
+                assertThat(parsed is Lc04SourceCommand.Cancel).isTrue()
+                assertThat(parsed?.sequence).isEqualTo(1L)
+                val sealedReply = checkNotNull(tvPort.sealReply(
+                    Lc04SourceReply(1, Lc04SourceReplyCode.CANCELED),
+                ))
+                try {
+                    assertThat(phonePort.openReply(sealedReply)?.code)
+                        .isEqualTo(Lc04SourceReplyCode.CANCELED)
+                } finally { sealedReply.fill(0) }
+            } finally { first.fill(0) }
+
+            // The legacy synthetic-only method cannot be retried to mint a
+            // second key owner. Any second attempt revokes the first.
+            assertThat(phone.completeSyntheticExchange()).isFalse()
+            assertThat(phonePort.sealRequest(Lc04SourceCommand.Cancel(2))).isNull()
+            assertThat(f.revoked.get()).isEqualTo(1)
+        }
+
+    @Test fun diagnosticSixFrameModeNeverExportsAppKey() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listen()
+            val phone = f.clientFor(listener.port)
+            assertThat(phone.completeSyntheticExchange()).isTrue()
+            awaitTvProof(listener)
+            assertThat(listener.takeSourceKeyPortAfterRealF6OutputClose()).isNull()
+            assertThat(phone.completeSourceKeyHandoffAfterTvEof()).isNull()
+            assertThat(f.revoked.get()).isEqualTo(1)
+        }
+
+    @Test fun routeLossAfterRealEofRevokesBothAppDataRecordDirections() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listenWithSourceKeyHandoff()
+            val phone = f.clientFor(listener.port)
+            val phonePort = checkNotNull(phone.completeSourceKeyHandoffAfterTvEof())
+            awaitTvProof(listener)
+            val tvPort = checkNotNull(listener.takeSourceKeyPortAfterRealF6OutputClose())
+            val authenticated = checkNotNull(
+                phonePort.sealRequest(Lc04SourceCommand.Cancel(1)),
+            )
+            try {
+                f.routeEligible.set(false)
+                assertThat(tvPort.openRequest(authenticated)).isNull()
+                assertThat(phonePort.sealRequest(Lc04SourceCommand.Cancel(2))).isNull()
+                assertThat(f.revoked.get()).isEqualTo(1)
+            } finally { authenticated.fill(0) }
+        }
+
+    @Test fun originalTvQrExpiryRejectsAuthenticatedSourceFrameAfterKernelEof() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listenWithSourceKeyHandoff()
+            val phone = f.clientFor(listener.port)
+            val phonePort = checkNotNull(phone.completeSourceKeyHandoffAfterTvEof())
+            awaitTvProof(listener)
+            val tvPort = checkNotNull(listener.takeSourceKeyPortAfterRealF6OutputClose())
+            val frame = checkNotNull(phonePort.sealRequest(Lc04SourceCommand.Cancel(1)))
+            try {
+                // No presentation poll: a valid AEAD frame must fail the
+                // original TV QR deadline even when APPDATA TTL is fresh.
+                f.now.addAndGet(TvHpkeQrSession.TTL_MILLIS)
+                assertThat(tvPort.openRequest(frame)).isNull()
+                assertThat(phonePort.sealRequest(Lc04SourceCommand.Cancel(2))).isNull()
+            } finally { frame.fill(0) }
+        }
+
+    @Test fun ownerStopAfterRealEofClosesClaimedSourcePort() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val listener = f.listenWithSourceKeyHandoff()
+            val phone = f.clientFor(listener.port)
+            val phonePort = checkNotNull(phone.completeSourceKeyHandoffAfterTvEof())
+            awaitTvProof(listener)
+            val tvPort = checkNotNull(listener.takeSourceKeyPortAfterRealF6OutputClose())
+            phone.close() // selected Android Network/onStop owner
+            assertThat(phonePort.sealRequest(Lc04SourceCommand.Cancel(1))).isNull()
+            listener.close() // TV onStop revokes the exact original QR
+            assertThat(tvPort.openRequest(byteArrayOf(1))).isNull()
+            assertThat(f.tv.presentation(f.now.get())).isNull()
         }
 
     private companion object {

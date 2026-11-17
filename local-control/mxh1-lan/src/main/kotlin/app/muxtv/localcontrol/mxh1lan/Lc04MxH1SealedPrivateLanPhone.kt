@@ -1,6 +1,7 @@
 package app.muxtv.localcontrol.mxh1lan
 
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
 import java.net.Socket
 
 /**
@@ -17,6 +18,14 @@ class Lc04MxH1SealedPrivateLanPhone private constructor(
 ) : AutoCloseable {
     /** Diagnostic only. Returns false on any failed/revoked network checkpoint. */
     fun completeSyntheticExchange(): Boolean = transport.completeSyntheticExchange()
+
+    /**
+     * Explicit, one-use source APPDATA key-owner handoff after actual F6/EOF.
+     * This does NOT establish an app-data TCP connection, source principal,
+     * D-pad activation approval, or provider credential transport.
+     */
+    fun completeSourceKeyHandoffAfterTvEof(): Lc04SourceAeadPort? =
+        transport.completeSourceKeyHandoffAfterTvEof()
 
     override fun close() = transport.close()
 

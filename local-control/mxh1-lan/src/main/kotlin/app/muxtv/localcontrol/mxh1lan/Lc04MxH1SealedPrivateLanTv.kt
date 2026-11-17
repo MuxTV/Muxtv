@@ -1,6 +1,7 @@
 package app.muxtv.localcontrol.mxh1lan
 
 import app.muxtv.localcontrol.nativetransport.Lc04PrivateIpv4
+import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.localcontrol.wirelab.Lc04HandoffKind
 import java.io.DataInputStream
@@ -26,10 +27,13 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
     private val now: () -> Long,
     private val listener: ServerSocket,
     private val loopbackForHostTests: Boolean,
+    private val retainSourceKeyAfterF6: Boolean,
+    private val sourceRouteEligible: () -> Boolean,
 ) : AutoCloseable {
     @Volatile private var stopped = false
     @Volatile private var completed = false
     @Volatile private var active: Socket? = null
+    @Volatile private var sourceRecordPort: Lc04SourceAeadPort? = null
     private val worker = Thread({ serveOnce() }, "muxtv-mxh1-mxr1-private-tv").apply {
         isDaemon = true
         start()
@@ -40,6 +44,19 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
     /** Diagnostic only; not a source or pairing capability. */
     fun hasAuthenticatedSyntheticExchange(): Boolean =
         !stopped && completed && tv.hasSyntheticMxH1Proof(now())
+
+    /**
+     * Deliver exactly once, after the worker has written F6 and called
+     * shutdownOutput() on the actual TCP socket. A subsequent authenticated
+     * APPDATA first request is still required to prove the phone saw F6.
+     */
+    @Synchronized
+    fun takeSourceKeyPortAfterRealF6OutputClose(): Lc04SourceAeadPort? {
+        if (stopped || !completed) return null
+        val result = sourceRecordPort ?: return null
+        sourceRecordPort = null
+        return result
+    }
 
     private fun serveOnce() {
         try {
@@ -114,6 +131,14 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
                             Lc04MxH1LeasedSealedFrameIo.write(output, sixth)
                             socket.shutdownOutput()
                         } finally { sixth.fill(0) }
+                        if (retainSourceKeyAfterF6) {
+                            if (stopped || !sourceRouteEligible()) return@use false
+                            val appPort = tv.claimSourceRecordsAfterSixthWritten(
+                                clock = now,
+                                routeEligible = { !stopped && sourceRouteEligible() },
+                            ) ?: return@use false
+                            sourceRecordPort = appPort
+                        }
                         !stopped
                     }
                 } catch (_: IOException) {
@@ -153,6 +178,8 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
         runCatching { listener.close() }
         runCatching { active?.close() }
         active = null
+        sourceRecordPort?.close()
+        sourceRecordPort = null
         tv.close()
     }
 
@@ -175,6 +202,35 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
             return open(ip, originalTvQrOwner, now, false)
         }
 
+        /**
+         * Explicit source-key mode. The caller supplies the SAME active,
+         * permission-gated TV Wi-Fi/Ethernet route checker, including onStop.
+         * Does not create an app-data socket or a source principal.
+         */
+        fun startOnApprovedPrivateIpv4WithSourceKeyHandoff(
+            address: String,
+            originalTvQrOwner: TvHpkeQrSession,
+            now: () -> Long,
+            selectedRouteEligible: () -> Boolean,
+        ): Lc04MxH1SealedPrivateLanTv {
+            val ip = requireNotNull(Lc04PrivateIpv4.parse(address)) {
+                "Numeric RFC1918 private IPv4 required."
+            }
+            require(originalTvQrOwner.hasApprovedPhoneForSyntheticMxH1(now()))
+            require(selectedRouteEligible()) { "Selected TV route is not eligible." }
+            return open(ip, originalTvQrOwner, now, false, true, selectedRouteEligible)
+        }
+
+        /** Host-only fixture: original QR, real socket, and visible consent. */
+        internal fun startLoopbackWithSourceKeyHandoffForHostTests(
+            originalTvQrOwner: TvHpkeQrSession,
+            now: () -> Long,
+            routeEligible: () -> Boolean,
+        ): Lc04MxH1SealedPrivateLanTv = open(
+            InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
+            originalTvQrOwner, now, true, true, routeEligible,
+        )
+
         /** Host-only fixture; cannot be used to bind a deployed TV endpoint. */
         internal fun startLoopbackForHostTests(
             originalTvQrOwner: TvHpkeQrSession, now: () -> Long,
@@ -186,11 +242,15 @@ class Lc04MxH1SealedPrivateLanTv private constructor(
         private fun open(
             ip: InetAddress, original: TvHpkeQrSession,
             now: () -> Long, hostOnly: Boolean,
+            retainSourceKey: Boolean = false,
+            routeEligible: () -> Boolean = { true },
         ): Lc04MxH1SealedPrivateLanTv {
             require(original.hasApprovedPhoneForSyntheticMxH1(now()))
             val socket = ServerSocket(0, 1, ip)
             socket.soTimeout = 300
-            return Lc04MxH1SealedPrivateLanTv(original, now, socket, hostOnly)
+            return Lc04MxH1SealedPrivateLanTv(
+                original, now, socket, hostOnly, retainSourceKey, routeEligible,
+            )
         }
     }
 }
