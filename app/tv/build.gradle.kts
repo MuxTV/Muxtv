@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":local-control:server"))
     implementation(project(":local-control:tv-qr"))
     implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:mxh1-lan"))
     implementation(project(":local-control:enrollment"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
