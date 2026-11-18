@@ -14,6 +14,8 @@ import app.muxtv.localcontrol.PendingTvPairing
 import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
 import app.muxtv.localcontrol.nativetransport.Lc04PrivateIpv4
 import app.muxtv.localcontrol.nativetransport.Lc04TvTcpServer
+import app.muxtv.localcontrol.mxh1lan.Lc04MxH1PrivateLanTv
+import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanTv
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.localcontrol.server.LanAddressPolicy
 import app.muxtv.localcontrol.server.TvLanServer
@@ -44,6 +46,9 @@ class TvPairingController(
     @Volatile private var publicQrSession: TvHpkeQrSession? = null
     @Volatile private var nativeProbeServer: Lc04TvTcpServer? = null
     @Volatile private var nativeProbeEndpoint: NativeProbeEndpoint? = null
+    @Volatile private var mxh1Server: Lc04MxH1PrivateLanTv? = null
+    @Volatile private var sealedMxH1Server: Lc04MxH1SealedPrivateLanTv? = null
+    @Volatile private var mxh1Endpoint: NativeProbeEndpoint? = null
     @Volatile private var observedNetwork: Network? = null
     @Volatile private var observedAddress: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -194,11 +199,141 @@ class TvPairingController(
         }
     }
 
+    /**
+     * Explicit *second* TV D-pad opt-in after MXW1 enrollment. Keeps the SAME
+     * QR/HPKE private receiver and TV-local-approved phone. Separate port,
+     * never an extra MXW1 kind, never auto-started from a QR or /pair route.
+     * The first native listener remains active for its original lifecycle.
+     */
+    suspend fun enableMxH1ForApprovedVisibleQr(): NativeProbeEndpoint = lifecycleMutex.withLock {
+        if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
+        val receiver = requireNotNull(publicQrSession) { "No original TV QR." }
+        require(receiver.hasApprovedPhoneForSyntheticMxH1(SystemClock.elapsedRealtime())) {
+            "The original TV-local Ed25519 consent is not verified."
+        }
+        requireNotNull(nativeProbeServer) { "The original native enrollment is not active." }
+        val nativeEndpoint = requireNotNull(nativeProbeEndpoint)
+        require(sealedMxH1Server == null) { "Six-frame listener already owns this original QR." }
+        mxh1Endpoint?.let { return@withLock it }
+        val generation = publicQrEpoch.get()
+        val lifecycle = lifecycleEpoch.get()
+        val selected = requireNotNull(observedNetwork) { "No selected Wi-Fi/Ethernet Network." }
+        val active = requireNotNull(networkManager.activeNetwork)
+        require(active == selected) { "Default network changed." }
+        val caps = requireNotNull(networkManager.getNetworkCapabilities(selected))
+        require((caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) &&
+            !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+            !caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR))
+        val host = requireNotNull(selectPrivateAddress(
+            requireNotNull(networkManager.getLinkProperties(selected)),
+        ))
+        require(host == observedAddress && host == nativeEndpoint.privateIpv4) {
+            "The original private IPv4 route changed."
+        }
+        val listener = Lc04MxH1PrivateLanTv.startOnApprovedPrivateIpv4(
+            host, receiver, SystemClock::elapsedRealtime,
+        )
+        try {
+            synchronized(this@TvPairingController) {
+                if (!isTvVisible() || generation != publicQrEpoch.get() ||
+                    lifecycle != lifecycleEpoch.get() ||
+                    publicQrSession !== receiver ||
+                    !receiver.hasApprovedPhoneForSyntheticMxH1(SystemClock.elapsedRealtime()) ||
+                    networkManager.activeNetwork != selected ||
+                    observedAddress != host || nativeProbeServer == null
+                ) throw CancellationException("MXH1 TV owner was revoked before publication.")
+                val endpoint = NativeProbeEndpoint(host, listener.port)
+                mxh1Server = listener
+                mxh1Endpoint = endpoint
+                endpoint
+            }
+        } catch (failure: Throwable) {
+            revokePublicKeyQrPreview()
+            listener.close()
+            throw failure
+        }
+    }
+
+    /**
+     * S2J2C2C: separately opted-in six-frame MXH1/MXR1 synthetic path.
+     * Reuses the SAME QR/HPKE private receiver, approved Ed25519 phone,
+     * permission-gated selected Wi-Fi/Ethernet interface and onStop fencing
+     * as original four-frame MXH1. The two modes can never coexist.
+     *
+     * No source, credential or persistent pairing authority is created.
+     */
+    suspend fun enableSealedMxH1ForApprovedVisibleQr(): NativeProbeEndpoint =
+        lifecycleMutex.withLock {
+            if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
+            val receiver = requireNotNull(publicQrSession) { "No original TV QR." }
+            require(receiver.hasApprovedPhoneForSyntheticMxH1(SystemClock.elapsedRealtime())) {
+                "Original TV-local Ed25519 consent has not been verified."
+            }
+            requireNotNull(nativeProbeServer) { "Original authenticated enrollment not active." }
+            val originalEndpoint = requireNotNull(nativeProbeEndpoint)
+            require(mxh1Server == null) { "Four-frame MXH1 already owns this QR." }
+            mxh1Endpoint?.let {
+                require(sealedMxH1Server != null) { "MXH1 listener owner mismatch." }
+                return@withLock it
+            }
+            val generation = publicQrEpoch.get()
+            val lifecycle = lifecycleEpoch.get()
+            val selected = requireNotNull(observedNetwork) { "No selected LAN Network." }
+            require(networkManager.activeNetwork == selected) { "Default route changed." }
+            val caps = requireNotNull(networkManager.getNetworkCapabilities(selected))
+            require((caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) &&
+                !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                !caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                "Only selected Wi-Fi/Ethernet without VPN/cellular is eligible."
+            }
+            val host = requireNotNull(selectPrivateAddress(
+                requireNotNull(networkManager.getLinkProperties(selected)),
+            ))
+            require(Lc04PrivateIpv4.parse(host) != null &&
+                host == observedAddress && host == originalEndpoint.privateIpv4
+            ) { "Original selected private IPv4 address changed." }
+
+            val listener = Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4(
+                host, receiver, SystemClock::elapsedRealtime,
+            )
+            try {
+                synchronized(this@TvPairingController) {
+                    if (!isTvVisible() || generation != publicQrEpoch.get() ||
+                        lifecycle != lifecycleEpoch.get() ||
+                        publicQrSession !== receiver ||
+                        !receiver.hasApprovedPhoneForSyntheticMxH1(
+                            SystemClock.elapsedRealtime(),
+                        ) ||
+                        networkManager.activeNetwork != selected ||
+                        observedAddress != host ||
+                        nativeProbeServer == null || mxh1Server != null
+                    ) throw CancellationException("Six-frame listener owner revoked.")
+                    val endpoint = NativeProbeEndpoint(host, listener.port)
+                    sealedMxH1Server = listener
+                    mxh1Endpoint = endpoint
+                    endpoint
+                }
+            } catch (failure: Throwable) {
+                revokePublicKeyQrPreview()
+                listener.close()
+                throw failure
+            }
+        }
+
     /** Safe to call on the UI thread and from Activity.onStop. */
     @Synchronized
     fun revokePublicKeyQrPreview() {
         publicQrEpoch.incrementAndGet()
         nativeProbeEndpoint = null
+        mxh1Endpoint = null
+        val mxh1Listener = mxh1Server
+        mxh1Server = null
+        mxh1Listener?.close() // same original QR owner and cancellation policy
+        val sealedListener = sealedMxH1Server
+        sealedMxH1Server = null
+        sealedListener?.close() // six-frame socket and original keys die on onStop
         val nativeListener = nativeProbeServer
         nativeProbeServer = null
         if (nativeListener != null) {
@@ -218,6 +353,17 @@ class TvPairingController(
 
     fun isPublicKeyQrPreviewActive(): Boolean =
         publicQrSession?.presentation(SystemClock.elapsedRealtime()) != null
+
+    /**
+     * Read-only user-interface qualification after REAL native Ed25519 proof.
+     * A D-pad approval flag alone is not proof: the enrollment gate must have
+     * verified and redeemed the exact phone identity for the ORIGINAL TV QR.
+     */
+    fun isApprovedMxH1PhoneReady(): Boolean =
+        isTvVisible() && nativeProbeServer != null &&
+            publicQrSession?.hasApprovedPhoneForSyntheticMxH1(
+                SystemClock.elapsedRealtime(),
+            ) == true
 
     /**
      * Display-only TV-local read: never expose the pending fingerprint via legacy LAN routes.

@@ -94,6 +94,12 @@ class Lc04MxH1LoopbackTcpLabTest {
             val server = f.open()
             val client = f.phoneConnector(server.port)
             assertThat(client.completeSyntheticExchange(f.phone)).isTrue()
+            // The client sees peer EOF before the server worker exits socket.use
+            // and commits its completed diagnostic. Preserve the assertion, but
+            // wait for the actual asynchronous server-state transition.
+            awaitCondition("TV commits authenticated one-use TCP proof") {
+                server.hasSyntheticNetworkProof()
+            }
             assertThat(server.hasSyntheticNetworkProof()).isTrue()
             assertThat(f.tv.hasSyntheticMxH1Proof(f.now.get())).isTrue()
             assertThat(f.phone.hasAuthenticatedTvSyntheticProof()).isTrue()
