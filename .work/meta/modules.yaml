@@ -109,7 +109,7 @@ actual_modules:
   local-control-mxh1-lan:
     gradle_path: :local-control:mxh1-lan
     type: pure_kotlin_library
-    owns: [bounded_private_ipv4_mxh1_tcp, selected_android_network_socket_binding, owner_scoped_tv_finished, real_f6_tcp_eof_source_key_handoff, no_source_tcp_data_plane_or_catalog_grant]
+    owns: [bounded_private_ipv4_mxh1_tcp, selected_android_network_socket_binding, owner_scoped_tv_finished, real_f6_tcp_eof_source_key_handoff, isolated_first_appdata_tcp_cancel_proof, no_provider_or_catalog_grant]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
