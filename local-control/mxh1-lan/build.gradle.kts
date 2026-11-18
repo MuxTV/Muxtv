@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":local-control:source-command-wire"))
     // Authenticated application records dispatch only to TV-owned source staging.
     implementation(project(":local-control:onboarding"))
+    implementation(libs.coroutines.core)
     implementation(project(":local-control:mxh1-session-lab"))
     implementation(project(":local-control:wire-lab"))
     implementation(project(":local-control:native-transport"))

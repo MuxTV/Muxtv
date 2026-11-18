@@ -385,7 +385,7 @@ class Lc04SourceCommandTcpPhone private constructor(
         fun afterVerifiedTvEofOnSelectedNetwork(
             address: String,
             appdataPort: Int,
-            completedHandshake: Lc04MxH1LeasedSealedPhone,
+            completedHandshake: Lc04MxH1SealedPrivateLanPhone,
             selectedRouteEligible: () -> Boolean,
             bindUnconnectedToSelectedNetwork: (Socket) -> Unit,
         ): Lc04SourceCommandTcpPhone? {
