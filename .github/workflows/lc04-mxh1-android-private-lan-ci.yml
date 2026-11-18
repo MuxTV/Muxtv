@@ -18,6 +18,8 @@ on:
       - '.work/specifications/lc04-s2j3d1-native-f6-eof-source-key-owner-20261117.md'
       - '.work/specifications/lc04-s2j3d2a-first-appdata-tcp-proof-20261118.md'
       - '.work/specifications/lc04-s2j3d2b1-tv-owned-aead-source-dispatch-20261119.md'
+      - '.work/specifications/lc04-s2j3d2b2-multicommand-source-tcp-20261119.md'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceCommandTcpContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04TvOriginalAeadOwnerContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04SourceFirstRequestTcpContractTest.kt'
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04NativeSourceKeyHandoffContractTest.kt'
@@ -86,6 +88,8 @@ jobs:
           grep -Fq 'class Lc04SourceFirstRequestTcpTest' local-control/mxh1-lan/src/test/kotlin/app/muxtv/localcontrol/mxh1lan/Lc04SourceFirstRequestTcpTest.kt
           grep -Fq 'class Lc04TvOriginalAeadCommandOwner' local-control/onboarding/src/main/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvOriginalAeadCommandOwner.kt
           grep -Fq 'class Lc04TvOriginalAeadCommandOwnerTest' local-control/onboarding/src/test/kotlin/app/muxtv/localcontrol/onboarding/Lc04TvOriginalAeadCommandOwnerTest.kt
+          grep -Fq 'class Lc04SourceCommandTcpTv private constructor(' local-control/mxh1-lan/src/main/kotlin/app/muxtv/localcontrol/mxh1lan/Lc04SourceCommandTcpSession.kt
+          grep -Fq 'class Lc04SourceCommandTcpSessionTest' local-control/mxh1-lan/src/test/kotlin/app/muxtv/localcontrol/mxh1lan/Lc04SourceCommandTcpSessionTest.kt
           ! grep -R -Eq 'Lc04SourceAeadRecords' app/phone/src/main/ app/tv/src/main/ local-control/server/src/main/
           ! grep -R -Eq 'Lc04TvSourceCommandSession|Lc04SourceCommandCodec' local-control/server/src/main/ app/phone/src/main/ app/tv/src/main/ 
           grep -Fq 'pairingController.enableSealedMxH1ForApprovedVisibleQr()' app/tv/src/main/kotlin/app/muxtv/MainActivity.kt
@@ -124,6 +128,7 @@ jobs:
             --tests 'app.muxtv.buildlogic.Lc04NativeSourceKeyHandoffContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04SourceFirstRequestTcpContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04TvOriginalAeadOwnerContractTest' \
+            --tests 'app.muxtv.buildlogic.Lc04SourceCommandTcpContractTest' \
             --tests 'app.muxtv.buildlogic.Lc04MxH1AndroidPrivateLanContractTest' \
             --no-daemon --stacktrace --console=plain --no-problems-report
       - name: Upload exact-head LAN and app compile evidence

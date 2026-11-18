@@ -7,11 +7,14 @@ dependencies {
     implementation(project(":local-control:source-aead"))
     // The first APPDATA proof permits only the fixed Cancel(1) vocabulary.
     implementation(project(":local-control:source-command-wire"))
+    // Authenticated application records dispatch only to TV-owned source staging.
+    implementation(project(":local-control:onboarding"))
     implementation(project(":local-control:mxh1-session-lab"))
     implementation(project(":local-control:wire-lab"))
     implementation(project(":local-control:native-transport"))
     testImplementation(project(":local-control:enrollment"))
     testImplementation(project(":local-control:qr-public"))
+    testImplementation(project(":catalog:api"))
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }
