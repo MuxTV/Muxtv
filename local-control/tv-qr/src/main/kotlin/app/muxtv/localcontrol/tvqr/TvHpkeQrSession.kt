@@ -428,6 +428,23 @@ class TvHpkeQrSession private constructor(
         }
     }
 
+    /**
+     * Original QR-owned opaque APPDATA port identity check. A fake/fixture
+     * AEAD port plus a synthetic-success Boolean must NOT authorize sources.
+     * This method never returns raw keys, grants or phone credentials.
+     *
+     * Call OUTSIDE the record-port monitor: presentation may revoke owner
+     * and close the record port on expiry.
+     */
+    @Synchronized
+    fun ownsOriginalSourceRecords(
+        records: Lc04SourceAeadPort,
+        nowElapsedMillis: Long,
+    ): Boolean =
+        sourceRecordPort === records &&
+            presentation(nowElapsedMillis) != null &&
+            mxh1Phase == MxH1Phase.VERIFIED
+
     /** Read-only diagnostic, not a pairing grant or source authorization. */
     @Synchronized
     fun hasSyntheticMxH1Proof(nowElapsedMillis: Long): Boolean =

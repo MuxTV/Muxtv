@@ -19,15 +19,30 @@ import kotlinx.coroutines.sync.withLock
  * transport must be implemented in this module before it can mint this principal.
  * Never expose the grant/credential over HTTP, logs, persistence, analytics or navigation.
  */
-class ProtectedSourcePrincipal internal constructor(
-    private val pairing: PairingAuthority,
-    grant: PairingGrant,
+class ProtectedSourcePrincipal private constructor(
+    internal val sessionId: String,
+    private val tvOwnedOrPairedAuthorization: () -> Boolean,
 ) {
-    internal val sessionId: String = grant.sessionId
-    private val credential = grant.credential
+    // Existing LC01/legacy authorized-session behavior stays intact.
+    internal constructor(pairing: PairingAuthority, grant: PairingGrant) : this(
+        grant.sessionId,
+        { pairing.authorize(grant.sessionId, grant.credential, PairingCapability.SOURCE_CREATE) },
+    )
+
+    // Native F6-bound TV owner: NO HTTP pairing bearer, claim ID or
+    // externally redeemable grant is minted for source authorization.
+    internal companion object {
+        fun fromOriginalTvAeadOwner(
+            sessionId: String,
+            tvOwnedLive: () -> Boolean,
+        ): ProtectedSourcePrincipal {
+            require(sessionId.isNotBlank() && sessionId.length <= 64)
+            return ProtectedSourcePrincipal(sessionId, tvOwnedLive)
+        }
+    }
 
     internal fun canWrite(): Boolean =
-        pairing.authorize(sessionId, credential, PairingCapability.SOURCE_CREATE)
+        try { tvOwnedOrPairedAuthorization() } catch (_: RuntimeException) { false }
 
     override fun toString(): String = "ProtectedSourcePrincipal([REDACTED])"
 }

@@ -53,7 +53,7 @@ actual_modules:
   local-control-onboarding:
     gradle_path: :local-control:onboarding
     type: pure_kotlin_library
-    owns: [protected_channel_source_staging, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
+    owns: [protected_channel_source_staging, original_tv_qr_bound_aead_dispatch, tv_only_sequence_bound_activation_approval, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
   local-control-qr-public:
     gradle_path: :local-control:qr-public
     type: pure_kotlin_library
