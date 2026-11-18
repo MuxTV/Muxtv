@@ -121,7 +121,12 @@ class Lc04SourceFirstRequestTv private constructor(
             // success; a separately reviewed TV source principal will be
             // needed before the channel can support provider operations.
             records.close()
-            if (!completed) close()
+            if (completed) {
+                // This one-shot proof has no further APPDATA operations.
+                // Revoke the spent original TV QR and all remaining key
+                // ownership as soon as the successful reply is committed.
+                owner.close()
+            } else close()
         }
     }
 

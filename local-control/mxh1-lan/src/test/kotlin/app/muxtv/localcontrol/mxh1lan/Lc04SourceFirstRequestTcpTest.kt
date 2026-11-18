@@ -165,6 +165,7 @@ class Lc04SourceFirstRequestTcpTest {
             val appPhone = f.appClient(appTv, phonePort)
             assertThat(appPhone.proveAuthenticatedFirstRequest()).isTrue()
             f.awaitAppProof(appTv)
+            f.awaitTvRevoke() // success consumes the original TV QR as well
             assertThat(f.bindCount.get()).isEqualTo(1)
             assertThat(f.phoneRevocations.get()).isEqualTo(1)
             assertThat(appPhone.proveAuthenticatedFirstRequest()).isFalse()

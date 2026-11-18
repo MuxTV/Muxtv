@@ -48,7 +48,11 @@ separate one-use, lifecycle-owned facades:
   no `SourceOnboarding.cancel` is invoked. It creates no source
   principal or TV-local activation permission. The APPDATA port
   is closed and the one-shot socket retired after the proof, preventing
-  credentials from ever crossing the unreviewed handler.
+  credentials from ever crossing the unreviewed handler. On success,
+  the one-shot TV original QR owner is revoked immediately after the
+  authenticated reply and real TCP output close; the phone always
+  revokes its original key owner in finally. No reusable session
+  survives successful proof.
 
 ## Acceptance evidence
 

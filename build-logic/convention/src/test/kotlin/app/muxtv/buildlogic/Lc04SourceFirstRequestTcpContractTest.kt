@@ -62,6 +62,7 @@ class Lc04SourceFirstRequestTcpContractTest {
             "runCatching { active?.close() }",
             "records.close()",
             "owner.close()",
+            "if (completed) {",
             "revokeOriginalPhoneOwner()",
             "return ByteArray(size).also { input.readFully(it) }",
         )) assertContains(src, required)
@@ -84,6 +85,7 @@ class Lc04SourceFirstRequestTcpContractTest {
         val tests = read(testModule + "Lc04SourceFirstRequestTcpTest.kt")
         for (name in listOf(
             "originalTvQrWithTwoRealTcpConnectionsAcceptsAuthenticatedFirstAppRequest",
+            "f.awaitTvRevoke() // success consumes the original TV QR as well",
             "noAppTcpListenerBeforeRealSixthAndOriginalTvApproval",
             "forgedFirstAppdataFrameRevokesOriginalTvQrWithoutReply",
             "validEncryptedFirstRequestWithTrailingByteIsRejectedBeforeReply",
