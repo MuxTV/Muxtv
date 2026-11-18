@@ -20,14 +20,29 @@ import kotlinx.coroutines.sync.withLock
  * Never expose the grant/credential over HTTP, logs, persistence, analytics or navigation.
  */
 class ProtectedSourcePrincipal internal constructor(
-    private val pairing: PairingAuthority,
-    grant: PairingGrant,
+    internal val sessionId: String,
+    private val tvOwnedOrPairedAuthorization: () -> Boolean,
 ) {
-    internal val sessionId: String = grant.sessionId
-    private val credential = grant.credential
+    // Existing LC01/legacy authorized-session behavior stays intact.
+    internal constructor(pairing: PairingAuthority, grant: PairingGrant) : this(
+        grant.sessionId,
+        { pairing.authorize(grant.sessionId, grant.credential, PairingCapability.SOURCE_CREATE) },
+    )
+
+    // Native F6-bound TV owner: NO HTTP pairing bearer, claim ID or
+    // externally redeemable grant is minted for source authorization.
+    internal companion object {
+        fun fromOriginalTvAeadOwner(
+            sessionId: String,
+            tvOwnedLive: () -> Boolean,
+        ): ProtectedSourcePrincipal {
+            require(sessionId.isNotBlank() && sessionId.length <= 64)
+            return ProtectedSourcePrincipal(sessionId, tvOwnedLive)
+        }
+    }
 
     internal fun canWrite(): Boolean =
-        pairing.authorize(sessionId, credential, PairingCapability.SOURCE_CREATE)
+        try { tvOwnedOrPairedAuthorization() } catch (_: RuntimeException) { false }
 
     override fun toString(): String = "ProtectedSourcePrincipal([REDACTED])"
 }
@@ -121,9 +136,16 @@ class ProtectedSourceStaging(private val onboarding: SourceOnboarding) {
         val result = try {
             onboarding.activate(handle, sourceName)
         } catch (cancelled: CancellationException) {
+            // A commit may have happened before cancellation. Never retain a
+            // replayable handle or claim that the activation rolled back.
+            prepared.remove(principal.sessionId)
             throw cancelled
         } catch (_: Exception) {
-            return@withLock SourceStagingResult.FAILED
+            // Exceptions can happen AFTER a durable commit; the outcome is
+            // unknown, not a safe retryable FAILED. Drop the handle without
+            // calling cancel, which might destroy a committed source.
+            prepared.remove(principal.sessionId)
+            return@withLock SourceStagingResult.ACTIVATION_OUTCOME_UNKNOWN
         }
         if (!principal.canWrite()) {
             prepared.remove(principal.sessionId)
