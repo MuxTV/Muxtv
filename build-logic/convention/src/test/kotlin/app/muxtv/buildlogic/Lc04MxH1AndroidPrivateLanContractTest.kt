@@ -19,10 +19,31 @@ class Lc04MxH1AndroidPrivateLanContractTest {
             ":local-control:wire-lab", ":local-control:native-transport")) {
             assertContains(gradle, required)
         }
-        for (blocked in listOf(":catalog:", ":core:credentials", ":local-control:onboarding",
+        // S2J3D2B2: the original MXH1 handshake kernel remains source-free.
+        // The separately authenticated APPDATA consumer now intentionally
+        // composes the existing TV-only onboarding module. Guard RUNTIME
+        // dependencies here; catalog:api is allowed ONLY as a test fixture.
+        val runtimeDependencies = gradle.lineSequence()
+            .map { it.trimStart() }
+            .filter { it.startsWith("implementation(") }
+            .joinToString("\n")
+        for (blocked in listOf(":catalog:", ":core:credentials",
             ":local-control:server", "libs.okhttp", "libs.ktor", "com.android.")) {
-            assertFalse(gradle.contains(blocked), blocked)
+            assertFalse(runtimeDependencies.contains(blocked), blocked)
         }
+        assertContains(gradle, "implementation(project(\":local-control:onboarding\"))")
+        assertContains(gradle, "testImplementation(project(\":catalog:api\"))")
+        val sourceApp = root.resolve("local-control/mxh1-lan/src/main/kotlin/" +
+            "app/muxtv/localcontrol/mxh1lan/Lc04SourceCommandTcpSession.kt").readText()
+        assertContains(sourceApp, "takeSourceKeyPortAfterRealF6OutputClose()")
+        assertContains(sourceApp, "completeSourceKeyHandoffAfterTvEof()")
+        assertContains(sourceApp, "Lc04TvOriginalAeadCommandOwner")
+        assertFalse(sourceApp.contains("import app.muxtv.catalog"))
+        assertFalse(sourceApp.contains("PairingGrant") || sourceApp.contains("HttpClient"))
+        assertContains(root.resolve(
+            "build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/" +
+                "Lc04SourceCommandTcpContractTest.kt",
+        ).readText(), "class Lc04SourceCommandTcpContractTest")
         val src = root.resolve("local-control/mxh1-lan/src/main/kotlin/" +
             "app/muxtv/localcontrol/mxh1lan/Lc04MxH1PrivateLan.kt").readText()
         for (required in listOf(

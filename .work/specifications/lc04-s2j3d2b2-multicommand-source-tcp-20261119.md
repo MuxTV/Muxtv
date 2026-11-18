@@ -67,8 +67,13 @@ The new build-logic `Lc04SourceCommandTcpContractTest` guarantees
 the exact real F6/EOF owner is the sole source of records, the
 TV-owning dispatcher is used, installed apps remain unchanged,
 legacy /pair cannot use source transport, and hosted CI includes
-the new tests. Require all 31 workflows on exact HEAD, both
-Android API26/API36 matrices and independent security review.
+the new tests. The historical MXH1 Android contract is updated
+narrowly: the legacy handshake file remains prohibited from catalog
+and source imports, the APPDATA bridge may depend on the TV-owned
+onboarding module, and `:catalog:api` is permitted only for the JVM
+fake-backend test fixture, never as an MXH1 runtime dependency.
+Require all 31 workflows on exact HEAD, both Android API26/API36
+matrices and independent security review.
 
 ## Remaining PRODUCT work — prioritize UI
 
