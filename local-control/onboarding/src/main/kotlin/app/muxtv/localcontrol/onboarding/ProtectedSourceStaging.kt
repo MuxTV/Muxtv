@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.withLock
  * transport must be implemented in this module before it can mint this principal.
  * Never expose the grant/credential over HTTP, logs, persistence, analytics or navigation.
  */
-class ProtectedSourcePrincipal private constructor(
+class ProtectedSourcePrincipal internal constructor(
     internal val sessionId: String,
     private val tvOwnedOrPairedAuthorization: () -> Boolean,
 ) {
