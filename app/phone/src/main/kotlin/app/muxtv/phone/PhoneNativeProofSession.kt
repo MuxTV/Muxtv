@@ -14,6 +14,8 @@ import app.muxtv.localcontrol.nativetransport.Lc04TcpPhoneExchange
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1PrivateLanPhone
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanPhone
+import app.muxtv.localcontrol.mxh1lan.Lc04SourceCommandTcpPhone
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReplyCode
 import app.muxtv.localcontrol.phoneflow.Lc04PhoneFrameExchange
 import app.muxtv.localcontrol.phoneflow.Lc04PhoneProofFlow
 import app.muxtv.localcontrol.qr.TvQrPublicKey
@@ -37,12 +39,17 @@ internal class PhoneNativeProofSession(
 ) : AutoCloseable {
     enum class State {
         OFFERING, WAITING_FOR_TV, VERIFYING, VERIFIED,
-        MXH1_VERIFYING, MXH1_VERIFIED, FAILED, REVOKED,
+        MXH1_VERIFYING, MXH1_VERIFIED, SOURCE_HANDSHAKE_RUNNING,
+        SOURCE_READY, SOURCE_PREPARING, SOURCE_PREPARED,
+        SOURCE_REQUESTING_APPROVAL, SOURCE_WAIT_TV_APPROVAL,
+        SOURCE_ACTIVATED, SOURCE_OUTCOME_UNKNOWN, FAILED, REVOKED,
     }
 
     private enum class Phase {
         NEW, OFFERING, WAITING, VERIFYING, VERIFIED,
-        MXH1_RUNNING, MXH1_VERIFIED, CLOSED,
+        MXH1_RUNNING, MXH1_VERIFIED, SOURCE_HANDSHAKE, SOURCE_READY,
+        SOURCE_PREPARING, SOURCE_PREPARED, SOURCE_REQUESTING_APPROVAL,
+        SOURCE_WAIT_TV, SOURCE_CONFIRMING, SOURCE_DONE, CLOSED,
     }
 
     private val manager: ConnectivityManager = requireNotNull(context.getSystemService(ConnectivityManager::class.java))
@@ -56,6 +63,9 @@ internal class PhoneNativeProofSession(
     @Volatile private var mxh1Client: Lc04MxH1PrivateLanPhone? = null
     @Volatile private var sealedMxH1Client: Lc04MxH1SealedPrivateLanPhone? = null
     @Volatile private var mxh1Phone: Lc04MxH1PhoneLab? = null
+    @Volatile private var sourceAppdata: Lc04SourceCommandTcpPhone? = null
+    @Volatile private var sourceTvIpv4: String? = null
+    @Volatile private var sourceNameForActivation: String? = null
 
     /**
      * May only be called once after a real user gesture AND the Android 17
@@ -274,6 +284,198 @@ internal class PhoneNativeProofSession(
         return true
     }
 
+    /**
+     * Separate PRODUCT mode after verified original MXW1/TV Ed25519 consent.
+     * Authenticates real F6 + kernel EOF on original selected-Network TCP,
+     * then retains one-use source records without learning the APPDATA port.
+     * No credentials or source mutation in this phase.
+     */
+    fun beginSourceMxH1(endpoint: PhoneNativeEndpoint): Boolean {
+        if (!phase.compareAndSet(Phase.VERIFIED, Phase.SOURCE_HANDSHAKE)) return false
+        if (flow?.hasAuthenticatedReceipt() != true) return failedToStart()
+        val selected = selectedNetwork ?: return failedToStart()
+        val addresses = selectedAddresses ?: return failedToStart()
+        if (!eligible(selected, addresses)) return failedToStart()
+        val phone = try {
+            Lc04MxH1PhoneLab(scannedTv, signingPhone, SystemClock::elapsedRealtime)
+        } catch (_: RuntimeException) { return failedToStart() }
+        val client = try {
+            Lc04MxH1SealedPrivateLanPhone.forSelectedPrivateIpv4(
+                privateIpv4 = endpoint.privateIpv4,
+                port = endpoint.port,
+                originalPhone = phone,
+                elapsedMillis = SystemClock::elapsedRealtime,
+                selectedRouteEligible = {
+                    sourcePhaseActive() && eligible(selected, addresses)
+                },
+                bindUnconnectedToSelectedNetwork = { unconnected ->
+                    if (!sourcePhaseActive() || !eligible(selected, addresses)) {
+                        throw IOException("Source LAN route revoked")
+                    }
+                    selected.bindSocket(unconnected)
+                    if (!eligible(selected, addresses)) {
+                        throw IOException("Source LAN route changed after bind")
+                    }
+                },
+                revokeOriginalQrAndKeys = { signingPhone.close() },
+            )
+        } catch (_: IllegalArgumentException) {
+            phone.close()
+            return failedToStart()
+        } catch (_: RuntimeException) {
+            phone.close()
+            return failedToStart()
+        }
+        mxh1Phone = phone
+        sealedMxH1Client = client
+        sourceTvIpv4 = endpoint.privateIpv4
+        publish(State.SOURCE_HANDSHAKE_RUNNING)
+        try {
+            worker.execute {
+                if (client.prepareSourceKeyHandoffForLaterAppdata() &&
+                    phase.compareAndSet(Phase.SOURCE_HANDSHAKE, Phase.SOURCE_READY) &&
+                    eligible(selected, addresses)
+                ) publish(State.SOURCE_READY)
+                else if (phase.get() != Phase.CLOSED) fail()
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return failedToStart()
+        }
+        return true
+    }
+
+    private fun sourcePhaseActive(): Boolean = when (phase.get()) {
+        Phase.SOURCE_HANDSHAKE, Phase.SOURCE_READY, Phase.SOURCE_PREPARING,
+        Phase.SOURCE_PREPARED, Phase.SOURCE_REQUESTING_APPROVAL,
+        Phase.SOURCE_WAIT_TV, Phase.SOURCE_CONFIRMING -> true
+        else -> false
+    }
+
+    /**
+     * User enters TV's second port AFTER F6/EOF. Only the original exact TV
+     * private IPv4 is eligible; no hostname/VPN fallback. HTTPS only until
+     * a separately reviewed TV-local insecure HTTP approval exists.
+     */
+    fun prepareSourceM3u(
+        endpoint: PhoneNativeEndpoint, locator: String, sourceName: String,
+    ): Boolean {
+        if (endpoint.privateIpv4 != sourceTvIpv4 ||
+            !locator.startsWith("https://", ignoreCase = true) ||
+            locator.toByteArray(Charsets.UTF_8).size !in 9..4096 ||
+            sourceName.isBlank() || sourceName != sourceName.trim() ||
+            sourceName.any { it.isISOControl() } ||
+            sourceName.toByteArray(Charsets.UTF_8).size !in 1..120
+        ) return false
+        if (!phase.compareAndSet(Phase.SOURCE_READY, Phase.SOURCE_PREPARING)) return false
+        val selected = selectedNetwork ?: return failedToStart()
+        val addresses = selectedAddresses ?: return failedToStart()
+        val handshake = sealedMxH1Client ?: return failedToStart()
+        sourceNameForActivation = sourceName
+        publish(State.SOURCE_PREPARING)
+        try {
+            worker.execute {
+                if (!sourcePhaseActive() || !eligible(selected, addresses)) {
+                    fail()
+                    return@execute
+                }
+                val app = try {
+                    Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(
+                        address = endpoint.privateIpv4,
+                        appdataPort = endpoint.port,
+                        completedHandshake = handshake,
+                        selectedRouteEligible = {
+                            sourcePhaseActive() && eligible(selected, addresses)
+                        },
+                        bindUnconnectedToSelectedNetwork = { unconnected ->
+                            if (!sourcePhaseActive() || !eligible(selected, addresses)) {
+                                throw IOException("Selected APPDATA Network revoked")
+                            }
+                            selected.bindSocket(unconnected)
+                            if (!eligible(selected, addresses)) {
+                                throw IOException("Selected APPDATA Network changed")
+                            }
+                        },
+                    )
+                } catch (_: IllegalArgumentException) { null }
+                  catch (_: RuntimeException) { null }
+                if (app == null) {
+                    fail()
+                    return@execute
+                }
+                sourceAppdata = app
+                if (app.prepareM3u(locator) == Lc04SourceReplyCode.PREPARED &&
+                    phase.compareAndSet(Phase.SOURCE_PREPARING, Phase.SOURCE_PREPARED)
+                ) publish(State.SOURCE_PREPARED)
+                else if (phase.get() != Phase.CLOSED) fail()
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return failedToStart()
+        }
+        return true
+    }
+
+    /** One initial ACTIVATE request; null or unknown reply is TERMINAL. */
+    fun requestSourceActivation(): Boolean {
+        if (!phase.compareAndSet(Phase.SOURCE_PREPARED, Phase.SOURCE_REQUESTING_APPROVAL)) {
+            return false
+        }
+        val sourceName = sourceNameForActivation ?: return activationOutcomeUnknown()
+        val app = sourceAppdata ?: return activationOutcomeUnknown()
+        publish(State.SOURCE_REQUESTING_APPROVAL)
+        try {
+            worker.execute {
+                when (app.requestActivate(sourceName)) {
+                    Lc04SourceReplyCode.TV_CONFIRMATION_REQUIRED -> {
+                        if (phase.compareAndSet(Phase.SOURCE_REQUESTING_APPROVAL, Phase.SOURCE_WAIT_TV)) {
+                            publish(State.SOURCE_WAIT_TV_APPROVAL)
+                        }
+                    }
+                    Lc04SourceReplyCode.ACTIVATED -> completeSourceActivation()
+                    else -> activationOutcomeUnknown()
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return activationOutcomeUnknown()
+        }
+        return true
+    }
+
+    /** TV D-pad first; second PHONE button sends the exact next sequence. */
+    fun completeSourceActivationAfterTvGesture(): Boolean {
+        if (!phase.compareAndSet(Phase.SOURCE_WAIT_TV, Phase.SOURCE_CONFIRMING)) return false
+        val sourceName = sourceNameForActivation ?: return activationOutcomeUnknown()
+        val app = sourceAppdata ?: return activationOutcomeUnknown()
+        publish(State.SOURCE_REQUESTING_APPROVAL)
+        try {
+            worker.execute {
+                if (app.requestActivate(sourceName) == Lc04SourceReplyCode.ACTIVATED) {
+                    completeSourceActivation()
+                } else {
+                    activationOutcomeUnknown()
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return activationOutcomeUnknown()
+        }
+        return true
+    }
+
+    private fun completeSourceActivation() {
+        phase.set(Phase.SOURCE_DONE)
+        sourceAppdata?.close()
+        sourceAppdata = null
+        sealedMxH1Client?.close()
+        sealedMxH1Client = null
+        sourceNameForActivation = null
+        publish(State.SOURCE_ACTIVATED)
+    }
+
+    private fun activationOutcomeUnknown(): Boolean {
+        close()
+        postToUi { onState(State.SOURCE_OUTCOME_UNKNOWN) }
+        return false
+    }
+
     private fun eligible(selected: Network, addresses: Set<String>): Boolean {
         if (phase.get() == Phase.CLOSED || manager.activeNetwork != selected) return false
         val caps = manager.getNetworkCapabilities(selected) ?: return false
@@ -325,6 +527,10 @@ internal class PhoneNativeProofSession(
         sealedMxH1Client = null
         mxh1Phone?.close()
         mxh1Phone = null
+        sourceAppdata?.close()
+        sourceAppdata = null
+        sourceTvIpv4 = null
+        sourceNameForActivation = null
         selectedNetwork = null
         selectedAddresses = null
         flow?.close()
