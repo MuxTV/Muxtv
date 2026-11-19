@@ -326,9 +326,22 @@ internal class PhoneNativeProofSession(
             phone.close()
             return failedToStart()
         }
-        mxh1Phone = phone
-        sealedMxH1Client = client
-        sourceTvIpv4 = endpoint.privateIpv4
+        // The network callback can revoke onStop WHILE construction runs.
+        // Publish the client under the same monitor as @Synchronized close():
+        // never create an unowned socket after the Activity has stopped.
+        val owned = synchronized(this) {
+            if (phase.get() != Phase.SOURCE_HANDSHAKE) false else {
+                mxh1Phone = phone
+                sealedMxH1Client = client
+                sourceTvIpv4 = endpoint.privateIpv4
+                true
+            }
+        }
+        if (!owned) {
+            client.close()
+            phone.close()
+            return false
+        }
         publish(State.SOURCE_HANDSHAKE_RUNNING)
         try {
             worker.execute {
@@ -402,7 +415,19 @@ internal class PhoneNativeProofSession(
                     fail()
                     return@execute
                 }
-                sourceAppdata = app
+                // close() is synchronized on the same owner, so a completed
+                // onStop can never be followed by a newly retained socket.
+                val owned = synchronized(this) {
+                    if (phase.get() != Phase.SOURCE_PREPARING) false
+                    else {
+                        sourceAppdata = app
+                        true
+                    }
+                }
+                if (!owned) {
+                    app.close()
+                    return@execute
+                }
                 if (app.prepareM3u(locator) == Lc04SourceReplyCode.PREPARED &&
                     phase.compareAndSet(Phase.SOURCE_PREPARING, Phase.SOURCE_PREPARED)
                 ) publish(State.SOURCE_PREPARED)
@@ -461,7 +486,9 @@ internal class PhoneNativeProofSession(
     }
 
     private fun completeSourceActivation() {
-        phase.set(Phase.SOURCE_DONE)
+        if (!phase.compareAndSet(Phase.SOURCE_REQUESTING_APPROVAL, Phase.SOURCE_DONE) &&
+            !phase.compareAndSet(Phase.SOURCE_CONFIRMING, Phase.SOURCE_DONE)
+        ) return // Activity stopped or route revoked: never claim success.
         sourceAppdata?.close()
         sourceAppdata = null
         sealedMxH1Client?.close()
