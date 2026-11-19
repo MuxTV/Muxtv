@@ -21,7 +21,8 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
             "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt",
         )
         for (required in listOf(
-            "suspend fun enableSealedMxH1ForApprovedVisibleQr()",
+            "suspend fun enableSealedMxH1ForApprovedVisibleQr(",
+            "forProtectedSources: Boolean = false,",
             "receiver.hasApprovedPhoneForSyntheticMxH1(",
             "requireNotNull(nativeProbeServer)",
             "networkManager.activeNetwork == selected",

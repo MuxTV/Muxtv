@@ -35,5 +35,9 @@ treated as source permission.
 - `:app:tv:compileDebugKotlin` and Android TV API26/API36 instrumentation
 - `LocalControlNativeTvOptInTest`: no listener from QR/verified phone alone,
   protected source action cannot auto-activate or silently start APPDATA
+- Previous synthetic-only architecture test updated narrowly for the
+  explicitly TV-owned source bridge; the old MXH1/HTTP and phone paths
+  remain guarded. The real F6/EOF owner, selected route, D-pad action and
+  synchronous revocation remain executable architecture assertions.
 - Existing LC04 hostile F6/EOF and source-command TCP tests remain required
 - Exact-head GitHub-hosted CI (no local PC; no new AVD)

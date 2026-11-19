@@ -71,8 +71,30 @@ class Lc04SourceCommandTcpContractTest {
         assertFalse(build.contains("implementation(project(\":catalog:api\"))"))
         val appPhone = file("app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt")
         val appTv = file("app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt")
+        // The phone's production source transport remains intentionally inert in E1.
+        // TV now owns a separate, explicit APPDATA opt-in; preserve the original
+        // F6/EOF transition, selected-route fencing and synchronous revocation.
         assertFalse(appPhone.contains("Lc04SourceCommandTcpPhone"))
-        assertFalse(appTv.contains("Lc04SourceCommandTcpTv"))
+        for (required in listOf(
+            "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
+            "handshake.hasAuthenticatedSyntheticExchange()",
+            "sourceHandshakeMode",
+            "sourceRouteEligible",
+            "sourceListener?.close()",
+            "approveProtectedSourceActivationOnTv()",
+            "publicQrSession === receiver",
+            "selected == networkManager.activeNetwork",
+        )) {
+            // Do not relax these security boundaries just to permit TV wiring.
+            if (required == "selected == networkManager.activeNetwork") {
+                assertContains(appTv, "networkManager.activeNetwork == selected")
+            } else {
+                assertContains(appTv, required)
+            }
+        }
+        assertFalse(appTv.contains("fun openPlainSource("))
+        assertFalse(appTv.contains("SourcePreparationRequest"))
+        assertFalse(appTv.contains("HttpClient"))
     }
 
     @Test fun `genuine two socket source command and hostile tests are hosted`() {
