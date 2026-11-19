@@ -455,7 +455,9 @@ internal class PhoneNativeProofSession(
                             publish(State.SOURCE_WAIT_TV_APPROVAL)
                         }
                     }
-                    Lc04SourceReplyCode.ACTIVATED -> completeSourceActivation()
+                    // A first-step ACTIVATED answer is not an allowed outcome:
+                    // phone requires a TV-confirmation-required challenge, then
+                    // a separate second gesture after physical TV D-pad consent.
                     else -> activationOutcomeUnknown()
                 }
             }
