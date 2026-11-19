@@ -80,7 +80,7 @@ class Lc04SourceCommandBoundaryContractTest {
         assertFalse(neutralBuild.contains("implementation(libs.tink)"))
         // Android DEVICE evidence may inject a fake onboarding backend, but
         // the production PHONE classpath must never own TV catalog authority.
-        val phoneRuntime = app.lineSequence().map(String::trimStart)
+        val phoneRuntime = app.lineSequence().map { it.trimStart() }
             .filter { it.startsWith("implementation(") }.joinToString("\n")
         assertFalse(phoneRuntime.contains("project(\":local-control:onboarding\")"))
         assertFalse(phoneRuntime.contains("project(\":catalog:api\")"))

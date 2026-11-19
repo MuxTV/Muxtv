@@ -24,7 +24,7 @@ class LocalPhoneQrScannerContractTest {
         assertContains(app, """implementation(project(":local-control:native-transport"))""")
         // E2 uses a fake catalogue backend in androidTest only. Check
         // RUNTIME dependencies, not the whole file including test fixtures.
-        val runtime = app.lineSequence().map(String::trimStart)
+        val runtime = app.lineSequence().map { it.trimStart() }
             .filter { it.startsWith("implementation(") }.joinToString("\n")
         for (prohibited in listOf(
             """:local-control:crypto-lab""", """:local-control:server""",
