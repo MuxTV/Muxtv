@@ -104,6 +104,7 @@ fun PhonePairingRoute(
     val closeFocus = remember { FocusRequester() }
     val denyFocus = remember { FocusRequester() }
     val returnFocus = remember { FocusRequester() }
+    val sourceMxH1Focus = remember { FocusRequester() }
 
     suspend fun restart() {
         onRevokePublicKeyPreview()
@@ -281,6 +282,17 @@ fun PhonePairingRoute(
             returnFocus.requestFocus()
         }
     }
+    // Focus the real PRODUCT path only after original TV-approved Ed25519
+    // enrollment, when no MXH1 listener already owns this QR. Focus is not
+    // an opt-in: only the remote's subsequent D-pad Enter can open TCP.
+    val sourceStartReady = keyPreview != null && keySecondsRemaining > 0 &&
+        nativeEndpoint != null && mxh1Endpoint == null && mxh1PhoneIsVerified()
+    LaunchedEffect(sourceStartReady) {
+        if (sourceStartReady) {
+            withFrameNanos { }
+            sourceMxH1Focus.requestFocus()
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             onRevokePublicKeyPreview()
@@ -368,7 +380,8 @@ fun PhonePairingRoute(
                                         text = if (mxh1Loading) "Запуск защищённого канала…" else
                                             "Разрешить передачу M3U/Xtream с телефона",
                                         onClick = { enableMxH1AfterTvApproval(true) },
-                                        modifier = Modifier.testTag("local-tv-source-mxh1-opt-in"),
+                                        modifier = Modifier.focusRequester(sourceMxH1Focus)
+                                            .testTag("local-tv-source-mxh1-opt-in"),
                                     )
                                     if (mxh1Error) Text(
                                         "MXH1 не открыт: дождитесь завершения проверки телефона и проверьте LAN.",

@@ -157,7 +157,14 @@ class LocalControlNativeTvOptInTest {
         }
         // The original diagnostic six-frame listener remains inert; users
         // must deliberately choose the distinct source-key-retaining mode.
-        rule.onNodeWithTag("local-tv-source-mxh1-opt-in").performClick()
+        // This is a TV remote action, NOT a mouse/touch semantics click:
+        // the protected-source button must be focused after original approval.
+        rule.onNodeWithTag("local-tv-source-mxh1-opt-in").assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.waitUntil(10_000) { sourceMxH1Starts == 1 }
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-mxh1-endpoint")
                 .fetchSemanticsNodes().size == 1
