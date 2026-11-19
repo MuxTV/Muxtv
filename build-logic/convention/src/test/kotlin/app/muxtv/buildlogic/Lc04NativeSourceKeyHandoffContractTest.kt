@@ -80,15 +80,28 @@ class Lc04NativeSourceKeyHandoffContractTest {
             "app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt")
         val androidTv = read(
             "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt")
-        // The old Android phone path is still synthetic-only. The installed
-        // TV now has a distinct, explicit source owner, but may not construct
-        // records directly or bypass original F6/EOF.
+        // The old synthetic-only phone mode stays terminal. Only a NEW
+        // original-F6/EOF mode can own APPDATA on Android phone; neither
+        // installed app may directly claim records or mint TV permission.
         for (forbidden in listOf(
             "completeSourceKeyHandoffAfterTvEof",
             "takeSourceKeyPortAfterRealF6OutputClose",
             "startOnApprovedPrivateIpv4WithSourceKeyHandoff",
-            "Lc04SourceCommandTcpPhone",
+            "SourceOnboarding", "ProtectedSourcePrincipal", "PairingCapability.SOURCE_CREATE",
         )) assertFalse(androidPhone.contains(forbidden), forbidden)
+        for (required in listOf(
+            "client.prepareSourceKeyHandoffForLaterAppdata()",
+            "Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(",
+            "sourcePhaseActive() && eligible(selected, addresses)",
+            "selected.bindSocket(unconnected)",
+            "app.prepareM3u(locator)",
+            "activationOutcomeUnknown()",
+        )) assertContains(androidPhone, required)
+        val originalDiagnostic = androidPhone.substringAfter(
+            "fun beginSealedMxH1(endpoint: PhoneNativeEndpoint)"
+        ).substringBefore("fun beginSourceMxH1(endpoint: PhoneNativeEndpoint)")
+        assertContains(originalDiagnostic, "client.completeSyntheticExchange()")
+        assertFalse(originalDiagnostic.contains("Lc04SourceCommandTcpPhone"))
         assertFalse(androidTv.contains("completeSourceKeyHandoffAfterTvEof"))
         assertFalse(androidTv.contains("takeSourceKeyPortAfterRealF6OutputClose"))
         for (required in listOf(

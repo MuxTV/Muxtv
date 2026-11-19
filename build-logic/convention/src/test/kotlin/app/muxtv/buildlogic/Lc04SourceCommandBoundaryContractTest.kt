@@ -78,7 +78,13 @@ class Lc04SourceCommandBoundaryContractTest {
         assertFalse(onboardingBuild.contains(":local-control:protected-channel"))
         val neutralBuild = source("local-control/source-command-wire/build.gradle.kts")
         assertFalse(neutralBuild.contains("implementation(libs.tink)"))
-        assertFalse(app.contains("project(\":local-control:onboarding\")"))
+        // Android DEVICE evidence may inject a fake onboarding backend, but
+        // the production PHONE classpath must never own TV catalog authority.
+        val phoneRuntime = app.lineSequence().map(String::trimStart)
+            .filter { it.startsWith("implementation(") }.joinToString("\n")
+        assertFalse(phoneRuntime.contains("project(\":local-control:onboarding\")"))
+        assertFalse(phoneRuntime.contains("project(\":catalog:api\")"))
+        assertContains(app, "androidTestImplementation(project(\":local-control:onboarding\"))")
         val legacy = source(
             "local-control/server/src/main/kotlin/app/muxtv/localcontrol/server/LanTransport.kt",
         )
