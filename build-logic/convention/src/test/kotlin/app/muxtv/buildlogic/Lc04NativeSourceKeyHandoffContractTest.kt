@@ -75,16 +75,30 @@ class Lc04NativeSourceKeyHandoffContractTest {
         }
     }
 
-    @Test fun `installed apps remain inert and hostile real socket tests are required`() {
+    @Test fun `phone stays inert and TV source owner requires F6 and explicit D-pad`() {
         val androidPhone = read(
             "app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt")
         val androidTv = read(
             "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt")
-        for (app in listOf(androidPhone, androidTv)) {
-            assertFalse(app.contains("completeSourceKeyHandoffAfterTvEof"))
-            assertFalse(app.contains("takeSourceKeyPortAfterRealF6OutputClose"))
-            assertFalse(app.contains("startOnApprovedPrivateIpv4WithSourceKeyHandoff"))
-        }
+        // The old Android phone path is still synthetic-only. The installed
+        // TV now has a distinct, explicit source owner, but may not construct
+        // records directly or bypass original F6/EOF.
+        for (forbidden in listOf(
+            "completeSourceKeyHandoffAfterTvEof",
+            "takeSourceKeyPortAfterRealF6OutputClose",
+            "startOnApprovedPrivateIpv4WithSourceKeyHandoff",
+            "Lc04SourceCommandTcpPhone",
+        )) assertFalse(androidPhone.contains(forbidden), forbidden)
+        assertFalse(androidTv.contains("completeSourceKeyHandoffAfterTvEof"))
+        assertFalse(androidTv.contains("takeSourceKeyPortAfterRealF6OutputClose"))
+        for (required in listOf(
+            "startOnApprovedPrivateIpv4WithSourceKeyHandoff(",
+            "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
+            "handshake.hasAuthenticatedSyntheticExchange()",
+            "forProtectedSources: Boolean = false",
+            "approveProtectedSourceActivationOnTv()",
+            "sourceListener?.close()",
+        )) assertContains(androidTv, required)
         val tests = read("local-control/mxh1-lan/src/test/kotlin/app/muxtv/" +
             "localcontrol/mxh1lan/Lc04MxH1SealedPrivateLanTvTest.kt")
         for (testName in listOf(

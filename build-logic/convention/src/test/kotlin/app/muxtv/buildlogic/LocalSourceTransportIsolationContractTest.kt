@@ -41,8 +41,24 @@ class LocalSourceTransportIsolationContractTest {
         assertFalse(build.contains("""project(":local-control:server")"""))
         val server = root.resolve("local-control/server/build.gradle.kts").readText()
         assertFalse(server.contains("""project(":local-control:onboarding")"""))
+        // E1 explicitly moves the installed TV onto the independently
+        // authenticated original-F6 source path; the untrusted HTTP/server
+        // modules and legacy native proof remain source-free.
         val app = root.resolve("app/tv/build.gradle.kts").readText()
-        assertFalse(app.contains("""project(":local-control:onboarding")"""))
+        assertContains(app, """implementation(project(":local-control:onboarding"))""")
+        val controller = root.resolve(
+            "app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt",
+        ).readText()
+        for (must in listOf(
+            "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
+            "startOnApprovedPrivateIpv4WithSourceKeyHandoff(",
+            "ProtectedSourceStaging(onboarding)",
+            "sourceRouteEligible",
+            "sourceListener?.close()",
+            "approveProtectedSourceActivationOnTv()",
+        )) assertContains(controller, must)
+        assertFalse(controller.contains("PairingCapability.SOURCE_CREATE"))
+        assertFalse(controller.contains("SourcePreparationRequest"))
     }
 
     @Test
