@@ -16,6 +16,12 @@ import app.muxtv.localcontrol.nativetransport.Lc04PrivateIpv4
 import app.muxtv.localcontrol.nativetransport.Lc04TvTcpServer
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1PrivateLanTv
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanTv
+import app.muxtv.localcontrol.mxh1lan.Lc04SourceCommandTcpTv
+import app.muxtv.localcontrol.onboarding.ProtectedSourceStaging
+import app.muxtv.catalog.SourceOnboarding
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.localcontrol.server.LanAddressPolicy
 import app.muxtv.localcontrol.server.TvLanServer
@@ -35,6 +41,7 @@ class TvPairingController(
     private val invalidated: () -> Unit,
     private val isTvVisible: () -> Boolean,
 ) {
+    private val appContext = context.applicationContext
     private val networkManager =
         context.getSystemService(ConnectivityManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -49,6 +56,9 @@ class TvPairingController(
     @Volatile private var mxh1Server: Lc04MxH1PrivateLanTv? = null
     @Volatile private var sealedMxH1Server: Lc04MxH1SealedPrivateLanTv? = null
     @Volatile private var mxh1Endpoint: NativeProbeEndpoint? = null
+    @Volatile private var sourceHandshakeMode = false
+    @Volatile private var sourceRouteEligible: (() -> Boolean)? = null
+    @Volatile private var sourceCommands: Lc04SourceCommandTcpTv? = null
     @Volatile private var observedNetwork: Network? = null
     @Volatile private var observedAddress: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -263,7 +273,9 @@ class TvPairingController(
      *
      * No source, credential or persistent pairing authority is created.
      */
-    suspend fun enableSealedMxH1ForApprovedVisibleQr(): NativeProbeEndpoint =
+    suspend fun enableSealedMxH1ForApprovedVisibleQr(
+        forProtectedSources: Boolean = false,
+    ): NativeProbeEndpoint =
         lifecycleMutex.withLock {
             if (!isTvVisible()) throw CancellationException("TV screen is not visible.")
             val receiver = requireNotNull(publicQrSession) { "No original TV QR." }
@@ -275,6 +287,9 @@ class TvPairingController(
             require(mxh1Server == null) { "Four-frame MXH1 already owns this QR." }
             mxh1Endpoint?.let {
                 require(sealedMxH1Server != null) { "MXH1 listener owner mismatch." }
+                require(sourceHandshakeMode == forProtectedSources) {
+                    "Existing MXH1 listener belongs to a different user-selected mode."
+                }
                 return@withLock it
             }
             val generation = publicQrEpoch.get()
@@ -295,9 +310,38 @@ class TvPairingController(
                 host == observedAddress && host == originalEndpoint.privateIpv4
             ) { "Original selected private IPv4 address changed." }
 
-            val listener = Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4(
-                host, receiver, SystemClock::elapsedRealtime,
-            )
+            // Source privileges require a fresh, explicit TV-local opt-in.
+            // Never upgrade an already-running synthetic-only listener.
+            val allowedRoute: () -> Boolean = {
+                runCatching {
+                    val currentCaps = networkManager.getNetworkCapabilities(selected)
+                    val links = networkManager.getLinkProperties(selected)
+                    val granted = Build.VERSION.SDK_INT < 37 ||
+                        appContext.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                            PackageManager.PERMISSION_GRANTED
+                    isTvVisible() && granted &&
+                        generation == publicQrEpoch.get() &&
+                        lifecycle == lifecycleEpoch.get() &&
+                        publicQrSession === receiver &&
+                        networkManager.activeNetwork == selected &&
+                        observedAddress == host && nativeProbeServer != null &&
+                        currentCaps != null &&
+                        (currentCaps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                            currentCaps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) &&
+                        !currentCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                        !currentCaps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
+                        links != null && selectPrivateAddress(links) == host
+                }.getOrDefault(false)
+            }
+            val listener = if (forProtectedSources) {
+                Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4WithSourceKeyHandoff(
+                    host, receiver, SystemClock::elapsedRealtime, allowedRoute,
+                )
+            } else {
+                Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4(
+                    host, receiver, SystemClock::elapsedRealtime,
+                )
+            }
             try {
                 synchronized(this@TvPairingController) {
                     if (!isTvVisible() || generation != publicQrEpoch.get() ||
@@ -312,6 +356,8 @@ class TvPairingController(
                     ) throw CancellationException("Six-frame listener owner revoked.")
                     val endpoint = NativeProbeEndpoint(host, listener.port)
                     sealedMxH1Server = listener
+                    sourceHandshakeMode = forProtectedSources
+                    sourceRouteEligible = if (forProtectedSources) allowedRoute else null
                     mxh1Endpoint = endpoint
                     endpoint
                 }
@@ -322,10 +368,70 @@ class TvPairingController(
             }
         }
 
+    /**
+     * Only after real F6 + TCP shutdownOutput; one original QR owner and one
+     * selected Android Network. UI must invoke this after its own D-pad action.
+     * A listener port is a locator, not a source capability.
+     */
+    suspend fun enableProtectedSourceCommandsAfterF6(
+        onboarding: SourceOnboarding,
+    ): NativeProbeEndpoint? = lifecycleMutex.withLock {
+        if (!sourceHandshakeMode || !isTvVisible()) return@withLock null
+        val existing = sourceCommands
+        if (existing != null) {
+            return@withLock if (sourceRouteEligible?.invoke() == true) {
+                NativeProbeEndpoint(requireNotNull(observedAddress), existing.port)
+            } else null
+        }
+        val handshake = sealedMxH1Server ?: return@withLock null
+        val qr = publicQrSession ?: return@withLock null
+        val host = observedAddress ?: return@withLock null
+        val allowedRoute = sourceRouteEligible ?: return@withLock null
+        if (!allowedRoute() || !handshake.hasAuthenticatedSyntheticExchange()) {
+            return@withLock null
+        }
+        val generation = publicQrEpoch.get()
+        val session = Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(
+            address = host,
+            completedHandshake = handshake,
+            originalTvQrOwner = qr,
+            staging = ProtectedSourceStaging(onboarding),
+            now = SystemClock::elapsedRealtime,
+            selectedRouteEligible = allowedRoute,
+            isTvVisible = isTvVisible,
+        )
+        synchronized(this@TvPairingController) {
+            if (generation != publicQrEpoch.get() || !allowedRoute() ||
+                publicQrSession !== qr || sourceCommands != null
+            ) {
+                session.close()
+                return@withLock null
+            }
+            sourceCommands = session
+            NativeProbeEndpoint(host, session.port)
+        }
+    }
+
+    /** D-pad-only reads; no LAN endpoint can call the TV approval methods. */
+    fun hasCompletedSourceMxH1F6(): Boolean =
+        sourceHandshakeMode && sourceRouteEligible?.invoke() == true &&
+            sealedMxH1Server?.hasAuthenticatedSyntheticExchange() == true
+
+    fun pendingProtectedSourceActivationName(): String? =
+        if (isTvVisible()) sourceCommands?.pendingActivationNameForTv() else null
+
+    fun approveProtectedSourceActivationOnTv(): Boolean =
+        isTvVisible() && sourceCommands?.approvePendingActivationOnTv() == true
+
     /** Safe to call on the UI thread and from Activity.onStop. */
     @Synchronized
     fun revokePublicKeyQrPreview() {
         publicQrEpoch.incrementAndGet()
+        val sourceListener = sourceCommands
+        sourceCommands = null
+        sourceListener?.close() // synchronous authority revocation, async staging cleanup
+        sourceHandshakeMode = false
+        sourceRouteEligible = null
         nativeProbeEndpoint = null
         mxh1Endpoint = null
         val mxh1Listener = mxh1Server

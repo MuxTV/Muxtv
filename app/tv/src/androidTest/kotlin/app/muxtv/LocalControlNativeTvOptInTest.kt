@@ -29,6 +29,11 @@ class LocalControlNativeTvOptInTest {
         var screenVisible by mutableStateOf(true)
         var nativeStarts = 0
         var mxh1Starts = 0
+        var sourceMxH1Starts = 0
+        var appdataStarts = 0
+        var tvSourceApprovals = 0
+        var sourceFinished by mutableStateOf(false)
+        var pendingSource by mutableStateOf<String?>(null)
         var mxh1Verified by mutableStateOf(false)
         var legacyHttpStarts = 0
         var revocations = 0
@@ -55,6 +60,21 @@ class LocalControlNativeTvOptInTest {
                             TvPairingController.NativeProbeEndpoint("192.168.1.2", 43211)
                         },
                         mxh1PhoneIsVerified = { mxh1Verified },
+                        onEnableSourceMxH1 = {
+                            sourceMxH1Starts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43212)
+                        },
+                        onEnableSourceAppData = {
+                            appdataStarts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43213)
+                        },
+                        sourceMxH1Finished = { sourceFinished },
+                        pendingSourceActivationName = { pendingSource },
+                        onApproveSourceActivation = {
+                            tvSourceApprovals++
+                            pendingSource = null
+                            true
+                        },
                         onRevokePublicKeyPreview = { revocations++ },
                         publicKeyPreviewIsActive = { true },
                         pendingPhoneKeyFingerprint = { null },
@@ -116,14 +136,23 @@ class LocalControlNativeTvOptInTest {
         rule.runOnIdle {
             check(nativeStarts == 1) { "Native transport must start on exactly one TV action." }
             check(mxh1Starts == 0) { "MXH1 must not start during MXW1 QR/proof." }
+            check(sourceMxH1Starts == 0 && appdataStarts == 0 && tvSourceApprovals == 0) {
+                "Protected source endpoints must not start from QR/native enrollment."
+            }
             mxh1Verified = true // Simulates the verified TV-owner read, NOT remote approval
         }
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
                 .fetchSemanticsNodes().size == 1
         }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-source-mxh1-opt-in")
+                .fetchSemanticsNodes().size == 1
+        }
         rule.runOnIdle {
-            check(mxh1Starts == 0) { "Verified state must not auto-start MXH1 TCP." }
+            check(mxh1Starts == 0 && sourceMxH1Starts == 0 && appdataStarts == 0) {
+                "Verified phone cannot silently grant APPDATA."
+            }
             screenVisible = false
         }
         rule.waitForIdle()

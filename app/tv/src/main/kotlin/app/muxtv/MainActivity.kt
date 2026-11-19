@@ -134,6 +134,13 @@ class MainActivity : ComponentActivity() {
                     startPhonePairing = ::startPhonePairing,
                     enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr,
                     enableMxH1ForApprovedVisibleQr = ::enableMxH1ForApprovedVisibleQr,
+                    enableSourceMxH1ForApprovedVisibleQr = ::enableSourceMxH1ForApprovedVisibleQr,
+                    enableSourceAppDataAfterF6 = ::enableSourceAppDataAfterF6,
+                    sourceMxH1Finished = pairingController::hasCompletedSourceMxH1F6,
+                    pendingSourceActivationName =
+                        pairingController::pendingProtectedSourceActivationName,
+                    approveSourceActivationOnTv =
+                        pairingController::approveProtectedSourceActivationOnTv,
                     mxh1VerifiedOriginalPhoneIsReady =
                         pairingController::isApprovedMxH1PhoneReady,
                     startPublicKeyQrPreview = {
@@ -202,6 +209,32 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (_: Exception) {
                 null // no private address or handshake material in diagnostics
+            }
+        }
+    }
+
+    private suspend fun enableSourceMxH1ForApprovedVisibleQr(): TvPairingController.NativeProbeEndpoint? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.enableSealedMxH1ForApprovedVisibleQr(forProtectedSources = true)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    private suspend fun enableSourceAppDataAfterF6(): TvPairingController.NativeProbeEndpoint? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.enableProtectedSourceCommandsAfterF6(sourceOnboarding)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
         }
     }
