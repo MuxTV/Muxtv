@@ -29,7 +29,6 @@ import com.google.common.truth.Truth.assertThat
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Test
 import org.junit.runner.RunWith
 

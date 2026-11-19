@@ -30,6 +30,10 @@ dependencies {
     testImplementation(libs.truth)
     // Only for an on-emulator, REAL selected-Network/TV-owner six-frame test.
     androidTestImplementation(project(":local-control:tv-qr"))
+    // On-device original-F6 APPDATA: fake catalogue port only, never prod TV authority.
+    androidTestImplementation(project(":local-control:onboarding"))
+    androidTestImplementation(project(":catalog:api"))
+    androidTestImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)

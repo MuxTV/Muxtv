@@ -39,8 +39,10 @@ Implemented in the existing stacked Draft #451, based on #450 and the
 - TV APPDATA port is manually entered, not yet advertised in a signed
   F6 extension. Cryptography authenticates the original TV F6/AEAD key
   owner, not the plaintext endpoint string.
-- Existing real two-TCP hostile host tests are retained, and phone/TV
-  API26/API36 hosted device matrices must pass. On-emulator no-QR source
+- Existing real two-TCP hostile host tests are retained. The phone API26/API36
+  matrix now includes an additional real selected Android Network two-TCP
+  APPDATA test using in-process original TV owner and FAKE SourceOnboarding
+  (no external IPTV network). Exactly 7/7 non-skipped methods required. On-emulator no-QR source
   forms stay hidden. This does not claim a cross-device physical E2E or
   Media3 playback after source activation.
 

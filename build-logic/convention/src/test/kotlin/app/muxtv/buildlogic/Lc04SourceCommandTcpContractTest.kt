@@ -131,6 +131,19 @@ class Lc04SourceCommandTcpContractTest {
             "oversizedAppdataFrameIsTerminalBeforeAllocation",
             "sourceCommandSessionRejectsSeventeenthRequest",
         )) assertContains(tests, name)
+        val realDevice = file(
+            "app/phone/src/androidTest/kotlin/app/muxtv/phone/" +
+                "PhoneSealedAndroidNetworkDeviceTest.kt",
+        )
+        for (required in listOf(
+            "selectedAndroidNetworkOriginalF6DelayedAppdataM3uTvConsentActivates",
+            "prepareSourceKeyHandoffForLaterAppdata()",
+            "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
+            "Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(",
+            "f.network.bindSocket(unconnected)",
+            "app.prepareM3u(testM3u)",
+            "tv.approvePendingActivationOnTv()",
+        )) assertContains(realDevice, required)
         val wf = file(".github/workflows/lc04-mxh1-android-private-lan-ci.yml")
         assertContains(wf, ":local-control:mxh1-lan:test")
         assertContains(wf, ":local-control:onboarding:test")

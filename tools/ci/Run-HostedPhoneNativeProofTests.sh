@@ -33,5 +33,5 @@ pwsh -NoProfile -File ./tools/ci/Assert-AndroidTestResults.ps1 \
   -OutputPath "$evidence/android-test-results.json"
 
 export MUXTV_PHONE_TEST_SUMMARY="$evidence/android-test-results.json"
-pwsh -NoProfile -Command '$s = Get-Content -LiteralPath $env:MUXTV_PHONE_TEST_SUMMARY -Raw | ConvertFrom-Json; if ([int]$s.tests -ne 6 -or [int]$s.skipped -ne 0 -or [int]$s.failures -ne 0 -or [int]$s.errors -ne 0) { throw "Exactly 6 successful, non-skipped phone native and real Network.bindSocket device tests required." }'
-echo "Accepted Android phone original-QR and real selected-Network six-frame API${MUXTV_PHONE_API}: 6/6 device tests."
+pwsh -NoProfile -Command '$s = Get-Content -LiteralPath $env:MUXTV_PHONE_TEST_SUMMARY -Raw | ConvertFrom-Json; if ([int]$s.tests -ne 7 -or [int]$s.skipped -ne 0 -or [int]$s.failures -ne 0 -or [int]$s.errors -ne 0) { throw "Exactly 7 successful, non-skipped phone original-F6 and APPDATA Android device tests required." }'
+echo "Accepted Android phone original-QR F6/EOF and real selected-Network APPDATA API${MUXTV_PHONE_API}: 7/7 device tests."
