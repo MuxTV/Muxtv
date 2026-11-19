@@ -3,6 +3,7 @@ package app.muxtv.localcontrol.mxh1lan
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.sourceaead.Lc04SourceAeadPort
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Explicit, one-use Android-facing adapter for the fixed six-frame synthetic
@@ -16,6 +17,31 @@ import java.net.Socket
 class Lc04MxH1SealedPrivateLanPhone private constructor(
     private val transport: Lc04MxH1LeasedSealedPhone,
 ) : AutoCloseable {
+    private val handoffStarted = AtomicBoolean(false)
+    private val handoffLock = Any()
+    @Volatile private var closed = false
+    private var preparedSourcePort: Lc04SourceAeadPort? = null
+
+    /**
+     * A TV APPDATA port only exists AFTER real F6 and kernel EOF. Hold the
+     * original sealed key owner privately until the user enters that port.
+     * Never restart the handshake or reset directional AES-GCM counters.
+     * Blocking handshake I/O is NOT protected by the lifecycle lock.
+     */
+    fun prepareSourceKeyHandoffForLaterAppdata(): Boolean {
+        if (closed || !handoffStarted.compareAndSet(false, true)) return false
+        val port = transport.completeSourceKeyHandoffAfterTvEof() ?: return false
+        return synchronized(handoffLock) {
+            if (closed) {
+                port.close()
+                false
+            } else {
+                preparedSourcePort = port
+                true
+            }
+        }
+    }
+
     /** Diagnostic only. Returns false on any failed/revoked network checkpoint. */
     fun completeSyntheticExchange(): Boolean = transport.completeSyntheticExchange()
 
@@ -24,10 +50,25 @@ class Lc04MxH1SealedPrivateLanPhone private constructor(
      * This does NOT establish an app-data TCP connection, source principal,
      * D-pad activation approval, or provider credential transport.
      */
-    fun completeSourceKeyHandoffAfterTvEof(): Lc04SourceAeadPort? =
-        transport.completeSourceKeyHandoffAfterTvEof()
+    fun completeSourceKeyHandoffAfterTvEof(): Lc04SourceAeadPort? {
+        if (closed) return null
+        if (handoffStarted.compareAndSet(false, true)) {
+            // Preserve the existing immediate-consumer API and its test fixtures.
+            return transport.completeSourceKeyHandoffAfterTvEof()
+        }
+        return synchronized(handoffLock) {
+            if (closed) null else preparedSourcePort.also { preparedSourcePort = null }
+        }
+    }
 
-    override fun close() = transport.close()
+    override fun close() {
+        synchronized(handoffLock) {
+            closed = true
+            preparedSourcePort?.close()
+            preparedSourcePort = null
+        }
+        transport.close() // interrupt pending socket reads on Activity.onStop
+    }
 
     override fun toString(): String =
         "Lc04MxH1SealedPrivateLanPhone([PRIVATE_ADDRESS_REDACTED])"
