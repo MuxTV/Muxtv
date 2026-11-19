@@ -71,10 +71,31 @@ class Lc04SourceCommandTcpContractTest {
         assertFalse(build.contains("implementation(project(\":catalog:api\"))"))
         val appPhone = file("app/phone/src/main/kotlin/app/muxtv/phone/PhoneNativeProofSession.kt")
         val appTv = file("app/tv/src/main/kotlin/app/muxtv/localcontrol/TvPairingController.kt")
-        // The phone's production source transport remains intentionally inert in E1.
-        // TV now owns a separate, explicit APPDATA opt-in; preserve the original
-        // F6/EOF transition, selected-route fencing and synchronous revocation.
-        assertFalse(appPhone.contains("Lc04SourceCommandTcpPhone"))
+        // E2 phone source flow is installed, but TV keeps all catalog authority.
+        // APPDATA is reachable only AFTER retaining original F6/EOF ownership.
+        for (required in listOf(
+            "fun beginSourceMxH1(endpoint: PhoneNativeEndpoint)",
+            "client.prepareSourceKeyHandoffForLaterAppdata()",
+            "Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(",
+            "selected.bindSocket(unconnected)",
+            "sourcePhaseActive() && eligible(selected, addresses)",
+            "endpoint.privateIpv4 != sourceTvIpv4",
+            "app.prepareM3u(locator)",
+            "app.requestActivate(sourceName)",
+            "completeSourceActivationAfterTvGesture()",
+            "private fun activationOutcomeUnknown()",
+            "sourceAppdata?.close()",
+        )) assertContains(appPhone, required)
+        assertFalse(appPhone.contains("SourceOnboarding"))
+        assertFalse(appPhone.contains("HttpClient"))
+        val facade = file(dir + "Lc04MxH1SealedPrivateLanPhone.kt")
+        for (required in listOf(
+            "prepareSourceKeyHandoffForLaterAppdata()",
+            "handoffStarted.compareAndSet(false, true)",
+            "preparedSourcePort.also { preparedSourcePort = null }",
+            "transport.completeSourceKeyHandoffAfterTvEof()",
+        )) assertContains(facade, required)
+        assertFalse(facade.contains("SharedPreferences"))
         for (required in listOf(
             "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
             "handshake.hasAuthenticatedSyntheticExchange()",

@@ -18,6 +18,8 @@ dependencies {
     implementation(project(":local-control:phone-flow"))
     implementation(project(":local-control:native-transport"))
     implementation(project(":local-control:mxh1-lan"))
+    // Reply-code vocabulary, no catalog/onboarding or legacy HTTP source authority.
+    implementation(project(":local-control:source-command-wire"))
     implementation(project(":local-control:mxh1-session-lab"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
