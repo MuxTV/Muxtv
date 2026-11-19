@@ -105,6 +105,7 @@ fun PhonePairingRoute(
     val denyFocus = remember { FocusRequester() }
     val returnFocus = remember { FocusRequester() }
     val sourceMxH1Focus = remember { FocusRequester() }
+    val sourceAppdataFocus = remember { FocusRequester() }
 
     suspend fun restart() {
         onRevokePublicKeyPreview()
@@ -293,6 +294,18 @@ fun PhonePairingRoute(
             sourceMxH1Focus.requestFocus()
         }
     }
+    // The original QR/F6 key owner must first prove authentic F6 and TCP
+    // half-close. Focusing APPDATA merely makes the TV remote usable; ONLY
+    // a following user D-pad Enter can create the second private listener.
+    val appdataStartReady = keyPreview != null && keySecondsRemaining > 0 &&
+        sourceMxH1Mode && mxh1Endpoint != null && appDataEndpoint == null &&
+        !appDataLoading && sourceMxH1Finished()
+    LaunchedEffect(appdataStartReady) {
+        if (appdataStartReady) {
+            withFrameNanos { }
+            sourceAppdataFocus.requestFocus()
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             onRevokePublicKeyPreview()
@@ -403,9 +416,9 @@ fun PhonePairingRoute(
                                                     text = if (appDataLoading) "Открытие APPDATA…" else
                                                         "Открыть защищённый приём источников",
                                                     onClick = ::enableSourceAppDataAfterTvGesture,
-                                                    modifier = Modifier.testTag(
-                                                        "local-tv-source-appdata-opt-in",
-                                                    ),
+                                                    modifier = Modifier
+                                                        .focusRequester(sourceAppdataFocus)
+                                                        .testTag("local-tv-source-appdata-opt-in"),
                                                 )
                                                 if (appDataError) {
                                                     Text("APPDATA не открыт: обновите одноразовую сессию.")

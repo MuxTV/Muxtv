@@ -10,7 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.localcontrol.PhonePairingRoute
 import app.muxtv.localcontrol.TvPairingController
@@ -181,7 +182,13 @@ class LocalControlNativeTvOptInTest {
                 .fetchSemanticsNodes().size == 1
         }
         rule.runOnIdle { check(appdataStarts == 0) { "F6 is not automatic source permission." } }
-        rule.onNodeWithTag("local-tv-source-appdata-opt-in").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("local-tv-source-appdata-opt-in").assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.waitUntil(10_000) { appdataStarts == 1 }
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-source-appdata-endpoint")
                 .fetchSemanticsNodes().size == 1
@@ -195,7 +202,15 @@ class LocalControlNativeTvOptInTest {
                 .fetchSemanticsNodes().size == 1
         }
         rule.runOnIdle { check(tvSourceApprovals == 0) { "Source reply is not TV consent." } }
-        rule.onNodeWithTag("local-tv-source-activation-approve").performClick()
+        // Approving a SOURCE may never be the default focus: the TV user
+        // must navigate to it and press Enter AFTER seeing the exact name.
+        rule.onNodeWithTag("local-tv-source-activation-approve")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
         rule.runOnIdle {
             check(tvSourceApprovals == 1) { "Only explicit TV surface may approve." }
             screenVisible = false
