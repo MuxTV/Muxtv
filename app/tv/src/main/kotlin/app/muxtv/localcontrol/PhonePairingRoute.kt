@@ -350,7 +350,12 @@ fun PhonePairingRoute(
                                 "TCP listener: ${endpoint.privateIpv4}:${endpoint.port}",
                                 modifier = Modifier.testTag("local-tv-native-endpoint"),
                             )
-                            if (mxh1PhoneIsVerified()) {
+                            // Ed25519 qualification is a one-use *start* gate:
+                            // once F1 is accepted, original MXH1 phase leaves NEW
+                            // and isApprovedMxH1PhoneReady() becomes false.
+                            // Keep the already opted-in endpoint visible through
+                            // F6 and TV D-pad APPDATA consent, never re-open it.
+                            if (mxh1PhoneIsVerified() || mxh1Endpoint != null) {
                                 val finished = mxh1Endpoint
                                 if (finished == null) {
                                     MuxTvActionButton(

@@ -166,6 +166,7 @@ class LocalControlNativeTvOptInTest {
             check(sourceMxH1Starts == 1 && mxh1Starts == 0 && appdataStarts == 0) {
                 "Source handshake cannot silently start APPDATA."
             }
+            mxh1Verified = false // Original QR is consumed by F1; not a stale approval
             sourceFinished = true // Simulated real F6/EOF from TV owner
         }
         rule.waitUntil(10_000) {
