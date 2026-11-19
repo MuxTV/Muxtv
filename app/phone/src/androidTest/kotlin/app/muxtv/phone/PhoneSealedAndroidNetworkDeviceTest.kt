@@ -7,11 +7,21 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.muxtv.catalog.SourceActivationResult
+import app.muxtv.catalog.SourceCancellationResult
+import app.muxtv.catalog.SourceOnboarding
+import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
+import app.muxtv.catalog.SourcePreparationResult
 import app.muxtv.localcontrol.enrollment.PhoneEnrollmentResult
 import app.muxtv.localcontrol.enrollment.PhoneSigningIdentity
 import app.muxtv.localcontrol.mxh1.Lc04MxH1PhoneLab
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanPhone
 import app.muxtv.localcontrol.mxh1lan.Lc04MxH1SealedPrivateLanTv
+import app.muxtv.localcontrol.mxh1lan.Lc04SourceCommandTcpPhone
+import app.muxtv.localcontrol.mxh1lan.Lc04SourceCommandTcpTv
+import app.muxtv.localcontrol.onboarding.ProtectedSourceStaging
+import app.muxtv.localcontrol.sourcecommandwire.Lc04SourceReplyCode
 import app.muxtv.localcontrol.nativetransport.Lc04PrivateIpv4
 import app.muxtv.localcontrol.qr.TvQrPublicKeyParser
 import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
@@ -19,6 +29,7 @@ import com.google.common.truth.Truth.assertThat
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -31,6 +42,41 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class PhoneSealedAndroidNetworkDeviceTest {
+    private class Handle : SourcePreparationHandle()
+
+    private class FakeOnboarding : SourceOnboarding {
+        private val handle = Handle()
+        val prepared = AtomicInteger(0)
+        val activated = AtomicInteger(0)
+        @Volatile var locator: String? = null
+
+        override suspend fun prepare(
+            locator: String, insecureHttpApproved: Boolean,
+        ): SourcePreparationResult =
+            prepare(SourcePreparationRequest.M3u(locator, insecureHttpApproved))
+
+        override suspend fun prepare(request: SourcePreparationRequest): SourcePreparationResult {
+            check(request is SourcePreparationRequest.M3u)
+            check(!request.insecureHttpApproved)
+            locator = request.locator
+            prepared.incrementAndGet()
+            return SourcePreparationResult.Prepared(handle, "https://provider.invalid")
+        }
+
+        override suspend fun activate(
+            handle: SourcePreparationHandle, sourceName: String,
+        ): SourceActivationResult {
+            check(handle === this.handle)
+            check(sourceName == "Каналы")
+            activated.incrementAndGet()
+            return SourceActivationResult.Activated
+        }
+
+        override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult =
+            SourceCancellationResult.Removed
+
+        override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
+    }
     private class Fixture : AutoCloseable {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val manager = requireNotNull(context.getSystemService(ConnectivityManager::class.java))
@@ -56,6 +102,8 @@ class PhoneSealedAndroidNetworkDeviceTest {
         val revoked = AtomicInteger(0)
         var listener: Lc04MxH1SealedPrivateLanTv? = null
         var client: Lc04MxH1SealedPrivateLanPhone? = null
+        var appTv: Lc04SourceCommandTcpTv? = null
+        var appPhone: Lc04SourceCommandTcpPhone? = null
 
         init {
             check(Build.VERSION.SDK_INT in 26..36) { "API37 permission needs separate device gate." }
@@ -94,6 +142,11 @@ class PhoneSealedAndroidNetworkDeviceTest {
                 address, tv, SystemClock::elapsedRealtime,
             ).also { listener = it }
 
+        fun openSourceServer(): Lc04MxH1SealedPrivateLanTv =
+            Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4WithSourceKeyHandoff(
+                address, tv, SystemClock::elapsedRealtime, ::routeStillSelected,
+            ).also { listener = it }
+
         fun openPhone(
             port: Int,
             routeEligible: () -> Boolean = ::routeStillSelected,
@@ -118,6 +171,8 @@ class PhoneSealedAndroidNetworkDeviceTest {
             ).also { client = it }
 
         override fun close() {
+            appPhone?.close()
+            appTv?.close()
             client?.close()
             listener?.close()
             phone.close()
@@ -161,6 +216,66 @@ class PhoneSealedAndroidNetworkDeviceTest {
                 f.tv.presentation(SystemClock.elapsedRealtime()),
             ).qrValue).isEqualTo(originalQr)
             assertThat(client.completeSyntheticExchange()).isFalse() // one-use
+        }
+
+
+    @Test fun selectedAndroidNetworkOriginalF6DelayedAppdataM3uTvConsentActivates() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val backend = FakeOnboarding()
+            val handshakeTv = f.openSourceServer()
+            val phone = f.openPhone(handshakeTv.port)
+
+            // The exact original Android-bound F1-F6/EOF socket is spent now.
+            // Delayed TV APPDATA port does not exist when phone authenticates F6.
+            assertThat(phone.prepareSourceKeyHandoffForLaterAppdata()).isTrue()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!handshakeTv.hasAuthenticatedSyntheticExchange() &&
+                System.nanoTime() < deadline
+            ) Thread.sleep(10)
+            assertThat(handshakeTv.hasAuthenticatedSyntheticExchange()).isTrue()
+            assertThat(f.bindings.get()).isEqualTo(1)
+
+            val tv = Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(
+                address = f.address,
+                completedHandshake = handshakeTv,
+                originalTvQrOwner = f.tv,
+                staging = ProtectedSourceStaging(backend),
+                now = SystemClock::elapsedRealtime,
+                selectedRouteEligible = f::routeStillSelected,
+                isTvVisible = { true },
+            ).also { f.appTv = it }
+
+            // Android Network.bindSocket before connect on a DIFFERENT socket,
+            // but with exactly the original F6 owner (not a new handshake).
+            val app = checkNotNull(
+                Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(
+                    address = f.address,
+                    appdataPort = tv.port,
+                    completedHandshake = phone,
+                    selectedRouteEligible = f::routeStillSelected,
+                    bindUnconnectedToSelectedNetwork = { unconnected ->
+                        check(!unconnected.isConnected && !unconnected.isBound)
+                        check(f.routeStillSelected())
+                        f.network.bindSocket(unconnected)
+                        check(f.routeStillSelected())
+                        f.bindings.incrementAndGet()
+                    },
+                ),
+            ).also { f.appPhone = it }
+            val testM3u = "https://iptv.invalid/list.m3u?token=ANDROID_TEST_ONLY"
+            assertThat(app.prepareM3u(testM3u)).isEqualTo(Lc04SourceReplyCode.PREPARED)
+            assertThat(backend.locator).isEqualTo(testM3u)
+            assertThat(app.requestActivate("Каналы"))
+                .isEqualTo(Lc04SourceReplyCode.TV_CONFIRMATION_REQUIRED)
+            assertThat(backend.activated.get()).isEqualTo(0)
+            assertThat(tv.pendingActivationNameForTv()).isEqualTo("Каналы")
+            assertThat(tv.approvePendingActivationOnTv()).isTrue()
+            assertThat(tv.approvePendingActivationOnTv()).isFalse()
+            assertThat(app.requestActivate("Каналы")).isEqualTo(Lc04SourceReplyCode.ACTIVATED)
+            assertThat(backend.activated.get()).isEqualTo(1)
+            assertThat(backend.prepared.get()).isEqualTo(1)
+            assertThat(f.bindings.get()).isEqualTo(2)
         }
 
     @Test fun deniedSelectedRouteNeverBindsSocketOrAuthenticates() =
