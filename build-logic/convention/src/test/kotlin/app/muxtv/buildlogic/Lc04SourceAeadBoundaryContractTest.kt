@@ -50,8 +50,13 @@ class Lc04SourceAeadBoundaryContractTest {
         )) assertFalse(module.contains(forbidden), forbidden)
         val phone = file("app/phone/build.gradle.kts")
         val tv = file("app/tv/build.gradle.kts")
+        // Android integration may import the original F6 AEAD records in
+        // androidTestImplementation; no app can construct its own runtime keys.
+        val tvRuntime = tv.lineSequence().map { it.trimStart() }
+            .filter { it.startsWith("implementation(") }.joinToString("\n")
         assertFalse(phone.contains(":local-control:source-aead"))
-        assertFalse(tv.contains(":local-control:source-aead"))
+        assertFalse(tvRuntime.contains(":local-control:source-aead"))
+        assertContains(tv, "androidTestImplementation(project(\":local-control:source-aead\"))")
         val legacy = file(
             "local-control/server/src/main/kotlin/app/muxtv/localcontrol/server/LanTransport.kt",
         )

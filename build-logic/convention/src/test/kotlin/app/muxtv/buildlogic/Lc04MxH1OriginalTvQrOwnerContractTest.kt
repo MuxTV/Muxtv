@@ -69,12 +69,16 @@ class Lc04MxH1OriginalTvQrOwnerContractTest {
             "getUsername(", "getPassword(")) {
             assertFalse(source.contains(bad), bad)
         }
-        for (app in listOf("app/tv/build.gradle.kts",
-            "local-control/native-transport/build.gradle.kts")) {
-            assertFalse(root.resolve(app).readText().contains(
-                ":local-control:mxh1-session-lab",
-            ))
-        }
+        val tvBuild = root.resolve("app/tv/build.gradle.kts").readText()
+        // E4 exercises the original handshake in a TV instrumented test,
+        // but production TV must still own only its reviewed MXH1 facade.
+        val tvRuntime = tvBuild.lineSequence().map { it.trimStart() }
+            .filter { it.startsWith("implementation(") }.joinToString("\n")
+        assertFalse(tvRuntime.contains(":local-control:mxh1-session-lab"))
+        assertContains(tvBuild, "androidTestImplementation(project(\":local-control:mxh1-session-lab\"))")
+        assertContains(tvBuild, "testImplementation(project(\":local-control:mxh1-session-lab\"))")
+        assertFalse(root.resolve("local-control/native-transport/build.gradle.kts")
+            .readText().contains(":local-control:mxh1-session-lab"))
     }
 
     @Test fun `real TV original-owner hostile suite and exact HEAD hosted evidence required`() {

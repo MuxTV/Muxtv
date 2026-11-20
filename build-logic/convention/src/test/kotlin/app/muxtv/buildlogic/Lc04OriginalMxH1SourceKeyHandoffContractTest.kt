@@ -91,7 +91,12 @@ class Lc04OriginalMxH1SourceKeyHandoffContractTest {
         assertFalse(server.contains("Lc04SourceAppKeyCandidate"))
         val tvApp = file("app/tv/build.gradle.kts")
         val phoneApp = file("app/phone/build.gradle.kts")
-        assertFalse(tvApp.contains(":local-control:source-aead"))
+        // The TV's NEW instrumented Room catalog evidence needs a TEST-ONLY
+        // original-F6 port; it must never join the production app classpath.
+        val tvRuntime = tvApp.lineSequence().map { it.trimStart() }
+            .filter { it.startsWith("implementation(") }.joinToString("\n")
+        assertFalse(tvRuntime.contains(":local-control:source-aead"))
+        assertContains(tvApp, "androidTestImplementation(project(\":local-control:source-aead\"))")
         assertFalse(phoneApp.contains(":local-control:source-aead"))
     }
 
