@@ -83,6 +83,7 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
             "noOriginalTvLocalApprovalCannotExposeSixFramePrivateListener",
             "deniedSelectedRouteNeverBindsSocketOrAuthenticates",
             "selectedAndroidNetworkOriginalF6DelayedAppdataM3uTvConsentActivates",
+            "selectedAndroidNetworkOriginalF6AppdataM3uCancelNeverActivates",
             "network.bindSocket(unconnected)",
             "Lc04MxH1SealedPrivateLanTv.startOnApprovedPrivateIpv4(",
             "Lc04MxH1SealedPrivateLanPhone.forSelectedPrivateIpv4(",
@@ -97,7 +98,7 @@ class Lc04MxH1SealedAndroidIntegrationContractTest {
         val runner = source("tools/ci/Run-HostedPhoneNativeProofTests.sh")
         assertContains(runner, "PhoneSealedAndroidNetworkDeviceTest")
         assertContains(runner, "PhoneNativeProofDeviceTest")
-        assertContains(runner, "-ne 7 -or")
+        assertContains(runner, "-ne 8 -or")
         assertContains(runner, ".skipped -ne 0")
         assertContains(runner, "git rev-parse HEAD")
         val workflow = source(".github/workflows/lc04-phone-native-proof-device-matrix.yml")

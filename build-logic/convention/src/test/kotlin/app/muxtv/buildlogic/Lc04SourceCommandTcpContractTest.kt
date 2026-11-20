@@ -82,6 +82,12 @@ class Lc04SourceCommandTcpContractTest {
             "endpoint.privateIpv4 != sourceTvIpv4",
             "app.prepareM3u(locator)",
             "app.requestActivate(sourceName)",
+            "fun cancelPreparedSource(): Boolean",
+            "Phase.SOURCE_CANCELING",
+            "app.cancel()",
+            "Lc04SourceReplyCode.CANCELED",
+            "Lc04SourceReplyCode.CLEANUP_PENDING",
+            "cancelSourceResultUnknown()",
             "completeSourceActivationAfterTvGesture()",
             "private fun activationOutcomeUnknown()",
             "sourceAppdata?.close()",
@@ -137,6 +143,7 @@ class Lc04SourceCommandTcpContractTest {
         )
         for (required in listOf(
             "selectedAndroidNetworkOriginalF6DelayedAppdataM3uTvConsentActivates",
+            "selectedAndroidNetworkOriginalF6AppdataM3uCancelNeverActivates",
             "prepareSourceKeyHandoffForLaterAppdata()",
             "Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(",
             "Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(",

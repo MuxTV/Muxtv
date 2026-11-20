@@ -30,6 +30,7 @@ class PhoneNativeProofDeviceTest {
                 val sourcePanel = checkNotNull(findByTag(root, "lc04-phone-source-appdata-panel"))
                 val sourcePrepare = checkNotNull(findByTag(root, "lc04-phone-source-prepare"))
                 val sourceConfirm = checkNotNull(findByTag(root, "lc04-phone-source-confirm-after-tv"))
+                val sourceCancel = checkNotNull(findByTag(root, "lc04-phone-source-cancel"))
                 assertThat(panel.visibility).isEqualTo(View.GONE)
                 assertThat(verify.visibility).isEqualTo(View.GONE)
                 // The manifest grants no pairing authority. Camera permission
@@ -41,6 +42,7 @@ class PhoneNativeProofDeviceTest {
                 assertThat(sourcePanel.visibility).isEqualTo(View.GONE)
                 assertThat(sourcePrepare.isShown).isFalse()
                 assertThat(sourceConfirm.isShown).isFalse()
+                assertThat(sourceCancel.isShown).isFalse()
             }
         }
     }

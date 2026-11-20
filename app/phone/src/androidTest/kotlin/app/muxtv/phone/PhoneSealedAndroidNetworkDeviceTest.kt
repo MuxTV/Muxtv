@@ -47,6 +47,7 @@ class PhoneSealedAndroidNetworkDeviceTest {
         private val handle = Handle()
         val prepared = AtomicInteger(0)
         val activated = AtomicInteger(0)
+        val canceled = AtomicInteger(0)
         @Volatile var locator: String? = null
 
         override suspend fun prepare(
@@ -71,8 +72,11 @@ class PhoneSealedAndroidNetworkDeviceTest {
             return SourceActivationResult.Activated
         }
 
-        override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult =
-            SourceCancellationResult.Removed
+        override suspend fun cancel(handle: SourcePreparationHandle): SourceCancellationResult {
+            check(handle === this.handle)
+            canceled.incrementAndGet()
+            return SourceCancellationResult.Removed
+        }
 
         override suspend fun restoreLatestPrepared(): SourcePreparationResult.Prepared? = null
     }
@@ -275,6 +279,57 @@ class PhoneSealedAndroidNetworkDeviceTest {
             assertThat(backend.activated.get()).isEqualTo(1)
             assertThat(backend.prepared.get()).isEqualTo(1)
             assertThat(f.bindings.get()).isEqualTo(2)
+        }
+
+
+    @Test fun selectedAndroidNetworkOriginalF6AppdataM3uCancelNeverActivates() =
+        fixture { f ->
+            f.approveOnOriginalTv()
+            val backend = FakeOnboarding()
+            val handshakeTv = f.openSourceServer()
+            val phone = f.openPhone(handshakeTv.port)
+            assertThat(phone.prepareSourceKeyHandoffForLaterAppdata()).isTrue()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (!handshakeTv.hasAuthenticatedSyntheticExchange() &&
+                System.nanoTime() < deadline
+            ) Thread.sleep(10)
+            assertThat(handshakeTv.hasAuthenticatedSyntheticExchange()).isTrue()
+            val tv = Lc04SourceCommandTcpTv.startAfterCompletedF6OnApprovedPrivateIpv4(
+                address = f.address,
+                completedHandshake = handshakeTv,
+                originalTvQrOwner = f.tv,
+                staging = ProtectedSourceStaging(backend),
+                now = SystemClock::elapsedRealtime,
+                selectedRouteEligible = f::routeStillSelected,
+                isTvVisible = { true },
+            ).also { f.appTv = it }
+            val app = checkNotNull(
+                Lc04SourceCommandTcpPhone.afterVerifiedTvEofOnSelectedNetwork(
+                    address = f.address,
+                    appdataPort = tv.port,
+                    completedHandshake = phone,
+                    selectedRouteEligible = f::routeStillSelected,
+                    bindUnconnectedToSelectedNetwork = { socket ->
+                        check(!socket.isBound && !socket.isConnected)
+                        check(f.routeStillSelected())
+                        f.network.bindSocket(socket)
+                        check(f.routeStillSelected())
+                        f.bindings.incrementAndGet()
+                    },
+                ),
+            ).also { f.appPhone = it }
+            assertThat(app.prepareM3u("https://iptv.invalid/test.m3u?token=REDACTED"))
+                .isEqualTo(Lc04SourceReplyCode.PREPARED)
+            assertThat(backend.prepared.get()).isEqualTo(1)
+            assertThat(backend.activated.get()).isEqualTo(0)
+            assertThat(tv.pendingActivationNameForTv()).isNull()
+            assertThat(tv.approvePendingActivationOnTv()).isFalse()
+            assertThat(app.cancel()).isEqualTo(Lc04SourceReplyCode.CANCELED)
+            assertThat(backend.canceled.get()).isEqualTo(1)
+            assertThat(backend.activated.get()).isEqualTo(0)
+            assertThat(tv.pendingActivationNameForTv()).isNull()
+            assertThat(f.bindings.get()).isEqualTo(2)
+            // No second TCP connection or automatic ACTIVATE is ever made.
         }
 
     @Test fun deniedSelectedRouteNeverBindsSocketOrAuthenticates() =
