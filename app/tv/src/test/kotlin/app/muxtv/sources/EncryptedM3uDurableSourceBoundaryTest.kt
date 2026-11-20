@@ -63,12 +63,14 @@ class EncryptedM3uDurableSourceBoundaryTest {
             return CredentialRemoveResult.Removed
         }
         override suspend fun reset(): CredentialResetResult {
-            values.values.forEach(ByteArray::fillZero)
+            values.values.forEach { it.fill(0) }
             values.clear()
             return CredentialResetResult.Reset
         }
-        fun erase() { values.values.forEach { it.fill(0) }; values.clear() }
-        private fun ByteArray.fillZero() = fill(0)
+        fun erase() {
+            values.values.forEach { it.fill(0) }
+            values.clear()
+        }
     }
 
     private class Pending : PendingSourcePreparationStore {
