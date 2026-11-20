@@ -95,6 +95,11 @@ dependencies {
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.mockwebserver3)
     androidTestImplementation(project(":core:testing"))
+    // TV-only Android proof: original F6 -> production Room catalog import.
+    androidTestImplementation(project(":local-control:mxh1-session-lab"))
+    androidTestImplementation(project(":local-control:qr-public"))
+    androidTestImplementation(project(":local-control:source-aead"))
+    androidTestImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)

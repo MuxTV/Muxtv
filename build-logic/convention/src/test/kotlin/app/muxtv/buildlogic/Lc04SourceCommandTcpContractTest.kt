@@ -172,6 +172,24 @@ class Lc04SourceCommandTcpContractTest {
         val appRuntime = file("app/tv/build.gradle.kts")
         assertContains(appRuntime, "testImplementation(project(\":local-control:mxh1-session-lab\"))")
         assertContains(file("tools/verify-local.ps1"), "\":app:tv:testDebugUnitTest\"")
+        val actualRoom = file(
+            "app/tv/src/androidTest/kotlin/app/muxtv/" +
+                "Lc04ProtectedSourceCatalogJourneyTest.kt",
+        )
+        for (required in listOf(
+            "encryptedM3uTvDpadActivationImportsTwoRealRoomCatalogChannels",
+            "Lc04TvOriginalAeadCommandOwner.fromOriginalTvRecordsAfterRealF6(",
+            "ProtectedSourceStaging(onboarding)",
+            "AppSourceOnboarding(",
+            "DurableRemoteSourceOnboarding(",
+            "DefaultRemoteSourceOnboarding(",
+            "CatalogRevisionImporterFactory.create(db.sourceRevisionStore)",
+            "db.playbackCatalog.observeChannels(query)",
+            "owner.approvePendingActivationOnTv()",
+            "Lc04SourceReplyCode.ACTIVATED",
+        )) assertContains(actualRoom, required)
+        assertFalse(actualRoom.contains("FakePlaybackCatalog"))
+        assertFalse(actualRoom.contains("MockWebServer"))
         val wf = file(".github/workflows/lc04-mxh1-android-private-lan-ci.yml")
         assertContains(wf, ":local-control:mxh1-lan:test")
         assertContains(wf, ":local-control:onboarding:test")
