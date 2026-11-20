@@ -63,6 +63,7 @@ class PhoneQrActivity : ComponentActivity() {
     private lateinit var prepareButton: Button
     private lateinit var activateButton: Button
     private lateinit var confirmButton: Button
+    private lateinit var cancelSourceButton: Button
 
     private lateinit var preview: PreviewView
     private lateinit var status: TextView
@@ -259,12 +260,19 @@ class PhoneQrActivity : ComponentActivity() {
             visibility = View.GONE
             setOnClickListener { confirmSourceActivationFromGesture() }
         }
+        cancelSourceButton = Button(this).apply {
+            tag = "lc04-phone-source-cancel"
+            text = "Отменить подготовленный источник"
+            visibility = View.GONE
+            setOnClickListener { cancelPreparedSourceFromGesture() }
+        }
         sourcePanel.addView(sourcePortInput)
         sourcePanel.addView(m3uInput)
         sourcePanel.addView(sourceNameInput)
         sourcePanel.addView(prepareButton)
         sourcePanel.addView(activateButton)
         sourcePanel.addView(confirmButton)
+        sourcePanel.addView(cancelSourceButton)
         nativePanel.addView(sourcePanel)
         content.addView(nativePanel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -453,6 +461,18 @@ class PhoneQrActivity : ComponentActivity() {
         }
     }
 
+    /** Cancels a prepared TV-owned credential; never retries ambiguous writes. */
+    private fun cancelPreparedSourceFromGesture() {
+        if (nativeSession?.cancelPreparedSource() == true) {
+            cancelSourceButton.isEnabled = false
+            activateButton.visibility = View.GONE
+            confirmButton.visibility = View.GONE
+            status.text = "Отмена и удаление подготовленного источника на ТВ…"
+        } else {
+            status.text = "Отменить сейчас нельзя. Проверьте состояние на ТВ."
+        }
+    }
+
     private fun confirmSourceActivationFromGesture() {
         if (nativeSession?.completeSourceActivationAfterTvGesture() == true) {
             confirmButton.isEnabled = false
@@ -539,8 +559,13 @@ class PhoneQrActivity : ComponentActivity() {
                             m3uInput.text?.clear()
                             activateButton.visibility = View.VISIBLE
                             activateButton.isEnabled = true
+                            cancelSourceButton.visibility = View.VISIBLE
+                            cancelSourceButton.isEnabled = true
                         }
-                        PhoneNativeProofSession.State.SOURCE_REQUESTING_APPROVAL ->
+                        PhoneNativeProofSession.State.SOURCE_REQUESTING_APPROVAL -> {
+                            cancelSourceButton.visibility = View.GONE
+                            status.text = "Ожидание защищённого ответа ТВ…"
+                        }
                             status.text = "Ожидание защищённого ответа ТВ…"
                         PhoneNativeProofSession.State.SOURCE_WAIT_TV_APPROVAL -> {
                             status.text = "Сначала подтвердите имя источника пультом ТВ, " +
@@ -548,12 +573,41 @@ class PhoneQrActivity : ComponentActivity() {
                             activateButton.visibility = View.GONE
                             confirmButton.visibility = View.VISIBLE
                             confirmButton.isEnabled = true
+                            cancelSourceButton.visibility = View.VISIBLE
+                            cancelSourceButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCELING -> {
+                            status.text = "Удаление временных данных источника на ТВ…"
+                            cancelSourceButton.isEnabled = false
+                            confirmButton.visibility = View.GONE
+                            activateButton.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCELED -> {
+                            status.text = "Источник отменён. ТВ подтвердил удаление подготовки."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCEL_CLEANUP_PENDING -> {
+                            status.text = "Отмена получена, но очистка на ТВ ещё не завершена. " +
+                                "Не повторяйте запрос. Проверьте источники на ТВ."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCEL_RESULT_UNKNOWN -> {
+                            status.text = "Результат отмены неизвестен. Не повторяйте команду; " +
+                                "проверьте источники на ТВ."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
                         }
                         PhoneNativeProofSession.State.SOURCE_ACTIVATED -> {
                             status.text = "Источник активирован на ТВ."
                             m3uInput.text?.clear()
                             sourceNameInput.text?.clear()
                             sourcePanel.visibility = View.GONE
+                            cancelSourceButton.visibility = View.GONE
                         }
                         PhoneNativeProofSession.State.SOURCE_OUTCOME_UNKNOWN -> {
                             status.text = "Результат активации неизвестен. Не отправляйте " +
@@ -623,6 +677,8 @@ class PhoneQrActivity : ComponentActivity() {
         prepareButton.isEnabled = true
         activateButton.visibility = View.GONE
         confirmButton.visibility = View.GONE
+        cancelSourceButton.visibility = View.GONE
+        cancelSourceButton.isEnabled = true
     }
 
     override fun onStop() {
