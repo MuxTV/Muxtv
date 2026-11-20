@@ -42,6 +42,8 @@ dependencies {
     implementation(project(":local-control:server"))
     implementation(project(":local-control:tv-qr"))
     implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:mxh1-lan"))
+    implementation(project(":local-control:onboarding"))
     implementation(project(":local-control:enrollment"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
@@ -79,6 +81,12 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    // Production adapter + ORIGINAL F6-bound encrypted record bridge JVM evidence.
+    // All lab-only components stay in test scope, never phone/TV runtime.
+    testImplementation(project(":local-control:mxh1-session-lab"))
+    testImplementation(project(":local-control:qr-public"))
+    testImplementation(project(":local-control:source-aead"))
+    testImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
@@ -87,6 +95,11 @@ dependencies {
     androidTestImplementation(platform(libs.okhttp.bom))
     androidTestImplementation(libs.mockwebserver3)
     androidTestImplementation(project(":core:testing"))
+    // TV-only Android proof: original F6 -> production Room catalog import.
+    androidTestImplementation(project(":local-control:mxh1-session-lab"))
+    androidTestImplementation(project(":local-control:qr-public"))
+    androidTestImplementation(project(":local-control:source-aead"))
+    androidTestImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)

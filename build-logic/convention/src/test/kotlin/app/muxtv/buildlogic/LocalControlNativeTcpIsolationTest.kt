@@ -93,8 +93,17 @@ class LocalControlNativeTcpIsolationTest {
         assertTrue(keyStart.indexOf("stopInternal()") <
             keyStart.indexOf("TvHpkeQrSession.create("),
             "LC03 HTTP must close before new native-mode QR is created")
-        assertFalse(controller.contains("SourceOnboarding"))
+        // The old native proof entrypoint must remain source-free. Only the
+        // NEW post-F6 TV product owner is allowed to compose SourceOnboarding.
+        val nativeProofOnly = controller.substringAfter(
+            "suspend fun enableNativeProbeForVisibleQr()"
+        ).substringBefore("suspend fun enableMxH1ForApprovedVisibleQr()")
+        assertFalse(nativeProofOnly.contains("SourceOnboarding"))
+        assertFalse(nativeProofOnly.contains("ProtectedSourceStaging"))
         assertFalse(controller.contains("SOURCE_CREATE"))
+        assertContains(controller, "enableProtectedSourceCommandsAfterF6(")
+        assertContains(controller, "handshake.hasAuthenticatedSyntheticExchange()")
+        assertContains(controller, "ProtectedSourceStaging(onboarding)")
 
         val activity = root.resolve("app/tv/src/main/kotlin/app/muxtv/MainActivity.kt")
             .readText()

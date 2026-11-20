@@ -25,12 +25,24 @@ class PhoneNativeProofDeviceTest {
                 val panel = checkNotNull(findByTag(root, "lc04-phone-native-panel"))
                 val start = checkNotNull(findByTag(root, "lc04-phone-native-opt-in"))
                 val verify = checkNotNull(findByTag(root, "lc04-phone-native-verify"))
+                val sixFrame = checkNotNull(findByTag(root, "lc04-phone-mxh1-second-opt-in"))
+                val sourceHandshake = checkNotNull(findByTag(root, "lc04-phone-source-mxh1-opt-in"))
+                val sourcePanel = checkNotNull(findByTag(root, "lc04-phone-source-appdata-panel"))
+                val sourcePrepare = checkNotNull(findByTag(root, "lc04-phone-source-prepare"))
+                val sourceConfirm = checkNotNull(findByTag(root, "lc04-phone-source-confirm-after-tv"))
+                val sourceCancel = checkNotNull(findByTag(root, "lc04-phone-source-cancel"))
                 assertThat(panel.visibility).isEqualTo(View.GONE)
                 assertThat(verify.visibility).isEqualTo(View.GONE)
                 // The manifest grants no pairing authority. Camera permission
                 // alone is not a transport opt-in.
                 assertThat(start.isShown).isFalse()
                 assertThat(verify.isShown).isFalse()
+                assertThat(sixFrame.isShown).isFalse()
+                assertThat(sourceHandshake.isShown).isFalse()
+                assertThat(sourcePanel.visibility).isEqualTo(View.GONE)
+                assertThat(sourcePrepare.isShown).isFalse()
+                assertThat(sourceConfirm.isShown).isFalse()
+                assertThat(sourceCancel.isShown).isFalse()
             }
         }
     }
