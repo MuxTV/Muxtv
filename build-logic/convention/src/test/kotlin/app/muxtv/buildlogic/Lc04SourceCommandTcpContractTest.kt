@@ -151,6 +151,27 @@ class Lc04SourceCommandTcpContractTest {
             "app.prepareM3u(testM3u)",
             "tv.approvePendingActivationOnTv()",
         )) assertContains(realDevice, required)
+        val durableBridge = file(
+            "app/tv/src/test/kotlin/app/muxtv/sources/" +
+                "EncryptedM3uDurableSourceBoundaryTest.kt",
+        )
+        for (required in listOf(
+            "class EncryptedM3uDurableSourceBoundaryTest",
+            "Encrypted", // packet/record boundary, not plaintext transport
+            "Lc04TvOriginalAeadCommandOwner.fromOriginalTvRecordsAfterRealF6(",
+            "ProtectedSourceStaging(onboarding)",
+            "AppSourceOnboarding(",
+            "DurableRemoteSourceOnboarding(",
+            "DefaultRemoteSourceOnboarding(",
+            "encryptedM3uRequiresTvDpadBeforeRealDurableActivation",
+            "encryptedM3uCancelRemovesDurablePreparationWithoutRefresh",
+            "encryptedHttpWithoutTvLocalApprovalCannotPrepareCredential",
+            "f.pending.rows",
+            "f.credentials.count",
+        )) assertContains(durableBridge, required)
+        val appRuntime = file("app/tv/build.gradle.kts")
+        assertContains(appRuntime, "testImplementation(project(\":local-control:mxh1-session-lab\"))")
+        assertContains(file("tools/verify-local.ps1"), "\":app:tv:testDebugUnitTest\"")
         val wf = file(".github/workflows/lc04-mxh1-android-private-lan-ci.yml")
         assertContains(wf, ":local-control:mxh1-lan:test")
         assertContains(wf, ":local-control:onboarding:test")

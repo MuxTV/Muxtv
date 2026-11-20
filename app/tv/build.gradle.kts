@@ -81,6 +81,12 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    // Production adapter + ORIGINAL F6-bound encrypted record bridge JVM evidence.
+    // All lab-only components stay in test scope, never phone/TV runtime.
+    testImplementation(project(":local-control:mxh1-session-lab"))
+    testImplementation(project(":local-control:qr-public"))
+    testImplementation(project(":local-control:source-aead"))
+    testImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
