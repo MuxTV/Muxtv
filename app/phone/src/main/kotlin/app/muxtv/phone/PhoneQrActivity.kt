@@ -566,7 +566,6 @@ class PhoneQrActivity : ComponentActivity() {
                             cancelSourceButton.visibility = View.GONE
                             status.text = "Ожидание защищённого ответа ТВ…"
                         }
-                            status.text = "Ожидание защищённого ответа ТВ…"
                         PhoneNativeProofSession.State.SOURCE_WAIT_TV_APPROVAL -> {
                             status.text = "Сначала подтвердите имя источника пультом ТВ, " +
                                 "затем нажмите кнопку ниже в течение 15 секунд."
