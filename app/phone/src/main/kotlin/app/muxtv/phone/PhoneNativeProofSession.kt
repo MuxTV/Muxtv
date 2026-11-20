@@ -42,6 +42,8 @@ internal class PhoneNativeProofSession(
         MXH1_VERIFYING, MXH1_VERIFIED, SOURCE_HANDSHAKE_RUNNING,
         SOURCE_READY, SOURCE_PREPARING, SOURCE_PREPARED,
         SOURCE_REQUESTING_APPROVAL, SOURCE_WAIT_TV_APPROVAL,
+        SOURCE_CANCELING, SOURCE_CANCELED, SOURCE_CANCEL_CLEANUP_PENDING,
+        SOURCE_CANCEL_RESULT_UNKNOWN,
         SOURCE_ACTIVATED, SOURCE_OUTCOME_UNKNOWN, FAILED, REVOKED,
     }
 
@@ -49,7 +51,8 @@ internal class PhoneNativeProofSession(
         NEW, OFFERING, WAITING, VERIFYING, VERIFIED,
         MXH1_RUNNING, MXH1_VERIFIED, SOURCE_HANDSHAKE, SOURCE_READY,
         SOURCE_PREPARING, SOURCE_PREPARED, SOURCE_REQUESTING_APPROVAL,
-        SOURCE_WAIT_TV, SOURCE_CONFIRMING, SOURCE_DONE, CLOSED,
+        SOURCE_WAIT_TV, SOURCE_CONFIRMING, SOURCE_CANCELING,
+        SOURCE_DONE, CLOSED,
     }
 
     private val manager: ConnectivityManager = requireNotNull(context.getSystemService(ConnectivityManager::class.java))
@@ -360,7 +363,8 @@ internal class PhoneNativeProofSession(
     private fun sourcePhaseActive(): Boolean = when (phase.get()) {
         Phase.SOURCE_HANDSHAKE, Phase.SOURCE_READY, Phase.SOURCE_PREPARING,
         Phase.SOURCE_PREPARED, Phase.SOURCE_REQUESTING_APPROVAL,
-        Phase.SOURCE_WAIT_TV, Phase.SOURCE_CONFIRMING -> true
+        Phase.SOURCE_WAIT_TV, Phase.SOURCE_CONFIRMING,
+        Phase.SOURCE_CANCELING -> true
         else -> false
     }
 
@@ -485,6 +489,62 @@ internal class PhoneNativeProofSession(
             return activationOutcomeUnknown()
         }
         return true
+    }
+
+
+    /**
+     * Explicit phone-side abort is permitted only BEFORE a durable ACTIVATE.
+     * The TV owns the opaque prepared credential and performs actual cleanup;
+     * a lost/ambiguous CANCEL reply is terminal and must never be replayed.
+     * In the TV-confirmation-required state this also invalidates the pending
+     * D-pad consent for the exact sequence, without sending another ACTIVATE.
+     */
+    fun cancelPreparedSource(): Boolean {
+        val previous = phase.get()
+        if (previous != Phase.SOURCE_PREPARED && previous != Phase.SOURCE_WAIT_TV) {
+            return false
+        }
+        if (!phase.compareAndSet(previous, Phase.SOURCE_CANCELING)) return false
+        val app = sourceAppdata ?: return cancelSourceResultUnknown()
+        publish(State.SOURCE_CANCELING)
+        try {
+            worker.execute {
+                when (app.cancel()) {
+                    Lc04SourceReplyCode.CANCELED -> {
+                        if (!phase.compareAndSet(Phase.SOURCE_CANCELING, Phase.SOURCE_DONE)) {
+                            return@execute // Activity.onStop revoked the owner during I/O.
+                        }
+                        sourceAppdata?.close()
+                        sourceAppdata = null
+                        sealedMxH1Client?.close()
+                        sealedMxH1Client = null
+                        sourceNameForActivation = null
+                        publish(State.SOURCE_CANCELED)
+                    }
+                    Lc04SourceReplyCode.CLEANUP_PENDING -> {
+                        cancelSourceCleanupPending()
+                    }
+                    else -> cancelSourceResultUnknown()
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return cancelSourceResultUnknown()
+        }
+        return true
+    }
+
+    private fun cancelSourceCleanupPending(): Boolean {
+        if (phase.get() != Phase.SOURCE_CANCELING) return false
+        close()
+        postToUi { onState(State.SOURCE_CANCEL_CLEANUP_PENDING) }
+        return false
+    }
+
+    private fun cancelSourceResultUnknown(): Boolean {
+        if (phase.get() != Phase.SOURCE_CANCELING) return false
+        close()
+        postToUi { onState(State.SOURCE_CANCEL_RESULT_UNKNOWN) }
+        return false
     }
 
     private fun completeSourceActivation() {
