@@ -162,6 +162,7 @@ class Lc04ProtectedSourceCatalogJourneyTest {
                 selectedRouteEligible = { true },
                 isTvVisible = { true },
             )
+            val activeOwner = checkNotNull(owner)
             suspend fun send(command: Lc04SourceCommand): Lc04SourceReply? {
                 val records = checkNotNull(phonePort)
                 val req = records.sealRequest(command) ?: return null
@@ -183,8 +184,8 @@ class Lc04ProtectedSourceCatalogJourneyTest {
             assertThat(send(Lc04SourceCommand.Activate(2, "Каналы LC04"))?.code)
                 .isEqualTo(Lc04SourceReplyCode.TV_CONFIRMATION_REQUIRED)
             assertThat(db.playbackCatalog.observeChannels(query).first()).isEmpty()
-            assertThat(owner.pendingActivationNameForTv()).isEqualTo("Каналы LC04")
-            assertThat(owner.approvePendingActivationOnTv()).isTrue()
+            assertThat(activeOwner.pendingActivationNameForTv()).isEqualTo("Каналы LC04")
+            assertThat(activeOwner.approvePendingActivationOnTv()).isTrue()
             assertThat(send(Lc04SourceCommand.Activate(3, "Каналы LC04"))?.code)
                 .isEqualTo(Lc04SourceReplyCode.ACTIVATED)
             val channels = withTimeout(10_000) {

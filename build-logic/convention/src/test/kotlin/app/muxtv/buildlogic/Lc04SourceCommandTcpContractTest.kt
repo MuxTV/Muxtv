@@ -185,7 +185,7 @@ class Lc04SourceCommandTcpContractTest {
             "DefaultRemoteSourceOnboarding(",
             "CatalogRevisionImporterFactory.create(db.sourceRevisionStore)",
             "db.playbackCatalog.observeChannels(query)",
-            "owner.approvePendingActivationOnTv()",
+            "activeOwner.approvePendingActivationOnTv()",
             "Lc04SourceReplyCode.ACTIVATED",
         )) assertContains(actualRoom, required)
         assertFalse(actualRoom.contains("FakePlaybackCatalog"))
