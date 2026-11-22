@@ -163,6 +163,34 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithText("Первый", substring = false).assertExists()
     }
 
+    @Test
+    fun invalidCustomNumberKeepsQuickEditorOpenForCorrection() {
+        val catalog = QuickActionPlaybackCatalog()
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(
+                    catalog = catalog,
+                    preferences = HidingPreferencesRepository(catalog),
+                )
+            }
+        }
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-row-0")
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+        drainEffects()
+        composeRule.onNodeWithText("Номер").performClick()
+        drainEffects()
+        composeRule.onNodeWithTag("channel-quick-actions-editor").performTextInput("10000")
+        composeRule.onNodeWithText("Сохранить").performClick()
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-quick-actions-error").assertExists()
+        composeRule.onNodeWithTag("channel-quick-actions-editor").assertExists()
+        composeRule.onNodeWithText("Введите номер от 1 до 9999.").assertExists()
+    }
+
     private fun drainEffects() {
         effectScheduler.runCurrent()
         composeRule.waitForIdle()
@@ -225,7 +253,12 @@ private class HidingPreferencesRepository(
         profileId: String,
         channelId: String,
         channelNumber: Int?,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.Applied
+    ): ChannelPreferenceMutationResult =
+        if (channelNumber != null && channelNumber !in 1..9999) {
+            ChannelPreferenceMutationResult.InvalidInput
+        } else {
+            ChannelPreferenceMutationResult.Applied
+        }
 
     override suspend fun resetCustomization(
         profileId: String,
