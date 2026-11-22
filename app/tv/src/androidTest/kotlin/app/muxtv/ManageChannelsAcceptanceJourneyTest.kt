@@ -6,7 +6,11 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.paging.PagingData
@@ -67,10 +71,10 @@ class ManageChannelsAcceptanceJourneyTest {
             }
         }
 
-        composeRule.onNodeWithTag("manage-channels-filter-hidden").performClick()
+        composeRule.onNodeWithTag("manage-channels-filter-hidden").pressRemoteOk()
         composeRule.waitUntilTag("manage-channel-row-channel-b")
-        composeRule.onNodeWithTag("manage-channel-row-channel-b").performClick()
-        composeRule.onNodeWithText("Показать").assertIsFocused().performClick()
+        composeRule.onNodeWithTag("manage-channel-row-channel-b").pressRemoteOk()
+        composeRule.onNodeWithText("Показать").assertIsFocused().pressRemoteOk()
         composeRule.waitForIdle()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -109,29 +113,29 @@ class ManageChannelsAcceptanceJourneyTest {
         }
         composeRule.waitUntilTag("manage-channel-row-channel-news")
 
-        composeRule.onNodeWithTag("manage-channel-row-channel-news").performClick()
-        composeRule.onNodeWithText("Переименовать").performClick()
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Переименовать").pressRemoteOk()
         composeRule.onNodeWithTag("manage-channels-editor")
             .assertIsFocused()
             .performTextClearance()
         composeRule.onNodeWithTag("manage-channels-editor")
             .performTextInput("Мои новости")
-        composeRule.onNodeWithText("Сохранить").performClick()
+        composeRule.onNodeWithText("Сохранить").pressRemoteOk()
         composeRule.waitForIdle()
         composeRule.waitUntilText("Мои новости")
 
-        composeRule.onNodeWithTag("manage-channel-row-channel-news").performClick()
-        composeRule.onNodeWithText("Номер").performClick()
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Номер").pressRemoteOk()
         composeRule.onNodeWithTag("manage-channels-editor")
             .assertIsFocused()
             .performTextInput("77")
-        composeRule.onNodeWithText("Сохранить").performClick()
+        composeRule.onNodeWithText("Сохранить").pressRemoteOk()
         composeRule.waitForIdle()
         composeRule.waitUntilText("77")
         composeRule.onNodeWithText("Видим · Избранное · Изменён").assertExists()
 
-        composeRule.onNodeWithTag("manage-channel-row-channel-news").performClick()
-        composeRule.onNodeWithText("Сбросить").performClick()
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Сбросить").pressRemoteOk()
         composeRule.waitForIdle()
         composeRule.waitUntilText("Новости")
 
@@ -139,6 +143,17 @@ class ManageChannelsAcceptanceJourneyTest {
         composeRule.onNodeWithText("Видим · Избранное").assertExists()
         composeRule.onNodeWithText("Изменён", substring = true).assertDoesNotExist()
         composeRule.onNodeWithTag("manage-channel-row-channel-news").assertIsFocused()
+    }
+
+    private fun SemanticsNodeInteraction.pressRemoteOk() {
+        // Compose TV buttons activate through focus + remote OK rather than
+        // an unfocused test semantics click.
+        performSemanticsAction(SemanticsActions.RequestFocus)
+        assertIsFocused()
+        performKeyInput {
+            keyDown(Key.Enter)
+            keyUp(Key.Enter)
+        }
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilTag(tag: String) {
