@@ -135,6 +135,34 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithText("Первый", substring = false).assertIsFocused()
     }
 
+    @Test
+    fun unchangedHideRestoresFocusWithoutWaitingForChannelRemoval() {
+        val catalog = QuickActionPlaybackCatalog()
+        val preferences = HidingPreferencesRepository(catalog, applyHide = false)
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(catalog = catalog, preferences = preferences)
+            }
+        }
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-row-0")
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+        drainEffects()
+        composeRule.onNodeWithText("Скрыть").performClick()
+        drainEffects()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(
+                "Долгое OK · быстрые действия",
+                substring = false,
+            ).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Первый", substring = false).assertExists()
+    }
+
     private fun drainEffects() {
         effectScheduler.runCurrent()
         composeRule.waitForIdle()
@@ -169,6 +197,7 @@ class ChannelQuickActionsJourneyTest {
 
 private class HidingPreferencesRepository(
     private val catalog: QuickActionPlaybackCatalog,
+    private val applyHide: Boolean = true,
 ) : ChannelPreferencesRepository {
     override suspend fun setFavorite(
         profileId: String,
@@ -181,6 +210,7 @@ private class HidingPreferencesRepository(
         channelId: String,
         isHidden: Boolean,
     ): ChannelPreferenceMutationResult {
+        if (!applyHide) return ChannelPreferenceMutationResult.Unchanged
         if (isHidden) catalog.remove(channelId)
         return ChannelPreferenceMutationResult.Applied
     }
