@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelPreferenceMutationResult
 import app.muxtv.catalog.ChannelPreferencesRepository
