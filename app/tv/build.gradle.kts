@@ -1,3 +1,7 @@
+import org.cyclonedx.Version
+import org.cyclonedx.gradle.CyclonedxDirectTask
+import org.cyclonedx.model.Component
+
 plugins {
     id("muxtv.android.application")
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +9,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.cyclonedx.bom)
 }
 
 android {
@@ -29,10 +34,15 @@ android {
 dependencies {
     implementation(project(":catalog:api"))
     implementation(project(":catalog:importer"))
+    implementation(project(":catalog:ingest"))
     implementation(project(":catalog:refresh"))
     implementation(project(":catalog:sync"))
     implementation(project(":catalog:onboarding"))
     implementation(project(":core:credentials"))
+    implementation(project(":local-control:server"))
+    implementation(project(":local-control:tv-qr"))
+    implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:enrollment"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:network"))
@@ -63,6 +73,7 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     implementation(libs.work.runtime)
     implementation(libs.profileinstaller)
+    implementation(libs.zxing.core)
     baselineProfile(project(":benchmark:macrobenchmark"))
     ksp(libs.hilt.compiler)
     ksp(libs.androidx.hilt.compiler)
@@ -82,7 +93,37 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 }
 
+// The Baseline Profile plugin creates benchmarkRelease after the Android DSL is evaluated.
+// Keep tracing-wire ONLY in that evidence variant, and enabled by default for
+// the dedicated in-process trace CI. The standalone cold-start comparison opts
+// out: it measures real Perfetto startup timings and ART compilation modes,
+// not an in-process trace flush which can fail on Android TV API36 emulators.
+// This flag never changes normal release/debug app dependencies.
+val inProcessTraceFlag = providers.gradleProperty("muxtvBenchmarkInProcessTracing").orNull
+require(inProcessTraceFlag == null || inProcessTraceFlag == "true" || inProcessTraceFlag == "false") {
+    "muxtvBenchmarkInProcessTracing must be true or false."
+}
+configurations.configureEach {
+    if (name == "benchmarkReleaseImplementation" && inProcessTraceFlag != "false") {
+        dependencies.add(project.dependencies.create(libs.androidx.tracing.wire.get()))
+    }
+}
+
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
+}
+
+tasks.named<CyclonedxDirectTask>("cyclonedxDirectBom") {
+    projectType = Component.Type.APPLICATION
+    schemaVersion = Version.VERSION_16
+    componentName = "app.muxtv.tv"
+    componentVersion = android.defaultConfig.versionName ?: error("MuxTV release versionName must be defined for SBOM generation.")
+    includeConfigs = listOf("releaseRuntimeClasspath")
+    testConfigs = emptyList()
+    includeBuildEnvironment = false
+    includeBomSerialNumber = false
+    includeBuildSystem = false
+    jsonOutput.set(layout.buildDirectory.file("reports/sbom/muxtv-tv-release.cdx.json"))
+    xmlOutput.unsetConvention()
 }

@@ -1,0 +1,71 @@
+name: LC04 MXH1 isolated handshake wire laboratory CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-mxh1-handshake-wire-ci.yml'
+      - 'local-control/wire-lab/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04HandoffWireIsolationContractTest.kt'
+      - '.work/specifications/lc04-mxh1-handshake-wire-20261105.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-mxh1-wire-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  hostile-mxh1-wire:
+    name: Canonical MXH1 hostile framing and real Tink Ed25519 JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact pull request HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Exact HEAD and production authority separation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -f local-control/wire-lab/src/main/kotlin/app/muxtv/localcontrol/wirelab/Lc04HandoffWireLab.kt
+          ! grep -Fq 'Lc04HandoffWireLab' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
+          ! grep -Eq 'SIGNED_SEED_OFFER|TV_KEY_CONFIRM|PHONE_KEY_CONFIRM' local-control/wire-lab/src/main/kotlin/app/muxtv/localcontrol/wirelab/Lc04WireLab.kt
+          ! grep -Eq 'SourceOnboarding|SourcePreparationHandle|Socket\(|HttpClient' local-control/wire-lab/src/main/kotlin/app/muxtv/localcontrol/wirelab/Lc04HandoffWireLab.kt
+          grep -Fq 'testImplementation(libs.tink)' local-control/wire-lab/build.gradle.kts
+      - name: Test isolated wire codec and existing enrolled phone and TV
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:wire-lab:test \
+            :local-control:enrollment:test :local-control:phone-flow:test \
+            :local-control:native-transport:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04HandoffWireIsolationContractTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload authenticated-wire isolation evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-mxh1-wire-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/wire-lab/build/test-results/test/**
+            local-control/wire-lab/build/reports/tests/test/**
+            local-control/enrollment/build/test-results/test/**
+            local-control/phone-flow/build/test-results/test/**
+            local-control/native-transport/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}

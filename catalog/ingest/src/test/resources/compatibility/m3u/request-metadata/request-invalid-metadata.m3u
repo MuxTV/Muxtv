@@ -1,0 +1,6 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.invalid",C21 Invalid Metadata
+#EXTHTTP:{"Host":"TEST_C21_INVALID.invalid","X-Unbounded-Custom":"TEST_C21_INVALID"}
+#EXTHTTP:{not-json-TEST_C21_INVALID
+#EXTVLCOPT:http-range=bytes=0-1
+https://streams.invalid/live/invalid.ts?token=TEST_C21_INVALID

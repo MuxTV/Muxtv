@@ -134,6 +134,58 @@ class ChannelBrowseRepositoryTest {
     }
 
     @Test
+    fun managementVisibilityIsProfileScopedAcrossBrowseAndRecovery() = runTest {
+        val secondaryProfile = "profile-secondary"
+        database.profileDao().insert(
+            ProfileEntity(secondaryProfile, "Secondary", isPrimary = false),
+        )
+        activateRevision(revisionNumber = 1L, channelCount = 1)
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = "channel-00001",
+                isHidden = true,
+            ),
+        )
+
+        val primaryBrowse = repository.pages(query(ChannelBrowseFilter.ALL)).asSnapshot()
+        val secondaryBrowse = repository.pages(
+            ChannelBrowseQuery(secondaryProfile, ChannelBrowseFilter.ALL),
+        ).asSnapshot()
+        val primaryHidden = repository.managementPages(
+            managementQuery(ChannelManagementVisibility.HIDDEN),
+        ).asSnapshot()
+        val secondaryHidden = repository.managementPages(
+            ChannelManagementQuery(secondaryProfile, ChannelManagementVisibility.HIDDEN),
+        ).asSnapshot()
+        val secondaryVisible = repository.managementPages(
+            ChannelManagementQuery(secondaryProfile, ChannelManagementVisibility.VISIBLE),
+        ).asSnapshot()
+
+        assertThat(primaryBrowse).isEmpty()
+        assertThat(primaryHidden.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(secondaryBrowse.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(secondaryHidden).isEmpty()
+        assertThat(secondaryVisible.map { it.channelId }).containsExactly("channel-00001")
+        assertThat(secondaryVisible.single().isHidden).isFalse()
+    }
+
+    @Test
+    fun managementPagingLoadsBeyondFirstPage() = runTest {
+        activateRevision(revisionNumber = 1L, channelCount = 65)
+
+        val rows = repository.managementPages(
+            managementQuery(ChannelManagementVisibility.ALL),
+        ).asSnapshot {
+            scrollTo(64)
+        }
+
+        assertThat(rows).hasSize(65)
+        assertThat(rows.last().channelId).isEqualTo("channel-00065")
+        assertThat(rows.last().effectiveChannelNumber).isEqualTo("65")
+    }
+
+    @Test
     fun managementProjectionKeepsProviderDefaultsSeparateFromUserOverrides() = runTest {
         activateRevision(revisionNumber = 1L, channelCount = 1)
         database.catalogDao().insertOverlay(

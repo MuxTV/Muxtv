@@ -175,6 +175,9 @@ class DefaultRemoteSourceOnboarding(
                 RemoteSourceActivationFailure.UrlRejected(result.reason),
             )
 
+            RemoteSourceRefreshResult.LocalNetworkAccessRequired ->
+                RemoteSourceActivationResult.LocalNetworkAccessRequired
+
             RemoteSourceRefreshResult.InsecureTransportApprovalRequired -> cleanupFailure(
                 token,
                 sourceId,
@@ -400,6 +403,8 @@ sealed interface RemoteSourceActivationResult {
             require(warningCount >= 0)
         }
     }
+
+    data object LocalNetworkAccessRequired : RemoteSourceActivationResult
 
     data class Failed(
         val failure: RemoteSourceActivationFailure,

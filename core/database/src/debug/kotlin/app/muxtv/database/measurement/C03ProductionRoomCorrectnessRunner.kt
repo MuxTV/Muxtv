@@ -1,0 +1,1482 @@
+package app.muxtv.database.measurement
+
+import android.content.Context
+import androidx.paging.PagingSource
+import androidx.room3.Room
+import androidx.room3.RoomDatabase
+import androidx.room3.useReaderConnection
+import app.muxtv.database.MuxTvDatabase
+import app.muxtv.database.ProfileEntity
+import app.muxtv.database.RecentWriteResult
+import app.muxtv.database.RoomSourceRefreshStore
+import app.muxtv.database.RoomSourceRevisionStore
+import app.muxtv.database.SourceDefinition
+import app.muxtv.database.SourceRefreshStore
+import app.muxtv.database.SourceRevisionActivationResult
+import app.muxtv.database.SourceRevisionStatistics
+import app.muxtv.database.SourceRevisionStore
+import app.muxtv.database.StagedCatalogEntry
+import app.muxtv.database.UserChannelOverlayEntity
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+internal enum class C03ProductionScenario {
+    DELTA_0,
+    DELTA_1,
+    DELTA_10,
+    DELTA_100,
+    REORDER,
+    REMOVE_10,
+    TOKEN_CHURN,
+}
+
+internal data class C03ProductionCorrectnessSnapshot(
+    val activeCount: Int,
+    val activeDigestSha256: String,
+    val logicalIdentityDigestSha256: String,
+    val previousGoodDigestSha256: String,
+    val activeOrderDigestSha256: String,
+    val catalogPayloadRowsAdded: Int = 0,
+    val searchPayloadRowsAdded: Int = 0,
+    val membershipRowsAdded: Int = 0,
+    val distinctLogicalIdentityCount: Int = 0,
+    val distinctCatalogPayloadCount: Int = 0,
+    val membershipCount: Int = 0,
+    val stagingEntryCount: Int = 0,
+    val stagingMembershipCount: Int = 0,
+    val orphanRowsAfterBoundedCleanup: Int = 0,
+    val cleanupPasses: Int = 0,
+    val lateActivationPublished: Boolean = false,
+)
+
+internal data class C03DuplicateBrowseResult(
+    val productionVariantCount: Int,
+    val candidateVariantCount: Int,
+)
+
+internal data class C03ProductionContentScenarioResult(
+    val production: C03ProductionCorrectnessSnapshot,
+    val candidate: C03ProductionCorrectnessSnapshot,
+    val expectedIncomingOrderDigestSha256: String,
+    val baselineLogicalIdentityDigestSha256: String,
+    val baselineActiveDigestSha256: String,
+)
+
+internal data class C03ProductionPairResult(
+    val production: C03ProductionCorrectnessSnapshot,
+    val candidate: C03ProductionCorrectnessSnapshot,
+)
+
+internal data class C03ProductionSafetyResult(
+    val production: C03ProductionCorrectnessSnapshot,
+    val candidate: C03ProductionCorrectnessSnapshot,
+    val productionSuperseded: Boolean = false,
+    val candidateSuperseded: Boolean = false,
+)
+
+internal data class X05UserStateSnapshot(
+    val isFavorite: Boolean,
+    val customName: String,
+    val channelNumber: Int,
+    val isHidden: Boolean,
+    val lastSuccessfulPlaybackAtEpochMillis: Long,
+)
+
+internal data class X05OverlaySurvivalResult(
+    val logicalChannelId: String,
+    val productionCanonicalChannelId: String,
+    val candidateCanonicalChannelId: String,
+    val before: X05UserStateSnapshot,
+    val after: X05UserStateSnapshot,
+)
+
+internal data class C03ActiveSearchPublicationResult(
+    val expectedCanonicalChannelId: String,
+    val productionBefore: List<String>,
+    val candidateBefore: List<String>,
+    val productionDuringStaging: List<String>,
+    val candidateDuringStaging: List<String>,
+    val productionAfter: List<String>,
+    val candidateAfter: List<String>,
+)
+
+internal data class C03RepeatedRevisionStorageResult(
+    val activeRevision: Long,
+    val retainedRevisions: List<Long>,
+    val beforeCompaction: C03ProductionCandidateRowCounts,
+    val afterCompaction: C03ProductionCandidateRowCounts,
+    val cleanupPasses: Int,
+    val cleanupDeletedRows: Int,
+)
+
+/**
+ * Correctness-only A/B proof for #364.
+ *
+ * A is the current production Room representation. B is the debug-only production-equivalent
+ * immutable-payload + revision-membership Room candidate. Both use in-memory Room deliberately:
+ * file/WAL/timing evidence belongs to the next evidence layer and must not contaminate correctness.
+ */
+internal class C03ProductionRoomCorrectnessRunner(context: Context) {
+    private val applicationContext = context.applicationContext
+
+    suspend fun runContentScenario(
+        scenario: C03ProductionScenario,
+        entryCount: Int,
+    ): C03ProductionContentScenarioResult {
+        require(entryCount > 0)
+        val baseline = Fixture.baseline(entryCount)
+        val incoming = scenario.apply(baseline)
+        val expectedOrder = orderDigest(incoming.toNormalizedRows())
+        val baselineLogical = logicalDigest(baseline.toNormalizedRows())
+        val baselineActive = activeDigest(baseline.toNormalizedRows())
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            val beforeCandidate = candidate.dao.rowCounts()
+            acquireRefresh(production, candidate, RUN_REFRESH, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE)
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+            val afterCandidateStage = candidate.dao.rowCounts()
+
+            val productionActivation = production.revisions.activateIfRefreshOwnerMatches(
+                sourceId = SOURCE_ID,
+                revisionNumber = REFRESH_REVISION,
+                expectedCredentialRef = CREDENTIAL_REF,
+                expectedRunToken = RUN_REFRESH,
+                activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                statistics = SourceRevisionStatistics(incoming.size, 0, 0),
+            )
+            check(productionActivation is SourceRevisionActivationResult.Activated)
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionRows = production.database.productionRows(REFRESH_REVISION)
+            val productionPrevious = production.database.productionRows(BASELINE_REVISION)
+            val candidateRows = candidate.dao.activeRows(SOURCE_ID).map {
+                NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal, it.payloadId)
+            }
+            val candidatePrevious = candidate.database.candidateRows(BASELINE_REVISION)
+
+            check(activeDigest(productionRows) == activeDigest(incoming.toNormalizedRows()))
+            check(activeDigest(candidateRows) == activeDigest(incoming.toNormalizedRows()))
+
+            C03ProductionContentScenarioResult(
+                production = snapshot(
+                    activeRows = productionRows,
+                    previousRows = productionPrevious,
+                ),
+                candidate = snapshot(
+                    activeRows = candidateRows,
+                    previousRows = candidatePrevious,
+                    catalogPayloadRowsAdded = afterCandidateStage.payloadRows - beforeCandidate.payloadRows,
+                    searchPayloadRowsAdded = afterCandidateStage.searchPayloadRows - beforeCandidate.searchPayloadRows,
+                    membershipRowsAdded = afterCandidateStage.membershipRows - beforeCandidate.membershipRows,
+                ),
+                expectedIncomingOrderDigestSha256 = expectedOrder,
+                baselineLogicalIdentityDigestSha256 = baselineLogical,
+                baselineActiveDigestSha256 = baselineActive,
+            )
+        }
+    }
+
+
+    suspend fun runOverlaySurvivalScenario(
+        scenario: C03ProductionScenario,
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult {
+        require(entryCount > 0)
+        require(overlayIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[overlayIndex]
+        val incoming = scenario.apply(baseline)
+        check(incoming.any { it.logicalChannelId == anchor.logicalChannelId }) {
+            "X05 overlay anchor must survive the selected refresh scenario."
+        }
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            seedX05UserState(production.database, anchor.canonicalChannelId)
+            val before = production.database.x05UserState(anchor.canonicalChannelId)
+
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                    statistics = SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionCanonicalChannelId = production.database.productionCanonicalChannelId(
+                revision = REFRESH_REVISION,
+                providerKey = anchor.providerKey,
+            )
+            val candidateCanonicalChannelId = candidate.dao.activeRows(SOURCE_ID)
+                .single { it.logicalChannelId == anchor.logicalChannelId }
+                .canonicalChannelId
+            val after = production.database.x05UserState(anchor.canonicalChannelId)
+
+            X05OverlaySurvivalResult(
+                logicalChannelId = anchor.logicalChannelId,
+                productionCanonicalChannelId = productionCanonicalChannelId,
+                candidateCanonicalChannelId = candidateCanonicalChannelId,
+                before = before,
+                after = after,
+            )
+        }
+    }
+
+
+    suspend fun runOverlayPartialFailureSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.PARTIAL_FAILURE,
+    )
+
+    suspend fun runOverlayStaleOwnerSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.STALE_OWNER,
+    )
+
+    suspend fun runOverlayCancellationSurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+    ): X05OverlaySurvivalResult = runOverlaySafetySurvival(
+        entryCount = entryCount,
+        overlayIndex = overlayIndex,
+        mode = X05SafetyMode.CANCELLATION,
+    )
+
+    private suspend fun runOverlaySafetySurvival(
+        entryCount: Int,
+        overlayIndex: Int,
+        mode: X05SafetyMode,
+    ): X05OverlaySurvivalResult {
+        require(entryCount > 1)
+        require(overlayIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[overlayIndex]
+        val incoming = C03ProductionScenario.DELTA_10.apply(baseline)
+        val partial = incoming.take(entryCount / 2)
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            seedX05UserState(production.database, anchor.canonicalChannelId)
+            val before = production.database.x05UserState(anchor.canonicalChannelId)
+            val candidateBaselineCounts = candidate.dao.rowCounts()
+
+            when (mode) {
+                X05SafetyMode.PARTIAL_FAILURE -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_REFRESH,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    val failure = runCatching {
+                        stage(production, candidate, REFRESH_REVISION, partial)
+                        error("injected-x05-partial-refresh-failure")
+                    }
+                    check(failure.isFailure)
+                    production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+                    candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+                }
+
+                X05SafetyMode.STALE_OWNER -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_STALE,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+                    check(
+                        production.refresh.tryAcquire(
+                            sourceId = SOURCE_ID,
+                            runToken = RUN_REPLACEMENT,
+                            startedAtEpochMillis = REPLACEMENT_STARTED_AT,
+                            staleBeforeEpochMillis = REPLACEMENT_STALE_BEFORE,
+                        ),
+                    )
+                    candidate.dao.setRunningRefreshOwner(SOURCE_ID, RUN_REPLACEMENT)
+
+                    val productionResult = production.revisions.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_STALE,
+                        REPLACEMENT_STARTED_AT + 1,
+                        SourceRevisionStatistics(incoming.size, 0, 0),
+                    )
+                    val candidateResult = candidate.dao.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_STALE,
+                        REPLACEMENT_STARTED_AT + 1,
+                    )
+                    check(productionResult == SourceRevisionActivationResult.Superseded)
+                    check(candidateResult == C03ProductionCandidateActivationResult.Superseded)
+                }
+
+                X05SafetyMode.CANCELLATION -> {
+                    acquireRefresh(
+                        production,
+                        candidate,
+                        RUN_REFRESH,
+                        REFRESH_STARTED_AT,
+                        BASELINE_STALE_BEFORE,
+                    )
+                    production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+                    candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+
+                    coroutineScope {
+                        val staged = CompletableDeferred<Unit>()
+                        val job = launch {
+                            try {
+                                stage(production, candidate, REFRESH_REVISION, partial)
+                                staged.complete(Unit)
+                                awaitCancellation()
+                            } catch (failure: Throwable) {
+                                if (!staged.isCompleted) staged.completeExceptionally(failure)
+                                throw failure
+                            } finally {
+                                withContext(NonCancellable) {
+                                    production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+                                    candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+                                }
+                            }
+                        }
+                        staged.await()
+                        job.cancelAndJoin()
+                    }
+
+                    val lateCandidate = candidate.dao.activateIfRefreshOwnerMatches(
+                        SOURCE_ID,
+                        REFRESH_REVISION,
+                        CREDENTIAL_REF,
+                        RUN_REFRESH,
+                        REFRESH_ACTIVATED_AT,
+                    )
+                    check(lateCandidate != C03ProductionCandidateActivationResult.Published)
+                }
+            }
+
+            compactToBaseline(candidate, candidateBaselineCounts)
+            check(production.database.activeRevision() == BASELINE_REVISION)
+            check(candidate.dao.activeRevision(SOURCE_ID) == BASELINE_REVISION)
+            check(production.database.productionEntryCount(REFRESH_REVISION) == 0)
+            check(!candidate.dao.revisionExists(SOURCE_ID, REFRESH_REVISION))
+
+            val afterCounts = candidate.dao.rowCounts()
+            check(afterCounts == candidateBaselineCounts) {
+                "X05 candidate cleanup did not return payload/search/membership rows to baseline."
+            }
+
+            val productionCanonicalChannelId = production.database.productionCanonicalChannelId(
+                revision = BASELINE_REVISION,
+                providerKey = anchor.providerKey,
+            )
+            val candidateCanonicalChannelId = candidate.dao.activeRows(SOURCE_ID)
+                .single { it.logicalChannelId == anchor.logicalChannelId }
+                .canonicalChannelId
+            val after = production.database.x05UserState(anchor.canonicalChannelId)
+
+            X05OverlaySurvivalResult(
+                logicalChannelId = anchor.logicalChannelId,
+                productionCanonicalChannelId = productionCanonicalChannelId,
+                candidateCanonicalChannelId = candidateCanonicalChannelId,
+                before = before,
+                after = after,
+            )
+        }
+    }
+
+
+    suspend fun runActiveSearchPublicationScenario(
+        entryCount: Int,
+        markerIndex: Int,
+    ): C03ActiveSearchPublicationResult {
+        require(entryCount > 0)
+        require(markerIndex in 0 until entryCount)
+        val baseline = Fixture.baseline(entryCount)
+        val anchor = baseline[markerIndex]
+        val marker = "c03searchmarker$markerIndex"
+        val incoming = baseline.mapIndexed { index, item ->
+            if (index == markerIndex) {
+                item.copy(rawName = marker).rehash()
+            } else {
+                item.copy(ordinal = index.toLong())
+            }
+        }
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            val productionBefore = production.database.productionSearchCanonicalIds(marker)
+            val candidateBefore = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                .map(C03ProductionCandidateSearchRow::canonicalChannelId)
+
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+
+            val productionDuringStaging = production.database.productionSearchCanonicalIds(marker)
+            val candidateDuringStaging = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                .map(C03ProductionCandidateSearchRow::canonicalChannelId)
+
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                    statistics = SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = REFRESH_REVISION,
+                    expectedCredentialRef = CREDENTIAL_REF,
+                    expectedRunToken = RUN_REFRESH,
+                    activatedAtEpochMillis = REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            C03ActiveSearchPublicationResult(
+                expectedCanonicalChannelId = anchor.canonicalChannelId,
+                productionBefore = productionBefore,
+                candidateBefore = candidateBefore,
+                productionDuringStaging = productionDuringStaging,
+                candidateDuringStaging = candidateDuringStaging,
+                productionAfter = production.database.productionSearchCanonicalIds(marker),
+                candidateAfter = candidate.dao.activeSearch(SOURCE_ID, marker, SEARCH_LIMIT)
+                    .map(C03ProductionCandidateSearchRow::canonicalChannelId),
+            )
+        }
+    }
+
+    suspend fun runRepeatedRevisionStorageScenario(
+        entryCount: Int,
+        revisionCount: Int,
+    ): C03RepeatedRevisionStorageResult {
+        require(entryCount > 0)
+        require(revisionCount >= 3)
+        val baseline = Fixture.baseline(entryCount)
+
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+
+            for (revision in 2L..revisionCount.toLong()) {
+                val incoming = baseline.mapIndexed { index, item ->
+                    item.copy(
+                        ordinal = index.toLong(),
+                        locator = "${item.locator}&repeatRevision=$revision&entry=$index",
+                    ).rehash()
+                }
+                candidate.dao.setRunningRefreshOwner(SOURCE_ID, "c03-repeat-$revision")
+                candidate.dao.beginRevision(
+                    sourceId = SOURCE_ID,
+                    revisionNumber = revision,
+                    startedAtEpochMillis = 1_000L + revision,
+                )
+                incoming.chunked(BATCH_SIZE).forEach { batch ->
+                    candidate.dao.stageBatch(
+                        sourceId = SOURCE_ID,
+                        revisionNumber = revision,
+                        entries = batch.map(FixtureItem::toCandidateEntry),
+                    )
+                }
+                check(
+                    candidate.dao.activateIfRefreshOwnerMatches(
+                        sourceId = SOURCE_ID,
+                        revisionNumber = revision,
+                        expectedCredentialRef = CREDENTIAL_REF,
+                        expectedRunToken = "c03-repeat-$revision",
+                        activatedAtEpochMillis = 2_000L + revision,
+                    ) == C03ProductionCandidateActivationResult.Published,
+                )
+            }
+
+            val beforeCompaction = candidate.dao.rowCounts()
+            var cleanupPasses = 0
+            var cleanupDeletedRows = 0
+            var reachedFixedPoint = false
+            while (cleanupPasses < MAX_REPEATED_CLEANUP_PASSES && !reachedFixedPoint) {
+                cleanupPasses++
+                val result = candidate.dao.compactOrphans(REPEATED_CLEANUP_BATCH_SIZE)
+                val deleted = result.payloadRowsDeleted + result.searchPayloadRowsDeleted
+                cleanupDeletedRows += deleted
+                reachedFixedPoint = deleted == 0
+            }
+            check(reachedFixedPoint) {
+                "C03 repeated-revision orphan compaction did not reach a bounded fixed point."
+            }
+
+            C03RepeatedRevisionStorageResult(
+                activeRevision = candidate.dao.activeRevision(SOURCE_ID),
+                retainedRevisions = candidate.dao.retainedRevisions(SOURCE_ID),
+                beforeCompaction = beforeCompaction,
+                afterCompaction = candidate.dao.rowCounts(),
+                cleanupPasses = cleanupPasses,
+                cleanupDeletedRows = cleanupDeletedRows,
+            )
+        }
+    }
+
+    suspend fun runDuplicateScenario(): C03ProductionPairResult {
+        val item = Fixture.baseline(1).single()
+        val incoming = listOf(item.copy(ordinal = 0), item.copy(ordinal = 1))
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, listOf(item))
+            acquireRefresh(production, candidate, RUN_REFRESH, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE)
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                    SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+            val productionRows = production.database.productionRows(REFRESH_REVISION)
+            val candidateRows = candidate.dao.activeRows(SOURCE_ID).map {
+                NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal, it.payloadId)
+            }
+            C03ProductionPairResult(
+                production = snapshot(productionRows, production.database.productionRows(BASELINE_REVISION)),
+                candidate = snapshot(
+                    activeRows = candidateRows,
+                    previousRows = candidate.database.candidateRows(BASELINE_REVISION),
+                    distinctLogicalIdentityCount = candidateRows.map { it.logicalChannelId }.toSet().size,
+                    distinctCatalogPayloadCount = candidateRows.mapNotNull { it.payloadId }.toSet().size,
+                    membershipCount = candidate.dao.membershipCount(SOURCE_ID, REFRESH_REVISION),
+                ),
+            )
+        }
+    }
+
+    suspend fun runDuplicateBrowseScenario(): C03DuplicateBrowseResult {
+        val item = Fixture.baseline(1).single()
+        val incoming = listOf(item.copy(ordinal = 0), item.copy(ordinal = 1))
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, listOf(item))
+            acquireRefresh(
+                production,
+                candidate,
+                RUN_REFRESH,
+                REFRESH_STARTED_AT,
+                BASELINE_STALE_BEFORE,
+            )
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+            check(
+                production.revisions.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                    SourceRevisionStatistics(incoming.size, 0, 0),
+                ) is SourceRevisionActivationResult.Activated,
+            )
+            check(
+                candidate.dao.activateIfRefreshOwnerMatches(
+                    SOURCE_ID,
+                    REFRESH_REVISION,
+                    CREDENTIAL_REF,
+                    RUN_REFRESH,
+                    REFRESH_ACTIVATED_AT,
+                ) == C03ProductionCandidateActivationResult.Published,
+            )
+
+            val productionPage = production.database.channelBrowseDao()
+                .pageActiveChannels(DUPLICATE_BROWSE_PROFILE_ID, false)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = DUPLICATE_BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
+            val candidatePage = candidate.dao.pageActiveChannels(SOURCE_ID)
+                .load(
+                    PagingSource.LoadParams.Refresh(
+                        key = 0,
+                        loadSize = DUPLICATE_BROWSE_PAGE_SIZE,
+                        placeholdersEnabled = false,
+                    ),
+                )
+
+            val productionRow =
+                (productionPage as? PagingSource.LoadResult.Page)?.data?.single()
+                    ?: error("C03 production duplicate browse page failed.")
+            val candidateRow =
+                (candidatePage as? PagingSource.LoadResult.Page)?.data?.single()
+                    ?: error("C03 candidate duplicate browse page failed.")
+
+            check(productionRow.channelId == item.canonicalChannelId)
+            check(candidateRow.channelId == item.canonicalChannelId)
+
+            C03DuplicateBrowseResult(
+                productionVariantCount = productionRow.variantCount,
+                candidateVariantCount = candidateRow.variantCount,
+            )
+        }
+    }
+
+    suspend fun runPartialFailureScenario(entryCount: Int): C03ProductionSafetyResult {
+        require(entryCount > 1)
+        val baseline = Fixture.baseline(entryCount)
+        val partial = C03ProductionScenario.DELTA_10.apply(baseline).take(entryCount / 2)
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            val candidateBaselineCounts = candidate.dao.rowCounts()
+            acquireRefresh(production, candidate, RUN_REFRESH, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE)
+            production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+            candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+            val failure = runCatching {
+                stage(production, candidate, REFRESH_REVISION, partial)
+                error("injected-c03-partial-refresh-failure")
+            }
+            check(failure.isFailure)
+            production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+            candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+            val cleanup = compactToBaseline(candidate, candidateBaselineCounts)
+
+            C03ProductionSafetyResult(
+                production = safetySnapshotProduction(production),
+                candidate = safetySnapshotCandidate(candidate, candidateBaselineCounts, cleanup),
+            )
+        }
+    }
+
+    suspend fun runStaleOwnerScenario(entryCount: Int): C03ProductionSafetyResult {
+        require(entryCount > 0)
+        val baseline = Fixture.baseline(entryCount)
+        val incoming = C03ProductionScenario.DELTA_10.apply(baseline)
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            acquireRefresh(production, candidate, RUN_STALE, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE)
+            beginAndStage(production, candidate, REFRESH_REVISION, incoming)
+
+            check(
+                production.refresh.tryAcquire(
+                    sourceId = SOURCE_ID,
+                    runToken = RUN_REPLACEMENT,
+                    startedAtEpochMillis = REPLACEMENT_STARTED_AT,
+                    staleBeforeEpochMillis = REPLACEMENT_STALE_BEFORE,
+                ),
+            )
+            candidate.dao.setRunningRefreshOwner(SOURCE_ID, RUN_REPLACEMENT)
+
+            val productionResult = production.revisions.activateIfRefreshOwnerMatches(
+                SOURCE_ID,
+                REFRESH_REVISION,
+                CREDENTIAL_REF,
+                RUN_STALE,
+                REPLACEMENT_STARTED_AT + 1,
+                SourceRevisionStatistics(incoming.size, 0, 0),
+            )
+            val candidateResult = candidate.dao.activateIfRefreshOwnerMatches(
+                SOURCE_ID,
+                REFRESH_REVISION,
+                CREDENTIAL_REF,
+                RUN_STALE,
+                REPLACEMENT_STARTED_AT + 1,
+            )
+
+            C03ProductionSafetyResult(
+                production = safetySnapshotProduction(production),
+                candidate = safetySnapshotCandidate(candidate, candidate.dao.rowCounts(), CleanupState(0, 0)),
+                productionSuperseded = productionResult == SourceRevisionActivationResult.Superseded,
+                candidateSuperseded = candidateResult == C03ProductionCandidateActivationResult.Superseded,
+            )
+        }
+    }
+
+    suspend fun runCancellationScenario(entryCount: Int): C03ProductionSafetyResult {
+        require(entryCount > 1)
+        val baseline = Fixture.baseline(entryCount)
+        val partial = C03ProductionScenario.DELTA_10.apply(baseline).take(entryCount / 2)
+        return withHarnesses { production, candidate ->
+            publishBaseline(production, candidate, baseline)
+            val candidateBaselineCounts = candidate.dao.rowCounts()
+            acquireRefresh(production, candidate, RUN_REFRESH, REFRESH_STARTED_AT, BASELINE_STALE_BEFORE)
+            production.revisions.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+            candidate.dao.beginRevision(SOURCE_ID, REFRESH_REVISION, REFRESH_STARTED_AT)
+
+            coroutineScope {
+                val staged = CompletableDeferred<Unit>()
+                val job = launch {
+                    try {
+                        stage(production, candidate, REFRESH_REVISION, partial)
+                        staged.complete(Unit)
+                        awaitCancellation()
+                    } catch (failure: Throwable) {
+                        if (!staged.isCompleted) staged.completeExceptionally(failure)
+                        throw failure
+                    } finally {
+                        withContext(NonCancellable) {
+                            production.revisions.discard(SOURCE_ID, REFRESH_REVISION)
+                            candidate.dao.discardRevision(SOURCE_ID, REFRESH_REVISION)
+                        }
+                    }
+                }
+                staged.await()
+                job.cancelAndJoin()
+            }
+
+            val lateCandidate = candidate.dao.activateIfRefreshOwnerMatches(
+                SOURCE_ID,
+                REFRESH_REVISION,
+                CREDENTIAL_REF,
+                RUN_REFRESH,
+                REFRESH_ACTIVATED_AT,
+            )
+            val cleanup = compactToBaseline(candidate, candidateBaselineCounts)
+            val candidateSnapshot = safetySnapshotCandidate(candidate, candidateBaselineCounts, cleanup).copy(
+                lateActivationPublished = lateCandidate == C03ProductionCandidateActivationResult.Published,
+            )
+            C03ProductionSafetyResult(
+                production = safetySnapshotProduction(production),
+                candidate = candidateSnapshot,
+            )
+        }
+    }
+
+    private suspend fun publishBaseline(
+        production: ProductionHarness,
+        candidate: CandidateHarness,
+        baseline: List<FixtureItem>,
+    ) {
+        production.revisions.upsertSource(SourceDefinition(SOURCE_ID, "C03 A/B source", CREDENTIAL_REF))
+        candidate.dao.upsertSource(SOURCE_ID, CREDENTIAL_REF)
+        acquireRefresh(production, candidate, RUN_BASELINE, BASELINE_STARTED_AT, 0)
+        beginAndStage(production, candidate, BASELINE_REVISION, baseline)
+        check(
+            production.revisions.activateIfRefreshOwnerMatches(
+                SOURCE_ID,
+                BASELINE_REVISION,
+                CREDENTIAL_REF,
+                RUN_BASELINE,
+                BASELINE_ACTIVATED_AT,
+                SourceRevisionStatistics(baseline.size, 0, 0),
+            ) is SourceRevisionActivationResult.Activated,
+        )
+        check(
+            candidate.dao.activateIfRefreshOwnerMatches(
+                SOURCE_ID,
+                BASELINE_REVISION,
+                CREDENTIAL_REF,
+                RUN_BASELINE,
+                BASELINE_ACTIVATED_AT,
+            ) == C03ProductionCandidateActivationResult.Published,
+        )
+    }
+
+    private suspend fun acquireRefresh(
+        production: ProductionHarness,
+        candidate: CandidateHarness,
+        runToken: String,
+        startedAtEpochMillis: Long,
+        staleBeforeEpochMillis: Long,
+    ) {
+        check(
+            production.refresh.tryAcquire(
+                sourceId = SOURCE_ID,
+                runToken = runToken,
+                startedAtEpochMillis = startedAtEpochMillis,
+                staleBeforeEpochMillis = staleBeforeEpochMillis,
+            ),
+        )
+        candidate.dao.setRunningRefreshOwner(SOURCE_ID, runToken)
+    }
+
+    private suspend fun beginAndStage(
+        production: ProductionHarness,
+        candidate: CandidateHarness,
+        revision: Long,
+        items: List<FixtureItem>,
+    ) {
+        production.revisions.beginRevision(SOURCE_ID, revision, REFRESH_STARTED_AT)
+        candidate.dao.beginRevision(SOURCE_ID, revision, REFRESH_STARTED_AT)
+        stage(production, candidate, revision, items)
+    }
+
+    private suspend fun stage(
+        production: ProductionHarness,
+        candidate: CandidateHarness,
+        revision: Long,
+        items: List<FixtureItem>,
+    ) {
+        items.chunked(BATCH_SIZE).forEach { batch ->
+            production.revisions.stageBatch(
+                SOURCE_ID,
+                revision,
+                batch.map { it.toProductionEntry(revision) },
+            )
+            candidate.dao.stageBatch(
+                SOURCE_ID,
+                revision,
+                batch.map(FixtureItem::toCandidateEntry),
+            )
+        }
+    }
+
+    private suspend fun safetySnapshotProduction(production: ProductionHarness): C03ProductionCorrectnessSnapshot {
+        val activeRevision = production.database.activeRevision()
+        val active = production.database.productionRows(activeRevision)
+        return snapshot(
+            activeRows = active,
+            previousRows = production.database.productionRows(BASELINE_REVISION),
+            stagingEntryCount = production.database.productionEntryCount(REFRESH_REVISION),
+        )
+    }
+
+    private suspend fun safetySnapshotCandidate(
+        candidate: CandidateHarness,
+        baselineCounts: C03ProductionCandidateRowCounts,
+        cleanup: CleanupState,
+    ): C03ProductionCorrectnessSnapshot {
+        val active = candidate.dao.activeRows(SOURCE_ID).map {
+            NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal, it.payloadId)
+        }
+        val counts = candidate.dao.rowCounts()
+        return snapshot(
+            activeRows = active,
+            previousRows = candidate.database.candidateRows(BASELINE_REVISION),
+            stagingMembershipCount = candidate.dao.membershipCount(SOURCE_ID, REFRESH_REVISION),
+            orphanRowsAfterBoundedCleanup =
+                (counts.payloadRows - baselineCounts.payloadRows).coerceAtLeast(0) +
+                    (counts.searchPayloadRows - baselineCounts.searchPayloadRows).coerceAtLeast(0),
+            cleanupPasses = cleanup.passes,
+        )
+    }
+
+
+    private suspend fun seedX05UserState(
+        database: MuxTvDatabase,
+        canonicalChannelId: String,
+    ) {
+        database.profileDao().insert(
+            ProfileEntity(
+                id = X05_PROFILE_ID,
+                name = "X05 overlay profile",
+                isPrimary = false,
+            ),
+        )
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = X05_PROFILE_ID,
+                canonicalChannelId = canonicalChannelId,
+                isFavorite = true,
+                customName = X05_CUSTOM_NAME,
+                channelNumber = X05_CUSTOM_NUMBER,
+                isHidden = true,
+            ),
+        )
+        check(
+            database.recentChannelsDao().recordSuccessfulPlayback(
+                profileId = X05_PROFILE_ID,
+                channelId = canonicalChannelId,
+                successfulAtEpochMillis = X05_RECENT_AT_EPOCH_MILLIS,
+                retentionLimit = X05_RECENT_RETENTION_LIMIT,
+            ) == RecentWriteResult.Applied,
+        )
+    }
+
+
+    private suspend fun MuxTvDatabase.productionSearchCanonicalIds(
+        ftsExpression: String,
+    ): List<String> = channelSearchDao().searchCandidates(
+        profileId = SEARCH_PROFILE_ID,
+        ftsExpression = ftsExpression,
+        nowEpochMillis = 0L,
+        fetchLimit = SEARCH_LIMIT,
+        restrictToCanonicalIds = null,
+    ).map { it.canonicalChannelId }
+
+    private suspend fun MuxTvDatabase.x05UserState(
+        canonicalChannelId: String,
+    ): X05UserStateSnapshot = useReaderConnection { connection ->
+        connection.usePrepared(
+            """
+            SELECT overlay.isFavorite,
+                   overlay.customName,
+                   overlay.channelNumber,
+                   overlay.isHidden,
+                   recent.lastSuccessfulPlaybackAtEpochMillis
+            FROM user_channel_overlays AS overlay
+            INNER JOIN recent_channels AS recent
+                ON recent.profileId = overlay.profileId
+               AND recent.canonicalChannelId = overlay.canonicalChannelId
+            WHERE overlay.profileId = ?
+              AND overlay.canonicalChannelId = ?
+            LIMIT 1
+            """.trimIndent(),
+        ) { statement ->
+            statement.bindText(1, X05_PROFILE_ID)
+            statement.bindText(2, canonicalChannelId)
+            check(statement.step()) { "X05 user state row is missing." }
+            X05UserStateSnapshot(
+                isFavorite = statement.getLong(0) != 0L,
+                customName = statement.getText(1),
+                channelNumber = statement.getLong(2).toInt(),
+                isHidden = statement.getLong(3) != 0L,
+                lastSuccessfulPlaybackAtEpochMillis = statement.getLong(4),
+            )
+        }
+    }
+
+    private suspend fun MuxTvDatabase.productionCanonicalChannelId(
+        revision: Long,
+        providerKey: String,
+    ): String = useReaderConnection { connection ->
+        connection.usePrepared(
+            """
+            SELECT variant.canonicalChannelId
+            FROM provider_channels AS provider
+            INNER JOIN stream_variants AS variant
+                ON variant.providerChannelId = provider.id
+            WHERE provider.sourceId = ?
+              AND provider.revisionNumber = ?
+              AND provider.providerKey = ?
+            LIMIT 1
+            """.trimIndent(),
+        ) { statement ->
+            statement.bindText(1, SOURCE_ID)
+            statement.bindLong(2, revision)
+            statement.bindText(3, providerKey)
+            check(statement.step()) { "X05 production anchor channel is missing." }
+            statement.getText(0)
+        }
+    }
+
+    private suspend fun compactToBaseline(
+        candidate: CandidateHarness,
+        baseline: C03ProductionCandidateRowCounts,
+    ): CleanupState {
+        var passes = 0
+        var deleted = 0
+        repeat(MAX_CLEANUP_PASSES) {
+            passes++
+            val result = candidate.dao.compactOrphans(CLEANUP_BATCH_SIZE)
+            deleted += result.payloadRowsDeleted + result.searchPayloadRowsDeleted
+            if (result.payloadRowsDeleted == 0 && result.searchPayloadRowsDeleted == 0) {
+                return CleanupState(passes, deleted)
+            }
+        }
+        val counts = candidate.dao.rowCounts()
+        check(counts.payloadRows <= baseline.payloadRows && counts.searchPayloadRows <= baseline.searchPayloadRows) {
+            "C03 candidate orphan cleanup exceeded its bounded correctness budget."
+        }
+        return CleanupState(passes, deleted)
+    }
+
+    private suspend fun MuxTvDatabase.activeRevision(): Long = useReaderConnection { connection ->
+        connection.usePrepared("SELECT activeRevision FROM sources WHERE id = ?") { statement ->
+            statement.bindText(1, SOURCE_ID)
+            check(statement.step())
+            statement.getLong(0)
+        }
+    }
+
+    private suspend fun MuxTvDatabase.productionEntryCount(revision: Long): Int =
+        useReaderConnection { connection ->
+            connection.usePrepared(
+                "SELECT COUNT(*) FROM provider_channels WHERE sourceId = ? AND revisionNumber = ?",
+            ) { statement ->
+                statement.bindText(1, SOURCE_ID)
+                statement.bindLong(2, revision)
+                check(statement.step())
+                statement.getLong(0).toInt()
+            }
+        }
+
+    private suspend fun MuxTvDatabase.productionRows(revision: Long): List<NormalizedRow> =
+        useReaderConnection { connection ->
+            connection.usePrepared(
+                """
+                SELECT p.providerKey, p.rawName, p.tvgId, p.tvgName, p.logoUrl,
+                       p.groupTitle, p.channelNumber, p.catchupMode, p.catchupSource,
+                       p.catchupDays, p.catchupCorrection, v.canonicalChannelId,
+                       v.locator, v.userAgent, v.referrer
+                FROM provider_channels AS p
+                INNER JOIN stream_variants AS v ON v.providerChannelId = p.id
+                WHERE p.sourceId = ? AND p.revisionNumber = ?
+                ORDER BY p.id COLLATE BINARY
+                """.trimIndent(),
+            ) { statement ->
+                statement.bindText(1, SOURCE_ID)
+                statement.bindLong(2, revision)
+                buildList {
+                    var ordinal = 0L
+                    while (statement.step()) {
+                        val providerKey = statement.getText(0)
+                        val logical = logicalChannelId(SOURCE_ID, providerKey)
+                        val content = contentHash(
+                            logicalChannelId = logical,
+                            providerKey = providerKey,
+                            rawName = statement.getText(1),
+                            tvgId = statement.getText(2),
+                            tvgName = statement.getText(3),
+                            logoUrl = statement.getText(4),
+                            groupTitle = statement.getText(5),
+                            channelNumber = statement.getText(6),
+                            catchupMode = statement.getText(7),
+                            catchupSource = statement.getText(8),
+                            catchupDays = statement.getLong(9).toInt(),
+                            catchupCorrection = statement.getText(10),
+                            canonicalChannelId = statement.getText(11),
+                            locator = statement.getText(12),
+                            userAgent = statement.getText(13),
+                            referrer = statement.getText(14),
+                        )
+                        add(NormalizedRow(logical, content, ordinal++))
+                    }
+                }
+            }
+        }
+
+    private suspend fun C03ProductionCandidateDatabase.candidateRows(revision: Long): List<NormalizedRow> =
+        useReaderConnection { connection ->
+            connection.usePrepared(
+                """
+                SELECT m.ordinal, m.logicalChannelId, p.contentHash, p.payloadId
+                FROM c03_production_candidate_memberships AS m
+                INNER JOIN c03_production_candidate_payloads AS p ON p.payloadId = m.payloadId
+                WHERE m.sourceId = ? AND m.revisionNumber = ?
+                ORDER BY m.ordinal
+                """.trimIndent(),
+            ) { statement ->
+                statement.bindText(1, SOURCE_ID)
+                statement.bindLong(2, revision)
+                buildList {
+                    while (statement.step()) {
+                        add(
+                            NormalizedRow(
+                                logicalChannelId = statement.getText(1),
+                                contentHash = statement.getText(2),
+                                ordinal = statement.getLong(0),
+                                payloadId = statement.getText(3),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+    private suspend fun <T> withHarnesses(
+        block: suspend (ProductionHarness, CandidateHarness) -> T,
+    ): T {
+        val productionDb = Room.inMemoryDatabaseBuilder(applicationContext, MuxTvDatabase::class.java).build()
+        val candidateDb = Room.inMemoryDatabaseBuilder(
+            applicationContext,
+            C03ProductionCandidateDatabase::class.java,
+        ).build()
+        val production = ProductionHarness(
+            database = productionDb,
+            revisions = RoomSourceRevisionStore(productionDb.sourceRevisionDao()),
+            refresh = RoomSourceRefreshStore(productionDb.sourceRefreshDao()),
+        )
+        val candidate = CandidateHarness(candidateDb, candidateDb.candidateDao())
+        return try {
+            block(production, candidate)
+        } finally {
+            candidateDb.close()
+            productionDb.close()
+        }
+    }
+
+    private fun C03ProductionScenario.apply(previous: List<FixtureItem>): List<FixtureItem> = when (this) {
+        C03ProductionScenario.DELTA_0 -> previous.mapIndexed { index, item -> item.copy(ordinal = index.toLong()) }
+        C03ProductionScenario.DELTA_1 -> Fixture.contentDelta(previous, 1)
+        C03ProductionScenario.DELTA_10 -> Fixture.contentDelta(previous, 10)
+        C03ProductionScenario.DELTA_100 -> Fixture.contentDelta(previous, 100)
+        C03ProductionScenario.REORDER -> previous.asReversed().mapIndexed { index, item -> item.copy(ordinal = index.toLong()) }
+        C03ProductionScenario.REMOVE_10 -> previous.dropLast((previous.size / 10).coerceAtLeast(1))
+            .mapIndexed { index, item -> item.copy(ordinal = index.toLong()) }
+        C03ProductionScenario.TOKEN_CHURN -> previous.mapIndexed { index, item ->
+            item.copy(
+                ordinal = index.toLong(),
+                locator = "${item.locator}&token=rotated-$index",
+            ).rehash()
+        }
+    }
+
+    private fun snapshot(
+        activeRows: List<NormalizedRow>,
+        previousRows: List<NormalizedRow>,
+        catalogPayloadRowsAdded: Int = 0,
+        searchPayloadRowsAdded: Int = 0,
+        membershipRowsAdded: Int = 0,
+        distinctLogicalIdentityCount: Int = activeRows.map { it.logicalChannelId }.toSet().size,
+        distinctCatalogPayloadCount: Int = activeRows.mapNotNull { it.payloadId }.toSet().size,
+        membershipCount: Int = activeRows.size,
+        stagingEntryCount: Int = 0,
+        stagingMembershipCount: Int = 0,
+        orphanRowsAfterBoundedCleanup: Int = 0,
+        cleanupPasses: Int = 0,
+    ): C03ProductionCorrectnessSnapshot = C03ProductionCorrectnessSnapshot(
+        activeCount = activeRows.size,
+        activeDigestSha256 = activeDigest(activeRows),
+        logicalIdentityDigestSha256 = logicalDigest(activeRows),
+        previousGoodDigestSha256 = activeDigest(previousRows),
+        activeOrderDigestSha256 = orderDigest(activeRows),
+        catalogPayloadRowsAdded = catalogPayloadRowsAdded,
+        searchPayloadRowsAdded = searchPayloadRowsAdded,
+        membershipRowsAdded = membershipRowsAdded,
+        distinctLogicalIdentityCount = distinctLogicalIdentityCount,
+        distinctCatalogPayloadCount = distinctCatalogPayloadCount,
+        membershipCount = membershipCount,
+        stagingEntryCount = stagingEntryCount,
+        stagingMembershipCount = stagingMembershipCount,
+        orphanRowsAfterBoundedCleanup = orphanRowsAfterBoundedCleanup,
+        cleanupPasses = cleanupPasses,
+    )
+
+    private enum class X05SafetyMode {
+        PARTIAL_FAILURE,
+        STALE_OWNER,
+        CANCELLATION,
+    }
+
+    private data class ProductionHarness(
+        val database: MuxTvDatabase,
+        val revisions: SourceRevisionStore,
+        val refresh: SourceRefreshStore,
+    )
+
+    private data class CandidateHarness(
+        val database: C03ProductionCandidateDatabase,
+        val dao: C03ProductionCandidateDao,
+    )
+
+    private data class CleanupState(val passes: Int, val deletedRows: Int)
+
+    private data class NormalizedRow(
+        val logicalChannelId: String,
+        val contentHash: String,
+        val ordinal: Long,
+        val payloadId: String? = null,
+    )
+
+    private data class FixtureItem(
+        val ordinal: Long,
+        val providerKey: String,
+        val logicalChannelId: String,
+        val canonicalChannelId: String,
+        val rawName: String,
+        val tvgId: String,
+        val tvgName: String,
+        val logoUrl: String,
+        val groupTitle: String,
+        val channelNumber: String,
+        val catchupMode: String,
+        val catchupSource: String,
+        val catchupDays: Int,
+        val catchupCorrection: String,
+        val locator: String,
+        val userAgent: String,
+        val referrer: String,
+        val contentHash: String,
+        val searchContentHash: String,
+    ) {
+        fun rehash(): FixtureItem = copy(
+            contentHash = contentHash(
+                logicalChannelId,
+                providerKey,
+                rawName,
+                tvgId,
+                tvgName,
+                logoUrl,
+                groupTitle,
+                channelNumber,
+                catchupMode,
+                catchupSource,
+                catchupDays,
+                catchupCorrection,
+                canonicalChannelId,
+                locator,
+                userAgent,
+                referrer,
+            ),
+            searchContentHash = searchHash(logicalChannelId, rawName, groupTitle, channelNumber),
+        )
+
+        fun toProductionEntry(revision: Long): StagedCatalogEntry = StagedCatalogEntry(
+            providerChannelId = physicalId("provider", revision, ordinal),
+            providerKey = providerKey,
+            rawName = rawName,
+            canonicalChannelId = canonicalChannelId,
+            canonicalDisplayName = tvgName,
+            streamVariantId = physicalId("stream", revision, ordinal),
+            locator = locator,
+            tvgId = tvgId,
+            tvgName = tvgName,
+            logoUrl = logoUrl,
+            groupTitle = groupTitle,
+            channelNumber = channelNumber,
+            catchupMode = catchupMode,
+            catchupSource = catchupSource,
+            catchupDays = catchupDays,
+            catchupCorrection = catchupCorrection,
+            userAgent = userAgent,
+            referrer = referrer,
+        )
+
+        fun toCandidateEntry(): C03ProductionCandidateStageEntry = C03ProductionCandidateStageEntry(
+            ordinal = ordinal,
+            logicalChannelId = logicalChannelId,
+            contentHash = contentHash,
+            searchContentHash = searchContentHash,
+            providerKey = providerKey,
+            rawName = rawName,
+            tvgId = tvgId,
+            tvgName = tvgName,
+            logoUrl = logoUrl,
+            groupTitle = groupTitle,
+            channelNumber = channelNumber,
+            locator = locator,
+            catchupMode = catchupMode,
+            catchupSource = catchupSource,
+            catchupDays = catchupDays,
+            catchupCorrection = catchupCorrection,
+            userAgent = userAgent,
+            referrer = referrer,
+            searchText = "$rawName $groupTitle $channelNumber",
+            canonicalChannelId = canonicalChannelId,
+        )
+    }
+
+    private object Fixture {
+        fun baseline(size: Int): List<FixtureItem> = List(size) { index ->
+            val providerKey = "provider:item-${index.toString().padStart(5, '0')}"
+            val logical = logicalChannelId(SOURCE_ID, providerKey)
+            FixtureItem(
+                ordinal = index.toLong(),
+                providerKey = providerKey,
+                logicalChannelId = logical,
+                canonicalChannelId = logical,
+                rawName = "Channel $index",
+                tvgId = "tvg-$index",
+                tvgName = "Channel $index",
+                logoUrl = "https://assets.invalid/$index.png",
+                groupTitle = "Group ${index % 8}",
+                channelNumber = (index + 1).toString(),
+                catchupMode = "append",
+                catchupSource = "?start={utc}",
+                catchupDays = 7,
+                catchupCorrection = "0",
+                locator = "https://stream.invalid/live/$index?session=baseline",
+                userAgent = "MuxTV-C03",
+                referrer = "https://provider.invalid/",
+                contentHash = "pending",
+                searchContentHash = "pending",
+            ).rehash()
+        }
+
+        fun contentDelta(previous: List<FixtureItem>, percent: Int): List<FixtureItem> {
+            val changed = (previous.size.toLong() * percent / 100L).toInt()
+            return previous.mapIndexed { index, item ->
+                val ordered = item.copy(ordinal = index.toLong())
+                if (index < changed) {
+                    ordered.copy(locator = "https://stream.invalid/live/$index?session=delta-$percent").rehash()
+                } else {
+                    ordered
+                }
+            }
+        }
+    }
+
+    private fun List<FixtureItem>.toNormalizedRows(): List<NormalizedRow> = map {
+        NormalizedRow(it.logicalChannelId, it.contentHash, it.ordinal)
+    }
+
+    private fun activeDigest(rows: List<NormalizedRow>): String = digestFrames(
+        ACTIVE_DIGEST_DOMAIN,
+        rows.sortedWith(compareBy<NormalizedRow> { it.logicalChannelId }.thenBy { it.contentHash })
+            .flatMap { listOf(it.logicalChannelId, it.contentHash) },
+    )
+
+    private fun logicalDigest(rows: List<NormalizedRow>): String = digestFrames(
+        LOGICAL_DIGEST_DOMAIN,
+        rows.map { it.logicalChannelId }.sorted(),
+    )
+
+    private fun orderDigest(rows: List<NormalizedRow>): String = digestFrames(
+        ORDER_DIGEST_DOMAIN,
+        rows.sortedBy { it.ordinal }.flatMap { listOf(it.logicalChannelId, it.contentHash) },
+    )
+
+    private companion object {
+        const val SOURCE_ID = "c03-production-ab-source"
+        const val CREDENTIAL_REF = "credential-c03-production-ab"
+        const val BASELINE_REVISION = 1L
+        const val REFRESH_REVISION = 2L
+        const val BASELINE_STARTED_AT = 10L
+        const val BASELINE_ACTIVATED_AT = 20L
+        const val REFRESH_STARTED_AT = 100L
+        const val REFRESH_ACTIVATED_AT = 120L
+        const val BASELINE_STALE_BEFORE = 50L
+        const val REPLACEMENT_STARTED_AT = 300L
+        const val REPLACEMENT_STALE_BEFORE = 200L
+        const val RUN_BASELINE = "c03-baseline-run"
+        const val RUN_REFRESH = "c03-refresh-run"
+        const val RUN_STALE = "c03-stale-run"
+        const val RUN_REPLACEMENT = "c03-replacement-run"
+        const val BATCH_SIZE = 40
+        const val CLEANUP_BATCH_SIZE = 64
+        const val MAX_CLEANUP_PASSES = 4
+        const val LOGICAL_ID_DOMAIN = "catalog-logical-v1"
+        const val CONTENT_HASH_DOMAIN = "c03-production-content-v1"
+        const val SEARCH_HASH_DOMAIN = "c03-production-search-v1"
+        const val ACTIVE_DIGEST_DOMAIN = "c03-active-digest-v1"
+        const val LOGICAL_DIGEST_DOMAIN = "c03-logical-digest-v1"
+        const val ORDER_DIGEST_DOMAIN = "c03-order-digest-v1"
+        const val X05_PROFILE_ID = "x05-overlay-profile"
+        const val X05_CUSTOM_NAME = "My News"
+        const val X05_CUSTOM_NUMBER = 77
+        const val X05_RECENT_AT_EPOCH_MILLIS = 42_000L
+        const val X05_RECENT_RETENTION_LIMIT = 50
+        const val SEARCH_PROFILE_ID = "c03-search-profile"
+        const val SEARCH_LIMIT = 20
+        const val DUPLICATE_BROWSE_PROFILE_ID = "c03-duplicate-browse-profile"
+        const val DUPLICATE_BROWSE_PAGE_SIZE = 64
+        const val REPEATED_CLEANUP_BATCH_SIZE = 512
+        const val MAX_REPEATED_CLEANUP_PASSES = 4
+
+        fun logicalChannelId(sourceId: String, providerKey: String): String =
+            digestFrames(LOGICAL_ID_DOMAIN, listOf(sourceId, providerKey))
+
+        fun physicalId(kind: String, revision: Long, ordinal: Long): String =
+            digestFrames("c03-physical-v1", listOf(kind, SOURCE_ID, revision.toString(), ordinal.toString()))
+
+        fun contentHash(
+            logicalChannelId: String,
+            providerKey: String,
+            rawName: String,
+            tvgId: String,
+            tvgName: String,
+            logoUrl: String,
+            groupTitle: String,
+            channelNumber: String,
+            catchupMode: String,
+            catchupSource: String,
+            catchupDays: Int,
+            catchupCorrection: String,
+            canonicalChannelId: String,
+            locator: String,
+            userAgent: String,
+            referrer: String,
+        ): String = digestFrames(
+            CONTENT_HASH_DOMAIN,
+            listOf(
+                logicalChannelId,
+                providerKey,
+                rawName,
+                tvgId,
+                tvgName,
+                logoUrl,
+                groupTitle,
+                channelNumber,
+                catchupMode,
+                catchupSource,
+                catchupDays.toString(),
+                catchupCorrection,
+                canonicalChannelId,
+                locator,
+                userAgent,
+                referrer,
+            ),
+        )
+
+        fun searchHash(
+            logicalChannelId: String,
+            rawName: String,
+            groupTitle: String,
+            channelNumber: String,
+        ): String = digestFrames(
+            SEARCH_HASH_DOMAIN,
+            listOf(logicalChannelId, rawName, groupTitle, channelNumber),
+        )
+
+        fun digestFrames(domain: String, values: List<String>): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.updateFrame(domain)
+            values.forEach { value -> digest.updateFrame(value) }
+            return digest.digest().joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        }
+
+        fun MessageDigest.updateFrame(value: String) {
+            val bytes = value.toByteArray(StandardCharsets.UTF_8)
+            update((bytes.size ushr 24).toByte())
+            update((bytes.size ushr 16).toByte())
+            update((bytes.size ushr 8).toByte())
+            update(bytes.size.toByte())
+            update(bytes)
+        }
+    }
+}

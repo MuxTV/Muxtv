@@ -2,9 +2,11 @@ package app.muxtv.benchmark
 
 import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
+import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
+import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -37,6 +39,29 @@ class MuxTvMacrobenchmarks {
     fun sourcesToDoctor() = measureJourney {
         openSources()
         openDoctor()
+    }
+
+    @OptIn(ExperimentalMetricApi::class)
+    @Test
+    fun searchInProcessTraceEvidence() {
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(
+                TraceSectionMetric(
+                    sectionName = "MuxTv.Search",
+                    mode = TraceSectionMetric.Mode.Count,
+                ),
+            ),
+            compilationMode = CompilationMode.Partial(BaselineProfileMode.UseIfAvailable),
+            iterations = 1,
+            setupBlock = {
+                pressHome()
+                startActivityAndWait()
+            },
+            measureBlock = {
+                MuxTvCriticalUserJourneys(this).runSearchTraceEvidence()
+            },
+        )
     }
 
     private fun measureStartup(startupMode: StartupMode) {

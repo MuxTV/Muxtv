@@ -1,0 +1,102 @@
+package app.muxtv.buildlogic
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class BaselineProfilePerformanceEvidenceContractTest {
+    private val repositoryRoot = File(System.getProperty("user.dir")).parentFile.parentFile
+
+    @Test
+    fun `alpha release compares cold startup with and without required Baseline Profile`() {
+        val comparison = repositoryRoot.resolve(
+            "benchmark/macrobenchmark/src/main/kotlin/app/muxtv/benchmark/BaselineProfilePerformanceComparison.kt",
+        )
+        assertTrue(comparison.isFile, "Missing dedicated Baseline Profile performance comparison benchmark.")
+        val comparisonText = comparison.readText()
+        listOf(
+            "coldStartupWithoutBaselineProfile",
+            "coldStartupWithBaselineProfile",
+            "StartupTimingMetric()",
+            "StartupMode.COLD",
+            "CompilationMode.None()",
+            "CompilationMode.Partial(",
+            "BaselineProfileMode.Require",
+            "iterations = 10",
+            "measureRepeated",
+        ).forEach { token -> assertContains(comparisonText, token) }
+        assertFalse(
+            comparisonText.contains("BaselineProfileMode.UseIfAvailable"),
+            "Release comparison must fail closed when the packaged Baseline Profile is unavailable.",
+        )
+
+        // AndroidX Benchmark upstream fix I48ccc shipped in 1.6.0-alpha01:
+        // Android 16 ART profile flush could fail with "Unable to flush profiles".
+        // The targeted upgrade must not silently upgrade the Baseline Profile
+        // Gradle plugin or weaken the required control/experimental comparison.
+        val catalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
+        assertContains(catalog, """benchmark = "1.5.0-rc02"""")
+        assertContains(catalog, """benchmark-macro-runtime = "1.6.0-alpha01"""")
+        assertContains(catalog,
+            """benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark-macro-runtime" }""")
+        assertContains(catalog, """androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }""")
+
+        val appGradle = repositoryRoot.resolve("app/tv/build.gradle.kts").readText()
+        assertContains(appGradle, """providers.gradleProperty("muxtvBenchmarkInProcessTracing")""")
+        assertContains(appGradle, """name == "benchmarkReleaseImplementation" && inProcessTraceFlag != "false"""")
+        assertContains(appGradle, "libs.androidx.tracing.wire.get()")
+        assertFalse(appGradle.contains("releaseImplementation(libs.androidx.tracing.wire)"))
+        assertFalse(appGradle.contains("debugImplementation(libs.androidx.tracing.wire)"))
+
+        val runner = repositoryRoot.resolve("tools/ci/Run-HostedBaselineProfilePerformance.sh")
+        assertTrue(runner.isFile, "Missing hosted Baseline Profile performance runner.")
+        val runnerText = runner.readText()
+        listOf(
+            "connectedBenchmarkReleaseAndroidTest",
+            "BaselineProfilePerformanceComparison",
+            "androidx.benchmark.enabledRules=Macrobenchmark",
+            "Assert-AndroidTestResults.ps1",
+            "MUXTV_BENCHMARK_EVIDENCE",
+            "source_commit",
+        ).forEach { token -> assertContains(runnerText, token) }
+        // StartupTimingMetric depends on real system Perfetto, NOT the separate
+        // in-process tracing-wire flush. Keep both real compilation modes.
+        assertContains(runnerText, "-PmuxtvBenchmarkInProcessTracing=false")
+        val traceRunner = repositoryRoot.resolve(
+            "tools/ci/Run-BenchmarkInProcessTraceEvidence.sh",
+        ).readText()
+        assertContains(traceRunner, "-PmuxtvBenchmarkInProcessTracing=true")
+        assertContains(traceRunner, "Assert-BenchmarkInProcessTraceEvidence.ps1")
+        assertFalse(traceRunner.contains("androidx.benchmark.dryRunMode.enable=true"))
+        assertFalse(
+            runnerText.contains("androidx.benchmark.dryRunMode.enable=true"),
+            "Release performance evidence must execute real Macrobenchmark iterations, not dry-run mode.",
+        )
+
+        val workflow = repositoryRoot.resolve(".github/workflows/release-baseline-profile-performance.yml")
+        assertTrue(workflow.isFile, "Missing hosted Baseline Profile performance evidence workflow.")
+        val workflowText = workflow.readText()
+        listOf(
+            "workflow_dispatch:",
+            "pull_request:",
+            "runs-on: ubuntu-latest",
+            "persist-credentials: false",
+            "uses: ./.github/actions/setup-muxtv-jdks",
+            "Enable-HostedAndroidKvm.sh",
+            "ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d",
+            "api-level: 36",
+            "target: android-tv",
+            "avd-name: MuxTV_TV_CURRENT_API36",
+            "Run-HostedBaselineProfilePerformance.sh",
+            "uses: ./.github/actions/upload-evidence-with-retry",
+            "benchmark/macrobenchmark/build/outputs/connected_android_test_additional_output/**",
+            ".work/evidence/release-baseline-profile-performance/**",
+        ).forEach { token -> assertContains(workflowText, token) }
+        assertFalse(
+            Regex("(?m)^\\s*uses:\\s*actions/upload-artifact@").containsMatchIn(workflowText),
+            "Performance evidence must use the shared bounded artifact uploader.",
+        )
+    }
+}

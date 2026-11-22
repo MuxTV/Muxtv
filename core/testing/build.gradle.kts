@@ -1,6 +1,8 @@
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins { id("muxtv.kotlin.library") }
 
@@ -109,4 +111,13 @@ tasks.register<JavaExec>("analyzeMeasurementSeries") {
     args = measurementSeriesCommandArguments
 }
 
-tasks.test { useJUnit() }
+tasks.test {
+    useJUnit()
+    testLogging {
+        events(TestLogEvent.FAILED)
+        exceptionFormat = TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+    }
+}

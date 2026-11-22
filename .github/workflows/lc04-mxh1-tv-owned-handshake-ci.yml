@@ -1,0 +1,77 @@
+name: LC04 isolated TV-owned MXH1 cryptographic handshake CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/lc04-mxh1-tv-owned-handshake-ci.yml'
+      - 'local-control/mxh1-session-lab/**'
+      - 'local-control/wire-lab/**'
+      - 'local-control/enrollment/**'
+      - 'local-control/protected-channel/**'
+      - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/Lc04MxH1TvOwnedHandshakeIsolationTest.kt'
+      - '.work/specifications/lc04-mxh1-tv-owned-handshake-20261105.md'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-mxh1-tv-owner-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  owner:
+    name: TV-owned Ed25519 HPKE HKDF confirmation hostile JVM matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact PR source HEAD
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Fail closed on non-exact HEAD or app/source integration
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -Fq '":local-control:mxh1-session-lab",' settings.gradle.kts
+          ! grep -Fq ':local-control:mxh1-session-lab' app/phone/build.gradle.kts
+          ! grep -Fq ':local-control:mxh1-session-lab' app/tv/build.gradle.kts
+          ! grep -Fq ':local-control:mxh1-session-lab' local-control/native-transport/build.gradle.kts
+          ! grep -Eq ':catalog:|:core:credentials|:local-control:onboarding|libs.okhttp|libs.ktor' local-control/mxh1-session-lab/build.gradle.kts
+          ! grep -Eq 'SourceOnboarding|SourcePreparationHandle|Socket\(|HttpClient|SharedPreferences' local-control/mxh1-session-lab/src/main/kotlin/app/muxtv/localcontrol/mxh1/*.kt
+          ! grep -Fq 'Lc04MxH1' local-control/native-transport/src/main/kotlin/app/muxtv/localcontrol/nativetransport/Lc04NativeTcpTransport.kt
+      - name: Run actual Tink consent and synthetic mutual confirmation suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:mxh1-session-lab:test \
+            :local-control:wire-lab:test :local-control:enrollment:test \
+            :local-control:protected-channel:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+          ./gradlew -p build-logic :convention:test \
+            --tests 'app.muxtv.buildlogic.Lc04MxH1TvOwnedHandshakeIsolationTest' \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Upload security test evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-mxh1-owner-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/mxh1-session-lab/build/test-results/test/**
+            local-control/mxh1-session-lab/build/reports/tests/test/**
+            local-control/wire-lab/build/test-results/test/**
+            local-control/enrollment/build/test-results/test/**
+            local-control/protected-channel/build/test-results/test/**
+            build-logic/convention/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}
