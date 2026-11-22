@@ -198,6 +198,8 @@ class ChannelQuickActionsJourneyTest {
         // performing a semantics click on an unfocused TV Button does not
         // exercise the actual remote interaction contract.
         composeRule.onNodeWithTag("channel-quick-actions-editor").pressDown()
+        composeRule.onNodeWithText("Сохранить").assertIsFocused().pressUp()
+        composeRule.onNodeWithTag("channel-quick-actions-editor").assertIsFocused().pressDown()
         composeRule.onNodeWithText("Сохранить").assertIsFocused().pressEnter()
         drainEffects()
 
@@ -360,4 +362,9 @@ private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = per
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressDown() = performKeyInput {
     keyDown(Key.DirectionDown)
     keyUp(Key.DirectionDown)
+}
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressUp() = performKeyInput {
+    keyDown(Key.DirectionUp)
+    keyUp(Key.DirectionUp)
 }
