@@ -102,6 +102,56 @@ class ChannelControlBrowseAcceptanceTest {
         assertThat(recoverable.single().effectiveChannelNumber).isEqualTo("77")
     }
 
+    @Test
+    fun hiddenFavoriteAndCustomizationsNeverLeakBetweenProfiles() = runTest {
+        database.profileDao().insert(
+            ProfileEntity(SECONDARY_PROFILE_ID, "Guest", isPrimary = false),
+        )
+        database.catalogDao().insertOverlay(
+            UserChannelOverlayEntity(
+                profileId = PROFILE_ID,
+                canonicalChannelId = CHANNEL_A,
+                isFavorite = true,
+                isHidden = true,
+                customName = "Личные новости",
+                channelNumber = 77,
+            ),
+        )
+
+        // The primary profile must not browse its own hidden channel.
+        assertThat(browse.pages(query(ChannelBrowseFilter.ALL)).asSnapshot().map { it.channelId })
+            .containsExactly(CHANNEL_B)
+
+        // Another profile must still see the canonical channel, not the primary
+        // profile's hidden flag, favorite, name or custom number.
+        val guestAll = browse.pages(
+            ChannelBrowseQuery(SECONDARY_PROFILE_ID, ChannelBrowseFilter.ALL),
+        ).asSnapshot()
+        assertThat(guestAll.map { it.channelId }).containsExactly(CHANNEL_A, CHANNEL_B).inOrder()
+        val guestChannel = guestAll.single { it.channelId == CHANNEL_A }
+        assertThat(guestChannel.displayName).isEqualTo("Новости")
+        assertThat(guestChannel.channelNumber).isEqualTo("1")
+        assertThat(guestChannel.isFavorite).isFalse()
+        assertThat(
+            browse.pages(
+                ChannelBrowseQuery(SECONDARY_PROFILE_ID, ChannelBrowseFilter.FAVORITES),
+            ).asSnapshot(),
+        ).isEmpty()
+
+        val mainHidden = browse.managementPages(
+            ChannelManagementQuery(PROFILE_ID, ChannelManagementVisibility.HIDDEN),
+        ).asSnapshot()
+        assertThat(mainHidden.map { it.channelId }).containsExactly(CHANNEL_A)
+        assertThat(mainHidden.single().isFavorite).isTrue()
+        assertThat(mainHidden.single().effectiveDisplayName).isEqualTo("Личные новости")
+        assertThat(mainHidden.single().effectiveChannelNumber).isEqualTo("77")
+        assertThat(
+            browse.managementPages(
+                ChannelManagementQuery(SECONDARY_PROFILE_ID, ChannelManagementVisibility.HIDDEN),
+            ).asSnapshot(),
+        ).isEmpty()
+    }
+
     private fun assertEffectiveOverlay(item: app.muxtv.catalog.ChannelBrowseItem) {
         assertThat(item.displayName).isEqualTo("Мои новости")
         assertThat(item.channelNumber).isEqualTo("77")
@@ -171,6 +221,7 @@ class ChannelControlBrowseAcceptanceTest {
 
     private companion object {
         const val PROFILE_ID = "profile-main"
+        const val SECONDARY_PROFILE_ID = "profile-guest"
         const val SOURCE_ID = "source-main"
         const val CHANNEL_A = "channel-a"
         const val CHANNEL_B = "channel-b"
