@@ -72,6 +72,63 @@ class ChannelQuickActionsJourneyTest {
     }
 
     @Test
+    fun shortDpadCenterStillStartsPlaybackInsteadOfQuickActions() {
+        val catalog = QuickActionPlaybackCatalog()
+        var openedChannelId: String? = null
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(
+                    catalog = catalog,
+                    preferences = HidingPreferencesRepository(catalog),
+                    onOpenChannel = { openedChannelId = it },
+                )
+            }
+        }
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused().performKeyInput {
+            keyDown(Key.DirectionCenter)
+            advanceEventTime(80L)
+            keyUp(Key.DirectionCenter)
+        }
+        drainEffects()
+
+        assertThat(openedChannelId).isEqualTo("channel-a")
+        composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
+    }
+
+    @Test
+    fun heldDpadCenterOpensQuickActionsWithoutStartingPlayback() {
+        val catalog = QuickActionPlaybackCatalog()
+        var openedChannelId: String? = null
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(
+                    catalog = catalog,
+                    preferences = HidingPreferencesRepository(catalog),
+                    onOpenChannel = { openedChannelId = it },
+                )
+            }
+        }
+        drainEffects()
+
+        // Key injection advances the key's event clock: repeat DOWN events are
+        // generated after 500ms, just as for a held Android TV remote button.
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused().performKeyInput {
+            keyDown(Key.DirectionCenter)
+            advanceEventTime(700L)
+            keyUp(Key.DirectionCenter)
+        }
+        drainEffects()
+
+        assertThat(openedChannelId).isNull()
+        composeRule.onNodeWithTag("channel-quick-actions").assertExists()
+        composeRule.onNodeWithText("В избранное").assertIsFocused()
+    }
+
+    @Test
     fun longClickOpensQuickActionsWithoutStartingPlayback() {
         val catalog = QuickActionPlaybackCatalog()
         var openedChannelId: String? = null
