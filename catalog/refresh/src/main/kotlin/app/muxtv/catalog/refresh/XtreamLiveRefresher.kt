@@ -18,6 +18,7 @@ import app.muxtv.catalog.ingest.XtreamLiveSink
 import app.muxtv.catalog.ingest.XtreamParseLimits
 import app.muxtv.credentials.CredentialId
 import app.muxtv.credentials.CredentialUnavailableReason
+import app.muxtv.credentials.CredentialWriteResult
 import app.muxtv.network.RedirectRejectedException
 import app.muxtv.network.RedirectRejectionReason
 import app.muxtv.network.ResponseSizeKind
@@ -30,6 +31,8 @@ import app.muxtv.network.SourceUrlRejectionReason
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.time.DateTimeException
+import java.time.ZoneId
 import javax.net.ssl.SSLException
 import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl
@@ -41,6 +44,7 @@ data class XtreamLiveRefreshRequest(
     val sourceId: String,
     val sourceName: String,
     val accessCredentialId: CredentialId,
+    val accessReference: SourceAccessReference = SourceAccessReference.xtream(accessCredentialId),
     val refreshRunToken: String? = null,
     val responseSizeLimits: ResponseSizeLimits = ResponseSizeLimits(),
     val parseLimits: XtreamParseLimits = XtreamParseLimits(),
@@ -48,6 +52,12 @@ data class XtreamLiveRefreshRequest(
     init {
         require(sourceId.isNotBlank())
         require(sourceName.isNotBlank())
+        require(accessReference.kind == SourceAccessKind.XTREAM) {
+            "Xtream refresh requires an Xtream source access reference."
+        }
+        require(accessReference.credentialId == accessCredentialId) {
+            "Xtream source access reference must match its credential id."
+        }
         require(refreshRunToken == null || refreshRunToken.isNotBlank())
     }
 
@@ -77,6 +87,7 @@ sealed interface XtreamLiveRefreshResult {
         val reason: SourceUrlRejectionReason,
     ) : XtreamLiveRefreshResult
 
+    data object LocalNetworkAccessRequired : XtreamLiveRefreshResult
     data object InsecureTransportApprovalRequired : XtreamLiveRefreshResult
     data object AuthenticationRejected : XtreamLiveRefreshResult
 
@@ -110,6 +121,7 @@ class XtreamLiveRefresher(
     private val importer: CatalogRevisionImporter,
     private val sourceClient: OkHttpClient,
     private val parser: StreamingXtreamParser,
+    private val localNetworkAccessRequired: (String) -> Boolean = { false },
 ) {
     suspend fun refresh(request: XtreamLiveRefreshRequest): XtreamLiveRefreshResult {
         val access = when (val accessResult = accessManager.read(request.accessCredentialId)) {
@@ -120,16 +132,21 @@ class XtreamLiveRefresher(
                 return XtreamLiveRefreshResult.AccessCredentialUnavailable(accessResult.reason)
         }
 
-        val normalizedBaseUrl = when (val decision = SourceUrlPolicy.evaluate(access.baseUrl)) {
-            is SourceUrlDecision.Allowed -> decision.normalizedUrl
-            is SourceUrlDecision.RequiresInsecureTransportApproval -> {
-                if (!access.insecureHttpApproved) {
-                    return XtreamLiveRefreshResult.InsecureTransportApprovalRequired
-                }
-                decision.normalizedUrl
-            }
+        val urlDecision = SourceUrlPolicy.evaluate(access.baseUrl)
+        val normalizedBaseUrl = when (urlDecision) {
+            is SourceUrlDecision.Allowed -> urlDecision.normalizedUrl
+            is SourceUrlDecision.RequiresInsecureTransportApproval -> urlDecision.normalizedUrl
+            is SourceUrlDecision.Rejected -> return XtreamLiveRefreshResult.UrlRejected(urlDecision.reason)
+        }
 
-            is SourceUrlDecision.Rejected -> return XtreamLiveRefreshResult.UrlRejected(decision.reason)
+        if (localNetworkAccessRequired(normalizedBaseUrl)) {
+            return XtreamLiveRefreshResult.LocalNetworkAccessRequired
+        }
+        if (
+            urlDecision is SourceUrlDecision.RequiresInsecureTransportApproval &&
+            !access.insecureHttpApproved
+        ) {
+            return XtreamLiveRefreshResult.InsecureTransportApprovalRequired
         }
 
         val requestContext = SourceRequestContext(
@@ -139,7 +156,7 @@ class XtreamLiveRefresher(
         val endpoint = normalizedBaseUrl.toXtreamEndpoint()
 
         return try {
-            when (
+            val archiveCapabilityEnabled = when (
                 val auth = executeAuth(
                     endpoint = endpoint,
                     access = access,
@@ -148,7 +165,11 @@ class XtreamLiveRefresher(
                 )
             ) {
                 XtreamAuthResult.Rejected -> return XtreamLiveRefreshResult.AuthenticationRejected
-                is XtreamAuthResult.Authenticated -> Unit
+                is XtreamAuthResult.Authenticated -> updateArchiveTimeZone(
+                    credentialId = request.accessCredentialId,
+                    access = access,
+                    serverTimeZoneId = auth.serverTimeZoneId,
+                )
             }
 
             executeLiveImport(
@@ -156,6 +177,7 @@ class XtreamLiveRefresher(
                 access = access,
                 requestContext = requestContext,
                 request = request,
+                archiveCapabilityEnabled = archiveCapabilityEnabled,
             )
         } catch (error: CancellationException) {
             throw error
@@ -185,6 +207,41 @@ class XtreamLiveRefresher(
         }
     }
 
+    private suspend fun updateArchiveTimeZone(
+        credentialId: CredentialId,
+        access: XtreamSourceAccess,
+        serverTimeZoneId: String?,
+    ): Boolean {
+        val normalizedTimeZoneId = normalizeArchiveTimeZoneId(serverTimeZoneId)
+        if (normalizedTimeZoneId == null) {
+            if (access.archiveTimeZoneId != null) {
+                accessManager.save(
+                    credentialId,
+                    access.withArchiveTimeZoneId(null),
+                )
+            }
+            return false
+        }
+        if (normalizedTimeZoneId == access.archiveTimeZoneId) return true
+
+        return accessManager.save(
+            credentialId,
+            access.withArchiveTimeZoneId(normalizedTimeZoneId),
+        ) == CredentialWriteResult.Stored
+    }
+
+    private fun normalizeArchiveTimeZoneId(value: String?): String? {
+        val candidate = value?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        if (candidate.length > XtreamSourceAccess.MAX_ARCHIVE_TIME_ZONE_ID_CHARACTERS) return null
+        if (candidate.any(Char::isISOControl)) return null
+
+        return try {
+            ZoneId.of(candidate).id
+        } catch (_: DateTimeException) {
+            null
+        }
+    }
+
     private suspend fun executeAuth(
         endpoint: HttpUrl,
         access: XtreamSourceAccess,
@@ -210,6 +267,7 @@ class XtreamLiveRefresher(
         access: XtreamSourceAccess,
         requestContext: SourceRequestContext,
         request: XtreamLiveRefreshRequest,
+        archiveCapabilityEnabled: Boolean,
     ): XtreamLiveRefreshResult {
         val liveUrl = endpoint.newBuilder()
             .addQueryParameter("username", access.username)
@@ -229,7 +287,7 @@ class XtreamLiveRefresher(
                     request = CatalogRevisionImportRequest(
                         sourceId = request.sourceId,
                         sourceName = request.sourceName,
-                        credentialRef = request.accessCredentialId.value,
+                        credentialRef = request.accessReference.value,
                         refreshRunToken = request.refreshRunToken,
                         sourceOwnership = if (durableRefresh) {
                             CatalogImportSourceOwnership.EXISTING_REMOTE_BINDING
@@ -241,6 +299,7 @@ class XtreamLiveRefresher(
                         parser = parser,
                         input = response.body.byteStream(),
                         limits = request.parseLimits,
+                        archiveCapabilityEnabled = archiveCapabilityEnabled,
                     ),
                 )
             ) {
@@ -280,13 +339,14 @@ private class XtreamLiveCatalogFeed(
     private val parser: StreamingXtreamParser,
     private val input: java.io.InputStream,
     private val limits: XtreamParseLimits,
+    private val archiveCapabilityEnabled: Boolean,
 ) : CatalogImportFeed {
     override suspend fun streamTo(sink: CatalogImportEntrySink): CatalogImportFeedReport {
         val report = parser.parseLive(
             input = input,
             sink = object : XtreamLiveSink {
                 override suspend fun onEntry(entry: XtreamLiveEntry) {
-                    sink.onEntry(entry.toCatalogImportEntry())
+                    sink.onEntry(entry.toCatalogImportEntry(archiveCapabilityEnabled))
                 }
             },
             limits = limits,
@@ -299,8 +359,11 @@ private class XtreamLiveCatalogFeed(
     }
 }
 
-private fun XtreamLiveEntry.toCatalogImportEntry(): CatalogImportEntry =
-    CatalogImportEntry(
+private fun XtreamLiveEntry.toCatalogImportEntry(
+    archiveCapabilityEnabled: Boolean,
+): CatalogImportEntry {
+    val archiveEnabled = archiveCapabilityEnabled && archiveAvailable == true
+    return CatalogImportEntry(
         providerStableId = streamId.toString(),
         displayName = name,
         playbackReference = "muxtv-provider://xtream/live/$streamId",
@@ -309,13 +372,14 @@ private fun XtreamLiveEntry.toCatalogImportEntry(): CatalogImportEntry =
         logoUrl = null,
         groupTitle = null,
         channelNumber = channelNumber?.toString(),
-        catchupMode = null,
+        catchupMode = if (archiveEnabled) XTREAM_CATCHUP_MODE else null,
         catchupSource = null,
-        catchupDays = null,
+        catchupDays = if (archiveEnabled) archiveDurationDays else null,
         catchupCorrection = null,
         userAgent = null,
         referrer = null,
     )
+}
 
 private fun String.toXtreamEndpoint(): HttpUrl = toHttpUrl()
     .newBuilder()
@@ -326,3 +390,5 @@ private fun String.toXtreamEndpoint(): HttpUrl = toHttpUrl()
 private class XtreamHttpStatusException(
     val statusCode: Int,
 ) : IOException("Xtream endpoint returned HTTP $statusCode.")
+
+private const val XTREAM_CATCHUP_MODE = "xtream"

@@ -3,6 +3,7 @@ package app.muxtv.catalog.sync
 import app.muxtv.catalog.importer.CatalogImportFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceNetworkFailureReason
 import app.muxtv.catalog.refresh.RemoteSourceRefreshResult
+import app.muxtv.catalog.refresh.XtreamLiveRefreshResult
 import app.muxtv.database.SourceRefreshCompletion
 import app.muxtv.database.SourceRefreshRunState
 
@@ -21,69 +22,86 @@ internal data class SourceRefreshDecision(
 
 internal object SourceRefreshOutcomeMapper {
     fun map(result: RemoteSourceRefreshResult): SourceRefreshDecision = when (result) {
-        is RemoteSourceRefreshResult.Refreshed -> SourceRefreshDecision(
-            state = SourceRefreshRunState.SUCCEEDED,
-            resultFamily = FAMILY_SUCCESS,
-            resultCode = null,
+        is RemoteSourceRefreshResult.Refreshed -> refreshed(
             revisionNumber = result.revisionNumber,
-            parsedEntries = result.entryCount,
+            entryCount = result.entryCount,
             skippedEntries = result.skippedEntries,
             warningCount = result.warningCount,
-            workSucceeded = true,
         )
 
-        RemoteSourceRefreshResult.Superseded -> SourceRefreshDecision(
-            state = SourceRefreshRunState.CANCELLED,
-            resultFamily = SourceRefreshCompletion.RESULT_FAMILY,
-            resultCode = SourceRefreshCompletion.RESULT_SUPERSEDED,
-            workSucceeded = true,
-        )
-
+        RemoteSourceRefreshResult.Superseded -> superseded()
         RemoteSourceRefreshResult.AccessCredentialNotFound -> needsAuth("NOT_FOUND")
         is RemoteSourceRefreshResult.AccessCredentialUnavailable ->
             needsAuth("UNAVAILABLE_${result.reason.stableCode()}")
         RemoteSourceRefreshResult.AccessCredentialCorrupted -> needsAuth("CORRUPTED")
-
         is RemoteSourceRefreshResult.UrlRejected -> failure(
             family = FAMILY_URL,
             code = result.reason.stableCode(),
         )
-
+        RemoteSourceRefreshResult.LocalNetworkAccessRequired -> localNetworkPermissionRequired()
         RemoteSourceRefreshResult.InsecureTransportApprovalRequired -> failure(
             family = FAMILY_TRANSPORT,
             code = "INSECURE_APPROVAL_REQUIRED",
         )
-
         is RemoteSourceRefreshResult.HttpFailure -> mapHttpFailure(result.statusCode)
-
         is RemoteSourceRefreshResult.ResponseTooLarge -> failure(
             family = FAMILY_SIZE,
             code = result.kind.stableCode(),
         )
-
         is RemoteSourceRefreshResult.RedirectRejected -> failure(
             family = FAMILY_REDIRECT,
             code = result.reason.stableCode(),
         )
-
-        is RemoteSourceRefreshResult.NetworkFailure -> SourceRefreshDecision(
-            state = SourceRefreshRunState.FAILED,
-            resultFamily = FAMILY_NETWORK,
-            resultCode = result.reason.stableCode(),
-            retryable = result.reason in RETRYABLE_NETWORK_REASONS,
-        )
-
+        is RemoteSourceRefreshResult.NetworkFailure -> networkFailure(result.reason)
         RemoteSourceRefreshResult.EmptyRevisionRejected -> failure(
             family = FAMILY_CONTENT,
             code = "EMPTY_REVISION",
         )
+        is RemoteSourceRefreshResult.ImportFailed -> importFailure(result.reason)
+    }
 
-        is RemoteSourceRefreshResult.ImportFailed -> SourceRefreshDecision(
-            state = SourceRefreshRunState.FAILED,
-            resultFamily = FAMILY_IMPORT,
-            resultCode = result.reason.stableCode(),
-            retryable = result.reason == CatalogImportFailureReason.StorageFailure,
+    fun map(result: XtreamLiveRefreshResult): SourceRefreshDecision = when (result) {
+        is XtreamLiveRefreshResult.Refreshed -> refreshed(
+            revisionNumber = result.revisionNumber,
+            entryCount = result.entryCount,
+            skippedEntries = result.skippedEntries,
+            warningCount = result.warningCount,
         )
+
+        XtreamLiveRefreshResult.Superseded -> superseded()
+        XtreamLiveRefreshResult.AccessCredentialNotFound -> needsAuth("NOT_FOUND")
+        is XtreamLiveRefreshResult.AccessCredentialUnavailable ->
+            needsAuth("UNAVAILABLE_${result.reason.stableCode()}")
+        XtreamLiveRefreshResult.AccessCredentialCorrupted -> needsAuth("CORRUPTED")
+        is XtreamLiveRefreshResult.UrlRejected -> failure(
+            family = FAMILY_URL,
+            code = result.reason.stableCode(),
+        )
+        XtreamLiveRefreshResult.LocalNetworkAccessRequired -> localNetworkPermissionRequired()
+        XtreamLiveRefreshResult.InsecureTransportApprovalRequired -> failure(
+            family = FAMILY_TRANSPORT,
+            code = "INSECURE_APPROVAL_REQUIRED",
+        )
+        XtreamLiveRefreshResult.AuthenticationRejected -> needsAuth("AUTHENTICATION_REJECTED")
+        is XtreamLiveRefreshResult.HttpFailure -> mapHttpFailure(result.statusCode)
+        is XtreamLiveRefreshResult.ResponseTooLarge -> failure(
+            family = FAMILY_SIZE,
+            code = result.kind.stableCode(),
+        )
+        is XtreamLiveRefreshResult.RedirectRejected -> failure(
+            family = FAMILY_REDIRECT,
+            code = result.reason.stableCode(),
+        )
+        is XtreamLiveRefreshResult.NetworkFailure -> networkFailure(result.reason)
+        XtreamLiveRefreshResult.ProtocolFailure -> failure(
+            family = FAMILY_CONTENT,
+            code = "PROTOCOL_FAILURE",
+        )
+        XtreamLiveRefreshResult.EmptyRevisionRejected -> failure(
+            family = FAMILY_CONTENT,
+            code = "EMPTY_REVISION",
+        )
+        is XtreamLiveRefreshResult.ImportFailed -> importFailure(result.reason)
     }
 
     fun missingCredentialReference(): SourceRefreshDecision = needsAuth("MISSING_REFERENCE")
@@ -103,6 +121,51 @@ internal object SourceRefreshOutcomeMapper {
         resultCode = "UNEXPECTED",
         retryable = true,
     )
+
+    private fun refreshed(
+        revisionNumber: Long,
+        entryCount: Int,
+        skippedEntries: Int,
+        warningCount: Int,
+    ): SourceRefreshDecision = SourceRefreshDecision(
+        state = SourceRefreshRunState.SUCCEEDED,
+        resultFamily = FAMILY_SUCCESS,
+        resultCode = null,
+        revisionNumber = revisionNumber,
+        parsedEntries = entryCount,
+        skippedEntries = skippedEntries,
+        warningCount = warningCount,
+        workSucceeded = true,
+    )
+
+    private fun superseded(): SourceRefreshDecision = SourceRefreshDecision(
+        state = SourceRefreshRunState.CANCELLED,
+        resultFamily = SourceRefreshCompletion.RESULT_FAMILY,
+        resultCode = SourceRefreshCompletion.RESULT_SUPERSEDED,
+        workSucceeded = true,
+    )
+
+    private fun localNetworkPermissionRequired(): SourceRefreshDecision = SourceRefreshDecision(
+        state = SourceRefreshRunState.FAILED,
+        resultFamily = FAMILY_LOCAL_NETWORK,
+        resultCode = "PERMISSION_REQUIRED",
+    )
+
+    private fun networkFailure(reason: RemoteSourceNetworkFailureReason): SourceRefreshDecision =
+        SourceRefreshDecision(
+            state = SourceRefreshRunState.FAILED,
+            resultFamily = FAMILY_NETWORK,
+            resultCode = reason.stableCode(),
+            retryable = reason in RETRYABLE_NETWORK_REASONS,
+        )
+
+    private fun importFailure(reason: CatalogImportFailureReason): SourceRefreshDecision =
+        SourceRefreshDecision(
+            state = SourceRefreshRunState.FAILED,
+            resultFamily = FAMILY_IMPORT,
+            resultCode = reason.stableCode(),
+            retryable = reason == CatalogImportFailureReason.StorageFailure,
+        )
 
     private fun mapHttpFailure(statusCode: Int): SourceRefreshDecision = when {
         statusCode == 401 || statusCode == 403 -> SourceRefreshDecision(
@@ -158,6 +221,7 @@ internal object SourceRefreshOutcomeMapper {
     private const val FAMILY_SUCCESS = "SUCCESS"
     private const val FAMILY_CREDENTIAL = "CREDENTIAL"
     private const val FAMILY_URL = "URL"
+    private const val FAMILY_LOCAL_NETWORK = "LOCAL_NETWORK"
     private const val FAMILY_TRANSPORT = "TRANSPORT"
     private const val FAMILY_HTTP = "HTTP"
     private const val FAMILY_SIZE = "SIZE"

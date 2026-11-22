@@ -73,6 +73,7 @@ private enum class SourcesFocusState {
 fun SourcesRoute(
     sourceManagement: SourceManagement,
     onAddSource: () -> Unit,
+    onOpenPhoneSetup: (() -> Unit)? = null,
     topNavigationFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
     railFocusRequester: FocusRequester? = null,
@@ -143,12 +144,14 @@ fun SourcesRoute(
                 topNavigationFocusRequester = topNavigationFocusRequester,
                 railFocusRequester = railFocusRequester,
                 onAddSource = onAddSource,
+                onOpenPhoneSetup = onOpenPhoneSetup,
             )
 
             SourcesUiState.Empty -> EmptyRoute(
                 addSourceFocusRequester = addSourceFocusRequester,
                 railFocusRequester = railFocusRequester,
                 onAddSource = onAddSource,
+                onOpenPhoneSetup = onOpenPhoneSetup,
             )
 
             SourcesUiState.Failed -> MessageRoute(
@@ -157,6 +160,7 @@ fun SourcesRoute(
                 topNavigationFocusRequester = topNavigationFocusRequester,
                 railFocusRequester = railFocusRequester,
                 onAddSource = onAddSource,
+                onOpenPhoneSetup = onOpenPhoneSetup,
             )
 
             is SourcesUiState.Content -> SourcesContent(
@@ -168,6 +172,7 @@ fun SourcesRoute(
                 railFocusRequester = railFocusRequester,
                 configureFocusRequesters = configureFocusRequesters,
                 onAddSource = onAddSource,
+                onOpenPhoneSetup = onOpenPhoneSetup,
                 onOpenDetails = { sourceId -> detailsSourceId = sourceId },
                 onRefreshNow = sourceManagement::refreshNow,
             )
@@ -209,6 +214,7 @@ private fun EmptyRoute(
     addSourceFocusRequester: FocusRequester,
     railFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
+    onOpenPhoneSetup: (() -> Unit)?,
 ) {
     MuxTvScreenScaffold(title = "Источники") {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -224,6 +230,15 @@ private fun EmptyRoute(
                     .focusProperties { left = railFocusRequester ?: FocusRequester.Default },
                 modifier = Modifier.fillMaxSize(),
             )
+            onOpenPhoneSetup?.let { action ->
+                MuxTvActionButton(
+                    text = "Настроить с телефона",
+                    onClick = action,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(TvTokens.Spacing.large)
+                        .testTag("source-phone-setup"),
+                )
+            }
         }
     }
 }
@@ -238,6 +253,7 @@ private fun SourcesContent(
     railFocusRequester: FocusRequester?,
     configureFocusRequesters: MutableMap<String, FocusRequester>,
     onAddSource: () -> Unit,
+    onOpenPhoneSetup: (() -> Unit)?,
     onOpenDetails: (String) -> Unit,
     onRefreshNow: (String) -> Unit,
 ) {
@@ -290,6 +306,15 @@ private fun SourcesContent(
                     onRefreshNow = onRefreshNow,
                     onConfigure = { onOpenDetails(source.sourceId) },
                 )
+            }
+            onOpenPhoneSetup?.let { action ->
+                item(key = "source-phone-setup") {
+                    MuxTvActionButton(
+                        text = "Настроить с телефона",
+                        onClick = action,
+                        modifier = Modifier.testTag("source-phone-setup"),
+                    )
+                }
             }
         }
     }
@@ -532,6 +557,7 @@ private fun MessageRoute(
     topNavigationFocusRequester: FocusRequester?,
     railFocusRequester: FocusRequester?,
     onAddSource: () -> Unit,
+    onOpenPhoneSetup: (() -> Unit)?,
 ) {
     MuxTvScreenScaffold(title = "Источники") {
         MuxTvActionButton(
@@ -551,6 +577,13 @@ private fun MessageRoute(
                 )
                 .focusRequester(addSourceFocusRequester),
         )
+        onOpenPhoneSetup?.let { action ->
+            MuxTvActionButton(
+                text = "Настроить с телефона",
+                onClick = action,
+                modifier = Modifier.testTag("source-phone-setup"),
+            )
+        }
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,

@@ -59,6 +59,7 @@ fun GuideRoute(
     onOpenChannel: (String) -> Unit,
     modifier: Modifier = Modifier,
     railFocusRequester: FocusRequester? = null,
+    onPlaybackSelected: ((GuidePlaybackSelection) -> Unit)? = null,
 ) {
     val factory = remember(repository, profileId) {
         viewModelFactory {
@@ -82,6 +83,7 @@ fun GuideRoute(
         onNextPage = screenViewModel::loadNextPage,
         onResetToFirstPage = screenViewModel::resetToFirstPage,
         onOpenChannel = onOpenChannel,
+        onPlaybackSelected = onPlaybackSelected,
         railFocusRequester = railFocusRequester,
         modifier = modifier,
     )
@@ -97,6 +99,7 @@ private fun GuideScreen(
     onNextPage: () -> Unit,
     onResetToFirstPage: () -> Unit,
     onOpenChannel: (String) -> Unit,
+    onPlaybackSelected: ((GuidePlaybackSelection) -> Unit)?,
     modifier: Modifier,
     railFocusRequester: FocusRequester? = null,
 ) {
@@ -134,6 +137,7 @@ private fun GuideScreen(
                 onNextPage = onNextPage,
                 onResetToFirstPage = onResetToFirstPage,
                 onOpenChannel = onOpenChannel,
+                onPlaybackSelected = onPlaybackSelected,
                 railFocusRequester = railFocusRequester,
             )
         }
@@ -185,6 +189,7 @@ private fun GuideContent(
     onNextPage: () -> Unit,
     onResetToFirstPage: () -> Unit,
     onOpenChannel: (String) -> Unit,
+    onPlaybackSelected: ((GuidePlaybackSelection) -> Unit)?,
     railFocusRequester: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
@@ -299,7 +304,21 @@ private fun GuideContent(
                         ) - FOCUS_SCROLL_LEADING_SPACE
                     ).coerceAtLeast(0.dp)
                 },
-                onOpenChannel = { onOpenChannel(row.channel.channelId) },
+                onOpenCell = { cell ->
+                    val selection = guidePlaybackSelection(
+                        channelId = row.channel.channelId,
+                        cell = cell,
+                        nowEpochMillis = nowEpochMillis,
+                    )
+                    if (selection != null) {
+                        val semanticHandler = onPlaybackSelected
+                        if (semanticHandler != null) {
+                            semanticHandler(selection)
+                        } else {
+                            onOpenChannel(selection.channelId)
+                        }
+                    }
+                },
             )
         }
     }
@@ -400,7 +419,7 @@ private fun GuideTimelineRow(
     timeOffset: Dp,
     nowEpochMillis: Long,
     onFocused: (Int, GuideCellProjection) -> Unit,
-    onOpenChannel: () -> Unit,
+    onOpenCell: (GuideCellProjection) -> Unit,
     railFocusRequester: FocusRequester? = null,
 ) {
     Row(
@@ -424,7 +443,7 @@ private fun GuideTimelineRow(
                         viewport = viewport,
                         focusRequester = requesters[cellIndex],
                         onFocused = { onFocused(cellIndex, cell) },
-                        onClick = onOpenChannel,
+                        onClick = { onOpenCell(cell) },
                         leftFocusRequester = if (cellIndex == 0) railFocusRequester else null,
                     )
                 }

@@ -16,9 +16,12 @@ on:
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
       - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
+      - 'tools/ci/Test-HostedAdbRetryShim.sh'
       - 'tools/ci/Test-SourcesStablePortContract.ps1'
       - 'tools/ci/Test-PlayerStablePortContract.ps1'
       - 'tools/ci/Assert-AndroidTestResults.ps1'
+      - 'tools/ci/Install-HostedAdbRetryShim.sh'
+      - 'tools/ci/adb-shim/**'
       - 'tools/ci/Enable-HostedAndroidKvm.sh'
       - 'tools/ci/Run-HostedAndroidProductTests.sh'
       - 'tools/ci/Run-HostedTvU1ShellTests.sh'
@@ -50,6 +53,10 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-AndroidTestResultsContract.ps1
+
+      - name: Verify hosted ADB retry shim contract
+        shell: bash
+        run: bash ./tools/ci/Test-HostedAdbRetryShim.sh
 
       - name: Verify hosted device lane contract
         shell: pwsh

@@ -1,0 +1,12 @@
+{
+  "name": "muxtv-local-control-browser-origin-probe",
+  "private": true,
+  "type": "module",
+  "description": "Research-only browser compatibility evidence; never a deployed phone UI",
+  "dependencies": {
+    "playwright": "1.64.1"
+  },
+  "scripts": {
+    "probe": "node run.mjs"
+  }
+}

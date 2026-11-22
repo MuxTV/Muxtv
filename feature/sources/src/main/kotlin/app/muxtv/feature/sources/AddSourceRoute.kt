@@ -29,8 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -67,25 +67,83 @@ fun AddSourceRoute(
     onboarding: SourceEntryOnboarding,
     onCompleted: () -> Unit,
     onBack: () -> Unit,
+    requestLocalNetworkPermission: suspend () -> LocalNetworkPermissionOutcome = {
+        LocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val session = remember(onboarding) { SourceEntrySession(onboarding) }
     val state by session.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sourceName by remember { mutableStateOf("") }
+    var provider by remember { mutableStateOf(SourceProviderSelection.M3U) }
     val locatorState = remember { TextFieldState() }
-    var revealLocator by remember { mutableStateOf(false) }
+    val xtreamEndpointState = remember { TextFieldState() }
+    val xtreamUsernameState = remember { TextFieldState() }
+    val xtreamPasswordState = remember { TextFieldState() }
+    var revealSensitiveInput by remember { mutableStateOf(false) }
+
+    val providerM3uFocusRequester = remember { FocusRequester() }
+    val providerXtreamFocusRequester = remember { FocusRequester() }
     val sourceNameFocusRequester = remember { FocusRequester() }
     val sourceLocatorFocusRequester = remember { FocusRequester() }
-    val revealLocatorFocusRequester = remember { FocusRequester() }
+    val xtreamEndpointFocusRequester = remember { FocusRequester() }
+    val xtreamUsernameFocusRequester = remember { FocusRequester() }
+    val xtreamPasswordFocusRequester = remember { FocusRequester() }
+    val revealSensitiveFocusRequester = remember { FocusRequester() }
+    val checkFocusRequester = remember { FocusRequester() }
+    val localNetworkActionFocusRequester = remember { FocusRequester() }
     val httpCancelFocusRequester = remember { FocusRequester() }
     val confirmFocusRequester = remember { FocusRequester() }
     val editAgainFocusRequester = remember { FocusRequester() }
     val cleanupRetryFocusRequester = remember { FocusRequester() }
 
+    fun providerFocusRequester(): FocusRequester = when (provider) {
+        SourceProviderSelection.M3U -> providerM3uFocusRequester
+        SourceProviderSelection.XTREAM -> providerXtreamFocusRequester
+    }
+
+    fun firstInputFocusRequester(): FocusRequester = when (provider) {
+        SourceProviderSelection.M3U -> sourceLocatorFocusRequester
+        SourceProviderSelection.XTREAM -> xtreamEndpointFocusRequester
+    }
+
+    fun clearTransientInputs() {
+        locatorState.clearText()
+        xtreamEndpointState.clearText()
+        xtreamUsernameState.clearText()
+        xtreamPasswordState.clearText()
+        revealSensitiveInput = false
+        session.clearTransientLocator()
+    }
+
     fun cancelAndLeave() {
         scope.launch {
             if (session.cancel()) onBack()
+        }
+    }
+
+    fun requestLocalNetworkAccess() {
+        scope.launch {
+            when (requestLocalNetworkPermission()) {
+                LocalNetworkPermissionOutcome.GRANTED ->
+                    session.resumeAfterLocalNetworkPermissionGranted()
+
+                LocalNetworkPermissionOutcome.DENIED ->
+                    session.recordLocalNetworkPermissionDenied(permanently = false)
+
+                LocalNetworkPermissionOutcome.PERMANENTLY_DENIED ->
+                    session.recordLocalNetworkPermissionDenied(permanently = true)
+            }
+        }
+    }
+
+    fun openLocalNetworkSettings() {
+        scope.launch {
+            if (openLocalNetworkPermissionSettings()) {
+                session.resumeAfterLocalNetworkPermissionGranted()
+            }
         }
     }
 
@@ -97,8 +155,7 @@ fun AddSourceRoute(
     LaunchedEffect(state) {
         val current = state
         if (current is SourceEntryUiState.Confirming) {
-            locatorState.clearText()
-            revealLocator = false
+            clearTransientInputs()
         }
         if (current is SourceEntryUiState.Completed) {
             onCompleted()
@@ -108,6 +165,9 @@ fun AddSourceRoute(
         withFrameNanos { }
         when (current) {
             SourceEntryUiState.Editing -> sourceNameFocusRequester.requestFocus()
+            SourceEntryUiState.LocalNetworkPermissionRequired,
+            is SourceEntryUiState.LocalNetworkPermissionDenied,
+            -> localNetworkActionFocusRequester.requestFocus()
             SourceEntryUiState.HttpApprovalRequired -> httpCancelFocusRequester.requestFocus()
             is SourceEntryUiState.Confirming -> {
                 if (sourceName.isBlank()) {
@@ -134,8 +194,7 @@ fun AddSourceRoute(
     }
     DisposableEffect(session) {
         onDispose {
-            locatorState.clearText()
-            session.clearTransientLocator()
+            clearTransientInputs()
         }
     }
 
@@ -159,117 +218,254 @@ fun AddSourceRoute(
             Text("Добавить источник", style = MaterialTheme.typography.displaySmall)
 
             when (val current = state) {
-            SourceEntryUiState.Editing -> {
-                TvTextInput(
-                    label = "Название",
-                    value = sourceName,
-                    onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
-                    onNavigateDown = sourceLocatorFocusRequester::requestFocus,
-                    modifier = Modifier
-                        .testTag(SOURCE_NAME_TEST_TAG)
-                        .focusRequester(sourceNameFocusRequester),
-                )
-                TvSecureTextInput(
-                    label = "Ссылка M3U",
-                    state = locatorState,
-                    revealed = revealLocator,
-                    focusRequester = sourceLocatorFocusRequester,
-                    onNavigateUp = sourceNameFocusRequester::requestFocus,
-                    onNavigateDown = revealLocatorFocusRequester::requestFocus,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                    MuxTvActionButton(
-                        text = if (revealLocator) "Скрыть ссылку" else "Показать временно",
-                        onClick = { revealLocator = !revealLocator },
-                        modifier = Modifier.focusRequester(revealLocatorFocusRequester),
-                    )
-                    MuxTvActionButton(
-                        text = "Проверить",
-                        onClick = {
-                            scope.launch {
-                                session.prepare(locatorState.text.toString())
-                            }
-                        },
-                        enabled = locatorState.text.isNotBlank(),
-                    )
-                    MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
-                }
-            }
-
-            SourceEntryUiState.Restoring -> StatusText("Восстановление незавершённого добавления…")
-            SourceEntryUiState.Preparing -> StatusText("Проверка источника…")
-            SourceEntryUiState.Activating -> StatusText("Импорт и активация источника…")
-            SourceEntryUiState.Completed -> StatusText("Источник добавлен.")
-
-            SourceEntryUiState.HttpApprovalRequired -> {
-                StatusText("Источник использует незащищённый HTTP. Продолжайте только для доверенной локальной сети.")
-                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                    MuxTvActionButton(
-                        text = "Разрешить HTTP",
-                        onClick = { scope.launch { session.approveInsecureHttp() } },
-                    )
-                    MuxTvActionButton(
-                        text = "Отмена",
-                        onClick = ::cancelAndLeave,
-                        modifier = Modifier
-                            .testTag(SOURCE_HTTP_CANCEL_TEST_TAG)
-                            .focusRequester(httpCancelFocusRequester),
-                    )
-                }
-            }
-
-            is SourceEntryUiState.Confirming -> {
-                Text(
-                    text = "Подтвердите адрес: ${current.endpoint}",
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                TvTextInput(
-                    label = "Название источника",
-                    value = sourceName,
-                    onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
-                    onNavigateDown = {
-                        if (sourceName.isNotBlank()) confirmFocusRequester.requestFocus()
-                    },
-                    modifier = Modifier
-                        .testTag(SOURCE_NAME_TEST_TAG)
-                        .focusRequester(sourceNameFocusRequester),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                    MuxTvActionButton(
-                        text = "Добавить",
-                        onClick = { scope.launch { session.activate(sourceName) } },
-                        enabled = sourceName.isNotBlank(),
-                        modifier = Modifier
-                            .testTag(SOURCE_CONFIRM_TEST_TAG)
-                            .focusRequester(confirmFocusRequester),
-                    )
-                    MuxTvActionButton(text = "Отмена", onClick = ::cancelAndLeave)
-                }
-            }
-
-            is SourceEntryUiState.Failed -> {
-                StatusText(current.reason.userMessage())
-                Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-                    if (current.cleanupPending) {
+                SourceEntryUiState.Editing -> {
+                    Text("Тип источника", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
                         MuxTvActionButton(
-                            text = "Повторить очистку",
-                            onClick = { scope.launch { session.cancel() } },
+                            text = if (provider == SourceProviderSelection.M3U) "M3U · выбрано" else "M3U",
+                            onClick = {
+                                provider = SourceProviderSelection.M3U
+                                xtreamEndpointState.clearText()
+                                xtreamUsernameState.clearText()
+                                xtreamPasswordState.clearText()
+                                revealSensitiveInput = false
+                                sourceNameFocusRequester.requestFocus()
+                            },
                             modifier = Modifier
-                                .testTag(SOURCE_CLEANUP_RETRY_TEST_TAG)
-                                .focusRequester(cleanupRetryFocusRequester),
+                                .testTag(SOURCE_PROVIDER_M3U_TEST_TAG)
+                                .focusRequester(providerM3uFocusRequester),
                         )
-                    } else {
                         MuxTvActionButton(
-                            text = "Изменить данные",
-                            onClick = session::editAgain,
+                            text = if (provider == SourceProviderSelection.XTREAM) "Xtream · выбрано" else "Xtream",
+                            onClick = {
+                                provider = SourceProviderSelection.XTREAM
+                                locatorState.clearText()
+                                revealSensitiveInput = false
+                                sourceNameFocusRequester.requestFocus()
+                            },
                             modifier = Modifier
-                                .testTag(SOURCE_EDIT_AGAIN_TEST_TAG)
-                                .focusRequester(editAgainFocusRequester),
+                                .testTag(SOURCE_PROVIDER_XTREAM_TEST_TAG)
+                                .focusRequester(providerXtreamFocusRequester),
                         )
                     }
-                    MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
+
+                    TvTextInput(
+                        label = "Название",
+                        value = sourceName,
+                        onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                        onNavigateUp = { providerFocusRequester().requestFocus() },
+                        onNavigateDown = { firstInputFocusRequester().requestFocus() },
+                        modifier = Modifier
+                            .testTag(SOURCE_NAME_TEST_TAG)
+                            .focusRequester(sourceNameFocusRequester),
+                    )
+
+                    when (provider) {
+                        SourceProviderSelection.M3U -> {
+                            TvSecureTextInput(
+                                label = "Ссылка M3U",
+                                state = locatorState,
+                                revealed = revealSensitiveInput,
+                                focusRequester = sourceLocatorFocusRequester,
+                                testTag = SOURCE_LOCATOR_TEST_TAG,
+                                maxCharacters = MAX_LOCATOR_CHARACTERS,
+                                onNavigateUp = sourceNameFocusRequester::requestFocus,
+                                onNavigateDown = revealSensitiveFocusRequester::requestFocus,
+                            )
+                        }
+
+                        SourceProviderSelection.XTREAM -> {
+                            TvSecureTextInput(
+                                label = "Сервер Xtream",
+                                state = xtreamEndpointState,
+                                revealed = revealSensitiveInput,
+                                focusRequester = xtreamEndpointFocusRequester,
+                                testTag = SOURCE_XTREAM_ENDPOINT_TEST_TAG,
+                                maxCharacters = MAX_LOCATOR_CHARACTERS,
+                                onNavigateUp = sourceNameFocusRequester::requestFocus,
+                                onNavigateDown = xtreamUsernameFocusRequester::requestFocus,
+                            )
+                            TvSecureTextInput(
+                                label = "Логин",
+                                state = xtreamUsernameState,
+                                revealed = revealSensitiveInput,
+                                focusRequester = xtreamUsernameFocusRequester,
+                                testTag = SOURCE_XTREAM_USERNAME_TEST_TAG,
+                                maxCharacters = MAX_CREDENTIAL_CHARACTERS,
+                                onNavigateUp = xtreamEndpointFocusRequester::requestFocus,
+                                onNavigateDown = xtreamPasswordFocusRequester::requestFocus,
+                            )
+                            TvSecureTextInput(
+                                label = "Пароль",
+                                state = xtreamPasswordState,
+                                revealed = revealSensitiveInput,
+                                focusRequester = xtreamPasswordFocusRequester,
+                                testTag = SOURCE_XTREAM_PASSWORD_TEST_TAG,
+                                maxCharacters = MAX_CREDENTIAL_CHARACTERS,
+                                onNavigateUp = xtreamUsernameFocusRequester::requestFocus,
+                                onNavigateDown = revealSensitiveFocusRequester::requestFocus,
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = if (revealSensitiveInput) "Скрыть данные" else "Показать временно",
+                            onClick = { revealSensitiveInput = !revealSensitiveInput },
+                            modifier = Modifier.focusRequester(revealSensitiveFocusRequester),
+                        )
+                        MuxTvActionButton(
+                            text = "Проверить",
+                            onClick = {
+                                scope.launch {
+                                    when (provider) {
+                                        SourceProviderSelection.M3U ->
+                                            session.prepare(locatorState.text.toString())
+
+                                        SourceProviderSelection.XTREAM ->
+                                            session.prepareXtream(
+                                                endpoint = xtreamEndpointState.text.toString(),
+                                                username = xtreamUsernameState.text.toString(),
+                                                password = xtreamPasswordState.text.toString(),
+                                            )
+                                    }
+                                }
+                            },
+                            enabled = when (provider) {
+                                SourceProviderSelection.M3U -> locatorState.text.isNotBlank()
+                                SourceProviderSelection.XTREAM ->
+                                    xtreamEndpointState.text.isNotBlank() &&
+                                        xtreamUsernameState.text.isNotBlank() &&
+                                        xtreamPasswordState.text.isNotBlank()
+                            },
+                            modifier = Modifier
+                                .testTag(SOURCE_CHECK_TEST_TAG)
+                                .focusRequester(checkFocusRequester),
+                        )
+                        MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
+                    }
                 }
-            }
+
+                SourceEntryUiState.Restoring -> StatusText("Восстановление незавершённого добавления…")
+                SourceEntryUiState.Preparing -> StatusText("Проверка источника…")
+                SourceEntryUiState.LocalNetworkPermissionRequired -> {
+                    StatusText("Для этого локального источника требуется доступ к локальной сети.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = "Разрешить доступ",
+                            onClick = ::requestLocalNetworkAccess,
+                            modifier = Modifier
+                                .testTag(SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG)
+                                .focusRequester(localNetworkActionFocusRequester),
+                        )
+                        MuxTvActionButton(
+                            text = "Отмена",
+                            onClick = ::cancelAndLeave,
+                            modifier = Modifier.testTag(SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG),
+                        )
+                    }
+                }
+
+                is SourceEntryUiState.LocalNetworkPermissionDenied -> {
+                    StatusText(
+                        if (current.permanently) {
+                            "Доступ к локальной сети отключён для MuxTV. Разрешите его в настройках Android."
+                        } else {
+                            "Доступ к локальной сети не предоставлен."
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = if (current.permanently) "Открыть настройки" else "Повторить",
+                            onClick = if (current.permanently) {
+                                ::openLocalNetworkSettings
+                            } else {
+                                ::requestLocalNetworkAccess
+                            },
+                            modifier = Modifier
+                                .testTag(SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG)
+                                .focusRequester(localNetworkActionFocusRequester),
+                        )
+                        MuxTvActionButton(
+                            text = "Отмена",
+                            onClick = ::cancelAndLeave,
+                            modifier = Modifier.testTag(SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG),
+                        )
+                    }
+                }
+
+                SourceEntryUiState.Activating -> StatusText("Импорт и активация источника…")
+                SourceEntryUiState.Completed -> StatusText("Источник добавлен.")
+
+                SourceEntryUiState.HttpApprovalRequired -> {
+                    StatusText("Источник использует незащищённый HTTP. Продолжайте только для доверенной локальной сети.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = "Разрешить HTTP",
+                            onClick = { scope.launch { session.approveInsecureHttp() } },
+                        )
+                        MuxTvActionButton(
+                            text = "Отмена",
+                            onClick = ::cancelAndLeave,
+                            modifier = Modifier
+                                .testTag(SOURCE_HTTP_CANCEL_TEST_TAG)
+                                .focusRequester(httpCancelFocusRequester),
+                        )
+                    }
+                }
+
+                is SourceEntryUiState.Confirming -> {
+                    Text(
+                        text = "Подтвердите адрес: ${current.endpoint}",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    TvTextInput(
+                        label = "Название источника",
+                        value = sourceName,
+                        onValueChange = { sourceName = it.take(MAX_SOURCE_NAME_CHARACTERS) },
+                        onNavigateDown = {
+                            if (sourceName.isNotBlank()) confirmFocusRequester.requestFocus()
+                        },
+                        modifier = Modifier
+                            .testTag(SOURCE_NAME_TEST_TAG)
+                            .focusRequester(sourceNameFocusRequester),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        MuxTvActionButton(
+                            text = "Добавить",
+                            onClick = { scope.launch { session.activate(sourceName) } },
+                            enabled = sourceName.isNotBlank(),
+                            modifier = Modifier
+                                .testTag(SOURCE_CONFIRM_TEST_TAG)
+                                .focusRequester(confirmFocusRequester),
+                        )
+                        MuxTvActionButton(text = "Отмена", onClick = ::cancelAndLeave)
+                    }
+                }
+
+                is SourceEntryUiState.Failed -> {
+                    StatusText(current.reason.userMessage())
+                    Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
+                        if (current.cleanupPending) {
+                            MuxTvActionButton(
+                                text = "Повторить очистку",
+                                onClick = { scope.launch { session.cancel() } },
+                                modifier = Modifier
+                                    .testTag(SOURCE_CLEANUP_RETRY_TEST_TAG)
+                                    .focusRequester(cleanupRetryFocusRequester),
+                            )
+                        } else {
+                            MuxTvActionButton(
+                                text = "Изменить данные",
+                                onClick = session::editAgain,
+                                modifier = Modifier
+                                    .testTag(SOURCE_EDIT_AGAIN_TEST_TAG)
+                                    .focusRequester(editAgainFocusRequester),
+                            )
+                        }
+                        MuxTvActionButton(text = "Назад", onClick = ::cancelAndLeave)
+                    }
+                }
             }
         }
     }
@@ -320,6 +516,8 @@ private fun TvSecureTextInput(
     state: TextFieldState,
     revealed: Boolean,
     focusRequester: FocusRequester,
+    testTag: String,
+    maxCharacters: Int,
     onNavigateUp: (() -> Unit)? = null,
     onNavigateDown: (() -> Unit)? = null,
 ) {
@@ -336,7 +534,7 @@ private fun TvSecureTextInput(
             state = state,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag(SOURCE_LOCATOR_TEST_TAG)
+                .testTag(testTag)
                 .focusRequester(focusRequester)
                 .onFocusChanged { hasFocus = it.isFocused }
                 .onPreviewDpadVertical(
@@ -352,12 +550,12 @@ private fun TvSecureTextInput(
                 )
                 .padding(horizontal = 20.dp, vertical = 16.dp)
                 .clearAndSetSemantics {
-                    contentDescription = "Ссылка M3U, значение скрыто"
+                    contentDescription = "$label, значение скрыто"
                     password()
                     focused = hasFocus
                     isEditable = true
                     isSensitiveData = true
-                    maxTextLength = MAX_LOCATOR_CHARACTERS
+                    maxTextLength = maxCharacters
                     editableText = maskedText
                     inputText = AnnotatedString("")
                     onClick {
@@ -370,12 +568,12 @@ private fun TvSecureTextInput(
                     }
                     setText { replacement ->
                         state.setTextAndPlaceCursorAtEnd(
-                            replacement.text.take(MAX_LOCATOR_CHARACTERS),
+                            replacement.text.take(maxCharacters),
                         )
                         true
                     }
                 },
-            inputTransformation = InputTransformation.maxLength(MAX_LOCATOR_CHARACTERS),
+            inputTransformation = InputTransformation.maxLength(maxCharacters),
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
@@ -420,7 +618,7 @@ private fun StatusText(message: String) {
 }
 
 private fun SourceEntryFailure.userMessage(): String = when (this) {
-    SourceEntryFailure.InvalidLocator -> "Ссылка отклонена. Проверьте схему, адрес и отсутствие встроенных учётных данных."
+    SourceEntryFailure.InvalidLocator -> "Данные источника отклонены. Проверьте адрес и обязательные поля."
     SourceEntryFailure.CredentialTooLarge -> "Данные доступа превышают допустимый размер."
     SourceEntryFailure.StorageUnavailable -> "Защищённое хранилище временно недоступно."
     SourceEntryFailure.InvalidSourceName -> "Введите название источника."
@@ -434,11 +632,25 @@ private fun SourceEntryFailure.userMessage(): String = when (this) {
     SourceEntryFailure.Unexpected -> "Не удалось добавить источник."
 }
 
+private enum class SourceProviderSelection {
+    M3U,
+    XTREAM,
+}
+
+private const val SOURCE_PROVIDER_M3U_TEST_TAG = "source-provider-m3u"
+private const val SOURCE_PROVIDER_XTREAM_TEST_TAG = "source-provider-xtream"
 private const val SOURCE_NAME_TEST_TAG = "source-name"
 private const val SOURCE_LOCATOR_TEST_TAG = "source-locator"
+private const val SOURCE_XTREAM_ENDPOINT_TEST_TAG = "source-xtream-endpoint"
+private const val SOURCE_XTREAM_USERNAME_TEST_TAG = "source-xtream-username"
+private const val SOURCE_XTREAM_PASSWORD_TEST_TAG = "source-xtream-password"
+private const val SOURCE_CHECK_TEST_TAG = "source-check"
+private const val SOURCE_LOCAL_NETWORK_ACTION_TEST_TAG = "source-local-network-action"
+private const val SOURCE_LOCAL_NETWORK_CANCEL_TEST_TAG = "source-local-network-cancel"
 private const val SOURCE_HTTP_CANCEL_TEST_TAG = "source-http-cancel"
 private const val SOURCE_CONFIRM_TEST_TAG = "source-confirm"
 private const val SOURCE_EDIT_AGAIN_TEST_TAG = "source-edit-again"
 private const val SOURCE_CLEANUP_RETRY_TEST_TAG = "source-cleanup-retry"
 private const val MAX_SOURCE_NAME_CHARACTERS = 200
 private const val MAX_LOCATOR_CHARACTERS = 4_096
+private const val MAX_CREDENTIAL_CHARACTERS = 4_096

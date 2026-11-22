@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import app.muxtv.catalog.ChannelFavoriteMutationResult
 import app.muxtv.catalog.ChannelPreferenceMutationResult
 import app.muxtv.catalog.ChannelPreferencesRepository
@@ -26,16 +27,24 @@ import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.feature.channels.ChannelsRoute
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChannelQuickActionsJourneyTest {
+    private val effectScheduler = TestCoroutineScheduler()
+
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createComposeRule(
+        effectContext = StandardTestDispatcher(effectScheduler),
+    )
 
     @Test
     fun normalOkStillOpensPlaybackWhenQuickActionsAreEnabled() {
@@ -51,12 +60,12 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0")
             .assertIsFocused()
             .pressEnter()
-        composeRule.waitForIdle()
+        drainEffects()
 
         assertThat(openedChannelId).isEqualTo("channel-a")
         composeRule.onNodeWithTag("channel-quick-actions").assertDoesNotExist()
@@ -76,11 +85,11 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0")
             .performSemanticsAction(SemanticsActions.OnLongClick)
-        composeRule.waitForIdle()
+        drainEffects()
 
         assertThat(openedChannelId).isNull()
         composeRule.onNodeWithTag("channel-quick-actions").assertExists()
@@ -100,7 +109,7 @@ class ChannelQuickActionsJourneyTest {
                 )
             }
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithTag("channel-row-0").performKeyInput {
             keyDown(Key.DirectionDown)
@@ -109,9 +118,12 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-row-1").assertIsFocused()
         composeRule.onNodeWithTag("channel-row-1")
             .performSemanticsAction(SemanticsActions.OnLongClick)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Скрыть").performClick()
-        composeRule.waitForIdle()
+        drainEffects()
+        // Drive the same focus path as a real TV remote.
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
+        drainEffects()
+        assertThat(preferences.hideRequests).isEqualTo(1)
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
@@ -122,9 +134,79 @@ class ChannelQuickActionsJourneyTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText("Второй", substring = false).fetchSemanticsNodes().isEmpty()
         }
-        composeRule.waitForIdle()
+        drainEffects()
 
         composeRule.onNodeWithText("Первый", substring = false).assertIsFocused()
+    }
+
+    @Test
+    fun unchangedHideRestoresFocusWithoutWaitingForChannelRemoval() {
+        val catalog = QuickActionPlaybackCatalog()
+        val preferences = HidingPreferencesRepository(catalog, applyHide = false)
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(catalog = catalog, preferences = preferences)
+            }
+        }
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-row-0")
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+        drainEffects()
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
+        drainEffects()
+        assertThat(preferences.hideRequests).isEqualTo(1)
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText(
+                "Долгое OK · быстрые действия",
+                substring = false,
+            ).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.onNodeWithTag("channel-row-0").assertIsFocused()
+        composeRule.onNodeWithText("Первый", substring = false).assertExists()
+    }
+
+    @Test
+    fun invalidCustomNumberKeepsQuickEditorOpenForCorrection() {
+        val catalog = QuickActionPlaybackCatalog()
+
+        composeRule.setContent {
+            MuxTvTheme {
+                channelsRoute(
+                    catalog = catalog,
+                    preferences = HidingPreferencesRepository(catalog),
+                )
+            }
+        }
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-row-0")
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+        drainEffects()
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Переименовать").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Номер").assertIsFocused().pressEnter()
+        drainEffects()
+        composeRule.onNodeWithTag("channel-quick-actions-editor")
+            .assertIsFocused()
+            .performTextInput("10000")
+        composeRule.onNodeWithText("Сохранить").performClick()
+        drainEffects()
+
+        composeRule.onNodeWithTag("channel-quick-actions-error").assertExists()
+        composeRule.onNodeWithTag("channel-quick-actions-editor").assertExists()
+        composeRule.onNodeWithText("Введите номер от 1 до 9999.").assertExists()
+    }
+
+    private fun drainEffects() {
+        effectScheduler.runCurrent()
+        composeRule.waitForIdle()
+        effectScheduler.runCurrent()
+        composeRule.waitForIdle()
     }
 
     @androidx.compose.runtime.Composable
@@ -154,7 +236,11 @@ class ChannelQuickActionsJourneyTest {
 
 private class HidingPreferencesRepository(
     private val catalog: QuickActionPlaybackCatalog,
+    private val applyHide: Boolean = true,
 ) : ChannelPreferencesRepository {
+    var hideRequests: Int = 0
+        private set
+
     override suspend fun setFavorite(
         profileId: String,
         channelId: String,
@@ -166,6 +252,8 @@ private class HidingPreferencesRepository(
         channelId: String,
         isHidden: Boolean,
     ): ChannelPreferenceMutationResult {
+        hideRequests++
+        if (!applyHide) return ChannelPreferenceMutationResult.Unchanged
         if (isHidden) catalog.remove(channelId)
         return ChannelPreferenceMutationResult.Applied
     }
@@ -180,7 +268,12 @@ private class HidingPreferencesRepository(
         profileId: String,
         channelId: String,
         channelNumber: Int?,
-    ): ChannelPreferenceMutationResult = ChannelPreferenceMutationResult.Applied
+    ): ChannelPreferenceMutationResult =
+        if (channelNumber != null && channelNumber !in 1..9999) {
+            ChannelPreferenceMutationResult.InvalidInput
+        } else {
+            ChannelPreferenceMutationResult.Applied
+        }
 
     override suspend fun resetCustomization(
         profileId: String,
@@ -257,4 +350,9 @@ private fun quickActionChannel(
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = performKeyInput {
     keyDown(Key.Enter)
     keyUp(Key.Enter)
+}
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressDown() = performKeyInput {
+    keyDown(Key.DirectionDown)
+    keyUp(Key.DirectionDown)
 }

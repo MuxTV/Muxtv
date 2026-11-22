@@ -19,6 +19,8 @@ on:
       - core/designsystem/**
       - core/ui/**
       - tools/ci/Assert-AndroidTestResults.ps1
+      - tools/ci/Install-HostedAdbRetryShim.sh
+      - tools/ci/adb-shim/**
       - tools/ci/Run-HostedAndroidProductTests.sh
       - tools/ci/Run-HostedTvU1ShellTests.sh
       - tools/ci/Test-TvU1FocusedProfileContract.ps1
@@ -68,6 +70,10 @@ jobs:
         env:
           MUXTV_KVM_EVIDENCE: .work/evidence/hosted-android/focused-api36
         run: bash ./tools/ci/Enable-HostedAndroidKvm.sh
+
+      - name: Install bounded hosted ADB retry shim
+        shell: bash
+        run: bash ./tools/ci/Install-HostedAdbRetryShim.sh
 
       - name: Run focused Android TV API36 connected tests
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, 2026-07-05

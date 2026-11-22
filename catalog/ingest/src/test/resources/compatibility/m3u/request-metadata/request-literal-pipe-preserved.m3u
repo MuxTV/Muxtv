@@ -1,0 +1,3 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.literal-pipe",C21 Literal Pipe
+https://streams.invalid/live/path|weird/segment.ts

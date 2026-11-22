@@ -9,11 +9,13 @@ import app.muxtv.catalog.ChannelSearchRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.GuideWindowRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackArchiveResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackReferenceResolver
 import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.RejectAllPlaybackAccessPolicyResolver
+import app.muxtv.catalog.UnhandledPlaybackArchiveResolver
 import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 
 class MuxTvDatabaseComponents internal constructor(
@@ -42,6 +44,8 @@ object MuxTvDatabaseFactory {
             RejectAllPlaybackAccessPolicyResolver,
         playbackReferenceResolver: PlaybackReferenceResolver =
             UnhandledPlaybackReferenceResolver,
+        playbackArchiveResolver: PlaybackArchiveResolver =
+            UnhandledPlaybackArchiveResolver,
     ): MuxTvDatabaseComponents {
         val database = Room.databaseBuilder(
             context = context.applicationContext,
@@ -59,6 +63,7 @@ object MuxTvDatabaseFactory {
             dao = database.playbackCatalogDao(),
             accessPolicyResolver = playbackAccessPolicyResolver,
             playbackReferenceResolver = playbackReferenceResolver,
+            playbackArchiveResolver = playbackArchiveResolver,
         )
         return MuxTvDatabaseComponents(
             initializer = DatabaseInitializer(database),

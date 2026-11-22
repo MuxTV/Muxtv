@@ -295,27 +295,10 @@ private fun ManageChannelsContent(
         listState.scrollToItem(requestedIndex, request.anchor.scrollOffset)
 
         val target = snapshotFlow {
-            val anchoredIndex = findLoadedManageChannelIndex(rows, request.anchor.itemKey)
-            when {
-                request.waitForAnchorRemoval && anchoredIndex != null -> null
-                !request.waitForAnchorRemoval && anchoredIndex != null -> {
-                    request.anchor.itemKey.let { anchoredIndex to it }
-                }
-
-                appendState is LoadState.NotLoading && appendState.endOfPaginationReached -> {
-                    val loadedIds = (0 until rows.itemCount)
-                        .mapNotNull { index -> rows.peek(index)?.channelId }
-                    if (loadedIds.size == rows.itemCount) {
-                        request.anchor.resolveAgainst(loadedIds)?.let { resolved ->
-                            resolved.index to resolved.itemKey
-                        }
-                    } else {
-                        null
-                    }
-                }
-
-                else -> null
-            }
+            request.anchor.resolveForManagement(
+                loadedKeys = (0 until rows.itemCount).map { index -> rows.peek(index)?.channelId },
+                waitForAnchorRemoval = request.waitForAnchorRemoval,
+            )?.let { resolved -> resolved.index to resolved.itemKey }
         }
             .filterNotNull()
             .first()
