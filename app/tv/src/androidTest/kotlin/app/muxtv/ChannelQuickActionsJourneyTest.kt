@@ -203,6 +203,7 @@ class ChannelQuickActionsJourneyTest {
 
         composeRule.onNodeWithTag("channel-quick-actions-error").assertExists()
         composeRule.onNodeWithTag("channel-quick-actions-editor").assertExists()
+        composeRule.onNodeWithTag("channel-quick-actions").assertExists()
         composeRule.onNodeWithText("Введите номер от 1 до 9999.").assertExists()
     }
 
