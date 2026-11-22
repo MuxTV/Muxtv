@@ -119,7 +119,9 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-row-1")
             .performSemanticsAction(SemanticsActions.OnLongClick)
         drainEffects()
-        composeRule.onNodeWithText("Скрыть").performClick()
+        // Drive the same focus path as a real TV remote.
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
         drainEffects()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -151,7 +153,8 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-row-0")
             .performSemanticsAction(SemanticsActions.OnLongClick)
         drainEffects()
-        composeRule.onNodeWithText("Скрыть").performClick()
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
         drainEffects()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -181,9 +184,14 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-row-0")
             .performSemanticsAction(SemanticsActions.OnLongClick)
         drainEffects()
-        composeRule.onNodeWithText("Номер").performClick()
+        composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Скрыть").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Переименовать").assertIsFocused().pressDown()
+        composeRule.onNodeWithText("Номер").assertIsFocused().pressEnter()
         drainEffects()
-        composeRule.onNodeWithTag("channel-quick-actions-editor").performTextInput("10000")
+        composeRule.onNodeWithTag("channel-quick-actions-editor")
+            .assertIsFocused()
+            .performTextInput("10000")
         composeRule.onNodeWithText("Сохранить").performClick()
         drainEffects()
 
@@ -336,4 +344,9 @@ private fun quickActionChannel(
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressEnter() = performKeyInput {
     keyDown(Key.Enter)
     keyUp(Key.Enter)
+}
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressDown() = performKeyInput {
+    keyDown(Key.DirectionDown)
+    keyUp(Key.DirectionDown)
 }
