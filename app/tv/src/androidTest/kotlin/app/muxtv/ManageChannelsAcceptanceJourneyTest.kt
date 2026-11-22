@@ -114,6 +114,7 @@ class ManageChannelsAcceptanceJourneyTest {
         composeRule.onNodeWithTag("manage-channels-editor")
             .assertIsFocused()
             .performTextClearance()
+        composeRule.onNodeWithTag("manage-channels-editor")
             .performTextInput("Мои новости")
         composeRule.onNodeWithText("Сохранить").performClick()
         composeRule.waitForIdle()
