@@ -123,6 +123,7 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
         composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
         drainEffects()
+        assertThat(preferences.hideRequests).isEqualTo(1)
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
@@ -156,6 +157,7 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithText("В избранное").assertIsFocused().pressDown()
         composeRule.onNodeWithText("Скрыть").assertIsFocused().pressEnter()
         drainEffects()
+        assertThat(preferences.hideRequests).isEqualTo(1)
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithText(
@@ -236,6 +238,9 @@ private class HidingPreferencesRepository(
     private val catalog: QuickActionPlaybackCatalog,
     private val applyHide: Boolean = true,
 ) : ChannelPreferencesRepository {
+    var hideRequests: Int = 0
+        private set
+
     override suspend fun setFavorite(
         profileId: String,
         channelId: String,
@@ -247,6 +252,7 @@ private class HidingPreferencesRepository(
         channelId: String,
         isHidden: Boolean,
     ): ChannelPreferenceMutationResult {
+        hideRequests++
         if (!applyHide) return ChannelPreferenceMutationResult.Unchanged
         if (isHidden) catalog.remove(channelId)
         return ChannelPreferenceMutationResult.Applied
