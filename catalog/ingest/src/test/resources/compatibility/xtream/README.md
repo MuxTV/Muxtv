@@ -9,6 +9,6 @@ This corpus is correctness evidence for the bounded Xtream protocol normalizatio
 - `REJECTED` — the structural input fails closed through a typed secret-safe failure;
 - `NOT_IMPLEMENTED` — syntax/metadata is characterized but the downstream product semantic is explicitly not claimed.
 
-Archive fields are intentionally `NOT_IMPLEMENTED` at product level in this slice: parsing `tv_archive` metadata is not evidence of catch-up playback support.
+The archive fixture now marks normalized `tv_archive` / `tv_archive_duration` semantics as `SUPPORTED`: those fields feed the bounded generic catch-up metadata used by the Xtream archive resolver. This corpus does not claim alternative Xtream timeshift dialect compatibility; credential-bearing transport materialization remains owned and tested in `catalog:refresh`.
 
 Large-array incremental behavior and hard item/field bounds are generated in the JVM test instead of storing a large fixture in Git.

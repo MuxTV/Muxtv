@@ -4,9 +4,8 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import app.muxtv.catalog.refresh.RemoteSourceRefreshRequest
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
-import app.muxtv.credentials.CredentialId
+import app.muxtv.catalog.refresh.XtreamLiveRefresher
 import app.muxtv.database.EpgMatchingStore
 import app.muxtv.database.RefreshCompletionDisposition
 import app.muxtv.database.SourceRefreshCompletion
@@ -31,9 +30,15 @@ class SourceRefreshWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParameters: WorkerParameters,
     private val refreshStore: SourceRefreshStore,
-    private val sourceRefresher: RemoteSourceRefresher,
+    sourceRefresher: RemoteSourceRefresher,
+    xtreamRefresher: XtreamLiveRefresher,
     private val matchingStore: EpgMatchingStore,
 ) : CoroutineWorker(appContext, workerParameters) {
+    private val refreshDispatcher = SourceRefreshDispatcher(
+        m3uRefresh = sourceRefresher::refresh,
+        xtreamRefresh = xtreamRefresher::refresh,
+    )
+
     override suspend fun doWork(): Result {
         val sourceId = inputData.getString(KEY_SOURCE_ID)?.takeIf(String::isNotBlank)
             ?: return Result.failure()
@@ -90,25 +95,12 @@ class SourceRefreshWorker @AssistedInject constructor(
     private suspend fun refresh(
         target: SourceRefreshTarget,
         runToken: String,
-    ): SourceRefreshDecision {
-        val credentialRef = target.credentialRef
-            ?: return SourceRefreshOutcomeMapper.missingCredentialReference()
-        val credentialId = runCatching { CredentialId.parse(credentialRef) }
-            .getOrElse { return SourceRefreshOutcomeMapper.invalidCredentialReference() }
-        val request = RemoteSourceRefreshRequest(
-            sourceId = target.sourceId,
-            sourceName = target.sourceName,
-            accessCredentialId = credentialId,
-            refreshRunToken = runToken,
-        )
-
-        return try {
-            withTimeout(REFRESH_TIMEOUT_MILLIS) {
-                SourceRefreshOutcomeMapper.map(sourceRefresher.refresh(request))
-            }
-        } catch (_: TimeoutCancellationException) {
-            SourceRefreshOutcomeMapper.runtimeTimeout()
+    ): SourceRefreshDecision = try {
+        withTimeout(REFRESH_TIMEOUT_MILLIS) {
+            refreshDispatcher.refresh(target, runToken)
         }
+    } catch (_: TimeoutCancellationException) {
+        SourceRefreshOutcomeMapper.runtimeTimeout()
     }
 
     private suspend fun complete(

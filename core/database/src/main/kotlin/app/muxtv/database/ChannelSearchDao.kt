@@ -2,6 +2,7 @@ package app.muxtv.database
 
 import androidx.room3.Dao
 import androidx.room3.Query
+import app.muxtv.catalog.ChannelSearchQuery
 import app.muxtv.catalog.PlayableChannelSummary
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -48,14 +49,24 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
             require(restrictedIds.none(String::isBlank))
             if (restrictedIds.isEmpty()) return emptyList()
         }
+        val restrictionEnabled = if (restrictedIds == null) 0 else 1
+        val diversityLimit = if (restrictionEnabled == 0) {
+            minOf(
+                ChannelSearchQuery.MAX_LIMIT,
+                (fetchLimit - ChannelSearchQuery.MAX_LIMIT).coerceAtLeast(0),
+            )
+        } else {
+            0
+        }
         return selectCandidates(
             profileId = profileId,
             ftsExpression = ftsExpression,
             nowEpochMillis = nowEpochMillis,
             fetchLimit = fetchLimit,
             matchPolicyVersion = CURRENT_EPG_MATCH_POLICY_VERSION,
-            restrictionEnabled = if (restrictedIds == null) 0 else 1,
+            restrictionEnabled = restrictionEnabled,
             restrictedCanonicalIds = restrictedIds ?: listOf(RESTRICTION_SENTINEL),
+            diversityLimit = diversityLimit,
         )
     }
 
@@ -225,36 +236,90 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
             SELECT canonicalChannelId, matchRank FROM direct_candidates
             UNION ALL
             SELECT canonicalChannelId, matchRank FROM epg_candidates
-        )
-        SELECT candidates.canonicalChannelId AS canonicalChannelId,
-               MIN(candidates.matchRank) AS bestMatchRank
-        FROM combined_candidates AS candidates
-        WHERE EXISTS (
-            SELECT 1
-            FROM stream_variants
+        ),
+        eligible_candidates AS (
+            SELECT candidates.canonicalChannelId AS canonicalChannelId,
+                   MIN(candidates.matchRank) AS bestMatchRank
+            FROM combined_candidates AS candidates
+            WHERE EXISTS (
+                SELECT 1
+                FROM stream_variants
+                INNER JOIN provider_channels
+                    ON provider_channels.id = stream_variants.providerChannelId
+                INNER JOIN sources
+                    ON sources.id = provider_channels.sourceId
+                   AND sources.activeRevision = provider_channels.revisionNumber
+                WHERE stream_variants.canonicalChannelId = candidates.canonicalChannelId
+            )
+              AND COALESCE(
+                  (
+                      SELECT user_channel_overlays.isHidden
+                      FROM user_channel_overlays
+                      WHERE user_channel_overlays.profileId = :profileId
+                        AND user_channel_overlays.canonicalChannelId = candidates.canonicalChannelId
+                      LIMIT 1
+                  ),
+                  0
+              ) = 0
+              AND (
+                  :restrictionEnabled = 0
+                  OR candidates.canonicalChannelId IN (:restrictedCanonicalIds)
+              )
+            GROUP BY candidates.canonicalChannelId
+        ),
+        candidate_sources AS (
+            SELECT DISTINCT eligible.canonicalChannelId AS canonicalChannelId,
+                            eligible.bestMatchRank AS bestMatchRank,
+                            provider_channels.sourceId AS sourceId
+            FROM eligible_candidates AS eligible
+            INNER JOIN stream_variants
+                ON stream_variants.canonicalChannelId = eligible.canonicalChannelId
             INNER JOIN provider_channels
                 ON provider_channels.id = stream_variants.providerChannelId
             INNER JOIN sources
                 ON sources.id = provider_channels.sourceId
                AND sources.activeRevision = provider_channels.revisionNumber
-            WHERE stream_variants.canonicalChannelId = candidates.canonicalChannelId
+        ),
+        source_best_ranks AS (
+            SELECT sourceId,
+                   MIN(bestMatchRank) AS bestMatchRank
+            FROM candidate_sources
+            GROUP BY sourceId
+        ),
+        source_representatives AS (
+            SELECT candidate_sources.sourceId AS sourceId,
+                   MIN(candidate_sources.canonicalChannelId) AS canonicalChannelId,
+                   candidate_sources.bestMatchRank AS bestMatchRank
+            FROM candidate_sources
+            INNER JOIN source_best_ranks
+                ON source_best_ranks.sourceId = candidate_sources.sourceId
+               AND source_best_ranks.bestMatchRank = candidate_sources.bestMatchRank
+            WHERE :restrictionEnabled = 0
+              AND :diversityLimit > 0
+            GROUP BY candidate_sources.sourceId,
+                     candidate_sources.bestMatchRank
+            ORDER BY candidate_sources.bestMatchRank,
+                     candidate_sources.sourceId COLLATE BINARY
+            LIMIT :diversityLimit
+        ),
+        candidate_pool AS (
+            SELECT source_representatives.canonicalChannelId AS canonicalChannelId,
+                   source_representatives.bestMatchRank AS bestMatchRank,
+                   0 AS acquisitionPriority
+            FROM source_representatives
+            UNION ALL
+            SELECT eligible_candidates.canonicalChannelId AS canonicalChannelId,
+                   eligible_candidates.bestMatchRank AS bestMatchRank,
+                   1 AS acquisitionPriority
+            FROM eligible_candidates
         )
-          AND COALESCE(
-              (
-                  SELECT user_channel_overlays.isHidden
-                  FROM user_channel_overlays
-                  WHERE user_channel_overlays.profileId = :profileId
-                    AND user_channel_overlays.canonicalChannelId = candidates.canonicalChannelId
-                  LIMIT 1
-              ),
-              0
-          ) = 0
-          AND (
-              :restrictionEnabled = 0
-              OR candidates.canonicalChannelId IN (:restrictedCanonicalIds)
-          )
-        GROUP BY candidates.canonicalChannelId
-        ORDER BY candidates.canonicalChannelId COLLATE BINARY
+        SELECT candidate_pool.canonicalChannelId AS canonicalChannelId,
+               MIN(candidate_pool.bestMatchRank) AS bestMatchRank
+        FROM candidate_pool
+        GROUP BY candidate_pool.canonicalChannelId
+        ORDER BY MIN(candidate_pool.acquisitionPriority),
+                 MIN(candidate_pool.bestMatchRank),
+                 candidate_pool.canonicalChannelId COLLATE BINARY
         LIMIT :fetchLimit
         """,
     )
@@ -266,6 +331,7 @@ internal abstract class ChannelSearchDao : ChannelSearchDataSource {
         matchPolicyVersion: Int,
         restrictionEnabled: Int,
         restrictedCanonicalIds: List<String>,
+        diversityLimit: Int,
     ): List<ChannelSearchCandidateRow>
 
     @Query(

@@ -1,7 +1,12 @@
 package app.muxtv
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,23 +21,56 @@ import app.muxtv.catalog.RecentChannelsRepository
 import app.muxtv.catalog.SourceManagement
 import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.designsystem.MuxTvTheme
+import app.muxtv.external.LocalNetworkPermissionGate
+import app.muxtv.external.LocalNetworkPermissionState
+import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.navigation.AppNavigation
+import app.muxtv.localcontrol.TvPairingController
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.MuxTvMediaControllerConnector
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Volatile private var tvVisible = false
     private lateinit var doctorExportState: DoctorExportState
+    // Cleanup must outlive Activity.lifecycleScope cancellation during onDestroy.
+    private val pairingCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pairingController by lazy {
+        TvPairingController(
+            context = this,
+            invalidated = {
+                stopPhonePairing() // active LAN interface/transport changed; never auto-rebind
+            },
+            isTvVisible = { tvVisible },
+        )
+    }
+    private var pendingLocalNetworkPermission: CompletableDeferred<LocalNetworkPermissionOutcome>? = null
+    private var pendingLocalNetworkSettings: CompletableDeferred<Boolean>? = null
+
     private val doctorDocumentLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
         ::finishDoctorExport,
     )
+    private val localNetworkPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+        ::finishLocalNetworkPermissionRequest,
+    )
+    private val localNetworkSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        pendingLocalNetworkSettings?.complete(hasLocalNetworkPermission())
+    }
 
     @Inject
     lateinit var playbackCatalog: PlaybackCatalog
@@ -70,6 +108,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var playbackObservationReader: PlaybackObservationReader
 
+    @Inject
+    lateinit var devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         doctorExportState = DoctorExportState(
@@ -90,14 +131,128 @@ class MainActivity : ComponentActivity() {
                     playbackSessionGateway = playbackSessionGateway,
                     sourceManagement = sourceManagement,
                     sourceOnboarding = sourceOnboarding,
+                    startPhonePairing = ::startPhonePairing,
+                    enableNativeProbeForVisibleQr = ::enableNativeProbeForVisibleQr,
+                    startPublicKeyQrPreview = {
+                        withContext(Dispatchers.Default) {
+                            pairingController.startPublicKeyQrPreview()
+                        }
+                    },
+                    revokePublicKeyQrPreview = pairingController::revokePublicKeyQrPreview,
+                    publicKeyQrPreviewIsActive = pairingController::isPublicKeyQrPreviewActive,
+                    pendingPhonePublicKeyFingerprint =
+                        pairingController::pendingPhonePublicKeyFingerprint,
+                    approvePhonePublicKeyOnTv = pairingController::approvePhonePublicKeyOnTv,
+                    denyPhonePublicKeyOnTv = pairingController::denyPhonePublicKeyOnTv,
+                    stopPhonePairing = ::stopPhonePairing,
+                    pendingPhonePairing = { pairingController.pendingClaim() },
+                    approvePhonePairing = pairingController::approve,
+                    denyPhonePairing = pairingController::deny,
+                    activePhonePairings = pairingController::activeSessionCount,
+                    phonePairingIsActive = pairingController::isActive,
                     playbackObservationReader = playbackObservationReader,
                     doctorExportStatus = doctorExportState.status,
                     onExportDoctorReport = ::beginDoctorExport,
+                    requestLocalNetworkPermission = ::requestLocalNetworkPermission,
+                    openLocalNetworkPermissionSettings = ::openLocalNetworkPermissionSettings,
+                    devicePlaybackProfileSummaryReader = devicePlaybackProfileSummaryReader,
                 )
             }
         }
         doctorExportState.pendingExportForResume()?.let(::writeDoctorExport)
     }
+
+    private suspend fun startPhonePairing(): TvPairingController.ScreenSession? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.start()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // Do not expose transport failures or pairing secrets in TV UI.
+            }
+        }
+    }
+
+    private suspend fun enableNativeProbeForVisibleQr(): TvPairingController.NativeProbeEndpoint? {
+        if (requestLocalNetworkPermission() != LocalNetworkPermissionOutcome.GRANTED) return null
+        return withContext(Dispatchers.IO) {
+            try {
+                pairingController.enableNativeProbeForVisibleQr()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // No endpoint, key or network address in diagnostics.
+            }
+        }
+    }
+
+    private fun stopPhonePairing() {
+        pairingController.revokeImmediately()
+        pairingCleanupScope.launch {
+            pairingController.stop()
+        }
+    }
+
+    private suspend fun requestLocalNetworkPermission(): LocalNetworkPermissionOutcome {
+        if (hasLocalNetworkPermission()) return LocalNetworkPermissionOutcome.GRANTED
+
+        pendingLocalNetworkPermission?.let { return it.await() }
+        val pending = CompletableDeferred<LocalNetworkPermissionOutcome>()
+        pendingLocalNetworkPermission = pending
+        try {
+            localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        } catch (_: RuntimeException) {
+            if (pendingLocalNetworkPermission === pending) pendingLocalNetworkPermission = null
+            return LocalNetworkPermissionOutcome.DENIED
+        }
+
+        return try {
+            pending.await()
+        } finally {
+            if (pendingLocalNetworkPermission === pending) pendingLocalNetworkPermission = null
+        }
+    }
+
+    private fun finishLocalNetworkPermissionRequest(granted: Boolean) {
+        val rationaleAvailable = !granted && shouldShowRequestPermissionRationale(
+            Manifest.permission.ACCESS_LOCAL_NETWORK,
+        )
+        val state = LocalNetworkPermissionGate(Build.VERSION.SDK_INT).resolveRequestResult(
+            granted = granted,
+            rationaleAvailable = rationaleAvailable,
+        )
+        pendingLocalNetworkPermission?.complete(state.toFeatureOutcome())
+    }
+
+    private suspend fun openLocalNetworkPermissionSettings(): Boolean {
+        if (hasLocalNetworkPermission()) return true
+
+        pendingLocalNetworkSettings?.let { return it.await() }
+        val pending = CompletableDeferred<Boolean>()
+        pendingLocalNetworkSettings = pending
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        )
+        try {
+            localNetworkSettingsLauncher.launch(intent)
+        } catch (_: RuntimeException) {
+            if (pendingLocalNetworkSettings === pending) pendingLocalNetworkSettings = null
+            return false
+        }
+
+        return try {
+            pending.await()
+        } finally {
+            if (pendingLocalNetworkSettings === pending) pendingLocalNetworkSettings = null
+        }
+    }
+
+    private fun hasLocalNetworkPermission(): Boolean =
+        Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
+            checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED
 
     private fun beginDoctorExport(report: String) {
         if (!doctorExportState.begin(report)) return
@@ -139,6 +294,37 @@ class MainActivity : ComponentActivity() {
             doctorExportState.pendingDestinationUriForSave(),
         )
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        tvVisible = true
+    }
+
+    override fun onStop() {
+        tvVisible = false
+        stopPhonePairing()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        tvVisible = false
+        stopPhonePairing()
+        pendingLocalNetworkPermission?.cancel()
+        pendingLocalNetworkSettings?.cancel()
+        pendingLocalNetworkPermission = null
+        pendingLocalNetworkSettings = null
+        super.onDestroy()
+    }
+
+    private fun LocalNetworkPermissionState.toFeatureOutcome(): LocalNetworkPermissionOutcome = when (this) {
+        LocalNetworkPermissionState.NOT_REQUIRED,
+        LocalNetworkPermissionState.GRANTED,
+        -> LocalNetworkPermissionOutcome.GRANTED
+
+        LocalNetworkPermissionState.DENIED -> LocalNetworkPermissionOutcome.DENIED
+        LocalNetworkPermissionState.PERMANENTLY_DENIED ->
+            LocalNetworkPermissionOutcome.PERMANENTLY_DENIED
     }
 
     private companion object {

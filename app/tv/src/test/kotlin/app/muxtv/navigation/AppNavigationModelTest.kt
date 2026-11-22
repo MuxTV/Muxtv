@@ -19,6 +19,7 @@ class AppNavigationModelTest {
             )
             .inOrder()
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.AddSource)
+        assertThat(AppDestination.topLevel).doesNotContain(AppDestination.PhonePairing)
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Sources)
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Doctor)
         assertThat(AppDestination.topLevel)
@@ -28,6 +29,11 @@ class AppNavigationModelTest {
     @Test
     fun `add source route carries no locator or preparation token`() {
         assertThat(AppDestination.AddSource.toString()).isEqualTo("AddSource")
+    }
+
+    @Test
+    fun `phone pairing route carries no one-time QR proof in navigation state`() {
+        assertThat(AppDestination.PhonePairing.toString()).isEqualTo("PhonePairing")
     }
 
     @Test

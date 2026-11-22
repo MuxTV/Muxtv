@@ -33,6 +33,64 @@ class EncryptedPlaybackAccessPolicyResolverTest {
     }
 
     @Test
+    fun `materialized HTTPS is validated without credential lookup`() = runTest {
+        val store = RecordingCredentialStore()
+        val resolver = EncryptedPlaybackAccessPolicyResolver(store)
+
+        val result = resolver.validateMaterializedTransport(
+            playbackLocator = "https://provider.example/live/user/pass/707.m3u8",
+            insecureHttpPreapproved = false,
+        )
+
+        assertThat(result).isEqualTo(PlaybackAccessDecision.SecureTransport)
+        assertThat(store.readCount.get()).isEqualTo(0)
+    }
+
+    @Test
+    fun `materialized HTTP fails closed without provider approval provenance`() = runTest {
+        val store = RecordingCredentialStore()
+        val resolver = EncryptedPlaybackAccessPolicyResolver(store)
+
+        val result = resolver.validateMaterializedTransport(
+            playbackLocator = "http://provider.example:8080/live/user/pass/707.ts",
+            insecureHttpPreapproved = false,
+        )
+
+        assertThat(result).isEqualTo(
+            PlaybackAccessDecision.ApprovalRequired("http://provider.example:8080"),
+        )
+        assertThat(store.readCount.get()).isEqualTo(0)
+    }
+
+    @Test
+    fun `materialized HTTP accepts explicit provider approval provenance`() = runTest {
+        val store = RecordingCredentialStore()
+        val resolver = EncryptedPlaybackAccessPolicyResolver(store)
+
+        val result = resolver.validateMaterializedTransport(
+            playbackLocator = "http://provider.example/live/user/pass/707.ts",
+            insecureHttpPreapproved = true,
+        )
+
+        assertThat(result).isEqualTo(PlaybackAccessDecision.Approved)
+        assertThat(store.readCount.get()).isEqualTo(0)
+    }
+
+    @Test
+    fun `materialized malformed locator is rejected regardless of provenance`() = runTest {
+        val store = RecordingCredentialStore()
+        val resolver = EncryptedPlaybackAccessPolicyResolver(store)
+
+        assertThat(
+            resolver.validateMaterializedTransport(
+                playbackLocator = "not a url",
+                insecureHttpPreapproved = true,
+            ),
+        ).isEqualTo(PlaybackAccessDecision.InvalidLocator)
+        assertThat(store.readCount.get()).isEqualTo(0)
+    }
+
+    @Test
     fun `exact approved HTTP origin resolves approved`() = runTest {
         val store = RecordingCredentialStore()
         storeAccess(

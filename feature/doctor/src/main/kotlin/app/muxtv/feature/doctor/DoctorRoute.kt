@@ -30,6 +30,8 @@ import androidx.tv.material3.Text
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
+import app.muxtv.player.DevicePlaybackProfileSummary
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackFailureCategory
 import app.muxtv.player.PlaybackObservation
 import app.muxtv.player.PlaybackObservationKind
@@ -61,10 +63,15 @@ fun DoctorRoute(
     onExport: (String) -> Unit,
     modifier: Modifier = Modifier,
     railFocusRequester: FocusRequester? = null,
+    devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader =
+        DevicePlaybackProfileSummaryReader { null },
 ) {
     val refreshFocusRequester = remember { FocusRequester() }
     var snapshot by remember(observationReader) {
         mutableStateOf(readSnapshot(observationReader))
+    }
+    var deviceSummary by remember(devicePlaybackProfileSummaryReader) {
+        mutableStateOf(readDeviceSummary(devicePlaybackProfileSummaryReader))
     }
 
     LaunchedEffect(Unit) {
@@ -86,7 +93,10 @@ fun DoctorRoute(
         Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
             MuxTvActionButton(
                 text = "Обновить",
-                onClick = { snapshot = readSnapshot(observationReader) },
+                onClick = {
+                    snapshot = readSnapshot(observationReader)
+                    deviceSummary = readDeviceSummary(devicePlaybackProfileSummaryReader)
+                },
                 modifier = Modifier
                     .testTag(DOCTOR_REFRESH_TEST_TAG)
                     .focusProperties { left = railFocusRequester ?: FocusRequester.Default }
@@ -99,6 +109,7 @@ fun DoctorRoute(
                         DoctorReportFormatter.format(
                             generatedAtEpochMillis = System.currentTimeMillis(),
                             observations = observations,
+                            deviceSummary = deviceSummary,
                         ),
                     )
                 },
@@ -120,6 +131,7 @@ fun DoctorRoute(
                 },
             )
         }
+        DoctorDeviceSummary(summary = deviceSummary)
         when (snapshot) {
             DoctorSnapshot.Failed -> Text(
                 text = "Не удалось прочитать диагностические события.",
@@ -155,6 +167,39 @@ fun DoctorRoute(
             }
         }
     }
+}
+
+@Composable
+private fun DoctorDeviceSummary(summary: DevicePlaybackProfileSummary?) {
+    Text(
+        text = summary?.toDoctorDisplayText() ?: "Данные устройства недоступны.",
+        modifier = Modifier.testTag(DOCTOR_DEVICE_SUMMARY_TEST_TAG),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private fun DevicePlaybackProfileSummary.toDoctorDisplayText(): String = buildString {
+    append("Устройство: декодеры=")
+    append(
+        if (videoDecoders.isEmpty()) {
+            "-"
+        } else {
+            videoDecoders.joinToString(",") { capability ->
+                "${capability.codec.name}:${capability.hardwareAcceleration.name}"
+            }
+        },
+    )
+    append("; текущий_режим=")
+    append(
+        currentDisplayMode?.let { mode ->
+            "${mode.widthPixels}x${mode.heightPixels}@${mode.refreshRateMilliHz}mHz"
+        } ?: "-",
+    )
+    append("; режимов=").append(supportedDisplayModeCount)
+    append("; HDR=").append(if (hdrTypes.isEmpty()) "-" else hdrTypes.joinToString(",") { it.name })
+    append("; low-RAM=").append(lowRamDevice)
+    append("; memoryClass=").append(memoryClassMb).append("MB")
 }
 
 @Composable
@@ -208,6 +253,10 @@ private fun readSnapshot(reader: PlaybackObservationReader): DoctorSnapshot =
             onFailure = { DoctorSnapshot.Failed },
         )
 
+private fun readDeviceSummary(
+    reader: DevicePlaybackProfileSummaryReader,
+): DevicePlaybackProfileSummary? = runCatching { reader.snapshot() }.getOrNull()
+
 private fun PlaybackObservationKind.title(): String = when (this) {
     PlaybackObservationKind.ATTEMPT_STARTED -> "Попытка начата"
     PlaybackObservationKind.ATTEMPT_FAILED -> "Попытка не удалась"
@@ -246,5 +295,6 @@ private fun DoctorExportStatus.message(): String? = when (this) {
 const val DOCTOR_TITLE_TEST_TAG = "doctor-title"
 const val DOCTOR_REFRESH_TEST_TAG = "doctor-refresh"
 const val DOCTOR_EXPORT_TEST_TAG = "doctor-export"
+const val DOCTOR_DEVICE_SUMMARY_TEST_TAG = "doctor-device-summary"
 
 fun doctorObservationTestTag(index: Int): String = "doctor-observation-$index"

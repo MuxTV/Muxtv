@@ -6,6 +6,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
+import app.muxtv.player.PlaybackIntent
 import app.muxtv.player.PlaybackStartFailure
 import app.muxtv.player.PlaybackStartRequest
 import app.muxtv.player.PlaybackStartResult
@@ -32,6 +33,11 @@ object MuxTvPlaybackSessionContract {
     private const val KEY_PROFILE_ID = "profile_id"
     private const val KEY_CHANNEL_ID = "channel_id"
     private const val KEY_PREFERRED_VARIANT_ID = "preferred_variant_id"
+    private const val KEY_INTENT_KIND = "intent_kind"
+    private const val KEY_PROGRAMME_ID = "programme_id"
+    private const val KEY_PROGRAMME_START_EPOCH_MILLIS = "programme_start_epoch_millis"
+    private const val KEY_PROGRAMME_END_EPOCH_MILLIS = "programme_end_epoch_millis"
+    private const val KEY_POSITION_EPOCH_MILLIS = "position_epoch_millis"
     private const val KEY_RESULT_KIND = "result_kind"
     private const val KEY_DISPLAY_ORIGIN = "display_origin"
     private const val KEY_VARIANT_ID = "variant_id"
@@ -45,6 +51,13 @@ object MuxTvPlaybackSessionContract {
     private const val KEY_SEEK_TARGET_MS = "seek_target_ms"
     private const val KEY_SEEK_REJECT_REASON = "seek_reject_reason"
 
+    private const val INTENT_KIND_CATCHUP_PROGRAM = "catchup_program"
+    private const val INTENT_KIND_CATCHUP_POSITION = "catchup_position"
+    private const val RESULT_KIND_STARTED = "started"
+    private const val RESULT_KIND_APPROVAL_REQUIRED = "approval_required"
+    private const val RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED =
+        "local_network_permission_required"
+    private const val RESULT_KIND_REJECTED = "rejected"
     private const val SEEK_KIND_RELATIVE = "relative"
     private const val SEEK_KIND_ABSOLUTE = "absolute"
     private const val RESULT_KIND_SEEK_ACCEPTED = "seek_accepted"
@@ -71,6 +84,19 @@ object MuxTvPlaybackSessionContract {
                 putString(KEY_CHANNEL_ID, request.channelId)
                 request.preferredVariantId?.let {
                     putString(KEY_PREFERRED_VARIANT_ID, it)
+                }
+                when (val intent = request.intent) {
+                    is PlaybackIntent.Live -> Unit
+                    is PlaybackIntent.CatchupProgram -> {
+                        putString(KEY_INTENT_KIND, INTENT_KIND_CATCHUP_PROGRAM)
+                        putString(KEY_PROGRAMME_ID, intent.programmeId)
+                        putLong(KEY_PROGRAMME_START_EPOCH_MILLIS, intent.startEpochMillis)
+                        putLong(KEY_PROGRAMME_END_EPOCH_MILLIS, intent.endEpochMillis)
+                    }
+                    is PlaybackIntent.CatchupPosition -> {
+                        putString(KEY_INTENT_KIND, INTENT_KIND_CATCHUP_POSITION)
+                        putLong(KEY_POSITION_EPOCH_MILLIS, intent.positionEpochMillis)
+                    }
                 }
             },
         )
@@ -99,21 +125,72 @@ object MuxTvPlaybackSessionContract {
         if (args.keySet() != setOf(KEY_SETUP_ID, KEY_REQUEST)) return null
         val id = PlaybackSetupId.parse(args.getString(KEY_SETUP_ID)) ?: return null
         val requestBundle = args.getBundle(KEY_REQUEST) ?: return null
-        val allowedRequestKeys = setOf(
-            KEY_PROFILE_ID,
-            KEY_CHANNEL_ID,
-            KEY_PREFERRED_VARIANT_ID,
-        )
-        if (!allowedRequestKeys.containsAll(requestBundle.keySet())) return null
-        if (!requestBundle.keySet().containsAll(setOf(KEY_PROFILE_ID, KEY_CHANNEL_ID))) return null
+        val profileId = requestBundle.getString(KEY_PROFILE_ID) ?: return null
+        val channelId = requestBundle.getString(KEY_CHANNEL_ID) ?: return null
+        val preferredVariantId = requestBundle.getString(KEY_PREFERRED_VARIANT_ID)
+        val intent = parsePlaybackIntent(requestBundle, channelId) ?: return null
         val request = runCatching {
             PlaybackStartRequest(
-                profileId = requestBundle.getString(KEY_PROFILE_ID) ?: return null,
-                channelId = requestBundle.getString(KEY_CHANNEL_ID) ?: return null,
-                preferredVariantId = requestBundle.getString(KEY_PREFERRED_VARIANT_ID),
+                profileId = profileId,
+                intent = intent,
+                preferredVariantId = preferredVariantId,
             )
         }.getOrNull() ?: return null
         return PlaybackSetupCommand(id = id, request = request)
+    }
+
+    private fun parsePlaybackIntent(
+        requestBundle: Bundle,
+        channelId: String,
+    ): PlaybackIntent? {
+        return when (requestBundle.getString(KEY_INTENT_KIND)) {
+            null -> {
+                if (!hasExactRequestKeys(requestBundle, LIVE_REQUIRED_KEYS, LIVE_OPTIONAL_KEYS)) {
+                    return null
+                }
+                runCatching { PlaybackIntent.Live(channelId) }.getOrNull()
+            }
+            INTENT_KIND_CATCHUP_PROGRAM -> {
+                if (!hasExactRequestKeys(
+                        requestBundle,
+                        CATCHUP_PROGRAM_REQUIRED_KEYS,
+                        CATCHUP_OPTIONAL_KEYS,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackIntent.CatchupProgram(
+                        channelId = channelId,
+                        programmeId = requestBundle.getString(KEY_PROGRAMME_ID) ?: return null,
+                        startEpochMillis = requestBundle.getLong(KEY_PROGRAMME_START_EPOCH_MILLIS),
+                        endEpochMillis = requestBundle.getLong(KEY_PROGRAMME_END_EPOCH_MILLIS),
+                    )
+                }.getOrNull()
+            }
+            INTENT_KIND_CATCHUP_POSITION -> {
+                if (!hasExactRequestKeys(
+                        requestBundle,
+                        CATCHUP_POSITION_REQUIRED_KEYS,
+                        CATCHUP_OPTIONAL_KEYS,
+                    )
+                ) return null
+                runCatching {
+                    PlaybackIntent.CatchupPosition(
+                        channelId = channelId,
+                        positionEpochMillis = requestBundle.getLong(KEY_POSITION_EPOCH_MILLIS),
+                    )
+                }.getOrNull()
+            }
+            else -> null
+        }
+    }
+
+    private fun hasExactRequestKeys(
+        bundle: Bundle,
+        required: Set<String>,
+        optional: Set<String>,
+    ): Boolean {
+        val keys = bundle.keySet()
+        return keys.containsAll(required) && (required + optional).containsAll(keys)
     }
 
     fun parseCancelArgs(args: Bundle): PlaybackSetupId? {
@@ -169,14 +246,18 @@ object MuxTvPlaybackSessionContract {
         SessionResult.RESULT_SUCCESS,
         Bundle().apply {
             when (result) {
-                PlaybackStartResult.Started -> putString(KEY_RESULT_KIND, "started")
+                PlaybackStartResult.Started -> putString(KEY_RESULT_KIND, RESULT_KIND_STARTED)
                 is PlaybackStartResult.InsecureHttpApprovalRequired -> {
-                    putString(KEY_RESULT_KIND, "approval_required")
+                    putString(KEY_RESULT_KIND, RESULT_KIND_APPROVAL_REQUIRED)
                     putString(KEY_DISPLAY_ORIGIN, result.displayOrigin)
                     putString(KEY_VARIANT_ID, result.variantId)
                 }
+                is PlaybackStartResult.LocalNetworkPermissionRequired -> {
+                    putString(KEY_RESULT_KIND, RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED)
+                    putString(KEY_VARIANT_ID, result.variantId)
+                }
                 is PlaybackStartResult.Rejected -> {
-                    putString(KEY_RESULT_KIND, "rejected")
+                    putString(KEY_RESULT_KIND, RESULT_KIND_REJECTED)
                     putString(KEY_FAILURE, result.reason.name)
                     putBoolean(KEY_OBSERVATION_AVAILABLE, result.observationAvailable)
                 }
@@ -205,10 +286,10 @@ object MuxTvPlaybackSessionContract {
         if (result.resultCode != SessionResult.RESULT_SUCCESS) return null
         val extras = result.extras
         return when (extras.getString(KEY_RESULT_KIND)) {
-            "started" -> PlaybackStartResult.Started.takeIf {
+            RESULT_KIND_STARTED -> PlaybackStartResult.Started.takeIf {
                 extras.keySet() == setOf(KEY_RESULT_KIND)
             }
-            "approval_required" -> {
+            RESULT_KIND_APPROVAL_REQUIRED -> {
                 if (extras.keySet() != setOf(
                         KEY_RESULT_KIND,
                         KEY_DISPLAY_ORIGIN,
@@ -222,7 +303,15 @@ object MuxTvPlaybackSessionContract {
                     )
                 }.getOrNull()
             }
-            "rejected" -> {
+            RESULT_KIND_LOCAL_NETWORK_PERMISSION_REQUIRED -> {
+                if (extras.keySet() != setOf(KEY_RESULT_KIND, KEY_VARIANT_ID)) return null
+                runCatching {
+                    PlaybackStartResult.LocalNetworkPermissionRequired(
+                        variantId = extras.getString(KEY_VARIANT_ID) ?: return null,
+                    )
+                }.getOrNull()
+            }
+            RESULT_KIND_REJECTED -> {
                 if (extras.keySet() != setOf(
                         KEY_RESULT_KIND,
                         KEY_FAILURE,
@@ -288,4 +377,22 @@ object MuxTvPlaybackSessionContract {
 
     fun notSupported(): SessionResult =
         SessionResult(SessionError.ERROR_NOT_SUPPORTED)
+
+    private val LIVE_REQUIRED_KEYS = setOf(KEY_PROFILE_ID, KEY_CHANNEL_ID)
+    private val LIVE_OPTIONAL_KEYS = setOf(KEY_PREFERRED_VARIANT_ID)
+    private val CATCHUP_OPTIONAL_KEYS = setOf(KEY_PREFERRED_VARIANT_ID)
+    private val CATCHUP_PROGRAM_REQUIRED_KEYS = setOf(
+        KEY_PROFILE_ID,
+        KEY_CHANNEL_ID,
+        KEY_INTENT_KIND,
+        KEY_PROGRAMME_ID,
+        KEY_PROGRAMME_START_EPOCH_MILLIS,
+        KEY_PROGRAMME_END_EPOCH_MILLIS,
+    )
+    private val CATCHUP_POSITION_REQUIRED_KEYS = setOf(
+        KEY_PROFILE_ID,
+        KEY_CHANNEL_ID,
+        KEY_INTENT_KIND,
+        KEY_POSITION_EPOCH_MILLIS,
+    )
 }

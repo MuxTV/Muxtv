@@ -45,11 +45,19 @@ class EncryptedPlaybackAccessPolicyResolver(
         }
     }
 
-    override suspend fun resolvePreapproved(playbackLocator: String): PlaybackAccessDecision =
-        when (parseTarget(playbackLocator)) {
+    override suspend fun validateMaterializedTransport(
+        playbackLocator: String,
+        insecureHttpPreapproved: Boolean,
+    ): PlaybackAccessDecision =
+        when (val target = parseTarget(playbackLocator)) {
             PlaybackTarget.Secure -> PlaybackAccessDecision.SecureTransport
             PlaybackTarget.Invalid -> PlaybackAccessDecision.InvalidLocator
-            is PlaybackTarget.Insecure -> PlaybackAccessDecision.Approved
+            is PlaybackTarget.Insecure ->
+                if (insecureHttpPreapproved) {
+                    PlaybackAccessDecision.Approved
+                } else {
+                    PlaybackAccessDecision.ApprovalRequired(target.origin.displayValue())
+                }
         }
 
     override suspend fun approve(

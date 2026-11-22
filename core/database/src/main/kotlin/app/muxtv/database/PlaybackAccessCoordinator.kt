@@ -65,17 +65,13 @@ internal class PlaybackAccessCoordinator(
 
     private suspend fun resolveEphemeral(
         reference: PlaybackReferenceResolution.Ready,
-    ): CoordinatedPlaybackAccess {
-        val decision = if (reference.insecureHttpPreapproved) {
-            accessPolicyResolver.resolvePreapproved(reference.locator)
-        } else {
-            // Xtream credential ids are not M3U access records. HTTPS needs no credential-bound
-            // approval lookup, so use an empty legacy credential reference while retaining the
-            // access-policy resolver as the final transport validation owner.
-            accessPolicyResolver.resolve("", reference.locator)
-        }
-        return mapAccessDecision(reference.locator, decision)
-    }
+    ): CoordinatedPlaybackAccess = mapAccessDecision(
+        locator = reference.locator,
+        decision = accessPolicyResolver.validateMaterializedTransport(
+            playbackLocator = reference.locator,
+            insecureHttpPreapproved = reference.insecureHttpPreapproved,
+        ),
+    )
 
     private fun mapAccessDecision(
         locator: String,

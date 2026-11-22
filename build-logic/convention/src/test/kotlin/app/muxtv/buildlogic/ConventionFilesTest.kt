@@ -3,6 +3,7 @@ package app.muxtv.buildlogic
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ConventionFilesTest {
@@ -17,12 +18,13 @@ class ConventionFilesTest {
             "compose-bom = \"2026.06.00\"",
             "tv-material = \"1.1.0\"",
             "tv-foundation = \"1.0.0\"",
-            "navigation3 = \"1.1.4\"",
-            "media3 = \"1.10.1\"",
+            "navigation3 = \"1.1.7\"",
+            "media3 = \"1.11.1\"",
             "room3 = \"3.0.0\"",
             "dagger-hilt = \"2.60.1\"",
             "work = \"2.11.2\"",
             "datastore = \"1.2.1\"",
+            "tracing = \"2.0.1\"",
         ).forEach { expected -> assertContains(catalog, expected) }
     }
 
@@ -37,4 +39,62 @@ class ConventionFilesTest {
             assertTrue(sourceRoot.resolve(name).isFile, "Missing convention plugin source: $name")
         }
     }
+
+    @Test
+    fun `tracing instruments accepted search and player adapter boundaries`() {
+        val searchRepository = repositoryRoot.resolve(
+            "core/database/src/main/kotlin/app/muxtv/database/RoomChannelSearchRepository.kt",
+        ).readText()
+        val playbackService = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt",
+        ).readText()
+
+        assertContains(
+            searchRepository,
+            "MuxTvTrace.global.coroutineSection(MuxTvTraceSection.SEARCH) {",
+        )
+        assertEquals(
+            2,
+            playbackService.countLiteral(
+                "MuxTvTrace.global.section(MuxTvTraceSection.PLAYER_PREPARE) {",
+            ),
+            "Internal and external player prepare paths must share the same bounded trace taxonomy.",
+        )
+        assertEquals(
+            2,
+            playbackService.countLiteral(
+                "MuxTvTrace.global.section(MuxTvTraceSection.FIRST_FRAME) {",
+            ),
+            "Internal and external first-frame callbacks must emit the same bounded trace slice.",
+        )
+    }
+
+    @Test
+    fun `catchup initial media position reaches the service owned Media3 install`() {
+        val playbackCatalogApi = repositoryRoot.resolve(
+            "catalog/api/src/main/kotlin/app/muxtv/catalog/PlaybackCatalog.kt",
+        ).readText()
+        val roomPlaybackCatalog = repositoryRoot.resolve(
+            "core/database/src/main/kotlin/app/muxtv/database/RoomPlaybackCatalog.kt",
+        ).readText()
+        val playbackSessionRequest = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/PlaybackSessionRequest.kt",
+        ).readText()
+        val playbackService = repositoryRoot.resolve(
+            "player/media3/src/main/kotlin/app/muxtv/player/media3/MuxTvPlaybackService.kt",
+        ).readText()
+
+        assertContains(playbackCatalogApi, "val initialMediaPositionMillis: Long = 0L,")
+        assertContains(roomPlaybackCatalog, "initialMediaPositionMillis = archive.initialMediaPositionMillis,")
+        assertContains(playbackSessionRequest, "val initialMediaPositionMillis: Long = 0L,")
+        assertContains(playbackService, "initialMediaPositionMillis = resolved.initialMediaPositionMillis,")
+        assertContains(
+            playbackService,
+            "sessionRequest.initialMediaPositionMillis.takeIf { it > 0L } ?: C.TIME_UNSET",
+        )
+        assertContains(playbackService, "startPositionMillis,")
+    }
 }
+
+private fun String.countLiteral(value: String): Int =
+    windowed(value.length, step = 1, partialWindows = false).count { it == value }

@@ -30,6 +30,8 @@ data class SourceRefreshPolicy(
 
 data class SourceRefreshStatus(
     val state: SourceRefreshRunState,
+    val failureFamily: String? = null,
+    val failureCode: String? = null,
 )
 
 data class SourceRefreshOverview(

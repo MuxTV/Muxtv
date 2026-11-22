@@ -5,8 +5,8 @@ ksp = "2.3.10"
 compose-bom = "2026.06.00"
 tv-material = "1.1.0"
 tv-foundation = "1.0.0"
-navigation3 = "1.1.4"
-media3 = "1.10.1"
+navigation3 = "1.1.7"
+media3 = "1.11.1"
 room3 = "3.0.0"
 paging = "3.5.0"
 dagger-hilt = "2.60.1"
@@ -17,19 +17,30 @@ activity = "1.13.0"
 lifecycle = "2.11.0"
 coroutines = "1.11.0"
 serialization = "1.11.0"
-okhttp = "5.3.0"
+okhttp = "5.5.0"
 junit = "4.13.2"
 truth = "1.4.4"
 androidx-test-core = "1.7.0"
 androidx-test-runner = "1.7.0"
 androidx-test-ext-junit = "1.3.0"
 espresso = "3.7.0"
-# 1.5.0-alpha07 is required for AGP 9.x's new DSL; 1.4.1 rejects the app module.
-benchmark = "1.5.0-alpha07"
+# 1.5.0-rc02 is the current 1.5 release candidate and supports AGP 9.x plus
+# automatic merging of target-package AndroidX Tracing in-process traces.
+benchmark = "1.5.0-rc02"
+# AndroidX Benchmark 1.6.0-alpha01 fixes I48ccc: Android 16 ART profile flush
+# returning "Unable to flush profiles for <packagename>" during macrobenchmark.
+# Keep the Baseline Profile Gradle plugin on verified 1.5.0-rc02; only update
+# benchmark instrumentation until plugin 1.6 is separately qualified.
+benchmark-macro-runtime = "1.6.0-alpha01"
 profileinstaller = "1.4.1"
-tracing = "1.3.0"
+tracing = "2.0.1"
 uiautomator = "2.4.0"
 jmh-gradle = "0.7.3"
+ktor = "3.5.1"
+tink = "1.23.0"
+zxing = "3.5.4"
+camera = "1.6.2"
+cyclonedx = "3.4.1"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
@@ -78,15 +89,28 @@ okhttp-bom = { module = "com.squareup.okhttp3:okhttp-bom", version.ref = "okhttp
 okhttp = { module = "com.squareup.okhttp3:okhttp" }
 mockwebserver3 = { module = "com.squareup.okhttp3:mockwebserver3" }
 androidx-tracing = { module = "androidx.tracing:tracing", version.ref = "tracing" }
+androidx-tracing-wire = { module = "androidx.tracing:tracing-wire", version.ref = "tracing" }
 junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
+benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark-macro-runtime" }
 profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
+
+ktor-server-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor" }
+ktor-server-test-host = { module = "io.ktor:ktor-server-test-host-jvm", version.ref = "ktor" }
+
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+
+tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camera" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -100,3 +124,4 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "dagger-hilt" }
 room3 = { id = "androidx.room3", version.ref = "room3" }
 jmh = { id = "me.champeau.jmh", version.ref = "jmh-gradle" }
+cyclonedx-bom = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }

@@ -1,0 +1,81 @@
+package app.muxtv.buildlogic
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class LocalHpkeLabIsolationContractTest {
+    private val root = File(System.getProperty("user.dir")).parentFile.parentFile
+
+    @Test
+    fun `experimental HPKE cannot be pulled into the app or plain HTTP transport`() {
+        listOf(
+            "app/tv/build.gradle.kts",
+            "local-control/server/build.gradle.kts",
+            "local-control/core/build.gradle.kts",
+            "local-control/onboarding/build.gradle.kts",
+        ).forEach { location ->
+            val content = root.resolve(location).readText()
+            assertFalse(content.contains("project(\":local-control:crypto-lab\")"),
+                "Experiment must not become a production dependency: $location")
+            assertFalse(content.contains("libs.tink"),
+                "Do not accidentally ship Tink via this experimental lab: $location")
+        }
+    }
+
+    @Test
+    fun `phone possession and every-message signatures remain lab-only and explicit`() {
+        val enrollment = root.resolve(
+            "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabPhoneEnrollment.kt",
+        ).readText()
+        val envelopes = root.resolve(
+            "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabSignedHpkeEnvelope.kt",
+        ).readText()
+        assertContains(enrollment, "Signature.getInstance(\"Ed25519\")")
+        assertContains(enrollment, "approveOnTv(")
+        assertContains(enrollment, "TV_CONSENT_REQUIRED")
+        assertContains(envelopes, "verifyAndDecrypt(")
+        assertContains(envelopes, "RejectedSignature")
+        assertContains(envelopes, "approvedPhoneFingerprint")
+        listOf("embeddedServer(", "installLocalControlTransport(", "SourceOnboarding(").forEach {
+            assertFalse(enrollment.contains(it))
+            assertFalse(envelopes.contains(it))
+        }
+        assertTrue(root.resolve(".work/research/lc04-s2-phone-enrollment-lab-20261015.md").isFile)
+    }
+
+    @Test
+    fun `TV QR binding serializes only a public HPKE keyset and refuses claimed fingerprints`() {
+        val path = "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/LabTvQrKeyBinding.kt"
+        val source = root.resolve(path).readText()
+        assertContains(source, "TinkProtoKeysetFormat.serializeKeysetWithoutSecret")
+        assertContains(source, "TinkProtoKeysetFormat.parseKeysetWithoutSecret")
+        assertContains(source, "HpkeKem.DHKEM_X25519_HKDF_SHA256")
+        assertContains(source, "HpkeAead.AES_256_GCM")
+        assertContains(source, "MessageDigest.isEqual(receiverBytes, encodedPublicKeyset())")
+        assertFalse(source.contains("serializeKeyset("))
+        assertFalse(source.contains("InsecureSecretKeyAccess"))
+        assertFalse(source.contains("embeddedServer("))
+        assertFalse(source.contains("SourceOnboarding"))
+        assertTrue(root.resolve(".work/research/lc04-s2-qr-key-pinning-lab-20261015.md").isFile)
+    }
+
+    @Test
+    fun `lab uses audited HPKE not a custom elliptic curve or TLS implementation`() {
+        val code = root.resolve(
+            "local-control/crypto-lab/src/main/kotlin/app/muxtv/localcontrol/cryptolab/ExperimentalHpkeLab.kt",
+        ).readText()
+        val build = root.resolve("local-control/crypto-lab/build.gradle.kts").readText()
+        assertContains(build, "implementation(libs.tink)")
+        assertContains(code, "HybridEncrypt")
+        assertContains(code, "HybridDecrypt")
+        assertContains(code, "DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_AES_256_GCM")
+        listOf(
+            "Cipher.getInstance(", "KeyAgreement.getInstance(", "Mac.getInstance(",
+            "ServerSocket(", "embeddedServer(", "SourceOnboarding(", "SourcePreparationRequest(",
+        ).forEach { assertFalse(code.contains(it), "The HPKE lab must stay isolated: $it") }
+        assertTrue(root.resolve(".work/research/lc04-s2-hpke-lab-20261015.md").isFile)
+    }
+}
