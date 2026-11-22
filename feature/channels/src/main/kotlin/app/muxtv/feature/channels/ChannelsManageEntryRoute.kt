@@ -10,6 +10,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelPreferencesRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
@@ -22,6 +23,7 @@ import app.muxtv.player.PlaybackSessionStateSource
 @Composable
 fun ChannelsRoute(
     channelBrowseRepository: ChannelBrowseRepository,
+    channelPreferencesRepository: ChannelPreferencesRepository,
     epgGuideRepository: EpgGuideRepository,
     playbackSessionStateSource: PlaybackSessionStateSource,
     profileId: String,
@@ -39,6 +41,7 @@ fun ChannelsRoute(
             onOpenChannel = onOpenChannel,
             modifier = Modifier.fillMaxSize(),
             railFocusRequester = railFocusRequester,
+            channelPreferencesRepository = channelPreferencesRepository,
         )
         MuxTvActionButton(
             text = "Управление",

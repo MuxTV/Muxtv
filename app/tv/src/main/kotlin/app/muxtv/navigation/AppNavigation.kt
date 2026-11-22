@@ -167,6 +167,7 @@ fun AppNavigation(
 
                         AppDestination.Channels -> ChannelsRoute(
                             channelBrowseRepository = channelBrowseRepository,
+                            channelPreferencesRepository = channelPreferencesRepository,
                             epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
