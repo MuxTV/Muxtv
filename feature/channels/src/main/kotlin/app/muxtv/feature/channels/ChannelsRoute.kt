@@ -45,6 +45,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -736,6 +741,7 @@ private fun ChannelQuickEditorRow(
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val saveFocusRequester = remember { FocusRequester() }
     Column(verticalArrangement = Arrangement.spacedBy(TvTokens.Spacing.xSmall)) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         BasicTextField(
@@ -747,6 +753,17 @@ private fun ChannelQuickEditorRow(
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(TvTokens.Shape.rowCorner))
                 .border(1.dp, MaterialTheme.colorScheme.borderVariant, RoundedCornerShape(TvTokens.Shape.rowCorner))
                 .padding(horizontal = TvTokens.Spacing.small)
+                // Single-line TV editors use DPAD_DOWN to reach Save, not move
+                // the text caret. Intercept before BasicTextField consumes it.
+                .onPreviewKeyEvent { event ->
+                    if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown) {
+                        saveFocusRequester.requestFocus()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .focusProperties { down = saveFocusRequester }
                 .focusRequester(focusRequester)
                 .testTag(CHANNEL_QUICK_ACTIONS_EDITOR_TEST_TAG),
             textStyle = MaterialTheme.typography.titleMedium.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -754,7 +771,13 @@ private fun ChannelQuickEditorRow(
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(TvTokens.Spacing.small)) {
-            MuxTvActionButton(text = "Сохранить", onClick = onSave)
+            MuxTvActionButton(
+                text = "Сохранить",
+                onClick = onSave,
+                modifier = Modifier
+                    .focusProperties { up = focusRequester }
+                    .focusRequester(saveFocusRequester),
+            )
             MuxTvActionButton(text = "Отмена", onClick = onCancel)
         }
     }

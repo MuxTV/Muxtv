@@ -255,6 +255,8 @@ class ChannelQuickActionsJourneyTest {
         // performing a semantics click on an unfocused TV Button does not
         // exercise the actual remote interaction contract.
         composeRule.onNodeWithTag("channel-quick-actions-editor").pressDown()
+        composeRule.onNodeWithText("Сохранить").assertIsFocused().pressUp()
+        composeRule.onNodeWithTag("channel-quick-actions-editor").assertIsFocused().pressDown()
         composeRule.onNodeWithText("Сохранить").assertIsFocused().pressEnter()
         drainEffects()
 
