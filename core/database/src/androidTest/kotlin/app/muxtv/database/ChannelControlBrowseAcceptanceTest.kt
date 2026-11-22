@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.muxtv.catalog.ChannelBrowseFilter
 import app.muxtv.catalog.ChannelBrowseQuery
+import app.muxtv.catalog.ChannelManagementQuery
+import app.muxtv.catalog.ChannelManagementVisibility
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -83,6 +85,21 @@ class ChannelControlBrowseAcceptanceTest {
         assertThat(browse.pages(query(ChannelBrowseFilter.FAVORITES)).asSnapshot()).isEmpty()
         assertThat(browse.pages(query(ChannelBrowseFilter.RECENT)).asSnapshot().map { it.channelId })
             .containsExactly(CHANNEL_B)
+
+        // The ordinary catalog must exclude hidden channels, but management
+        // must retain them so the user can recover visibility without a
+        // provider refresh or losing the profile's favorite/customizations.
+        val recoverable = browse.managementPages(
+            ChannelManagementQuery(
+                profileId = PROFILE_ID,
+                visibility = ChannelManagementVisibility.HIDDEN,
+            ),
+        ).asSnapshot()
+        assertThat(recoverable.map { it.channelId }).containsExactly(CHANNEL_A)
+        assertThat(recoverable.single().isHidden).isTrue()
+        assertThat(recoverable.single().isFavorite).isTrue()
+        assertThat(recoverable.single().effectiveDisplayName).isEqualTo("Мои новости")
+        assertThat(recoverable.single().effectiveChannelNumber).isEqualTo("77")
     }
 
     private fun assertEffectiveOverlay(item: app.muxtv.catalog.ChannelBrowseItem) {
