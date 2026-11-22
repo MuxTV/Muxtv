@@ -37,6 +37,7 @@ import app.muxtv.localcontrol.tvqr.TvHpkeQrSession
 import app.muxtv.sources.AppSourceOnboarding
 import com.google.common.truth.Truth.assertThat
 import java.io.ByteArrayInputStream
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -91,8 +92,10 @@ class Lc04ProtectedSourceCatalogJourneyTest {
             #EXTINF:-1 tvg-id="lc04.test.b" group-title="Демонстрация",$marker Movies
             https://media.invalid/movies.m3u8?token=LOCAL_TEST_ONLY
         """.trimIndent() + "\n"
-        val db = MuxTvDatabaseFactory.create(context)
-        db.initializer.initialize()
+        // An isolated database prevents this importer from changing the app's Home state
+        // for subsequent MainActivity/D-pad tests in the same instrumentation package.
+        val databaseName = "lc04-protected-source-${UUID.randomUUID()}.db"
+        val db = MuxTvDatabaseFactory.create(context, databaseName = databaseName)
         val importer = CatalogRevisionImporterFactory.create(db.sourceRevisionStore)
         val credentials = Credentials()
         val sourceUrl = "https://provider.invalid/list.m3u?token=TV_TEST_ONLY"
@@ -105,6 +108,7 @@ class Lc04ProtectedSourceCatalogJourneyTest {
         var phonePort: Lc04SourceAeadPort? = null
         var owner: Lc04TvOriginalAeadCommandOwner? = null
         try {
+            db.initializer.initialize()
             val onboarding = AppSourceOnboarding(
                 DurableRemoteSourceOnboarding(
                     delegate = DefaultRemoteSourceOnboarding(
@@ -206,13 +210,24 @@ class Lc04ProtectedSourceCatalogJourneyTest {
             }
             assertThat(credentials.recordCount).isEqualTo(1)
         } finally {
-            owner?.close()
-            phonePort?.close()
-            tvPort?.close()
-            phone.close()
-            signer.close()
-            tv.close()
-            credentials.erase()
+            try {
+                owner?.close()
+                phonePort?.close()
+                tvPort?.close()
+                phone.close()
+                signer.close()
+                tv.close()
+                credentials.erase()
+            } finally {
+                try {
+                    db.close()
+                } finally {
+                    context.deleteDatabase(databaseName)
+                    check(!context.getDatabasePath(databaseName).exists()) {
+                        "Isolated LC04 Room database was not deleted"
+                    }
+                }
+            }
         }
     }
 }
