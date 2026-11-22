@@ -1,6 +1,9 @@
 package app.muxtv
 
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -9,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import app.muxtv.catalog.ChannelFavoriteMutationResult
@@ -102,8 +106,10 @@ class ChannelQuickActionsJourneyTest {
     fun heldDpadCenterOpensQuickActionsWithoutStartingPlayback() {
         val catalog = QuickActionPlaybackCatalog()
         var openedChannelId: String? = null
+        lateinit var inputModeManager: InputModeManager
 
         composeRule.setContent {
+            inputModeManager = LocalInputModeManager.current
             MuxTvTheme {
                 channelsRoute(
                     catalog = catalog,
@@ -114,12 +120,14 @@ class ChannelQuickActionsJourneyTest {
         }
         drainEffects()
 
-        // Key injection advances the key's event clock: repeat DOWN events are
-        // generated after 500ms, just as for a held Android TV remote button.
+        // Match Compose Foundation's keyboard long-click test: explicitly
+        // enter Keyboard mode and hold past this device's actual timeout.
+        // This synthesizes real repeat key events, not a semantics OnLongClick.
+        composeRule.runOnIdle {
+            inputModeManager.requestInputMode(InputMode.Keyboard)
+        }
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused().performKeyInput {
-            keyDown(Key.DirectionCenter)
-            advanceEventTime(700L)
-            keyUp(Key.DirectionCenter)
+            pressKey(Key.DirectionCenter, viewConfiguration.longPressTimeoutMillis + 100L)
         }
         drainEffects()
 

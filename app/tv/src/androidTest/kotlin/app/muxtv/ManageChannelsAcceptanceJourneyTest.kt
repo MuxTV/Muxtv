@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -85,7 +86,7 @@ class ManageChannelsAcceptanceJourneyTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("manage-channel-row-channel-a").assertIsFocused()
+        composeRule.waitUntilFocused("manage-channel-row-channel-a")
         composeRule.onNodeWithTag("manage-channel-row-channel-c").assertDoesNotExist()
     }
 
@@ -142,7 +143,7 @@ class ManageChannelsAcceptanceJourneyTest {
         composeRule.onNodeWithText("10").assertExists()
         composeRule.onNodeWithText("Видим · Избранное").assertExists()
         composeRule.onNodeWithText("Изменён", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithTag("manage-channel-row-channel-news").assertIsFocused()
+        composeRule.waitUntilFocused("manage-channel-row-channel-news")
     }
 
     private fun SemanticsNodeInteraction.pressRemoteOk() {
@@ -154,6 +155,16 @@ class ManageChannelsAcceptanceJourneyTest {
             keyDown(Key.Enter)
             keyUp(Key.Enter)
         }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilFocused(tag: String) {
+        // Room/Paging and focus restoration settle asynchronously. Still
+        // require a genuine focused semantics node; do not force focus here.
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()
+                ?.config?.getOrNull(SemanticsProperties.Focused) == true
+        }
+        onNodeWithTag(tag).assertIsFocused()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilTag(tag: String) {
