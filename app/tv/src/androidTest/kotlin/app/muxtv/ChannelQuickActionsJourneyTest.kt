@@ -194,7 +194,11 @@ class ChannelQuickActionsJourneyTest {
         composeRule.onNodeWithTag("channel-quick-actions-editor")
             .assertIsFocused()
             .performTextInput("10000")
-        composeRule.onNodeWithText("Сохранить").performClick()
+        // The editor owns TV focus. Move to Save via D-pad before pressing OK:
+        // performing a semantics click on an unfocused TV Button does not
+        // exercise the actual remote interaction contract.
+        composeRule.onNodeWithTag("channel-quick-actions-editor").pressDown()
+        composeRule.onNodeWithText("Сохранить").assertIsFocused().pressEnter()
         drainEffects()
 
         composeRule.onNodeWithTag("channel-quick-actions-error").assertExists()
