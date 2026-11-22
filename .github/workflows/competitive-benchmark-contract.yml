@@ -1,0 +1,57 @@
+name: Competitive benchmark contract
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'benchmark/competitive/**'
+      - 'settings.gradle.kts'
+      - 'tools/ci/Test-CompetitiveBenchmarkContract.ps1'
+      - '.github/workflows/competitive-benchmark-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: competitive-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Competitive benchmark contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Assert exact source
+        shell: pwsh
+        run: |
+          $expected = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          & ./tools/ci/Assert-EvidenceCommit.ps1 -ExpectedCommit $expected
+
+      - name: Run competitive benchmark contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :benchmark:competitive:test --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Preserve bounded test report
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: competitive-benchmark-contract-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: benchmark/competitive/build/reports/tests/**
+          retention-days: 7
+          github-token: ${{ github.token }}

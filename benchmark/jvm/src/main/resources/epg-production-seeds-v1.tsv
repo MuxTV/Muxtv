@@ -1,0 +1,84 @@
+partition	source_bucket	family_id	canonical_id	canonical_name	alias	tags	upstream_ref
+calibration	stream-us	ae-us	us-ae	A&E	A&E	latin,near-duplicate	iptv-stream-us
+calibration	stream-us	ae-us	us-ae-latam	A&E Latin America	A&E Latin America	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	ae-us	us-ae-latam-br	A&E Latin America Brazil	A&E Latin America Brazil	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	abc-us	us-abc	ABC	ABC	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	abc-us	us-abc-west	ABC West	ABC West	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	access-us	us-access19	Access 19	Access 19	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	access-us	us-access16	AccessVision Channel 16	AccessVision Channel 16	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	access-us	us-access17	AccessVision Channel 17	AccessVision Channel 17	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	akaku-us	us-akaku53	Akaku 53	Akaku 53	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	akaku-us	us-akaku54	Akaku 54	Akaku 54	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	akaku-us	us-akaku55	Akaku 55	Akaku 55	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	akc-us	us-akctv	AKC TV	AKC TV	latin,near-duplicate	iptv-stream-us
+calibration	stream-us	akc-us	us-akc-breeds	AKC TV Meet The Breeds	AKC TV Meet The Breeds	latin,near-duplicate	iptv-stream-us
+calibration	stream-us	akc-us	us-akc-puppies	AKC TV Puppies 24/7	AKC TV Puppies 24/7	latin,numeric-sibling,near-duplicate	iptv-stream-us
+calibration	stream-us	alhurra-us	us-alhurra	Alhurra	Alhurra	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	alhurra-us	us-alhurra-iraq	Alhurra Iraq	Alhurra Iraq	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	amc-us	us-amc	AMC	AMC	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	amc-us	us-amc-east	AMC East	AMC East	latin,regional,near-duplicate	iptv-stream-us
+calibration	stream-us	weather-us	us-accuweather	AccuWeather NOW	AccuWeather NOW	latin	iptv-stream-us
+calibration	stream-us	adult-us	us-adult-swim-latam	Adult Swim Latin America Brazil	Adult Swim Latin America Brazil	latin,regional	iptv-stream-us
+calibration	stream-ru-translit	bridge-ru	ru-bridge	BRIDGE	BRIDGE	latin,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	bridge-ru	ru-bridge-classic	BRIDGE Classic	BRIDGE Classic	latin,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	bridge-ru	ru-bridge-deluxe	BRIDGE Deluxe	BRIDGE Deluxe HD	latin,quality,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	bridge-ru	ru-bridge-hits	BRIDGE Hits	BRIDGE Hits	latin,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel5intl	Channel 5 International	Channel 5 International	latin,numeric-sibling,regional,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel8	Channel 8	Channel 8	latin,numeric-sibling,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel8-kras	Channel 8 Krasnoyarsk	Channel 8 Krasnoyarsk HD	latin,numeric-sibling,regional,quality,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel8-nsk	Channel 8 Novosibirsk	Channel 8 Novosibirsk	latin,numeric-sibling,regional,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel10	Channel 10	Channel 10	latin,numeric-sibling,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel12	Channel 12	Channel 12	latin,numeric-sibling,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	channel-ru	ru-channel-one	Channel One	Channel One	latin,number-word,near-duplicate	iptv-stream-ru
+calibration	stream-ru-translit	carousel-ru	ru-carousel	Carousel	Carousel	latin,timeshift	iptv-stream-ru
+calibration	stream-ru-translit	misc-ru	ru-2x2	2x2	2x2	latin,numeric-sibling	iptv-stream-ru
+calibration	stream-ru-translit	misc-ru	ru-360	360°	360°	latin,unicode,numeric-sibling	iptv-stream-ru
+calibration	stream-ru-translit	misc-ru	ru-amedia-hit	Amedia Hit	Amedia Hit	latin	iptv-stream-ru
+holdout	api-cn	cctv-cn	cn-cctv1	CCTV-1	CCTV-1	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv2	CCTV-2	CCTV-2	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv3	CCTV-3	CCTV-3	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv4asia	CCTV-4 Asia	CCTV-4 Asia	cjk,numeric-sibling,regional,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv4k	CCTV-4K	CCTV-4K	cjk,numeric-sibling,quality,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv5plus	CCTV-5+	CCTV-5+	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv6	CCTV-6	CCTV-6	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv7	CCTV-7	CCTV-7	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv8	CCTV-8	CCTV-8	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv8k	CCTV-8K	CCTV-8K	cjk,numeric-sibling,quality,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv9	CCTV-9	CCTV-9	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv10	CCTV-10	CCTV-10	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv11	CCTV-11	CCTV-11	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv12	CCTV-12	CCTV-12	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv13	CCTV-13	CCTV-13	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv14	CCTV-14	CCTV-14	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv15	CCTV-15	CCTV-15	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv16	CCTV-16	CCTV-16	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cctv-cn	cn-cctv17	CCTV-17	CCTV-17	cjk,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-cn	cgtn-cn	cn-cgtn	CGTN	CGTN	cjk,near-duplicate	iptv-db-api
+holdout	api-cn	cgtn-cn	cn-cgtn-doc	CGTN Documentary	CGTN Documentary	cjk,near-duplicate	iptv-db-api
+holdout	api-cn	cgtn-cn	cn-cgtn-fr	CGTN French	CGTN French	cjk,regional,near-duplicate	iptv-db-api
+holdout	api-cn	cgtn-cn	cn-cgtn-es	CGTN Spanish	CGTN Spanish	cjk,regional,near-duplicate	iptv-db-api
+holdout	api-cn	brtv-cn	cn-brtv-beijing	BRTV Beijing Satellite TV	BRTV 北京卫视	cjk,regional	iptv-db-api
+holdout	api-cn	anhui-cn	cn-anhui	Anhui TV	安徽卫视	cjk	iptv-db-api
+holdout	api-gr	ert-gr	gr-ert1	ERT1	ΕΡΤ1	greek,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-gr	ert-gr	gr-ert3	ERT3	ΕΡΤ3	greek,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-gr	ert-gr	gr-ert-news	ERT News	ΕΡΤ News	greek,near-duplicate	iptv-db-api
+holdout	api-gr	ert-gr	gr-ert-sports1	ERT Sports 1	ΕΡΤ Sports 1	greek,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-gr	ert-gr	gr-ert-sports2	ERT Sports 2	ΕΡΤ Sports 2	greek,numeric-sibling,near-duplicate	iptv-db-api
+holdout	api-gr	ant-gr	gr-ant1	ANT1	Αντέννα	greek	iptv-db-api
+holdout	api-gr	epirus-gr	gr-epirus1	Epirus TV1	Ήπειρος TV1	greek,numeric-sibling	iptv-db-api
+holdout	api-gr	general-gr	gr-action24	Action 24	Action 24	greek,numeric-sibling	iptv-stream-gr
+holdout	api-gr	general-gr	gr-channel8	Channel 8	Channel 8	greek,numeric-sibling	iptv-stream-gr
+holdout	api-jp	nhk-jp	jp-nhk-general	NHK General TV	NHK General TV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	nhk-jp	jp-nhk-world	NHK World-Japan	NHK World-Japan	cjk,regional,near-duplicate	iptv-stream-jp
+holdout	api-jp	nhk-jp	jp-nhk-premium	NHK World Premium	NHK World Premium	cjk,regional,near-duplicate	iptv-stream-jp
+holdout	api-jp	dtv-jp	jp-joax	JOAX-DTV	JOAX-DTV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	dtv-jp	jp-jocx	JOCX-DTV	JOCX-DTV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	dtv-jp	jp-joex	JOEX-DTV	JOEX-DTV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	dtv-jp	jp-jorx	JORX-DTV	JORX-DTV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	dtv-jp	jp-jotx	JOTX-DTV	JOTX-DTV	cjk,near-duplicate	iptv-stream-jp
+holdout	api-jp	mtv-jp	jp-mtv	MTV	MTV	cjk	iptv-stream-jp
+holdout	api-ru-alt	ru-alt	ru-start	Start	Старт	cyrillic	iptv-db-api
+holdout	api-ru-alt	ru-alt	ru-kinopokaz	Kinopokaz	Кинопоказ	cyrillic	iptv-db-api
+holdout	api-ru-alt	ru-alt	ru-ots	OTS	ОТС	cyrillic	iptv-db-api
+holdout	api-ru-alt	ru-alt	ru-my	MY	МЫ	cyrillic	iptv-db-api
+holdout	api-ru-alt	ru-alt	ru-uspeh	Uspeh	Успех	cyrillic	iptv-db-api

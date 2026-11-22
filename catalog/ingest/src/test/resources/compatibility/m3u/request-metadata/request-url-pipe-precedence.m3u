@@ -1,0 +1,5 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.pipe",C21 Pipe Precedence
+#EXTVLCOPT:http-user-agent=MuxTV TEST_C21_PIPE Directive
+#EXTHTTP:{"USER-AGENT":"MuxTV TEST_C21_PIPE Json","Referer":"https://referrer.invalid/TEST_C21_PIPE/json/"}
+https://streams.invalid/live/pipe.m3u8?token=TEST_C21_PIPE|user-agent=MuxTV%20TEST_C21_PIPE%20Pipe&REFERER=https%3A%2F%2Freferrer.invalid%2FTEST_C21_PIPE%2Fpipe%2F

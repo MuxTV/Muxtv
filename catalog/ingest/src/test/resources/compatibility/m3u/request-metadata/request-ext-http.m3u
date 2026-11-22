@@ -1,0 +1,4 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.ext-http",C21 EXTHTTP
+#EXTHTTP:{"User-Agent":"MuxTV TEST_C21_EXTHTTP Agent","Origin":"https://portal.invalid","Authorization":"Bearer TEST_C21_EXTHTTP"}
+https://streams.invalid/live/ext-http.m3u8?token=TEST_C21_EXTHTTP

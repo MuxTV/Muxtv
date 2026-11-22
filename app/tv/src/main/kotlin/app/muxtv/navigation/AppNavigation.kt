@@ -42,10 +42,17 @@ import app.muxtv.feature.doctor.DoctorRoute
 import app.muxtv.feature.guide.GuideRoute
 import app.muxtv.feature.home.HomeRoute
 import app.muxtv.feature.player.PlaybackStartGateway
+import app.muxtv.feature.player.PlayerLocalNetworkPermissionOutcome
 import app.muxtv.feature.search.SearchRoute
 import app.muxtv.feature.settings.SettingsRoute
 import app.muxtv.feature.sources.AddSourceRoute
+import app.muxtv.feature.sources.LocalNetworkPermissionOutcome
 import app.muxtv.feature.sources.SourcesRoute
+import app.muxtv.localcontrol.PendingTvPairing
+import app.muxtv.localcontrol.TvPairingController
+import app.muxtv.localcontrol.tvqr.TvHpkeQrPresentation
+import app.muxtv.localcontrol.PhonePairingRoute
+import app.muxtv.player.DevicePlaybackProfileSummaryReader
 import app.muxtv.player.PlaybackObservationReader
 import app.muxtv.player.PlaybackSessionGateway
 import app.muxtv.player.media3.Media3PlaybackSurface
@@ -69,8 +76,28 @@ fun AppNavigation(
     playbackObservationReader: PlaybackObservationReader = PlaybackObservationReader { emptyList() },
     doctorExportStatus: DoctorExportStatus = DoctorExportStatus.IDLE,
     onExportDoctorReport: (String) -> Unit = {},
+    requestLocalNetworkPermission: suspend () -> LocalNetworkPermissionOutcome = {
+        LocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     playbackStartGateway: PlaybackStartGateway? = null,
     modifier: Modifier = Modifier,
+    devicePlaybackProfileSummaryReader: DevicePlaybackProfileSummaryReader =
+        DevicePlaybackProfileSummaryReader { null },
+    startPhonePairing: suspend () -> TvPairingController.ScreenSession? = { null },
+    stopPhonePairing: () -> Unit = {},
+    startPublicKeyQrPreview: suspend () -> TvHpkeQrPresentation? = { null },
+    enableNativeProbeForVisibleQr: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
+    revokePublicKeyQrPreview: () -> Unit = {},
+    publicKeyQrPreviewIsActive: () -> Boolean = { false },
+    pendingPhonePublicKeyFingerprint: () -> String? = { null },
+    approvePhonePublicKeyOnTv: (String) -> Boolean = { false },
+    denyPhonePublicKeyOnTv: (String) -> Boolean = { false },
+    pendingPhonePairing: () -> PendingTvPairing? = { null },
+    approvePhonePairing: (String) -> Boolean = { false },
+    denyPhonePairing: (String) -> Boolean = { false },
+    activePhonePairings: () -> Int = { 0 },
+    phonePairingIsActive: () -> Boolean = { false },
 ) {
     val backStack = rememberNavBackStack(AppDestination.initial)
     val railFocusRequester = remember { FocusRequester() }
@@ -93,7 +120,8 @@ fun AppNavigation(
     }
 
     val current = backStack.lastOrNull() as? AppDestination ?: AppDestination.initial
-    val railVisible = current !is AppDestination.Player && current != AppDestination.AddSource
+    val railVisible = current !is AppDestination.Player &&
+        current != AppDestination.AddSource && current != AppDestination.PhonePairing
 
     BackHandler(enabled = railVisible && railFocused) {
         // Returning focus to the content group preserves spatial provenance and
@@ -163,6 +191,9 @@ fun AppNavigation(
                                 open(AppDestination.Player(channelId))
                             },
                             railFocusRequester = railFocusRequester,
+                            onPlaybackSelected = { selection ->
+                                open(selection.toPlayerDestination())
+                            },
                         )
 
                         AppDestination.Search -> SearchRoute(
@@ -184,6 +215,7 @@ fun AppNavigation(
                             sourceManagement = sourceManagement,
                             topNavigationFocusRequester = null,
                             onAddSource = { open(AppDestination.AddSource) },
+                            onOpenPhoneSetup = { open(AppDestination.PhonePairing) },
                             railFocusRequester = railFocusRequester,
                         )
 
@@ -192,30 +224,59 @@ fun AppNavigation(
                             exportStatus = doctorExportStatus,
                             onExport = onExportDoctorReport,
                             railFocusRequester = railFocusRequester,
+                            devicePlaybackProfileSummaryReader = devicePlaybackProfileSummaryReader,
+                        )
+
+                        AppDestination.PhonePairing -> PhonePairingRoute(
+                            onStart = startPhonePairing,
+                            onStop = stopPhonePairing,
+                            onStartPublicKeyPreview = startPublicKeyQrPreview,
+                            onEnableNativeProbe = enableNativeProbeForVisibleQr,
+                            onRevokePublicKeyPreview = revokePublicKeyQrPreview,
+                            publicKeyPreviewIsActive = publicKeyQrPreviewIsActive,
+                            pendingPhoneKeyFingerprint = pendingPhonePublicKeyFingerprint,
+                            approvePhoneKeyOnTv = approvePhonePublicKeyOnTv,
+                            denyPhoneKeyOnTv = denyPhonePublicKeyOnTv,
+                            pendingFromTv = pendingPhonePairing,
+                            approveFromTv = approvePhonePairing,
+                            denyFromTv = denyPhonePairing,
+                            pairedCount = activePhonePairings,
+                            connectionIsActive = phonePairingIsActive,
+                            onBack = ::goBack,
                         )
 
                         AppDestination.AddSource -> AddSourceRoute(
                             onboarding = sourceOnboarding,
                             onCompleted = ::goBack,
                             onBack = ::goBack,
+                            requestLocalNetworkPermission = requestLocalNetworkPermission,
+                            openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
                         )
 
-                        is AppDestination.Player -> PlayerFavoriteRoute(
-                            playbackCatalog = playbackCatalog,
-                            channelPreferencesRepository = channelPreferencesRepository,
-                            playbackSessionGateway = playbackSessionGateway,
-                            playbackSurface = { session, surfaceModifier ->
-                                Media3PlaybackSurface(
-                                    session = session,
-                                    modifier = surfaceModifier,
-                                )
-                            },
-                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
-                            channelId = destination.channelId,
-                            onBack = ::goBack,
-                            onOpenDoctor = ::openDoctorFromPlayer,
-                            playbackStartGateway = playbackStartGateway,
-                        )
+                        is AppDestination.Player -> {
+                            val playbackIntent = destination.toPlaybackIntent()
+                            PlayerFavoriteRoute(
+                                playbackCatalog = playbackCatalog,
+                                channelPreferencesRepository = channelPreferencesRepository,
+                                playbackSessionGateway = playbackSessionGateway,
+                                playbackSurface = { session, surfaceModifier ->
+                                    Media3PlaybackSurface(
+                                        session = session,
+                                        modifier = surfaceModifier,
+                                    )
+                                },
+                                profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
+                                channelId = playbackIntent.channelId,
+                                onBack = ::goBack,
+                                onOpenDoctor = ::openDoctorFromPlayer,
+                                playbackStartGateway = playbackStartGateway,
+                                requestLocalNetworkPermission = {
+                                    requestLocalNetworkPermission().toPlayerOutcome()
+                                },
+                                openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
+                                playbackIntent = playbackIntent,
+                            )
+                        }
                     }
                 }
             },
@@ -239,6 +300,14 @@ private fun rememberHasSources(sourceManagement: SourceManagement): Flow<Boolean
         sourceManagement.observeOverviews().map { overviews -> overviews.isNotEmpty() }
     }
 
+private fun LocalNetworkPermissionOutcome.toPlayerOutcome(): PlayerLocalNetworkPermissionOutcome =
+    when (this) {
+        LocalNetworkPermissionOutcome.GRANTED -> PlayerLocalNetworkPermissionOutcome.GRANTED
+        LocalNetworkPermissionOutcome.DENIED -> PlayerLocalNetworkPermissionOutcome.DENIED
+        LocalNetworkPermissionOutcome.PERMANENTLY_DENIED ->
+            PlayerLocalNetworkPermissionOutcome.PERMANENTLY_DENIED
+    }
+
 @Composable
 private fun topLevelRailItems(selected: AppDestination): List<MuxTvNavigationRailItem> =
     AppDestination.topLevel.map { destination ->
@@ -254,13 +323,14 @@ private fun topLevelRailItems(selected: AppDestination): List<MuxTvNavigationRai
 private fun AppDestination.navigationKey(): String = when (this) {
     AppDestination.Home -> "home"
     AppDestination.Channels -> "channels"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "guide"
     AppDestination.Search -> "search"
     AppDestination.Settings -> "settings"
-    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    AppDestination.PhonePairing -> error("PhonePairing is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
@@ -276,45 +346,49 @@ private fun destinationByRailKey(key: String): AppDestination = when (key) {
 private fun AppDestination.navigationLabel(): String = when (this) {
     AppDestination.Home -> "Главная"
     AppDestination.Channels -> "Эфир"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "Программа"
     AppDestination.Search -> "Поиск"
     AppDestination.Settings -> "Настройки"
-    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    AppDestination.PhonePairing -> error("PhonePairing is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.navigationIcon() = when (this) {
     AppDestination.Home -> MuxTvIcons.Home
     AppDestination.Channels -> MuxTvIcons.LiveTv
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> MuxTvIcons.Guide
     AppDestination.Search -> MuxTvIcons.Search
     AppDestination.Settings -> MuxTvIcons.Settings
-    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    AppDestination.PhonePairing -> error("PhonePairing is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.navigationTestTag(): String = when (this) {
     AppDestination.Home -> "nav-home"
     AppDestination.Channels -> "nav-channels"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "nav-guide"
     AppDestination.Search -> "nav-search"
     AppDestination.Settings -> "nav-settings"
-    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Sources -> error("Sources is not a top-level destination.")
     AppDestination.Doctor -> error("Doctor is not a top-level destination.")
     AppDestination.AddSource -> error("AddSource is not a top-level destination.")
+    AppDestination.PhonePairing -> error("PhonePairing is not a top-level destination.")
     is AppDestination.Player -> error("Player is not a top-level destination.")
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
     AppDestination.ManageChannels -> AppDestination.Channels
-    AppDestination.Sources, AppDestination.Doctor, AppDestination.AddSource -> AppDestination.Settings
+    AppDestination.Sources, AppDestination.Doctor, AppDestination.AddSource,
+    AppDestination.PhonePairing -> AppDestination.Settings
     is AppDestination.Player -> AppDestination.Channels
     else -> this
 }

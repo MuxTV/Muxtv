@@ -6,6 +6,7 @@ import app.muxtv.catalog.SourceCancellationResult
 import app.muxtv.catalog.SourceOnboarding
 import app.muxtv.catalog.SourcePreparationFailure
 import app.muxtv.catalog.SourcePreparationHandle
+import app.muxtv.catalog.SourcePreparationRequest
 import app.muxtv.catalog.SourcePreparationResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,10 @@ sealed interface SourceEntryUiState {
     data object Editing : SourceEntryUiState
     data object Restoring : SourceEntryUiState
     data object Preparing : SourceEntryUiState
+    data object LocalNetworkPermissionRequired : SourceEntryUiState
+    data class LocalNetworkPermissionDenied(
+        val permanently: Boolean,
+    ) : SourceEntryUiState
     data object HttpApprovalRequired : SourceEntryUiState
     data class Confirming(val endpoint: String) : SourceEntryUiState
     data object Activating : SourceEntryUiState
@@ -54,7 +59,9 @@ class SourceEntrySession(
 
     private var preparedHandle: SourcePreparationHandle? = null
     private var preparedEndpoint: String? = null
-    private var pendingHttpLocator: String? = null
+    private var pendingLocalNetworkRequest: SourcePreparationRequest? = null
+    private var pendingLocalNetworkActivationSourceName: String? = null
+    private var pendingHttpRequest: SourcePreparationRequest? = null
 
     suspend fun restore() = runExclusive {
         if (preparedHandle != null || mutableState.value !is SourceEntryUiState.Editing) return@runExclusive
@@ -76,65 +83,66 @@ class SourceEntrySession(
 
     suspend fun prepare(locator: String) = runExclusive {
         if (preparedHandle != null) return@runExclusive
-        prepareLocked(locator = locator, insecureHttpApproved = false)
+        prepareLocked(
+            SourcePreparationRequest.M3u(
+                locator = locator,
+                insecureHttpApproved = false,
+            ),
+        )
+    }
+
+    suspend fun prepareXtream(
+        endpoint: String,
+        username: String,
+        password: String,
+    ) = runExclusive {
+        if (preparedHandle != null) return@runExclusive
+        prepareLocked(
+            SourcePreparationRequest.Xtream(
+                endpoint = endpoint,
+                username = username,
+                password = password,
+                insecureHttpApproved = false,
+            ),
+        )
+    }
+
+    suspend fun resumeAfterLocalNetworkPermissionGranted() = runExclusive {
+        val request = pendingLocalNetworkRequest
+        if (request != null) {
+            prepareLocked(request)
+            return@runExclusive
+        }
+        val sourceName = pendingLocalNetworkActivationSourceName ?: return@runExclusive
+        pendingLocalNetworkActivationSourceName = null
+        activateLocked(sourceName)
+    }
+
+    fun recordLocalNetworkPermissionDenied(permanently: Boolean) {
+        if (
+            !operationMutex.isLocked &&
+            (pendingLocalNetworkRequest != null || pendingLocalNetworkActivationSourceName != null) &&
+            mutableState.value is SourceEntryUiState.LocalNetworkPermissionRequired
+        ) {
+            mutableState.value = SourceEntryUiState.LocalNetworkPermissionDenied(
+                permanently = permanently,
+            )
+        }
     }
 
     suspend fun approveInsecureHttp() = runExclusive {
-        val locator = pendingHttpLocator ?: return@runExclusive
-        prepareLocked(locator = locator, insecureHttpApproved = true)
+        val request = pendingHttpRequest ?: return@runExclusive
+        prepareLocked(request.withInsecureHttpApproval())
     }
 
     suspend fun activate(sourceName: String) = runExclusive {
-        val handle = preparedHandle
-        if (handle == null) {
-            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
-            return@runExclusive
-        }
-
-        val endpoint = preparedEndpoint
-        if (endpoint == null) {
-            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
-            return@runExclusive
-        }
-
-        mutableState.value = SourceEntryUiState.Activating
-        val result = try {
-            onboarding.activate(handle, sourceName)
-        } catch (cancelled: CancellationException) {
-            mutableState.value = SourceEntryUiState.Confirming(endpoint = endpoint)
-            throw cancelled
-        } catch (_: Exception) {
-            mutableState.value = SourceEntryUiState.Failed(
-                reason = SourceEntryFailure.CleanupPending,
-                cleanupPending = true,
-            )
-            return@runExclusive
-        }
-
-        when (result) {
-            SourceActivationResult.Activated -> {
-                preparedHandle = null
-                preparedEndpoint = null
-                mutableState.value = SourceEntryUiState.Completed
-            }
-
-            is SourceActivationResult.Failed -> {
-                if (!result.cleanupPending) {
-                    preparedHandle = null
-                    preparedEndpoint = null
-                }
-                mutableState.value = SourceEntryUiState.Failed(
-                    reason = result.reason.toEntryFailure(),
-                    cleanupPending = result.cleanupPending,
-                )
-            }
-        }
+        activateLocked(sourceName)
     }
 
     suspend fun cancel(): Boolean {
         if (!operationMutex.tryLock()) return false
         return try {
-            pendingHttpLocator = null
+            clearPendingAuthorization()
             val handle = preparedHandle
             if (handle == null) {
                 mutableState.value = SourceEntryUiState.Editing
@@ -174,52 +182,118 @@ class SourceEntrySession(
 
     fun editAgain() {
         if (preparedHandle == null && !operationMutex.isLocked) {
-            pendingHttpLocator = null
+            clearPendingAuthorization()
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
         }
     }
 
     fun clearTransientLocator() {
-        pendingHttpLocator = null
+        clearPendingAuthorization()
     }
 
-    private suspend fun prepareLocked(
-        locator: String,
-        insecureHttpApproved: Boolean,
-    ) {
-        if (locator.isBlank()) {
-            pendingHttpLocator = null
+    private suspend fun prepareLocked(request: SourcePreparationRequest) {
+        if (!request.hasRequiredInput()) {
+            clearPendingAuthorization()
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.InvalidLocator)
             return
         }
 
-        pendingHttpLocator = locator
+        clearPendingAuthorization()
         mutableState.value = SourceEntryUiState.Preparing
         val result = try {
-            onboarding.prepare(
-                locator = locator,
-                insecureHttpApproved = insecureHttpApproved,
-            )
+            when (request) {
+                is SourcePreparationRequest.M3u -> onboarding.prepare(
+                    locator = request.locator,
+                    insecureHttpApproved = request.insecureHttpApproved,
+                )
+
+                is SourcePreparationRequest.Xtream -> onboarding.prepare(request)
+            }
         } catch (cancelled: CancellationException) {
-            pendingHttpLocator = null
+            clearPendingAuthorization()
             preparedEndpoint = null
             mutableState.value = SourceEntryUiState.Editing
             throw cancelled
         } catch (_: Exception) {
-            pendingHttpLocator = null
+            clearPendingAuthorization()
             mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.Unexpected)
             return
         }
 
         when (result) {
             is SourcePreparationResult.Prepared -> acceptPrepared(result)
-            SourcePreparationResult.InsecureTransportApprovalRequired ->
+
+            SourcePreparationResult.LocalNetworkAccessRequired -> {
+                pendingLocalNetworkRequest = request
+                mutableState.value = SourceEntryUiState.LocalNetworkPermissionRequired
+            }
+
+            SourcePreparationResult.InsecureTransportApprovalRequired -> {
+                pendingHttpRequest = request
                 mutableState.value = SourceEntryUiState.HttpApprovalRequired
+            }
 
             is SourcePreparationResult.Failed -> {
-                pendingHttpLocator = null
+                clearPendingAuthorization()
                 mutableState.value = SourceEntryUiState.Failed(result.reason.toEntryFailure())
+            }
+        }
+    }
+
+    private suspend fun activateLocked(sourceName: String) {
+        val handle = preparedHandle
+        if (handle == null) {
+            clearPendingAuthorization()
+            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
+            return
+        }
+
+        val endpoint = preparedEndpoint
+        if (endpoint == null) {
+            clearPendingAuthorization()
+            mutableState.value = SourceEntryUiState.Failed(SourceEntryFailure.SessionExpired)
+            return
+        }
+
+        pendingLocalNetworkActivationSourceName = null
+        mutableState.value = SourceEntryUiState.Activating
+        val result = try {
+            onboarding.activate(handle, sourceName)
+        } catch (cancelled: CancellationException) {
+            mutableState.value = SourceEntryUiState.Confirming(endpoint = endpoint)
+            throw cancelled
+        } catch (_: Exception) {
+            mutableState.value = SourceEntryUiState.Failed(
+                reason = SourceEntryFailure.CleanupPending,
+                cleanupPending = true,
+            )
+            return
+        }
+
+        when (result) {
+            SourceActivationResult.Activated -> {
+                preparedHandle = null
+                preparedEndpoint = null
+                clearPendingAuthorization()
+                mutableState.value = SourceEntryUiState.Completed
+            }
+
+            SourceActivationResult.LocalNetworkAccessRequired -> {
+                pendingLocalNetworkActivationSourceName = sourceName
+                mutableState.value = SourceEntryUiState.LocalNetworkPermissionRequired
+            }
+
+            is SourceActivationResult.Failed -> {
+                clearPendingAuthorization()
+                if (!result.cleanupPending) {
+                    preparedHandle = null
+                    preparedEndpoint = null
+                }
+                mutableState.value = SourceEntryUiState.Failed(
+                    reason = result.reason.toEntryFailure(),
+                    cleanupPending = result.cleanupPending,
+                )
             }
         }
     }
@@ -227,10 +301,16 @@ class SourceEntrySession(
     private fun acceptPrepared(result: SourcePreparationResult.Prepared) {
         preparedHandle = result.handle
         preparedEndpoint = result.displayEndpoint
-        pendingHttpLocator = null
+        clearPendingAuthorization()
         mutableState.value = SourceEntryUiState.Confirming(
             endpoint = result.displayEndpoint,
         )
+    }
+
+    private fun clearPendingAuthorization() {
+        pendingLocalNetworkRequest = null
+        pendingLocalNetworkActivationSourceName = null
+        pendingHttpRequest = null
     }
 
     private suspend inline fun runExclusive(crossinline block: suspend () -> Unit) {
@@ -243,10 +323,31 @@ class SourceEntrySession(
     }
 }
 
+private fun SourcePreparationRequest.hasRequiredInput(): Boolean = when (this) {
+    is SourcePreparationRequest.M3u -> locator.isNotBlank()
+    is SourcePreparationRequest.Xtream ->
+        endpoint.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+}
+
+private fun SourcePreparationRequest.withInsecureHttpApproval(): SourcePreparationRequest = when (this) {
+    is SourcePreparationRequest.M3u -> SourcePreparationRequest.M3u(
+        locator = locator,
+        insecureHttpApproved = true,
+    )
+
+    is SourcePreparationRequest.Xtream -> SourcePreparationRequest.Xtream(
+        endpoint = endpoint,
+        username = username,
+        password = password,
+        insecureHttpApproved = true,
+    )
+}
+
 private fun SourcePreparationFailure.toEntryFailure(): SourceEntryFailure = when (this) {
     SourcePreparationFailure.InvalidLocator -> SourceEntryFailure.InvalidLocator
     SourcePreparationFailure.CredentialTooLarge -> SourceEntryFailure.CredentialTooLarge
     SourcePreparationFailure.StorageUnavailable -> SourceEntryFailure.StorageUnavailable
+    SourcePreparationFailure.UnsupportedProvider -> SourceEntryFailure.Unexpected
 }
 
 private fun SourceActivationFailure.toEntryFailure(): SourceEntryFailure = when (this) {

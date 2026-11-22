@@ -1,0 +1,3 @@
+core/testing/src/main/resources/app/muxtv/testing/media/c09/manifest-v1.tsv -text
+core/testing/src/main/resources/app/muxtv/testing/media/c09/avc-hls.m3u8 -text
+core/testing/src/main/resources/app/muxtv/testing/media/c09/hevc-hls.m3u8 -text

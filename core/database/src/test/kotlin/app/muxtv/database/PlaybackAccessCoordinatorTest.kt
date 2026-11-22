@@ -27,11 +27,11 @@ class PlaybackAccessCoordinatorTest {
             CoordinatedPlaybackAccess.Ready(DIRECT_HTTPS, insecureHttpApproved = false),
         )
         assertThat(policy.resolveCalls).containsExactly(CREDENTIAL_REF to DIRECT_HTTPS)
-        assertThat(policy.preapprovedCalls).isEmpty()
+        assertThat(policy.materializedCalls).isEmpty()
     }
 
     @Test
-    fun `resolved https locator does not pass Xtream credential id into legacy M3U policy`() = runTest {
+    fun `resolved https locator uses materialized path without credential lookup`() = runTest {
         val policy = RecordingAccessPolicy(PlaybackAccessDecision.SecureTransport)
         val coordinator = PlaybackAccessCoordinator(
             referenceResolver = PlaybackReferenceResolver {
@@ -45,12 +45,12 @@ class PlaybackAccessCoordinatorTest {
         assertThat(result).isEqualTo(
             CoordinatedPlaybackAccess.Ready(EPHEMERAL_HTTPS, insecureHttpApproved = false),
         )
-        assertThat(policy.resolveCalls).containsExactly("" to EPHEMERAL_HTTPS)
-        assertThat(policy.preapprovedCalls).isEmpty()
+        assertThat(policy.resolveCalls).isEmpty()
+        assertThat(policy.materializedCalls).containsExactly(EPHEMERAL_HTTPS to false)
     }
 
     @Test
-    fun `resolved approved http still passes through final preapproved access-policy validation`() = runTest {
+    fun `resolved approved http uses materialized transport provenance`() = runTest {
         val policy = RecordingAccessPolicy(PlaybackAccessDecision.Approved)
         val coordinator = PlaybackAccessCoordinator(
             referenceResolver = PlaybackReferenceResolver {
@@ -65,7 +65,7 @@ class PlaybackAccessCoordinatorTest {
             CoordinatedPlaybackAccess.Ready(EPHEMERAL_HTTP, insecureHttpApproved = true),
         )
         assertThat(policy.resolveCalls).isEmpty()
-        assertThat(policy.preapprovedCalls).containsExactly(EPHEMERAL_HTTP)
+        assertThat(policy.materializedCalls).containsExactly(EPHEMERAL_HTTP to true)
     }
 
     @Test
@@ -128,7 +128,7 @@ private class RecordingAccessPolicy(
     private val decision: PlaybackAccessDecision,
 ) : PlaybackAccessPolicyResolver {
     val resolveCalls = mutableListOf<Pair<String, String>>()
-    val preapprovedCalls = mutableListOf<String>()
+    val materializedCalls = mutableListOf<Pair<String, Boolean>>()
 
     override suspend fun resolve(
         credentialRef: String,
@@ -138,8 +138,11 @@ private class RecordingAccessPolicy(
         return decision
     }
 
-    override suspend fun resolvePreapproved(playbackLocator: String): PlaybackAccessDecision {
-        preapprovedCalls += playbackLocator
+    override suspend fun validateMaterializedTransport(
+        playbackLocator: String,
+        insecureHttpPreapproved: Boolean,
+    ): PlaybackAccessDecision {
+        materializedCalls += playbackLocator to insecureHttpPreapproved
         return decision
     }
 

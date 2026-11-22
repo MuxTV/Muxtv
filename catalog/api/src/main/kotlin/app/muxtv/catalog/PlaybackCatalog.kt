@@ -1,5 +1,7 @@
 package app.muxtv.catalog
 
+import app.muxtv.player.PlaybackIntent
+import app.muxtv.player.ResolvedPlaybackTimeline
 import kotlinx.coroutines.flow.Flow
 
 const val MAX_PLAYBACK_CANDIDATES: Int = 3
@@ -87,18 +89,22 @@ data class ResolvedPlaybackRequest(
     val locator: String,
     val requestHeaders: Map<String, String>,
     val insecureHttpApproved: Boolean,
+    val timeline: ResolvedPlaybackTimeline? = null,
+    val initialMediaPositionMillis: Long = 0L,
 ) {
     init {
         require(channelId.isNotBlank())
         require(variantId.isNotBlank())
         require(locator.isNotBlank())
         require(requestHeaders.keys.none(String::isBlank))
+        require(initialMediaPositionMillis >= 0L)
     }
 
     override fun toString(): String =
         "ResolvedPlaybackRequest(channelId=$channelId, variantId=$variantId, " +
             "locator=<redacted>, requestHeaders=${requestHeaders.keys.sorted()}, " +
-            "insecureHttpApproved=$insecureHttpApproved)"
+            "insecureHttpApproved=$insecureHttpApproved, hasTimeline=${timeline != null}, " +
+            "initialMediaPositionMillis=$initialMediaPositionMillis)"
 }
 
 enum class PlaybackAccessUnavailableReason {
@@ -106,6 +112,9 @@ enum class PlaybackAccessUnavailableReason {
     CredentialNotFound,
     CredentialCorrupted,
     CredentialUnavailable,
+    ArchiveOutsideRetention,
+    ArchiveUnsupported,
+    ArchiveInvalidMetadata,
 }
 
 sealed interface PlaybackVariantResolution {
@@ -159,6 +168,23 @@ interface PlaybackCandidateResolver {
         profileId: String,
         candidate: PlaybackCandidateIdentity,
     ): PlaybackVariantResolution?
+
+    suspend fun resolveIntentCandidate(
+        profileId: String,
+        intent: PlaybackIntent,
+        candidate: PlaybackCandidateIdentity,
+    ): PlaybackVariantResolution? = when (intent) {
+        is PlaybackIntent.Live -> resolveCandidate(
+            profileId = profileId,
+            candidate = candidate,
+        )
+
+        is PlaybackIntent.CatchupProgram,
+        is PlaybackIntent.CatchupPosition,
+        -> PlaybackVariantResolution.AccessUnavailable(
+            PlaybackAccessUnavailableReason.ArchiveUnsupported,
+        )
+    }
 }
 
 interface PlaybackCatalog {
@@ -174,6 +200,24 @@ interface PlaybackCatalog {
         channelId: String,
         preferredVariantId: String? = null,
     ): PlaybackVariantResolution?
+
+    suspend fun resolveIntent(
+        profileId: String,
+        intent: PlaybackIntent,
+        preferredVariantId: String? = null,
+    ): PlaybackVariantResolution? = when (intent) {
+        is PlaybackIntent.Live -> resolveVariant(
+            profileId = profileId,
+            channelId = intent.channelId,
+            preferredVariantId = preferredVariantId,
+        )
+
+        is PlaybackIntent.CatchupProgram,
+        is PlaybackIntent.CatchupPosition,
+        -> PlaybackVariantResolution.AccessUnavailable(
+            PlaybackAccessUnavailableReason.ArchiveUnsupported,
+        )
+    }
 
     suspend fun approveInsecurePlayback(
         profileId: String,

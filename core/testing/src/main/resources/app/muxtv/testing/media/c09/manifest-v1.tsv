@@ -1,0 +1,17 @@
+# c09-playback-corpus-v1
+# generator=ffmpeg-7.1.5;source=testsrc2;video_only=true;secrets=false
+scenario_id	transport	codec	width	height	fps	entrypoint	supporting_file
+raw-avc-360p30	MPEG_TS	AVC	640	360	30	avc-360p30.ts	-
+raw-avc-720p50	MPEG_TS	AVC	1280	720	50	avc-720p50.ts	-
+raw-hevc-360p30	MPEG_TS	HEVC	640	360	30	hevc-360p30.ts	-
+raw-hevc-720p50	MPEG_TS	HEVC	1280	720	50	hevc-720p50.ts	-
+hls-avc-360p30	HLS	AVC	640	360	30	avc-hls.m3u8	avc-360p30.ts
+hls-hevc-360p30	HLS	HEVC	640	360	30	hevc-hls.m3u8	hevc-360p30.ts
+# files
+path	size_bytes	sha256
+avc-360p30.ts	41924	f18f019088523bdd9a8cf9521d316fdfa140c84563336ca15f9cd41bc9c038fd
+avc-720p50.ts	65048	39759e22e38ce40a6c046e33b1780079d9cb4bd2bec297395731d94b43a5738f
+avc-hls.m3u8	117	80a2bbcdce538eab68d4e5ef51031ceaab8e5d2c0ef958b6fd2f256d5411c327
+hevc-360p30.ts	32148	9276b5b278de9dbb90ba1fcdadb6af3748f35d1345ab8339f4de2feac5052142
+hevc-720p50.ts	54708	8c9855b58fb653d554298c6263edf2b1e608cb411f8913273786873bf06d29dc
+hevc-hls.m3u8	118	648128b2140128e651ee18bd32824323a6872e341b051f9cbab06e548fec6f78

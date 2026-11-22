@@ -87,7 +87,7 @@ settings.edit_safe
 diagnostics.export
 ```
 
-Pairing defaults to setup capabilities needed by active flow. Sensitive actions require additional TV confirmation or installation PIN:
+Pairing defaults to setup capabilities needed by active flow. Sensitive actions require additional explicit TV confirmation (no parental/profile PIN policy):
 
 - reveal/replace credentials;
 - delete source/profile;
@@ -168,7 +168,7 @@ Optional controls:
 - open guide/programme;
 - volume not controlled unless Android/platform capability explicitly supports safe behavior.
 
-TV displays remote action feedback. Local remote cannot bypass current profile policy/PIN. Switching to restricted channel is denied.
+TV displays remote action feedback. Local remote respects the active profile's user-owned hidden channels and catalog preferences. It has no parental PIN/age/schedule restriction system; it cannot silently change another profile's preferences.
 
 ## 11. Secrets
 
@@ -229,7 +229,7 @@ No request bodies, credentials or full URLs. User can view/revoke devices and cl
 - upload/archive/XML limits;
 - session expiration/revocation;
 - process death during import/refresh;
-- remote playback obeys profile restrictions;
+- remote playback respects active profile selection and user-owned hidden-channel preferences;
 - destructive actions require confirmation;
 - CSP/no external web assets.
 

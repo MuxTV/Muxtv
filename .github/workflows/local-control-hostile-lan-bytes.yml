@@ -1,0 +1,57 @@
+name: LC04 serialized hostile LAN crypto lab
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-control-hostile-lan-bytes.yml'
+      - 'local-control/crypto-lab/**'
+      - 'local-control/wire-lab/**'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-hostile-lan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  hostile-lan:
+    name: Signed HPKE / AES-GCM hostile serialized-wire JVM
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Verify exact source revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Full lab cryptography and serialized hostile-LAN test suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:crypto-lab:test :local-control:wire-lab:test \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+      - name: Publish secret-free JVM failure evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-hostile-lan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/crypto-lab/build/test-results/test/**
+            local-control/wire-lab/build/test-results/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}

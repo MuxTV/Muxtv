@@ -1,0 +1,92 @@
+name: Local Control browser origin feasibility
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/local-control-browser-origin-lab.yml'
+      - 'tools/local-control/browser-probe/**'
+      - '.work/research/lc04-s2-browser-origin-20261015.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lc04-browser-origin-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  origin-probe:
+    name: Nonsecret browser-origin probe (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify immutable source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          node --version
+          npm --version
+
+      - name: Install pinned Playwright and test browser
+        shell: bash
+        working-directory: tools/local-control/browser-probe
+        env:
+          BROWSER: ${{ matrix.browser }}
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+          npx playwright install --with-deps "$BROWSER"
+
+      - name: Probe HTTPS secure context and private LAN HTTP without secrets
+        shell: bash
+        env:
+          MUXTV_BROWSER: ${{ matrix.browser }}
+          MUXTV_REPORT_DIR: .work/evidence/local-control-browser-origin
+        run: |
+          set -euo pipefail
+          node tools/local-control/browser-probe/run.mjs
+          test -s ".work/evidence/local-control-browser-origin/$MUXTV_BROWSER.json"
+
+      - name: Upload independently scoped nonsecret evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-browser-origin-${{ matrix.browser }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .work/evidence/local-control-browser-origin/**
+          retention-days: 7
+          github-token: ${{ github.token }}
+
+  gate:
+    name: Local Control browser origin lab
+    if: always()
+    needs: origin-probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require three desktop fixture jobs
+        shell: bash
+        env:
+          PROBE_RESULT: ${{ needs.origin-probe.result }}
+        run: |
+          set -euo pipefail
+          test "$PROBE_RESULT" = "success"
+          echo "Headless desktop fixture tests passed. Production mobile compatibility remains NOT_QUALIFIED."

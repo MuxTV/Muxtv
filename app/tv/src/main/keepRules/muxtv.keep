@@ -1,1 +1,8 @@
 # Add narrow application keep rules only when release-build or runtime evidence requires them.
+
+# Ktor's optional IntelliJ/JVM debugger probe references Java SE management
+# classes that Android deliberately does not implement. The probe is not
+# part of the Android TV server's functionality. Do not suppress any other
+# missing class: R8 must continue to fail closed on real dependencies.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
