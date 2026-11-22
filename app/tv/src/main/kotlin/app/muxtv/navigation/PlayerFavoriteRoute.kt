@@ -14,7 +14,9 @@ import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.feature.player.PlaybackStartGateway
 import app.muxtv.feature.player.PlaybackSurfaceRenderer
 import app.muxtv.feature.player.PlayerFavoriteAction
+import app.muxtv.feature.player.PlayerLocalNetworkPermissionOutcome
 import app.muxtv.feature.player.PlayerRoute
+import app.muxtv.player.PlaybackIntent
 import app.muxtv.player.PlaybackSessionGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -30,20 +32,28 @@ internal fun PlayerFavoriteRoute(
     onBack: () -> Unit,
     onOpenDoctor: () -> Unit,
     playbackStartGateway: PlaybackStartGateway? = null,
+    requestLocalNetworkPermission: suspend () -> PlayerLocalNetworkPermissionOutcome = {
+        PlayerLocalNetworkPermissionOutcome.DENIED
+    },
+    openLocalNetworkPermissionSettings: suspend () -> Boolean = { false },
     modifier: Modifier = Modifier,
+    playbackIntent: PlaybackIntent = PlaybackIntent.Live(channelId),
 ) {
+    val playbackChannelId = playbackIntent.channelId
+    require(channelId == playbackChannelId)
+
     val scope = rememberCoroutineScope()
-    var favoriteOverride by remember(profileId, channelId) { mutableStateOf<Boolean?>(null) }
-    var mutationInProgress by remember(profileId, channelId) { mutableStateOf(false) }
-    var mutationFailed by remember(profileId, channelId) { mutableStateOf(false) }
+    var favoriteOverride by remember(profileId, playbackChannelId) { mutableStateOf<Boolean?>(null) }
+    var mutationInProgress by remember(profileId, playbackChannelId) { mutableStateOf(false) }
+    var mutationFailed by remember(profileId, playbackChannelId) { mutableStateOf(false) }
     val catalogFavorite by produceState<Boolean?>(
         initialValue = null,
         playbackCatalog,
         profileId,
-        channelId,
+        playbackChannelId,
     ) {
         value = try {
-            playbackCatalog.getChannel(profileId = profileId, channelId = channelId)
+            playbackCatalog.getChannel(profileId = profileId, channelId = playbackChannelId)
                 ?.summary
                 ?.isFavorite
         } catch (cancelled: CancellationException) {
@@ -59,7 +69,7 @@ internal fun PlayerFavoriteRoute(
         playbackSessionGateway = playbackSessionGateway,
         playbackSurface = playbackSurface,
         profileId = profileId,
-        channelId = channelId,
+        playbackIntent = playbackIntent,
         onBack = onBack,
         onOpenDoctor = onOpenDoctor,
         playbackStartGateway = playbackStartGateway,
@@ -81,7 +91,7 @@ internal fun PlayerFavoriteRoute(
                                 when (
                                     channelPreferencesRepository.setFavorite(
                                         profileId = profileId,
-                                        channelId = channelId,
+                                        channelId = playbackChannelId,
                                         isFavorite = requestedFavorite,
                                     )
                                 ) {
@@ -104,6 +114,8 @@ internal fun PlayerFavoriteRoute(
                 failureLabel = if (mutationFailed) "Не удалось изменить избранное" else null,
             )
         },
+        requestLocalNetworkPermission = requestLocalNetworkPermission,
+        openLocalNetworkPermissionSettings = openLocalNetworkPermissionSettings,
         modifier = modifier,
     )
 }

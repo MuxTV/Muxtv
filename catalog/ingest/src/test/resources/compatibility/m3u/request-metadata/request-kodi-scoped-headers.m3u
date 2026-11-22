@@ -1,0 +1,6 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="c21.kodi-scoped",C21 Kodi Scoped
+#KODIPROP:http-user-agent=MuxTV TEST_C21_KODI Default
+#KODIPROP:inputstream.adaptive.stream_headers=User-Agent=MuxTV%20TEST_C21_KODI%20Segment&Origin=https%3A%2F%2Fportal.invalid
+#KODIPROP:inputstream.adaptive.manifest_headers=User-Agent=MuxTV%20TEST_C21_KODI%20Manifest&Referer=https%3A%2F%2Freferrer.invalid%2FTEST_C21_KODI%2F
+https://streams.invalid/live/kodi-scoped.m3u8?token=TEST_C21_KODI

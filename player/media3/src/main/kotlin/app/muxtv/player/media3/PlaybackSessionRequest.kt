@@ -13,6 +13,7 @@ class PlaybackSessionRequest(
     requestHeaders: Map<String, String> = emptyMap(),
     val insecureHttpApproved: Boolean = false,
     val mimeType: String? = null,
+    val initialMediaPositionMillis: Long = 0L,
 ) {
     val requestHeaders: Map<String, String> = requestHeaders.immutableSnapshot()
 
@@ -24,6 +25,7 @@ class PlaybackSessionRequest(
         require(displayName == null || displayName.isValidField(MAX_DISPLAY_NAME_LENGTH))
         require(artworkUri == null || artworkUri.isValidField(MAX_LOCATOR_LENGTH))
         require(mimeType == null || mimeType.isValidField(MAX_MIME_LENGTH))
+        require(initialMediaPositionMillis >= 0L)
         require(this.requestHeaders.size <= MAX_HEADER_COUNT)
         this.requestHeaders.forEach { (name, value) ->
             require(name.isValidField(MAX_HEADER_NAME_LENGTH))
@@ -39,6 +41,7 @@ class PlaybackSessionRequest(
     operator fun component6(): Map<String, String> = requestHeaders
     operator fun component7(): Boolean = insecureHttpApproved
     operator fun component8(): String? = mimeType
+    operator fun component9(): Long = initialMediaPositionMillis
 
     fun copy(
         profileId: String = this.profileId,
@@ -50,6 +53,7 @@ class PlaybackSessionRequest(
         requestHeaders: Map<String, String> = this.requestHeaders,
         insecureHttpApproved: Boolean = this.insecureHttpApproved,
         mimeType: String? = this.mimeType,
+        initialMediaPositionMillis: Long = this.initialMediaPositionMillis,
     ): PlaybackSessionRequest = PlaybackSessionRequest(
         profileId = profileId,
         mediaId = mediaId,
@@ -60,6 +64,7 @@ class PlaybackSessionRequest(
         requestHeaders = requestHeaders,
         insecureHttpApproved = insecureHttpApproved,
         mimeType = mimeType,
+        initialMediaPositionMillis = initialMediaPositionMillis,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -73,7 +78,8 @@ class PlaybackSessionRequest(
             artworkUri == other.artworkUri &&
             requestHeaders == other.requestHeaders &&
             insecureHttpApproved == other.insecureHttpApproved &&
-            mimeType == other.mimeType
+            mimeType == other.mimeType &&
+            initialMediaPositionMillis == other.initialMediaPositionMillis
     }
 
     override fun hashCode(): Int {
@@ -86,6 +92,7 @@ class PlaybackSessionRequest(
         result = 31 * result + requestHeaders.hashCode()
         result = 31 * result + insecureHttpApproved.hashCode()
         result = 31 * result + (mimeType?.hashCode() ?: 0)
+        result = 31 * result + initialMediaPositionMillis.hashCode()
         return result
     }
 
@@ -94,7 +101,7 @@ class PlaybackSessionRequest(
             "variantId=<redacted>, locator=<redacted>, " +
             "hasDisplayName=${displayName != null}, hasArtworkUri=${artworkUri != null}, " +
             "headerCount=${requestHeaders.size}, insecureHttpApproved=$insecureHttpApproved, " +
-            "hasMimeType=${mimeType != null})"
+            "hasMimeType=${mimeType != null}, initialMediaPositionMillis=$initialMediaPositionMillis)"
 
     companion object {
         const val EXTERNAL_MEDIA_ID_PREFIX = "external:"

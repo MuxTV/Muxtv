@@ -1,10 +1,14 @@
 package app.muxtv.di
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import app.muxtv.catalog.CatalogRepository
 import app.muxtv.catalog.ChannelBrowseRepository
 import app.muxtv.catalog.EpgGuideRepository
 import app.muxtv.catalog.PlaybackAccessPolicyResolver
+import app.muxtv.catalog.PlaybackArchiveResolver
 import app.muxtv.catalog.PlaybackCatalog
 import app.muxtv.catalog.PlaybackCandidateResolver
 import app.muxtv.catalog.PlaybackReferenceResolver
@@ -14,9 +18,11 @@ import app.muxtv.catalog.importer.CatalogRevisionImporter
 import app.muxtv.catalog.importer.CatalogRevisionImporterFactory
 import app.muxtv.catalog.importer.EpgRevisionImporter
 import app.muxtv.catalog.importer.EpgRevisionImporterFactory
+import app.muxtv.catalog.ingest.StreamingXtreamParser
 import app.muxtv.catalog.onboarding.DurableRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.DefaultRemoteSourceOnboarding
 import app.muxtv.catalog.refresh.EncryptedPlaybackAccessPolicyResolver
+import app.muxtv.catalog.refresh.M3uPlaybackArchiveResolver
 import app.muxtv.catalog.refresh.RemoteEpgRefresher
 import app.muxtv.catalog.refresh.RemoteSourceAccessManager
 import app.muxtv.catalog.refresh.RemoteSourceActivationCleanup
@@ -24,8 +30,12 @@ import app.muxtv.catalog.refresh.RemoteSourceActivator
 import app.muxtv.catalog.refresh.RemoteSourceMetadataCleanupResult
 import app.muxtv.catalog.refresh.RemoteSourceOnboarding
 import app.muxtv.catalog.refresh.RemoteSourceRefresher
+import app.muxtv.catalog.refresh.XtreamLiveRefresher
 import app.muxtv.catalog.refresh.XtreamPlaybackReferenceResolver
 import app.muxtv.catalog.refresh.XtreamSourceAccessManager
+import app.muxtv.catalog.refresh.XtreamSourceActivator
+import app.muxtv.catalog.refresh.XtreamSourceLifecycle
+import app.muxtv.catalog.refresh.XtreamSourcePreparer
 import app.muxtv.catalog.sync.SourceRefreshScheduler
 import app.muxtv.credentials.CredentialStore
 import app.muxtv.database.DatabaseInitializer
@@ -38,6 +48,8 @@ import app.muxtv.database.PendingSourcePreparationStore
 import app.muxtv.database.SourceRefreshStore
 import app.muxtv.database.SourceRevisionStore
 import app.muxtv.external.ExternalPlaybackOriginGrantStore
+import app.muxtv.external.LocalNetworkPermissionGate
+import app.muxtv.external.LocalNetworkSourcePreflight
 import app.muxtv.external.SharedPreferencesExternalPlaybackOriginGrantStore
 import app.muxtv.network.MuxTvHttpClients
 import app.muxtv.network.MuxTvHttpResources
@@ -72,6 +84,12 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideXtreamSourcePreparer(
+        accessManager: XtreamSourceAccessManager,
+    ): XtreamSourcePreparer = XtreamSourcePreparer(accessManager)
+
+    @Provides
+    @Singleton
     fun providePlaybackAccessPolicyResolver(
         accessManager: RemoteSourceAccessManager,
     ): PlaybackAccessPolicyResolver = EncryptedPlaybackAccessPolicyResolver(accessManager)
@@ -84,14 +102,42 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePlaybackArchiveResolver(): PlaybackArchiveResolver {
+        val xtream = app.muxtv.catalog.refresh.XtreamPlaybackArchiveResolver()
+        val m3u = M3uPlaybackArchiveResolver()
+        return PlaybackArchiveResolver { request ->
+            when (val resolution = xtream.resolve(request)) {
+                app.muxtv.catalog.PlaybackArchiveResolution.NotApplicable -> m3u.resolve(request)
+                else -> resolution
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
+    fun provideLocalNetworkSourcePreflight(
+        @ApplicationContext context: Context,
+    ): LocalNetworkSourcePreflight = LocalNetworkSourcePreflight(
+        apiLevel = Build.VERSION.SDK_INT,
+        permissionGranted = {
+            Build.VERSION.SDK_INT < LocalNetworkPermissionGate.ANDROID_17_API ||
+                context.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+                PackageManager.PERMISSION_GRANTED
+        },
+    )
+
+    @Provides
+    @Singleton
     fun provideDatabaseComponents(
         @ApplicationContext context: Context,
         playbackAccessPolicyResolver: PlaybackAccessPolicyResolver,
         playbackReferenceResolver: PlaybackReferenceResolver,
+        playbackArchiveResolver: PlaybackArchiveResolver,
     ): MuxTvDatabaseComponents = MuxTvDatabaseFactory.create(
         context = context,
         playbackAccessPolicyResolver = playbackAccessPolicyResolver,
         playbackReferenceResolver = playbackReferenceResolver,
+        playbackArchiveResolver = playbackArchiveResolver,
     )
 
     @Provides
@@ -189,10 +235,27 @@ object AppModule {
         accessManager: RemoteSourceAccessManager,
         importer: CatalogRevisionImporter,
         clients: MuxTvHttpClients,
+        localNetworkPreflight: LocalNetworkSourcePreflight,
     ): RemoteSourceRefresher = RemoteSourceRefresher(
         accessManager = accessManager,
         importer = importer,
         sourceClient = clients.source,
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
+    )
+
+    @Provides
+    @Singleton
+    fun provideXtreamLiveRefresher(
+        accessManager: XtreamSourceAccessManager,
+        importer: CatalogRevisionImporter,
+        clients: MuxTvHttpClients,
+        localNetworkPreflight: LocalNetworkSourcePreflight,
+    ): XtreamLiveRefresher = XtreamLiveRefresher(
+        accessManager = accessManager,
+        importer = importer,
+        sourceClient = clients.source,
+        parser = StreamingXtreamParser(),
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
     )
 
     @Provides
@@ -216,16 +279,19 @@ object AppModule {
     ): DefaultRemoteSourceOnboarding = DefaultRemoteSourceOnboarding(
         accessManager = accessManager,
         activator = RemoteSourceActivator { request -> refresher.refresh(request) },
-        activationCleanup = RemoteSourceActivationCleanup { sourceId, credentialRef ->
-            when (revisionStore.removeInactiveSource(sourceId, credentialRef)) {
-                InactiveSourceRemovalResult.Removed -> RemoteSourceMetadataCleanupResult.Removed
-                InactiveSourceRemovalResult.NotFound -> RemoteSourceMetadataCleanupResult.NotFound
-                InactiveSourceRemovalResult.Active,
-                InactiveSourceRemovalResult.CredentialMismatch,
-                InactiveSourceRemovalResult.ConcurrentChange,
-                -> RemoteSourceMetadataCleanupResult.Retained
-            }
-        },
+        activationCleanup = remoteSourceActivationCleanup(revisionStore),
+    )
+
+    @Provides
+    @Singleton
+    fun provideXtreamSourceLifecycle(
+        accessManager: XtreamSourceAccessManager,
+        refresher: XtreamLiveRefresher,
+        revisionStore: SourceRevisionStore,
+    ): XtreamSourceLifecycle = XtreamSourceLifecycle(
+        accessManager = accessManager,
+        activator = XtreamSourceActivator { request -> refresher.refresh(request) },
+        activationCleanup = remoteSourceActivationCleanup(revisionStore),
     )
 
     @Provides
@@ -247,7 +313,15 @@ object AppModule {
     @Singleton
     fun provideSourceOnboarding(
         durable: DurableRemoteSourceOnboarding,
-    ): SourceOnboarding = AppSourceOnboarding(durable)
+        xtreamPreparer: XtreamSourcePreparer,
+        xtreamLifecycle: XtreamSourceLifecycle,
+        localNetworkPreflight: LocalNetworkSourcePreflight,
+    ): SourceOnboarding = AppSourceOnboarding(
+        delegate = durable,
+        xtreamPreparer = xtreamPreparer,
+        xtreamLifecycle = xtreamLifecycle,
+        localNetworkAccessRequired = localNetworkPreflight::accessRequired,
+    )
 
     @Provides
     @Singleton
@@ -281,6 +355,19 @@ object AppModule {
             Context.MODE_PRIVATE,
         ),
     )
+
+    private fun remoteSourceActivationCleanup(
+        revisionStore: SourceRevisionStore,
+    ): RemoteSourceActivationCleanup = RemoteSourceActivationCleanup { sourceId, credentialRef ->
+        when (revisionStore.removeInactiveSource(sourceId, credentialRef)) {
+            InactiveSourceRemovalResult.Removed -> RemoteSourceMetadataCleanupResult.Removed
+            InactiveSourceRemovalResult.NotFound -> RemoteSourceMetadataCleanupResult.NotFound
+            InactiveSourceRemovalResult.Active,
+            InactiveSourceRemovalResult.CredentialMismatch,
+            InactiveSourceRemovalResult.ConcurrentChange,
+            -> RemoteSourceMetadataCleanupResult.Retained
+        }
+    }
 
     private const val EXTERNAL_PLAYBACK_PREFERENCES_NAME = "muxtv_external_playback"
 }

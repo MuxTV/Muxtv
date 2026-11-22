@@ -1,7 +1,11 @@
 schema_version: 2
 state: implementation_current
-last_reviewed: 2026-08-11
+last_reviewed: 2026-09-08
 actual_modules:
+  app-phone:
+    gradle_path: :app:phone
+    type: android_application
+    owns: [offline_camera_qr_scanner, display_public_tv_key_fingerprint, phone_companion_entry]
   app-tv:
     gradle_path: :app:tv
     type: android_application
@@ -38,6 +42,62 @@ actual_modules:
     gradle_path: :core:credentials
     type: android_library
     owns: [android_keystore_keys, encrypted_credential_store, credential_envelopes]
+  local-control-core:
+    gradle_path: :local-control:core
+    type: pure_kotlin_library
+    owns: [ephemeral_pairing_proof, tv_consent, replay_protection, scoped_session_authority]
+  local-control-server:
+    gradle_path: :local-control:server
+    type: jvm_library
+    owns: [ephemeral_ktor_lan_transport, private_address_binding, host_origin_checks, bounded_http_pairing]
+  local-control-onboarding:
+    gradle_path: :local-control:onboarding
+    type: pure_kotlin_library
+    owns: [protected_channel_source_staging, existing_onboarding_delegation, session_owned_preparations, tv_only_http_approval]
+  local-control-qr-public:
+    gradle_path: :local-control:qr-public
+    type: pure_kotlin_library
+    owns: [bounded_canonical_tv_public_hpke_qr_parser, public_key_fingerprint]
+  local-control-crypto-lab:
+    gradle_path: :local-control:crypto-lab
+    type: pure_kotlin_library
+    owns: [hpke_protocol_feasibility, binding_and_replay_lab, attack_negative_tests]
+  local-control-crypto-android-compat:
+    gradle_path: :local-control:crypto-android-compat
+    type: android_library
+    owns: [android_crypto_provider_evidence, hpke_android_compatibility, ed25519_device_matrix]
+  local-control-tv-qr:
+    gradle_path: :local-control:tv-qr
+    type: pure_kotlin_library
+    owns: [ephemeral_tv_hpke_receiver, public_only_canonical_qr_preview, local_key_revocation]
+  local-control-enrollment:
+    gradle_path: :local-control:enrollment
+    type: pure_kotlin_library
+    owns: [tink_ed25519_phone_identity, tv_local_phone_consent_gate, bounded_nonce_proof]
+  local-control-wire-lab:
+    gradle_path: :local-control:wire-lab
+    type: pure_kotlin_library
+    owns: [bounded_binary_enrollment_probe_reply_framing, hostile_input_corpus, no_authority_semantics]
+  local-control-native-transport:
+    gradle_path: :local-control:native-transport
+    type: pure_kotlin_library
+    owns: [isolated_private_ipv4_tcp_framing, qr_owned_public_enrollment_dispatch, bounded_peer_io, one_request_per_connection]
+  local-control-phone-flow:
+    gradle_path: :local-control:phone-flow
+    type: pure_kotlin_library
+    owns: [qr_pinned_phone_enrollment_state_machine, tv_local_consent_enforced_by_tv, one_shot_authenticated_receipt_verification, no_transport_or_source_authority]
+  local-control-protected-channel:
+    gradle_path: :local-control:protected-channel
+    type: pure_kotlin_library
+    owns: [synthetic_only_bidirectional_aead_lab, strict_direction_and_counter, fail_closed_expiry_and_revocation, no_production_handshake_or_provider_data]
+  local-control-mxh1-session-lab:
+    gradle_path: :local-control:mxh1-session-lab
+    type: pure_kotlin_library
+    owns: [tv_owned_mxh1_ephemeral_handshake_lab, approved_phone_ed25519_and_hpke_seed, bidirectional_synthetic_key_confirmations, no_android_or_source_authority]
+  local-control-mxh1-tcp-lab:
+    gradle_path: :local-control:mxh1-tcp-lab
+    type: pure_kotlin_library
+    owns: [loopback_only_three_frame_tcp_hostile_lab, original_tv_qr_owner, no_android_endpoint_or_source_capability]
   catalog-api:
     gradle_path: :catalog:api
     type: pure_kotlin_library
@@ -115,13 +175,16 @@ actual_modules:
     gradle_path: :benchmark:jvm
     type: jvm_benchmark
     owns: [jmh_measurements]
+  benchmark-competitive:
+    gradle_path: :benchmark:competitive
+    type: pure_kotlin_library
+    owns: [competitive_benchmark_contracts, orchestration, provenance, normalized_reports]
   build-logic:
     path: build-logic
     type: gradle_included_build
     owns: [convention_plugins, module_defaults, quality_wiring]
 planned_not_created:
   - feature_profiles
-  - local_control_server
   - local_control_web
 rules:
   - pure_kotlin_modules_must_not_depend_on_android

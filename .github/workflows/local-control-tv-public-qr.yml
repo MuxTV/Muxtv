@@ -1,0 +1,66 @@
+name: Local Control TV public QR preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/local-control-tv-public-qr.yml'
+      - 'local-control/tv-qr/**'
+      - 'app/tv/src/main/kotlin/app/muxtv/localcontrol/**'
+      - 'app/tv/src/main/kotlin/app/muxtv/MainActivity.kt'
+      - 'app/tv/src/main/kotlin/app/muxtv/navigation/AppNavigation.kt'
+      - 'app/tv/build.gradle.kts'
+      - 'settings.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lc04-tv-key-qr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  public-qr:
+    name: TV key QR JVM and app compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up pinned MuxTV JDKs
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Require exact source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Test canonical key QR and compile actual TV app
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :local-control:tv-qr:test :app:tv:compileDebugKotlin \
+            --no-daemon --stacktrace --console=plain --no-problems-report
+
+      - name: Upload scoped test evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: lc04-tv-key-qr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            local-control/tv-qr/build/test-results/test/**
+            local-control/tv-qr/build/reports/tests/test/**
+          retention-days: 7
+          github-token: ${{ github.token }}

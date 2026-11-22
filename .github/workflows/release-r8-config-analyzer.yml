@@ -1,0 +1,71 @@
+name: R8 Configuration Analyzer evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release-r8-config-analyzer.yml"
+      - "tools/release/Invoke-R8ConfigAnalyzerEvidence.ps1"
+      - "build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/R8AnalyzerEvidenceContractTest.kt"
+      - "app/tv/build.gradle.kts"
+      - "gradle/libs.versions.toml"
+      - "**/src/main/keepRules/**"
+      - "**/consumer-rules.pro"
+      - "**/proguard-rules.pro"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-r8-config-analyzer-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  analyze:
+    name: Release R8 Configuration Analyzer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+
+      - name: Initialize Android SDK environment
+        shell: pwsh
+        run: |
+          . .\tools\android\Initialize-AndroidSdkEnvironment.ps1 -PersistForGitHubActions
+
+      - name: Verify R8 analyzer evidence contract
+        shell: pwsh
+        run: |
+          .\gradlew.bat -p build-logic :convention:test `
+            --no-daemon `
+            --stacktrace `
+            --console=plain `
+            --no-problems-report
+          if ($LASTEXITCODE -ne 0) { throw "R8 analyzer evidence contract failed." }
+
+      - name: Generate exact-head R8 analyzer evidence
+        shell: pwsh
+        run: |
+          & .\tools\release\Invoke-R8ConfigAnalyzerEvidence.ps1 `
+            -SourceCommit "$env:SOURCE_COMMIT"
+
+      - name: Upload R8 analyzer evidence
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: release-r8-config-analyzer-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/tv/build/reports/r8/r8-config-analyzer-release.html
+            .work/evidence/release-r8/**
+          retention-days: 30
+          github-token: ${{ github.token }}
