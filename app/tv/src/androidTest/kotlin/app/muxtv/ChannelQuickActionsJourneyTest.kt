@@ -428,3 +428,8 @@ private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressDown() = perf
     keyDown(Key.DirectionDown)
     keyUp(Key.DirectionDown)
 }
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.pressUp() = performKeyInput {
+    keyDown(Key.DirectionUp)
+    keyUp(Key.DirectionUp)
+}
