@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import app.muxtv.catalog.ChannelFavoriteMutationResult
@@ -120,14 +119,24 @@ class ChannelQuickActionsJourneyTest {
         }
         drainEffects()
 
-        // Match Compose Foundation's keyboard long-click test: explicitly
-        // enter Keyboard mode and hold past this device's actual timeout.
-        // This synthesizes real repeat key events, not a semantics OnLongClick.
+        // A held remote key spans input batches so the modifier's coroutine
+        // timer runs while Center is still down. The custom effectContext uses
+        // a TestCoroutineScheduler independent of the key-injection clock.
+        // Compose also synthesizes real key repeats while advancing event time.
         composeRule.runOnIdle {
             inputModeManager.requestInputMode(InputMode.Keyboard)
         }
+        var holdDurationMillis = 0L
         composeRule.onNodeWithTag("channel-row-0").assertIsFocused().performKeyInput {
-            pressKey(Key.DirectionCenter, viewConfiguration.longPressTimeoutMillis + 100L)
+            holdDurationMillis = viewConfiguration.longPressTimeoutMillis + 100L
+            keyDown(Key.DirectionCenter)
+            advanceEventTime(holdDurationMillis)
+        }
+        effectScheduler.runCurrent()
+        effectScheduler.advanceTimeBy(holdDurationMillis)
+        effectScheduler.runCurrent()
+        composeRule.onNodeWithTag("channel-row-0").performKeyInput {
+            keyUp(Key.DirectionCenter)
         }
         drainEffects()
 

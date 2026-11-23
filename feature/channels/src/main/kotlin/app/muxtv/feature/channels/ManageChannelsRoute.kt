@@ -3,7 +3,6 @@ package app.muxtv.feature.channels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -253,6 +252,7 @@ private fun ManageChannelsContent(
 ) {
     val listState = rememberLazyListState()
     val rowFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
+    var observedFocusedRowId by remember(filter) { mutableStateOf<String?>(null) }
     val allFocusRequester = remember { FocusRequester() }
     val visibleFocusRequester = remember { FocusRequester() }
     val hiddenFocusRequester = remember { FocusRequester() }
@@ -317,6 +317,10 @@ private fun ManageChannelsContent(
 
         withFrameNanos { }
         if (requester.requestFocus()) {
+            // requestFocus() alone does not prove that the intended TV row
+            // owns focus after a Paging update or editor/action dismissal.
+            snapshotFlow { observedFocusedRowId }
+                .first { focusedId -> focusedId == targetId }
             onFocusReturnConsumed()
         }
     }
@@ -451,6 +455,13 @@ private fun ManageChannelsContent(
                                         scrollOffset = listState.firstVisibleItemScrollOffset,
                                     ),
                                 )
+                            },
+                            onFocusChanged = { isFocused ->
+                                if (isFocused) {
+                                    observedFocusedRowId = channel.channelId
+                                } else if (observedFocusedRowId == channel.channelId) {
+                                    observedFocusedRowId = null
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -606,6 +617,7 @@ private fun ManageChannelRow(
     channel: ChannelManagementItem,
     selected: Boolean,
     onClick: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember(channel.channelId) { mutableStateOf(false) }
@@ -641,9 +653,13 @@ private fun ManageChannelRow(
                 color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.borderVariant,
                 shape = shape,
             )
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                onFocusChanged(state.isFocused)
+            }
+            // clickable already provides the focus target; a second focusable()
+            // can make the requester and row semantics observe different targets.
             .clickable(role = Role.Button, onClick = onClick)
-            .focusable()
             .padding(horizontal = TvTokens.Spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
