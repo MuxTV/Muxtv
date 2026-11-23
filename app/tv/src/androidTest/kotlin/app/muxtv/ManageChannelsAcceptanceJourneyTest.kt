@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -161,9 +162,19 @@ class ManageChannelsAcceptanceJourneyTest {
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilFocused(tag: String) {
         // Room/Paging and focus restoration settle asynchronously. Still
         // require a genuine focused semantics node; do not force focus here.
-        waitUntil(timeoutMillis = 5_000) {
-            onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()
-                ?.config?.getOrNull(SemanticsProperties.Focused) == true
+        try {
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()
+                    ?.config?.getOrNull(SemanticsProperties.Focused) == true
+            }
+        } catch (failure: Exception) {
+            // Keep this a hard acceptance failure, but make the actual UI
+            // focus owner visible in hosted Android test logs.
+            throw AssertionError(
+                "Expected focus on $tag. Unmerged semantics:\n" +
+                    onRoot(useUnmergedTree = true).printToString(),
+                failure,
+            )
         }
         onNodeWithTag(tag).assertIsFocused()
     }

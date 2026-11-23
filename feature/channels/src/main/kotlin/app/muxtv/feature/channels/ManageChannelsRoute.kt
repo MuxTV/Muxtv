@@ -308,20 +308,25 @@ private fun ManageChannelsContent(
             listState.scrollToItem(targetIndex, request.anchor.scrollOffset)
         }
 
-        val requester = snapshotFlow {
+        snapshotFlow {
             val placed = listState.layoutInfo.visibleItemsInfo.any { item -> item.index == targetIndex }
             if (placed) rowFocusRequesters[targetId] else null
         }
             .filterNotNull()
             .first()
 
-        withFrameNanos { }
-        if (requester.requestFocus()) {
-            // requestFocus() alone does not prove that the intended TV row
-            // owns focus after a Paging update or editor/action dismissal.
-            snapshotFlow { observedFocusedRowId }
-                .first { focusedId -> focusedId == targetId }
-            onFocusReturnConsumed()
+        // Paging can replace a lazy row's focus modifier between placement
+        // and the next frame. Re-resolve the current requester for each
+        // bounded attempt instead of consuming focus restoration prematurely.
+        repeat(MANAGE_CHANNELS_FOCUS_RESTORE_FRAMES) {
+            withFrameNanos { }
+            val placed = listState.layoutInfo.visibleItemsInfo.any { item -> item.index == targetIndex }
+            val currentRequester = if (placed) rowFocusRequesters[targetId] else null
+            currentRequester?.requestFocus()
+            if (observedFocusedRowId == targetId) {
+                onFocusReturnConsumed()
+                return@LaunchedEffect
+            }
         }
     }
 
@@ -735,5 +740,6 @@ private const val MANAGE_CHANNELS_EMPTY_TEST_TAG = "manage-channels-empty"
 private const val MANAGE_CHANNELS_ACTIONS_TEST_TAG = "manage-channels-actions"
 private const val MANAGE_CHANNELS_EDITOR_TEST_TAG = "manage-channels-editor"
 private const val MANAGE_CHANNELS_ERROR_TEST_TAG = "manage-channels-error"
+private const val MANAGE_CHANNELS_FOCUS_RESTORE_FRAMES = 120
 private const val MANAGE_CHANNEL_ROW_TEST_TAG_PREFIX = "manage-channel-row-"
 private val MANAGE_CHANNEL_ROW_HEIGHT = 88.dp

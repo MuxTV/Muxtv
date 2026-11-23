@@ -132,9 +132,13 @@ class ChannelQuickActionsJourneyTest {
             keyDown(Key.DirectionCenter)
             advanceEventTime(holdDurationMillis)
         }
-        effectScheduler.runCurrent()
-        effectScheduler.advanceTimeBy(holdDurationMillis)
-        effectScheduler.runCurrent()
+        // Coroutine effects can schedule Compose layout; drive them only on
+        // the Android UI thread, never on the instrumentation test thread.
+        composeRule.runOnIdle {
+            effectScheduler.runCurrent()
+            effectScheduler.advanceTimeBy(holdDurationMillis)
+            effectScheduler.runCurrent()
+        }
         composeRule.onNodeWithTag("channel-row-0").performKeyInput {
             keyUp(Key.DirectionCenter)
         }
