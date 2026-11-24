@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -119,10 +121,10 @@ class ChannelQuickActionsJourneyTest {
         }
         drainEffects()
 
-        // A held remote key spans input batches so the modifier's coroutine
-        // timer runs while Center is still down. The custom effectContext uses
-        // a TestCoroutineScheduler independent of the key-injection clock.
-        // Compose also synthesizes real key repeats while advancing event time.
+        // A held remote key spans input batches. Key event timestamps and
+        // the Compose frame clock are separate clocks; a long-click timer
+        // must have a chance to run before Center is released.
+        // Keep effectContext's independent scheduler on the UI thread.
         composeRule.runOnIdle {
             inputModeManager.requestInputMode(InputMode.Keyboard)
         }
@@ -139,13 +141,24 @@ class ChannelQuickActionsJourneyTest {
             effectScheduler.advanceTimeBy(holdDurationMillis)
             effectScheduler.runCurrent()
         }
+        // Foundation combinedClickable uses Compose-driven timeout and
+        // animation frames. Key advanceEventTime() alone doesn't drive those.
+        composeRule.mainClock.advanceTimeBy(holdDurationMillis)
         composeRule.onNodeWithTag("channel-row-0").performKeyInput {
             keyUp(Key.DirectionCenter)
         }
         drainEffects()
 
         assertThat(openedChannelId).isNull()
-        composeRule.onNodeWithTag("channel-quick-actions").assertExists()
+        try {
+            composeRule.onNodeWithTag("channel-quick-actions").assertExists()
+        } catch (failure: AssertionError) {
+            throw AssertionError(
+                "Held D-pad Center did not expose Quick Actions. Semantics:\n" +
+                    composeRule.onRoot(useUnmergedTree = true).printToString(),
+                failure,
+            )
+        }
         composeRule.onNodeWithText("В избранное").assertIsFocused()
     }
 

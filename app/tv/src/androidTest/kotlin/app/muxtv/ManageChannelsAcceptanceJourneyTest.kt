@@ -1,6 +1,7 @@
 package app.muxtv
 
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -168,7 +169,9 @@ class ManageChannelsAcceptanceJourneyTest {
                 onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()
                     ?.config?.getOrNull(SemanticsProperties.Focused) == true
             }
-        } catch (failure: Exception) {
+        } catch (failure: ComposeTimeoutException) {
+            // ComposeTimeoutException extends Throwable directly, not
+            // Exception; an Exception catch silently misses this failure.
             // Keep this a hard acceptance failure, but make the actual UI
             // focus owner visible in hosted Android test logs.
             throw AssertionError(
