@@ -19,10 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -251,8 +249,8 @@ private fun ManageChannelsContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val rowFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
     var observedFocusedRowId by remember(filter) { mutableStateOf<String?>(null) }
+    var focusRestoreTargetId by remember(filter) { mutableStateOf<String?>(null) }
     val allFocusRequester = remember { FocusRequester() }
     val visibleFocusRequester = remember { FocusRequester() }
     val hiddenFocusRequester = remember { FocusRequester() }
@@ -284,10 +282,11 @@ private fun ManageChannelsContent(
         if (refreshState !is LoadState.NotLoading) return@LaunchedEffect
 
         if (rows.itemCount == 0) {
+            // An asynchronously replacing PagingData may briefly be empty.
+            // Focus the filter as a safe fallback, but preserve the anchor:
+            // the effect reruns when the next page is presented.
             withFrameNanos { }
-            if (selectedFilterFocusRequester.requestFocus()) {
-                onFocusReturnConsumed()
-            }
+            selectedFilterFocusRequester.requestFocus()
             return@LaunchedEffect
         }
 
@@ -308,26 +307,14 @@ private fun ManageChannelsContent(
             listState.scrollToItem(targetIndex, request.anchor.scrollOffset)
         }
 
-        snapshotFlow {
-            val placed = listState.layoutInfo.visibleItemsInfo.any { item -> item.index == targetIndex }
-            if (placed) rowFocusRequesters[targetId] else null
-        }
-            .filterNotNull()
-            .first()
-
-        // Paging can replace a lazy row's focus modifier between placement
-        // and the next frame. Re-resolve the current requester for each
-        // bounded attempt instead of consuming focus restoration prematurely.
-        repeat(MANAGE_CHANNELS_FOCUS_RESTORE_FRAMES) {
-            withFrameNanos { }
-            val placed = listState.layoutInfo.visibleItemsInfo.any { item -> item.index == targetIndex }
-            val currentRequester = if (placed) rowFocusRequesters[targetId] else null
-            currentRequester?.requestFocus()
-            if (observedFocusedRowId == targetId) {
-                onFocusReturnConsumed()
-                return@LaunchedEffect
-            }
-        }
+        // Let the target row request focus from its own LaunchedEffect
+        // after it is attached to the LazyColumn. Parent-level requests
+        // race the Paging replacement and the action-panel focus teardown.
+        focusRestoreTargetId = targetId
+        snapshotFlow { observedFocusedRowId }
+            .first { focusedId -> focusedId == targetId }
+        focusRestoreTargetId = null
+        onFocusReturnConsumed()
     }
 
     MuxTvScreenScaffold(
@@ -440,11 +427,16 @@ private fun ManageChannelsContent(
                         Text("Загрузка…")
                     } else {
                         val focusRequester = remember(channel.channelId) { FocusRequester() }
-                        DisposableEffect(channel.channelId, focusRequester) {
-                            rowFocusRequesters[channel.channelId] = focusRequester
-                            onDispose {
-                                if (rowFocusRequesters[channel.channelId] === focusRequester) {
-                                    rowFocusRequesters.remove(channel.channelId)
+                        LaunchedEffect(focusRestoreTargetId == channel.channelId, focusRequester) {
+                            if (focusRestoreTargetId == channel.channelId) {
+                                // Bound retries while this concrete lazy row is
+                                // attached. Never claim success without focus.
+                                repeat(MANAGE_CHANNELS_FOCUS_RESTORE_FRAMES) {
+                                    withFrameNanos { }
+                                    if (observedFocusedRowId == channel.channelId) {
+                                        return@LaunchedEffect
+                                    }
+                                    focusRequester.requestFocus()
                                 }
                             }
                         }

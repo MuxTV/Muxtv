@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -50,6 +51,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +81,7 @@ import app.muxtv.designsystem.component.MuxTvChannelLogo
 import app.muxtv.designsystem.component.MuxTvProgrammeProgress
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
 import app.muxtv.player.PlaybackSessionStateSource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -791,8 +794,54 @@ private fun ChannelRow(
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    var focused by remember(row.channelId) { mutableStateOf(false) }
+    var centerHeld by remember(row.channelId) { mutableStateOf(false) }
+    var centerLongHandled by remember(row.channelId) { mutableStateOf(false) }
+    val latestClick by rememberUpdatedState(onClick)
+    val latestLongClick by rememberUpdatedState(onLongClick)
+    val longPressTimeoutMillis = LocalViewConfiguration.current.longPressTimeoutMillis.toLong()
     val shape = RoundedCornerShape(TvTokens.Shape.rowCorner)
+
+    // Pointer long-click semantics are still provided by combinedClickable,
+    // but TV remote key hold is a separate gesture. Compose's key-click
+    // activation does not guarantee that a held Center delivers OnLongClick.
+    LaunchedEffect(centerHeld, longPressTimeoutMillis) {
+        if (centerHeld && latestLongClick != null) {
+            delay(longPressTimeoutMillis)
+            if (centerHeld && !centerLongHandled) {
+                centerLongHandled = true
+                latestLongClick?.invoke()
+            }
+        }
+    }
+    val centerKeyModifier = if (onLongClick != null) {
+        Modifier.onPreviewKeyEvent { event ->
+            if (event.key != Key.DirectionCenter) {
+                false
+            } else {
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        if (!centerHeld) {
+                            centerLongHandled = false
+                            centerHeld = true
+                        }
+                        true // Repeats cannot trigger duplicate playback.
+                    }
+                    KeyEventType.KeyUp -> {
+                        if (centerHeld) {
+                            val wasLong = centerLongHandled
+                            centerHeld = false
+                            if (!wasLong) latestClick()
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
     val interactionModifier = if (onLongClick == null) {
         Modifier.clickable(role = Role.Button, onClick = onClick)
     } else {
@@ -812,7 +861,11 @@ private fun ChannelRow(
                 color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.borderVariant,
                 shape = shape,
             )
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                if (!state.isFocused) centerHeld = false
+            }
+            .then(centerKeyModifier)
             .then(interactionModifier)
             .focusable()
             .padding(horizontal = TvTokens.Spacing.medium),
