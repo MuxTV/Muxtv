@@ -25,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,8 +57,6 @@ import app.muxtv.designsystem.TvTokens
 import app.muxtv.designsystem.component.MuxTvActionButton
 import app.muxtv.designsystem.component.MuxTvChannelLogo
 import app.muxtv.designsystem.component.MuxTvScreenScaffold
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -250,7 +247,6 @@ private fun ManageChannelsContent(
 ) {
     val listState = rememberLazyListState()
     var observedFocusedRowId by remember(filter) { mutableStateOf<String?>(null) }
-    var focusRestoreTargetId by remember(filter) { mutableStateOf<String?>(null) }
     val allFocusRequester = remember { FocusRequester() }
     val visibleFocusRequester = remember { FocusRequester() }
     val hiddenFocusRequester = remember { FocusRequester() }
@@ -271,50 +267,32 @@ private fun ManageChannelsContent(
         }
     }
 
-    LaunchedEffect(
-        focusReturnRequest,
-        rows,
-        refreshState,
-        appendState,
-        rows.itemCount,
+    // Resolve the stable return identity during composition against the
+    // active Paging snapshot. Paging.peek() is deliberately non-loading and
+    // changes to its returned items need not wake a waiting snapshotFlow.
+    val focusRestoreTarget = if (
+        focusReturnRequest != null && refreshState is LoadState.NotLoading
     ) {
+        focusReturnRequest.anchor.resolveForManagement(
+            loadedKeys = (0 until rows.itemCount).map { index -> rows.peek(index)?.channelId },
+            waitForAnchorRemoval = focusReturnRequest.waitForAnchorRemoval,
+        )
+    } else {
+        null
+    }
+
+    LaunchedEffect(focusReturnRequest, focusRestoreTarget, rows.itemCount, refreshState) {
         val request = focusReturnRequest ?: return@LaunchedEffect
         if (refreshState !is LoadState.NotLoading) return@LaunchedEffect
-
         if (rows.itemCount == 0) {
-            // An asynchronously replacing PagingData may briefly be empty.
-            // Focus the filter as a safe fallback, but preserve the anchor:
-            // the effect reruns when the next page is presented.
+            // Preserve pending focus when a replacement page is empty.
             withFrameNanos { }
             selectedFilterFocusRequester.requestFocus()
             return@LaunchedEffect
         }
-
-        val requestedIndex = request.anchor.previousIndex.coerceIn(0, rows.itemCount - 1)
-        listState.scrollToItem(requestedIndex, request.anchor.scrollOffset)
-
-        val target = snapshotFlow {
-            request.anchor.resolveForManagement(
-                loadedKeys = (0 until rows.itemCount).map { index -> rows.peek(index)?.channelId },
-                waitForAnchorRemoval = request.waitForAnchorRemoval,
-            )?.let { resolved -> resolved.index to resolved.itemKey }
-        }
-            .filterNotNull()
-            .first()
-
-        val (targetIndex, targetId) = target
-        if (targetIndex != requestedIndex) {
-            listState.scrollToItem(targetIndex, request.anchor.scrollOffset)
-        }
-
-        // Let the target row request focus from its own LaunchedEffect
-        // after it is attached to the LazyColumn. Parent-level requests
-        // race the Paging replacement and the action-panel focus teardown.
-        focusRestoreTargetId = targetId
-        snapshotFlow { observedFocusedRowId }
-            .first { focusedId -> focusedId == targetId }
-        focusRestoreTargetId = null
-        onFocusReturnConsumed()
+        val index = focusRestoreTarget?.index
+            ?: request.anchor.previousIndex.coerceIn(0, rows.itemCount - 1)
+        listState.scrollToItem(index, request.anchor.scrollOffset)
     }
 
     MuxTvScreenScaffold(
@@ -427,19 +405,33 @@ private fun ManageChannelsContent(
                         Text("Загрузка…")
                     } else {
                         val focusRequester = remember(channel.channelId) { FocusRequester() }
-                        LaunchedEffect(focusRestoreTargetId == channel.channelId, focusRequester) {
-                            if (focusRestoreTargetId == channel.channelId) {
-                                // Bound retries while this concrete lazy row is
-                                // attached. Never claim success without focus.
+                        LaunchedEffect(
+                            focusRestoreTarget?.itemKey == channel.channelId,
+                            selectedChannel?.channelId,
+                            editor,
+                            focusRequester,
+                        ) {
+                            if (
+                                focusRestoreTarget?.itemKey == channel.channelId &&
+                                selectedChannel == null && editor == null
+                            ) {
+                                // The current LazyColumn row owns its requester.
+                                // Wait for layout and panel teardown, then make
+                                // bounded attempts and verify actual focus.
                                 repeat(MANAGE_CHANNELS_FOCUS_RESTORE_FRAMES) {
                                     withFrameNanos { }
-                                    if (observedFocusedRowId == channel.channelId) {
-                                        return@LaunchedEffect
-                                    }
                                     focusRequester.requestFocus()
+                                    if (observedFocusedRowId == channel.channelId) {
+                                        withFrameNanos { }
+                                        if (observedFocusedRowId == channel.channelId) {
+                                            onFocusReturnConsumed()
+                                            return@LaunchedEffect
+                                        }
+                                    }
                                 }
                             }
                         }
+
                         ManageChannelRow(
                             channel = channel,
                             selected = selectedChannel?.channelId == channel.channelId,

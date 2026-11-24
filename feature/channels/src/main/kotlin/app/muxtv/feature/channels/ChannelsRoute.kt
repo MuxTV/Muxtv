@@ -50,6 +50,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
@@ -831,7 +832,18 @@ private fun ChannelRow(
                         if (centerHeld) {
                             val wasLong = centerLongHandled
                             centerHeld = false
-                            if (!wasLong) latestClick()
+                            if (!wasLong) {
+                                // Preserve long hold semantics on remotes
+                                // whose key-event clock advances independently
+                                // of the Compose coroutine/frame clocks.
+                                val heldMillis = (event.nativeKeyEvent.eventTime -
+                                    event.nativeKeyEvent.downTime).coerceAtLeast(0L)
+                                if (heldMillis >= longPressTimeoutMillis) {
+                                    latestLongClick?.invoke()
+                                } else {
+                                    latestClick()
+                                }
+                            }
                         }
                         true
                     }
@@ -867,7 +879,8 @@ private fun ChannelRow(
             }
             .then(centerKeyModifier)
             .then(interactionModifier)
-            .focusable()
+            // clickable/combinedClickable already creates a focus target.
+            // A second focusable() can divert DPAD key events to another node.
             .padding(horizontal = TvTokens.Spacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
