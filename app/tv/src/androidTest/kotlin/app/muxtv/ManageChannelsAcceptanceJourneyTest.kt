@@ -1,0 +1,336 @@
+package app.muxtv
+
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
+import androidx.paging.PagingData
+import app.muxtv.catalog.ChannelBrowseItem
+import app.muxtv.catalog.ChannelBrowseQuery
+import app.muxtv.catalog.ChannelBrowseRepository
+import app.muxtv.catalog.ChannelFavoriteMutationResult
+import app.muxtv.catalog.ChannelManagementItem
+import app.muxtv.catalog.ChannelManagementQuery
+import app.muxtv.catalog.ChannelManagementVisibility
+import app.muxtv.catalog.ChannelPreferenceMutationResult
+import app.muxtv.catalog.ChannelPreferencesRepository
+import app.muxtv.designsystem.MuxTvTheme
+import app.muxtv.feature.channels.ManageChannelsRoute
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import org.junit.Rule
+import org.junit.Test
+
+class ManageChannelsAcceptanceJourneyTest {
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun hiddenChannelCanBeRecoveredAndFocusFallsBackToNearestPreviousHiddenRow() {
+        val fixture = ManageChannelsFixture(
+            initialRows = listOf(
+                managementChannel(
+                    id = "channel-a",
+                    canonicalName = "Первый",
+                    number = "1",
+                    isHidden = true,
+                ),
+                managementChannel(
+                    id = "channel-b",
+                    canonicalName = "Второй",
+                    number = "2",
+                    isHidden = true,
+                ),
+                managementChannel(
+                    id = "channel-c",
+                    canonicalName = "Третий",
+                    number = "3",
+                    isHidden = false,
+                ),
+            ),
+        )
+
+        composeRule.setContent {
+            MuxTvTheme {
+                ManageChannelsRoute(
+                    channelBrowseRepository = fixture,
+                    channelPreferencesRepository = fixture,
+                    profileId = PROFILE_ID,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("manage-channels-filter-hidden").pressRemoteOk()
+        composeRule.waitUntilTag("manage-channel-row-channel-b")
+        composeRule.onNodeWithTag("manage-channel-row-channel-b").pressRemoteOk()
+        composeRule.onNodeWithText("Показать").assertIsFocused().pressRemoteOk()
+        composeRule.waitForIdle()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("manage-channels-actions").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("manage-channel-row-channel-b").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+
+        composeRule.waitUntilFocused("manage-channel-row-channel-a")
+        composeRule.onNodeWithTag("manage-channel-row-channel-c").assertDoesNotExist()
+    }
+
+    @Test
+    fun renameNumberAndResetRoundTripKeepsFavoriteState() {
+        val fixture = ManageChannelsFixture(
+            initialRows = listOf(
+                managementChannel(
+                    id = "channel-news",
+                    canonicalName = "Новости",
+                    number = "10",
+                    isFavorite = true,
+                ),
+            ),
+        )
+
+        composeRule.setContent {
+            MuxTvTheme {
+                ManageChannelsRoute(
+                    channelBrowseRepository = fixture,
+                    channelPreferencesRepository = fixture,
+                    profileId = PROFILE_ID,
+                )
+            }
+        }
+        composeRule.waitUntilTag("manage-channel-row-channel-news")
+
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Переименовать").pressRemoteOk()
+        composeRule.onNodeWithTag("manage-channels-editor")
+            .assertIsFocused()
+            .performTextClearance()
+        composeRule.onNodeWithTag("manage-channels-editor")
+            .performTextInput("Мои новости")
+        composeRule.onNodeWithText("Сохранить").pressRemoteOk()
+        composeRule.waitForIdle()
+        composeRule.waitUntilText("Мои новости")
+
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Номер").pressRemoteOk()
+        composeRule.onNodeWithTag("manage-channels-editor")
+            .assertIsFocused()
+            .performTextInput("77")
+        composeRule.onNodeWithText("Сохранить").pressRemoteOk()
+        composeRule.waitForIdle()
+        composeRule.waitUntilText("77")
+        composeRule.onNodeWithText("Видим · Избранное · Изменён").assertExists()
+
+        composeRule.onNodeWithTag("manage-channel-row-channel-news").pressRemoteOk()
+        composeRule.onNodeWithText("Сбросить").pressRemoteOk()
+        composeRule.waitForIdle()
+        composeRule.waitUntilText("Новости")
+
+        composeRule.onNodeWithText("10").assertExists()
+        composeRule.onNodeWithText("Видим · Избранное").assertExists()
+        composeRule.onNodeWithText("Изменён", substring = true).assertDoesNotExist()
+        composeRule.waitUntilFocused("manage-channel-row-channel-news")
+    }
+
+    private fun SemanticsNodeInteraction.pressRemoteOk() {
+        // Compose TV buttons activate through focus + remote OK rather than
+        // an unfocused test semantics click.
+        performSemanticsAction(SemanticsActions.RequestFocus)
+        assertIsFocused()
+        performKeyInput {
+            keyDown(Key.Enter)
+            keyUp(Key.Enter)
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilFocused(tag: String) {
+        // Room/Paging and focus restoration settle asynchronously. Still
+        // require a genuine focused semantics node; do not force focus here.
+        try {
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()
+                    ?.config?.getOrNull(SemanticsProperties.Focused) == true
+            }
+        } catch (failure: ComposeTimeoutException) {
+            // ComposeTimeoutException extends Throwable directly, not
+            // Exception; an Exception catch silently misses this failure.
+            // Keep this a hard acceptance failure, but make the actual UI
+            // focus owner visible in hosted Android test logs.
+            throw AssertionError(
+                "Expected focus on $tag. Unmerged semantics:\n" +
+                    onRoot(useUnmergedTree = true).printToString(),
+                failure,
+            )
+        }
+        onNodeWithTag(tag).assertIsFocused()
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilTag(tag: String) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithTag(tag).fetchSemanticsNodes().size == 1
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.waitUntilText(text: String) {
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithText(text, substring = false).fetchSemanticsNodes().isNotEmpty()
+        }
+        waitUntil(timeoutMillis = 5_000) {
+            onAllNodesWithTag("manage-channels-actions").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    private companion object {
+        const val PROFILE_ID = "profile-main"
+    }
+}
+
+private class ManageChannelsFixture(
+    initialRows: List<ChannelManagementItem>,
+) : ChannelBrowseRepository, ChannelPreferencesRepository {
+    private val rows = MutableStateFlow(initialRows)
+
+    override fun pages(query: ChannelBrowseQuery): Flow<PagingData<ChannelBrowseItem>> =
+        flowOf(PagingData.empty())
+
+    override fun managementPages(query: ChannelManagementQuery): Flow<PagingData<ChannelManagementItem>> =
+        rows.map { current ->
+            val filtered = when (query.visibility) {
+                ChannelManagementVisibility.ALL -> current
+                ChannelManagementVisibility.VISIBLE -> current.filterNot { it.isHidden }
+                ChannelManagementVisibility.HIDDEN -> current.filter { it.isHidden }
+            }
+            PagingData.from(filtered)
+        }
+
+    override suspend fun setFavorite(
+        profileId: String,
+        channelId: String,
+        isFavorite: Boolean,
+    ): ChannelFavoriteMutationResult =
+        updateVisible(channelId) { row -> row.copy(isFavorite = isFavorite) }
+            .toFavoriteResult()
+
+    override suspend fun setHidden(
+        profileId: String,
+        channelId: String,
+        isHidden: Boolean,
+    ): ChannelPreferenceMutationResult =
+        update(channelId) { row -> row.copy(isHidden = isHidden) }
+
+    override suspend fun setCustomName(
+        profileId: String,
+        channelId: String,
+        customName: String?,
+    ): ChannelPreferenceMutationResult {
+        val normalized = customName?.trim()
+        if (normalized != null && normalized.isBlank()) return ChannelPreferenceMutationResult.InvalidInput
+        return update(channelId) { row ->
+            row.copy(effectiveDisplayName = normalized ?: row.canonicalDisplayName)
+        }
+    }
+
+    override suspend fun setChannelNumber(
+        profileId: String,
+        channelId: String,
+        channelNumber: Int?,
+    ): ChannelPreferenceMutationResult {
+        if (channelNumber != null && channelNumber !in 1..9999) {
+            return ChannelPreferenceMutationResult.InvalidInput
+        }
+        return update(channelId) { row ->
+            row.copy(
+                customChannelNumber = channelNumber,
+                effectiveChannelNumber = channelNumber?.toString() ?: row.defaultChannelNumber,
+            )
+        }
+    }
+
+    override suspend fun resetCustomization(
+        profileId: String,
+        channelId: String,
+    ): ChannelPreferenceMutationResult =
+        update(channelId) { row ->
+            row.copy(
+                effectiveDisplayName = row.canonicalDisplayName,
+                customChannelNumber = null,
+                effectiveChannelNumber = row.defaultChannelNumber,
+                isHidden = false,
+            )
+        }
+
+    private fun updateVisible(
+        channelId: String,
+        transform: (ChannelManagementItem) -> ChannelManagementItem,
+    ): ChannelPreferenceMutationResult {
+        val current = rows.value
+        val index = current.indexOfFirst { row -> row.channelId == channelId && !row.isHidden }
+        if (index < 0) return ChannelPreferenceMutationResult.NotFound
+        return replaceAt(index, transform)
+    }
+
+    private fun update(
+        channelId: String,
+        transform: (ChannelManagementItem) -> ChannelManagementItem,
+    ): ChannelPreferenceMutationResult {
+        val current = rows.value
+        val index = current.indexOfFirst { row -> row.channelId == channelId }
+        if (index < 0) return ChannelPreferenceMutationResult.NotFound
+        return replaceAt(index, transform)
+    }
+
+    private fun replaceAt(
+        index: Int,
+        transform: (ChannelManagementItem) -> ChannelManagementItem,
+    ): ChannelPreferenceMutationResult {
+        val current = rows.value
+        val before = current[index]
+        val after = transform(before)
+        if (before == after) return ChannelPreferenceMutationResult.Unchanged
+        rows.value = current.toMutableList().also { it[index] = after }
+        return ChannelPreferenceMutationResult.Applied
+    }
+
+    private fun ChannelPreferenceMutationResult.toFavoriteResult(): ChannelFavoriteMutationResult = when (this) {
+        ChannelPreferenceMutationResult.Applied -> ChannelFavoriteMutationResult.Applied
+        ChannelPreferenceMutationResult.Unchanged -> ChannelFavoriteMutationResult.Unchanged
+        ChannelPreferenceMutationResult.NotFound -> ChannelFavoriteMutationResult.NotFound
+        ChannelPreferenceMutationResult.InvalidInput -> ChannelFavoriteMutationResult.NotFound
+    }
+}
+
+private fun managementChannel(
+    id: String,
+    canonicalName: String,
+    number: String,
+    isFavorite: Boolean = false,
+    isHidden: Boolean = false,
+): ChannelManagementItem = ChannelManagementItem(
+    channelId = id,
+    canonicalDisplayName = canonicalName,
+    effectiveDisplayName = canonicalName,
+    defaultChannelNumber = number,
+    customChannelNumber = null,
+    effectiveChannelNumber = number,
+    isFavorite = isFavorite,
+    isHidden = isHidden,
+    variantCount = 1,
+)

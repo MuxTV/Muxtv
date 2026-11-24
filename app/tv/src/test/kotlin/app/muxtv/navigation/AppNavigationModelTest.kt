@@ -20,6 +20,7 @@ class AppNavigationModelTest {
             .inOrder()
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.AddSource)
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.PhonePairing)
+        assertThat(AppDestination.topLevel).doesNotContain(AppDestination.ManageChannels)
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Sources)
         assertThat(AppDestination.topLevel).doesNotContain(AppDestination.Doctor)
         assertThat(AppDestination.topLevel)

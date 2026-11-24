@@ -36,6 +36,7 @@ import app.muxtv.designsystem.component.MuxTvNavigationRail
 import app.muxtv.designsystem.component.MuxTvNavigationRailItem
 import app.muxtv.designsystem.icon.MuxTvIcons
 import app.muxtv.feature.channels.ChannelsRoute
+import app.muxtv.feature.channels.ManageChannelsRoute
 import app.muxtv.feature.doctor.DoctorExportStatus
 import app.muxtv.feature.doctor.DoctorRoute
 import app.muxtv.feature.guide.GuideRoute
@@ -166,12 +167,21 @@ fun AppNavigation(
 
                         AppDestination.Channels -> ChannelsRoute(
                             channelBrowseRepository = channelBrowseRepository,
+                            channelPreferencesRepository = channelPreferencesRepository,
                             epgGuideRepository = epgGuideRepository,
                             playbackSessionStateSource = controllerConnector,
                             profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             onOpenChannel = { channelId ->
                                 open(AppDestination.Player(channelId))
                             },
+                            onManageChannels = { open(AppDestination.ManageChannels) },
+                            railFocusRequester = railFocusRequester,
+                        )
+
+                        AppDestination.ManageChannels -> ManageChannelsRoute(
+                            channelBrowseRepository = channelBrowseRepository,
+                            channelPreferencesRepository = channelPreferencesRepository,
+                            profileId = DatabaseDefaults.PRIMARY_PROFILE_ID,
                             railFocusRequester = railFocusRequester,
                         )
 
@@ -314,6 +324,7 @@ private fun topLevelRailItems(selected: AppDestination): List<MuxTvNavigationRai
 private fun AppDestination.navigationKey(): String = when (this) {
     AppDestination.Home -> "home"
     AppDestination.Channels -> "channels"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "guide"
     AppDestination.Search -> "search"
     AppDestination.Settings -> "settings"
@@ -336,6 +347,7 @@ private fun destinationByRailKey(key: String): AppDestination = when (key) {
 private fun AppDestination.navigationLabel(): String = when (this) {
     AppDestination.Home -> "Главная"
     AppDestination.Channels -> "Эфир"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "Программа"
     AppDestination.Search -> "Поиск"
     AppDestination.Settings -> "Настройки"
@@ -349,6 +361,7 @@ private fun AppDestination.navigationLabel(): String = when (this) {
 private fun AppDestination.navigationIcon() = when (this) {
     AppDestination.Home -> MuxTvIcons.Home
     AppDestination.Channels -> MuxTvIcons.LiveTv
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> MuxTvIcons.Guide
     AppDestination.Search -> MuxTvIcons.Search
     AppDestination.Settings -> MuxTvIcons.Settings
@@ -362,6 +375,7 @@ private fun AppDestination.navigationIcon() = when (this) {
 private fun AppDestination.navigationTestTag(): String = when (this) {
     AppDestination.Home -> "nav-home"
     AppDestination.Channels -> "nav-channels"
+    AppDestination.ManageChannels -> error("ManageChannels is not a top-level destination.")
     AppDestination.Guide -> "nav-guide"
     AppDestination.Search -> "nav-search"
     AppDestination.Settings -> "nav-settings"
@@ -373,6 +387,7 @@ private fun AppDestination.navigationTestTag(): String = when (this) {
 }
 
 private fun AppDestination.topLevelDestination(): AppDestination = when (this) {
+    AppDestination.ManageChannels -> AppDestination.Channels
     AppDestination.Sources, AppDestination.Doctor, AppDestination.AddSource,
     AppDestination.PhonePairing -> AppDestination.Settings
     is AppDestination.Player -> AppDestination.Channels
