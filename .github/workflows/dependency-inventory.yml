@@ -60,6 +60,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/dependencies/normalize.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
+      - name: Query OSV for selected Maven versions
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/dependencies/osv_scan.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
       - name: Upload dependency inventory
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
