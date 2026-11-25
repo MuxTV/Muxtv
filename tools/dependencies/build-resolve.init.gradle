@@ -12,7 +12,9 @@ gradle.projectsEvaluated {
         outputRoot = root.projectDir
         plans = [
             [project: root, file: 'main-root', build: 'main', configs: ['buildscript:classpath']],
-            [project: root.project(':app:tv'), file: 'main-tv', build: 'main', configs: ['buildscript:classpath']]
+            [project: root.project(':app:tv'), file: 'main-tv', build: 'main', configs: ['buildscript:classpath'], processors: true],
+            [project: root.project(':core:database'), file: 'main-database', build: 'main', configs: [], processors: true],
+            [project: root.project(':benchmark:jvm'), file: 'main-jvm-benchmark', build: 'main', configs: ['jmhRuntimeClasspath']]
         ]
     } else if (root.name == 'build-logic') {
         outputRoot = root.projectDir.parentFile
@@ -32,7 +34,16 @@ gradle.projectsEvaluated {
                 def sha = System.getenv('SOURCE_COMMIT')
                 if (!(sha ==~ /[0-9a-f]{40}/)) throw new GradleException('Missing SOURCE_COMMIT')
                 int failures = 0
-                def graphs = plan.configs.collect { name ->
+                def discovered = []
+                if (plan.processors) {
+                    discovered = owner.configurations.findAll {
+                        it.name.startsWith('ksp') && it.name.endsWith('ProcessorClasspath') && it.canBeResolved
+                    }.collect { it.name }.sort()
+                    if (discovered.isEmpty()) {
+                        throw new GradleException("No resolvable KSP processor classpaths in ${owner.path}")
+                    }
+                }
+                def graphs = (plan.configs + discovered).collect { name ->
                     def config = name == 'buildscript:classpath' ?
                         owner.buildscript.configurations.findByName('classpath') :
                         owner.configurations.findByName(name)
@@ -67,7 +78,8 @@ gradle.projectsEvaluated {
                 output.parentFile.mkdirs()
                 output.setText(JsonOutput.prettyPrint(JsonOutput.toJson([
                     schemaVersion: 1, sourceCommit: sha, gradleVersion: version,
-                    scope: 'selected-build-graphs', unresolvedCount: failures, graphs: graphs
+                    scope: 'selected-build-graphs', unresolvedCount: failures,
+                    discoveredProcessorConfigurations: discovered, graphs: graphs
                 ])) + '\n', 'UTF-8')
                 if (failures != 0) throw new GradleException("Unresolved build dependencies: ${failures}")
             }

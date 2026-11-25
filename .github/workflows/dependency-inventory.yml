@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash ./gradlew --no-daemon --no-configuration-cache --console=plain -I tools/dependencies/build-resolve.init.gradle :muxtvBuildDependencyInventory :app:tv:muxtvBuildDependencyInventory
+          bash ./gradlew --no-daemon --no-configuration-cache --console=plain -I tools/dependencies/build-resolve.init.gradle :muxtvBuildDependencyInventory :app:tv:muxtvBuildDependencyInventory :core:database:muxtvBuildDependencyInventory :benchmark:jvm:muxtvBuildDependencyInventory
           bash ./gradlew -p build-logic --no-daemon --no-configuration-cache --console=plain -I "$PWD/tools/dependencies/build-resolve.init.gradle" :convention:muxtvBuildDependencyInventory
       - name: Validate and scan selected build graphs
         timeout-minutes: 12
