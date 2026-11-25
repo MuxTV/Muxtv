@@ -133,7 +133,7 @@ try {
         repository = "MuxTV/Muxtv"
         sourceCommit = $SourceCommit
         plugin = "org.cyclonedx.bom"
-        pluginVersion = "3.4.1"
+        pluginVersion = "3.6.1"
         dependencyConfiguration = "releaseRuntimeClasspath"
         sbomPath = $sbomRelativePath
         sbomSizeBytes = $sbomFile.Length

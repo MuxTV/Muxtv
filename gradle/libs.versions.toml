@@ -40,7 +40,7 @@ ktor = "3.5.1"
 tink = "1.23.0"
 zxing = "3.5.4"
 camera = "1.6.2"
-cyclonedx = "3.4.1"
+cyclonedx = "3.6.1"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }

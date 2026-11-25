@@ -12,7 +12,7 @@ class ReleaseSbomEvidenceContractTest {
     @Test
     fun `alpha release generates bounded direct CycloneDX SBOM evidence`() {
         val versionCatalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
-        assertContains(versionCatalog, "cyclonedx = \"3.4.1\"")
+        assertContains(versionCatalog, "cyclonedx = \"3.6.1\"")
         assertContains(versionCatalog, "id = \"org.cyclonedx.bom\"")
 
         val appBuild = repositoryRoot.resolve("app/tv/build.gradle.kts").readText()
@@ -51,6 +51,7 @@ class ReleaseSbomEvidenceContractTest {
             "Get-FileHash",
             "SHA256",
             "sourceCommit",
+            "pluginVersion = \"3.6.1\"",
             "sbomSha256",
             "release-sbom-evidence.json",
             "cyclonedx-generation.log",
