@@ -13,7 +13,7 @@ class ConventionFilesTest {
     fun `version catalog contains the reviewed dependency pins`() {
         val catalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
         listOf(
-            "agp = \"9.3.0\"",
+            "agp = \"9.3.1\"",
             "kotlin = \"2.4.21\"",
             "ksp = \"2.3.14\"",
             "compose-bom = \"2026.06.00\"",
@@ -32,7 +32,7 @@ class ConventionFilesTest {
     @Test
     fun `included build toolchain agrees with reviewed catalog pins`() {
         val convention = repositoryRoot.resolve("build-logic/convention/build.gradle.kts").readText()
-        assertContains(convention, "implementation(\"com.android.tools.build:gradle:9.3.0\")")
+        assertContains(convention, "implementation(\"com.android.tools.build:gradle:9.3.1\")")
         assertContains(convention, "implementation(\"org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21\")")
     }
 
