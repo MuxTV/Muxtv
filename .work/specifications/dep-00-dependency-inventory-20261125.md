@@ -23,3 +23,7 @@ DEP-00C: verify official supported Gradle/AGP/KGP/KSP matrix and actual stable M
 DEP-01+: isolated compatible toolchain, storage, UI, network and crypto owners. Crypto updates require original QR/F6/EOF/APPDATA negative and positive tests on canonical API26/API36, security review, and orderly #401 integration. No claim of physical device compatibility.
 
 The collector uses Python standard library only (3.11+ for tomllib). The diagnostic Gradle invocation disables configuration cache because it reads resolution results at execution time; production configuration-cache settings remain unchanged. No logs or user IPTV credentials are collected by the inventory. Do not add repository secrets or URLs to its reports.
+
+## RED and correction (2026-11-25)
+
+Run 45563753498 on 9e803bf88a2fc9985a366e4a44de5e03bb0bddd6 passed declared inventory and publication but failed resolution: Gradle 9.5 rejected cross-project configuration access without the owning project's exclusive lock. The replacement registers one task on each application project, writes separate UTF-8 reports, and validates all six graphs in a standalone Python step before writing the combined report. No internal locking API or parallel-build workaround. Negative tests cover missing, stale, duplicate, unresolved and malformed graph evidence. A partial artifact is diagnostic only; the workflow must succeed before DEP-00B consumes it.

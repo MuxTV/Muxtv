@@ -1,4 +1,4 @@
-// Diagnostic-only init script. No production build configuration is modified.
+// Diagnostic-only init script. Resolve configurations only in their owning project's task.
 import groovy.json.JsonOutput
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
@@ -7,19 +7,21 @@ import org.gradle.api.artifacts.result.UnresolvedDependencyResult
 gradle.projectsEvaluated {
     def root = gradle.rootProject
     if (root.name != 'MuxTV') return
-    root.tasks.register('muxtvDependencyInventory') {
-        doLast {
-            def sha = System.getenv('SOURCE_COMMIT')
-            if (!(sha ==~ /[0-9a-f]{40}/)) {
-                throw new GradleException('Missing exact SOURCE_COMMIT')
-            }
-            def reports = []
-            int failures = 0
-            [':app:tv', ':app:phone'].each { path ->
-                def project = root.project(path)
+    [':app:tv', ':app:phone'].each { path ->
+        def owner = root.project(path)
+        def output = root.file(".work/evidence/dependency-inventory/resolved-${owner.name}.json")
+        def version = gradle.gradleVersion
+        owner.tasks.register('muxtvDependencyInventory') {
+            doLast {
+                def sha = System.getenv('SOURCE_COMMIT')
+                if (!(sha ==~ /[0-9a-f]{40}/)) {
+                    throw new GradleException('Missing exact SOURCE_COMMIT')
+                }
+                def reports = []
+                int failures = 0
                 ['releaseRuntimeClasspath', 'debugUnitTestRuntimeClasspath',
                  'debugAndroidTestRuntimeClasspath'].each { name ->
-                    def configuration = project.configurations.findByName(name)
+                    def configuration = owner.configurations.findByName(name)
                     if (configuration == null || !configuration.canBeResolved) {
                         throw new GradleException("Missing resolvable configuration: ${path}:${name}")
                     }
@@ -50,14 +52,13 @@ gradle.projectsEvaluated {
                     }
                     reports << [project: path, configuration: name, components: components, edges: edges]
                 }
+                output.parentFile.mkdirs()
+                output.setText(JsonOutput.prettyPrint(JsonOutput.toJson([
+                    schemaVersion: 1, sourceCommit: sha, gradleVersion: version,
+                    scope: 'selected-app-runtime-graphs', unresolvedCount: failures, graphs: reports
+                ])) + '\n', 'UTF-8')
+                if (failures != 0) throw new GradleException("Unresolved dependencies in ${path}: ${failures}")
             }
-            def out = root.file('.work/evidence/dependency-inventory/resolved-dependencies.json')
-            out.parentFile.mkdirs()
-            out.text = JsonOutput.prettyPrint(JsonOutput.toJson([
-                schemaVersion: 1, sourceCommit: sha, gradleVersion: gradle.gradleVersion,
-                scope: 'selected-app-runtime-graphs', unresolvedCount: failures, graphs: reports
-            ])) + '\n'
-            if (failures != 0) throw new GradleException("Unresolved dependencies: ${failures}")
         }
     }
 }

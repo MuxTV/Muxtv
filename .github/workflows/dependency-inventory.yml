@@ -49,7 +49,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash ./gradlew --no-daemon --no-configuration-cache --console=plain -I tools/dependencies/resolve.init.gradle muxtvDependencyInventory
+          bash ./gradlew --no-daemon --no-configuration-cache --console=plain -I tools/dependencies/resolve.init.gradle :app:tv:muxtvDependencyInventory :app:phone:muxtvDependencyInventory
+      - name: Validate and combine six exact-source graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/dependencies/verify_resolved.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
       - name: Upload dependency inventory
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry
