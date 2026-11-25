@@ -29,7 +29,7 @@ concurrency:
 jobs:
   inventory:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 65
     env:
       SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       PYTHONDONTWRITEBYTECODE: '1'
@@ -84,6 +84,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/dependencies/build_inventory.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
+      - name: Enrich advisories and selected dependency paths
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/dependencies/advisory_review.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
       - name: Upload dependency inventory
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry

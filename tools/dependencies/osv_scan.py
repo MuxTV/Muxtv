@@ -41,6 +41,11 @@ def fetch_batch(queries):
     request = Request(URL, data=json.dumps({"queries": queries}).encode("utf-8"),
                       headers={"Content-Type": "application/json", "Accept": "application/json"},
                       method="POST")
+    return fetch_json(request)
+
+
+def fetch_json(request):
+    """Shared bounded HTTPS transport for OSV batch and detail requests."""
     for attempt in range(MAX_ATTEMPTS):
         try:
             with build_opener(NoRedirect()).open(request, timeout=TIMEOUT) as response:
