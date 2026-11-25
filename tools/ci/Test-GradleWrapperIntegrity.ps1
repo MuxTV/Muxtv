@@ -27,14 +27,14 @@ try {
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $sourceDir "gradle-wrapper.jar") -Destination $jar
     $utf8 = [Text.UTF8Encoding]::new($false)
-    [IO.File]::WriteAllText($properties, $original, $utf8)
-    & $guard -RepositoryRoot $fixture
     $lf = $original.Replace("`r`n", "`n")
+    [IO.File]::WriteAllText($properties, $lf, $utf8)
+    & $guard -RepositoryRoot $fixture
     [IO.File]::WriteAllText($properties, $lf.Replace("`n", "`r`n"), $utf8)
     & $guard -RepositoryRoot $fixture
     $mutations = [ordered]@{
         missingChecksum = ($original -replace '(?m)^distributionSha256Sum=.*\r?\n', '')
-        wrongChecksum = ($original -replace '(?m)(distributionSha256Sum=)[0-9a-f]{64}', ('$1' + ('0' * 64)))
+        wrongChecksum = ($original -replace '(?m)^distributionSha256Sum=[0-9a-f]{64}', ('distributionSha256Sum=' + ('0' * 64)))
         wrongUrl = $original.Replace('services.gradle.org', 'example.invalid')
         duplicate = ($original + "`ndistributionUrl=https\://example.invalid/other.zip`n")
         escapedKey = $original.Replace('distributionUrl=', 'distribution\u0055rl=')
