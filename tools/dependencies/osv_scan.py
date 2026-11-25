@@ -196,6 +196,10 @@ def main():
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("OSV scan", result["scanStatus"], json.dumps(result["counts"], sort_keys=True))
     print("Distinct OSV IDs:", len(result["distinctAdvisoryIds"]))
+    for row in result["packages"]:
+        for advisory in row["advisories"]:
+            print("Runtime OSV match", row["purl"], advisory["id"],
+                  "releaseRuntime=" + str(row["inAnyReleaseRuntime"]))
     if result["scanStatus"] != "COMPLETE":
         raise SystemExit(1)
 
