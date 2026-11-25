@@ -12,6 +12,7 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
 }
 
 $scriptDirectory = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDirectory "CycloneDxMetadataWarnings.ps1")
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $scriptDirectory "..\..")).Path
 $sbomPath = Join-Path $repositoryRoot "app\tv\build\reports\sbom\muxtv-tv-release.cdx.json"
 $evidenceDirectory = Join-Path $repositoryRoot ".work\evidence\release-sbom"
@@ -40,17 +41,7 @@ try {
         throw "CycloneDX releaseRuntimeClasspath SBOM generation failed."
     }
 
-    $metadataResolutionWarnings = @(
-        $generationOutput |
-            ForEach-Object {
-                $line = [string]$_
-                $match = [regex]::Match($line, 'Unable to resolve POM for\s+(?<coordinate>[^\s]+)')
-                if ($match.Success) {
-                    $match.Groups['coordinate'].Value
-                }
-            } |
-            Sort-Object -Unique
-    )
+    $metadataResolutionWarnings = @(Get-CycloneDxMetadataWarningCoordinates -Lines $generationOutput)
 
     if (-not (Test-Path -LiteralPath $sbomPath -PathType Leaf)) {
         throw "Expected release SBOM was not generated: app/tv/build/reports/sbom/muxtv-tv-release.cdx.json"
@@ -93,24 +84,8 @@ try {
         throw "Release SBOM contains no dependency graph nodes."
     }
 
+    Assert-CycloneDxWarnedComponentsPresent -Coordinates $metadataResolutionWarnings -Components $components
     $metadataResolutionWarningComponentsPresent = $true
-    foreach ($coordinate in $metadataResolutionWarnings) {
-        $parts = @($coordinate -split ':', 3)
-        if ($parts.Count -ne 3) {
-            throw "CycloneDX reported an unparseable POM metadata warning coordinate: $coordinate"
-        }
-        $matchingComponents = @(
-            $components | Where-Object {
-                [string]$_.group -ceq $parts[0] -and
-                [string]$_.name -ceq $parts[1] -and
-                [string]$_.version -ceq $parts[2]
-            }
-        )
-        if ($matchingComponents.Count -lt 1) {
-            $metadataResolutionWarningComponentsPresent = $false
-            throw "CycloneDX metadata enrichment failed and the warned component is absent from the SBOM graph: $coordinate"
-        }
-    }
 
     $forbiddenDependencyFragments = @(
         "pkg:maven/junit/junit@",
