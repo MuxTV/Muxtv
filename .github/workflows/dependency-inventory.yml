@@ -1,0 +1,60 @@
+name: Dependency inventory evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.gradle.kts'
+      - '**/*.gradle'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - 'tools/dependencies/**'
+      - 'tools/local-control/browser-probe/package*.json'
+      - '.work/meta/dependencies.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: dependency-inventory-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          persist-credentials: false
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Test and collect declared inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/dependencies -p 'test_*.py'
+          rm -rf .work/evidence/dependency-inventory
+          python3 tools/dependencies/inventory.py --source-commit "$SOURCE_COMMIT" --output .work/evidence/dependency-inventory/declared-versions.json
+      - name: Resolve TV and phone runtime graphs
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./gradlew --no-daemon --no-configuration-cache --console=plain -I tools/dependencies/resolve.init.gradle muxtvDependencyInventory
+      - name: Upload dependency inventory
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: dependency-inventory-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .work/evidence/dependency-inventory/**
+          retention-days: 7
+          github-token: ${{ github.token }}
