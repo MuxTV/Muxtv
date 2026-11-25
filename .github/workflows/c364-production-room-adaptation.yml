@@ -198,6 +198,7 @@ jobs:
           path: |
             .work/evidence/c364-canonical/**
             core/database/build/outputs/androidTest-results/**
+            core/database/build/outputs/connected_android_test_additional_output/**
           retention-days: 14
           github-token: ${{ github.token }}
 

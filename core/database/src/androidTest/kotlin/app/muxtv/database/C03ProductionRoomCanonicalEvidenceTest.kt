@@ -162,7 +162,7 @@ class C03ProductionRoomCanonicalEvidenceTest {
             C03ProductionRoomHostedTransport.ARGUMENT,
         )
         if (hostedTransport == C03ProductionRoomHostedTransport.VERSION) {
-            C03ProductionRoomHostedTransport.publish(report.sourceCommit, output.toByteArray())
+            C03ProductionRoomHostedTransport.publish(report.sourceCommit, "canonical", output.toByteArray())
         } else {
             require(hostedTransport == null) { "Unsupported C364 hosted report transport." }
             instrumentation.addResults(

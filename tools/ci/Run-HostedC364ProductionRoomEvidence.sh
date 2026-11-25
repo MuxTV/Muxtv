@@ -17,25 +17,28 @@ fi
 mkdir -p "$MUXTV_EVIDENCE_DIR"
 chmod +x ./gradlew
 RESULT_ROOT="core/database/build/outputs/androidTest-results/connected/debug"
+ADDITIONAL_ROOT="core/database/build/outputs/connected_android_test_additional_output"
 test "$(git rev-parse HEAD)" = "$MUXTV_SOURCE_COMMIT"
 REPORT_PATH="$MUXTV_EVIDENCE_DIR/c03-production-room-canonical.json"
 test ! -e "$REPORT_PATH"
 test ! -e "$MUXTV_EVIDENCE_DIR/transport-probe.json"
 
-# Exercise the actual AGP per-test logcat transport before the expensive matrix.
-rm -rf "$RESULT_ROOT"
+# Exercise the AGP additional test output transport before the expensive matrix.
+rm -rf "$RESULT_ROOT" "$ADDITIONAL_ROOT"
 ./gradlew \
   :core:database:connectedDebugAndroidTest \
   --no-daemon --stacktrace --console=plain --no-problems-report \
+  -Pandroid.enableAdditionalTestOutput=true \
   -PcatalogMeasurements=true \
   -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.C03ProductionRoomTransportProbeTest \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomSourceCommit="$MUXTV_SOURCE_COMMIT" \
-  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=logcat-v1
-python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --mode probe \
+  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=additional-output-v1
+python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --additional-output "$ADDITIONAL_ROOT" --mode probe \
   --source-commit "$MUXTV_SOURCE_COMMIT" --output "$MUXTV_EVIDENCE_DIR/transport-probe.json"
 # Preserve the probe's original Android results before starting the canonical test.
 cp -a "$RESULT_ROOT" "$MUXTV_EVIDENCE_DIR/transport-probe-results"
-rm -rf "$RESULT_ROOT"
+cp -a "$ADDITIONAL_ROOT" "$MUXTV_EVIDENCE_DIR/transport-probe-additional-output"
+rm -rf "$RESULT_ROOT" "$ADDITIONAL_ROOT"
 
 ./gradlew \
   :core:database:connectedDebugAndroidTest \
@@ -43,16 +46,17 @@ rm -rf "$RESULT_ROOT"
   --stacktrace \
   --console=plain \
   --no-problems-report \
+  -Pandroid.enableAdditionalTestOutput=true \
   -PcatalogMeasurements=true \
   -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.C03ProductionRoomCanonicalEvidenceTest \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomSourceCommit="$MUXTV_SOURCE_COMMIT" \
-  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=logcat-v1 \
+  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=additional-output-v1 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomWarmups=1 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomIterations=5 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomEntryCount=10000 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomOutputName=c03-production-room-canonical.json
 
-python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --mode canonical \
+python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --additional-output "$ADDITIONAL_ROOT" --mode canonical \
   --source-commit "$MUXTV_SOURCE_COMMIT" --output "$REPORT_PATH"
 
 python3 - "$REPORT_PATH" "$MUXTV_SOURCE_COMMIT" <<'PY'
