@@ -13,6 +13,10 @@ on:
       - 'player/api/**'
       - 'player/media3/**'
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
+      - 'tools/ci/*GradleWrapperIntegrity.ps1'
+      - 'gradle/wrapper/**'
+      - 'gradlew'
+      - 'gradlew.bat'
       - 'tools/ci/Test-RiskBasedDeviceLaneContract.ps1'
       - 'tools/ci/Test-TvU1FocusedProfileContract.ps1'
       - 'tools/ci/Test-AndroidTestResultsContract.ps1'
@@ -77,6 +81,10 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File .\tools\ci\Test-PlayerStablePortContract.ps1
+
+      - name: Verify Gradle wrapper integrity contract
+        shell: pwsh
+        run: pwsh -NoProfile -File .\tools\ci\Test-GradleWrapperIntegrity.ps1
 
       - name: Verify GitHub-hosted workflow contract
         shell: pwsh

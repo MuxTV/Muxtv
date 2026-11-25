@@ -132,6 +132,7 @@ if (-not (Test-Path -LiteralPath $jdkActionPath -PathType Leaf)) {
 } else {
     $jdkAction = Get-Content -LiteralPath $jdkActionPath -Raw
     foreach ($requiredToken in @(
+        'Assert-GradleWrapperIntegrity.ps1',
         'actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961',
         "java-version: '17'",
         'set-default: false',

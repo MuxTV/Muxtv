@@ -4,6 +4,11 @@ description: Install the Gradle runtime JDK and the Java 17 build-logic toolchai
 runs:
   using: composite
   steps:
+    - name: Verify Gradle Wrapper before execution
+      shell: pwsh
+      run: |
+        & "$env:GITHUB_WORKSPACE/tools/ci/Assert-GradleWrapperIntegrity.ps1" -RepositoryRoot $env:GITHUB_WORKSPACE
+
     - name: Install Temurin JDK 17 toolchain
       uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
       with:

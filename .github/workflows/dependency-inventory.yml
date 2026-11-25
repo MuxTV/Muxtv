@@ -11,6 +11,9 @@ on:
       - '.github/workflows/**'
       - '.github/actions/**'
       - 'tools/dependencies/**'
+      - 'tools/ci/*GradleWrapperIntegrity.ps1'
+      - 'gradlew'
+      - 'gradlew.bat'
       - 'tools/local-control/browser-probe/package*.json'
       - '.work/meta/dependencies.yaml'
   workflow_dispatch:
@@ -38,6 +41,9 @@ jobs:
           persist-credentials: false
       - name: Set up MuxTV JDK toolchains
         uses: ./.github/actions/setup-muxtv-jdks
+      - name: Verify wrapper integrity negative cases
+        shell: pwsh
+        run: ./tools/ci/Test-GradleWrapperIntegrity.ps1
       - name: Test and collect declared inventory
         shell: bash
         run: |
