@@ -158,14 +158,22 @@ class C03ProductionRoomCanonicalEvidenceTest {
         assertThat(json).doesNotContain("token=")
         assertThat(json).doesNotContain("session=")
 
-        instrumentation.addResults(
-            Bundle().apply {
-                putString(
-                    RESULT_REPORT_BASE64,
-                    Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP),
-                )
-            },
+        val hostedTransport = InstrumentationRegistry.getArguments().getString(
+            C03ProductionRoomHostedTransport.ARGUMENT,
         )
+        if (hostedTransport == C03ProductionRoomHostedTransport.VERSION) {
+            C03ProductionRoomHostedTransport.publish(report.sourceCommit, output.toByteArray())
+        } else {
+            require(hostedTransport == null) { "Unsupported C364 hosted report transport." }
+            instrumentation.addResults(
+                Bundle().apply {
+                    putString(
+                        RESULT_REPORT_BASE64,
+                        Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP),
+                    )
+                },
+            )
+        }
     }
 
     companion object {

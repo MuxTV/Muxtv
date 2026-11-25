@@ -16,7 +16,26 @@ fi
 
 mkdir -p "$MUXTV_EVIDENCE_DIR"
 chmod +x ./gradlew
-rm -rf core/database/build/outputs/androidTest-results/connected/debug
+RESULT_ROOT="core/database/build/outputs/androidTest-results/connected/debug"
+test "$(git rev-parse HEAD)" = "$MUXTV_SOURCE_COMMIT"
+REPORT_PATH="$MUXTV_EVIDENCE_DIR/c03-production-room-canonical.json"
+test ! -e "$REPORT_PATH"
+test ! -e "$MUXTV_EVIDENCE_DIR/transport-probe.json"
+
+# Exercise the actual AGP per-test logcat transport before the expensive matrix.
+rm -rf "$RESULT_ROOT"
+./gradlew \
+  :core:database:connectedDebugAndroidTest \
+  --no-daemon --stacktrace --console=plain --no-problems-report \
+  -PcatalogMeasurements=true \
+  -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.C03ProductionRoomTransportProbeTest \
+  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomSourceCommit="$MUXTV_SOURCE_COMMIT" \
+  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=logcat-v1
+python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --mode probe \
+  --source-commit "$MUXTV_SOURCE_COMMIT" --output "$MUXTV_EVIDENCE_DIR/transport-probe.json"
+# Preserve the probe's original Android results before starting the canonical test.
+cp -a "$RESULT_ROOT" "$MUXTV_EVIDENCE_DIR/transport-probe-results"
+rm -rf "$RESULT_ROOT"
 
 ./gradlew \
   :core:database:connectedDebugAndroidTest \
@@ -27,27 +46,14 @@ rm -rf core/database/build/outputs/androidTest-results/connected/debug
   -PcatalogMeasurements=true \
   -Pandroid.testInstrumentationRunnerArguments.class=app.muxtv.database.C03ProductionRoomCanonicalEvidenceTest \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomSourceCommit="$MUXTV_SOURCE_COMMIT" \
+  -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomHostedTransport=logcat-v1 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomWarmups=1 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomIterations=5 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomEntryCount=10000 \
   -Pandroid.testInstrumentationRunnerArguments.c03ProductionRoomOutputName=c03-production-room-canonical.json
 
-RESULT_ROOT="core/database/build/outputs/androidTest-results/connected/debug"
-mapfile -t TEST_LOGS < <(find "$RESULT_ROOT" -type f -name test-results.log | sort)
-if (( ${#TEST_LOGS[@]} != 1 )); then
-  echo "Expected exactly one C364 test-results.log, found ${#TEST_LOGS[@]}." >&2
-  exit 1
-fi
-
-RESULT_PREFIX="INSTRUMENTATION_RESULT: c03ProductionRoomEvidenceReportBase64="
-ENCODED="$(grep -F "$RESULT_PREFIX" "${TEST_LOGS[0]}" | tail -n 1 | sed "s/^.*${RESULT_PREFIX}//")"
-if [[ -z "$ENCODED" ]]; then
-  echo "C364 instrumentation result payload is missing." >&2
-  exit 1
-fi
-
-REPORT_PATH="$MUXTV_EVIDENCE_DIR/c03-production-room-canonical.json"
-printf '%s' "$ENCODED" | base64 --decode > "$REPORT_PATH"
+python3 tools/ci/c364_report_transport.py --root "$RESULT_ROOT" --mode canonical \
+  --source-commit "$MUXTV_SOURCE_COMMIT" --output "$REPORT_PATH"
 
 python3 - "$REPORT_PATH" "$MUXTV_SOURCE_COMMIT" <<'PY'
 import json
@@ -80,6 +86,7 @@ require(report.get("batchSize") == 250, "C364 batch-size contract mismatch.")
 require(report.get("browsePageSize") == 64, "C364 browse page-size contract mismatch.")
 require(report.get("browseOffset") == 0, "C364 browse offset contract mismatch.")
 environment = report.get("environment", {})
+require(environment.get("apiLevel") == 36, "C364 environment API must be 36.")
 require(
     isinstance(environment.get("fingerprintSha256"), str) and len(environment["fingerprintSha256"]) == 64,
     "C364 environment fingerprint is missing.",
