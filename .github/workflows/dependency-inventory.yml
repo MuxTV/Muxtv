@@ -55,6 +55,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/dependencies/verify_resolved.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
+      - name: Normalize selected Maven packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/dependencies/normalize.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/dependency-inventory
       - name: Upload dependency inventory
         if: always()
         uses: ./.github/actions/upload-evidence-with-retry

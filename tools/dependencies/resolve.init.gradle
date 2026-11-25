@@ -50,7 +50,8 @@ gradle.projectsEvaluated {
                     if (!components.any { it.kind == 'module' } || edges.isEmpty()) {
                         throw new GradleException("Empty dependency graph: ${path}:${name}")
                     }
-                    reports << [project: path, configuration: name, components: components, edges: edges]
+                    reports << [project: path, configuration: name, rootComponent: graph.rootComponent.get().id.displayName,
+                                components: components, edges: edges]
                 }
                 output.parentFile.mkdirs()
                 output.setText(JsonOutput.prettyPrint(JsonOutput.toJson([

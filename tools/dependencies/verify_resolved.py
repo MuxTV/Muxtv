@@ -56,6 +56,8 @@ def combine(declared, reports, expected):
                             f"{app}/{name}: missing module coordinates")
                     modules += 1
             require(modules > 0 and bool(graph["edges"]), f"{app}/{name}: empty graph")
+            require(any(c["id"] == graph.get("rootComponent") and c["kind"] == "other"
+                        for c in graph["components"]), f"{app}/{name}: invalid root component")
             for edge in graph["edges"]:
                 require(not edge.get("unresolved", False)
                         and edge.get("from") in ids and edge.get("selected") in ids

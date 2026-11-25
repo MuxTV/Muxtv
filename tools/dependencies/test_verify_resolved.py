@@ -15,7 +15,7 @@ def fixture():
             "schemaVersion": 1, "scope": "selected-app-runtime-graphs",
             "sourceCommit": SHA, "gradleVersion": "9.5.0", "unresolvedCount": 0,
             "graphs": [
-                {"project": project, "configuration": name,
+                {"project": project, "configuration": name, "rootComponent": project,
                  "components": [{"kind": "other", "id": project},
                                 {"kind": "module", "id": "g:n:1", "group": "g", "name": "n", "version": "1"}],
                  "edges": [{"from": project, "requested": "g:n:1", "selected": "g:n:1",
