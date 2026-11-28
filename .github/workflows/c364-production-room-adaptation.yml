@@ -5,6 +5,14 @@ on:
     branches:
       - main
     paths:
+      - 'gradle/libs.versions.toml'
+      - 'gradle/wrapper/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'gradle.properties'
+      - 'build-logic/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
       - 'catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/CatalogEntryIdentityFactory.kt'
       - 'catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/CatalogEntryPayloadFingerprint.kt'
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/C03Production**'

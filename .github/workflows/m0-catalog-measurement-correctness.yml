@@ -5,6 +5,14 @@ on:
     branches:
       - main
     paths:
+      - 'gradle/libs.versions.toml'
+      - 'gradle/wrapper/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'gradle.properties'
+      - 'build-logic/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/**'
       - 'core/database/src/androidTest/kotlin/app/muxtv/database/CatalogDatabaseMeasurementCorrectnessTest.kt'
       - 'core/database/src/test/kotlin/app/muxtv/database/measurement/**'
