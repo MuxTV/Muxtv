@@ -5,6 +5,14 @@ on:
     branches:
       - main
     paths:
+      - 'gradle/libs.versions.toml'
+      - 'gradle/wrapper/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'gradle.properties'
+      - 'build-logic/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
       - 'catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/CatalogEntryIdentityFactory.kt'
       - 'catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/CatalogEntryPayloadFingerprint.kt'
       - 'core/database/src/debug/kotlin/app/muxtv/database/measurement/C03Production**'
@@ -12,6 +20,8 @@ on:
       - 'tools/ci/Test-GitHubHostedWorkflowContract.ps1'
       - 'tools/ci/Run-HostedC364ProductionRoomSmoke.sh'
       - 'tools/ci/Run-HostedC364ProductionRoomEvidence.sh'
+      - 'tools/ci/c364_report_transport.py'
+      - 'tools/ci/test_c364_report_transport.py'
       - '.github/workflows/c364-production-room-adaptation.yml'
   workflow_dispatch:
 
@@ -46,6 +56,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Verify C364 report transport fixtures
+        shell: bash
+        run: python3 -m unittest discover -s tools/ci -p 'test_c364_report_transport.py'
 
       - name: Compile C364 production Room contracts
         shell: bash
@@ -192,6 +206,7 @@ jobs:
           path: |
             .work/evidence/c364-canonical/**
             core/database/build/outputs/androidTest-results/**
+            core/database/build/outputs/connected_android_test_additional_output/**
           retention-days: 14
           github-token: ${{ github.token }}
 

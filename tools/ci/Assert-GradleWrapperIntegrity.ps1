@@ -6,15 +6,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Independently published Gradle 9.9.2 checksums:
+# Independently published Gradle 9.9.3 checksums:
 # https://gradle.org/release-checksums/
 # Update these reviewed pins together with the wrapper in a toolchain PR.
-$distributionSha256 = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b'
+$distributionSha256 = '4f2135b741f272acc88c168a52202a0a63fceee0cd61ee753da79694cd2b1e4b'
 $wrapperJarSha256 = '621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8'
 $expected = @(
     'distributionBase=GRADLE_USER_HOME'
     'distributionPath=wrapper/dists'
-    'distributionUrl=https\://services.gradle.org/distributions/gradle-9.9.2-bin.zip'
+    'distributionUrl=https\://services.gradle.org/distributions/gradle-9.9.3-bin.zip'
     "distributionSha256Sum=$distributionSha256"
     'networkTimeout=10000'
     'retries=0'
@@ -62,4 +62,4 @@ $actualJar = (Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash.ToLowerInva
 if ($actualJar -cne $wrapperJarSha256) {
     throw "Wrapper integrity: JAR SHA-256 mismatch"
 }
-Write-Host "Gradle wrapper integrity PASS: version=9.9.2; jarSha256=$actualJar; distributionSha256=$distributionSha256"
+Write-Host "Gradle wrapper integrity PASS: version=9.9.3; jarSha256=$actualJar; distributionSha256=$distributionSha256"

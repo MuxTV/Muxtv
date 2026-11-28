@@ -5,6 +5,14 @@ on:
     branches:
       - main
     paths:
+      - 'gradle/libs.versions.toml'
+      - 'gradle/wrapper/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'gradle.properties'
+      - 'build-logic/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
       - catalog/importer/src/main/kotlin/app/muxtv/catalog/importer/EpgRevisionImporter.kt
       - catalog/importer/src/androidTest/**
       - core/database/src/main/kotlin/app/muxtv/database/**
