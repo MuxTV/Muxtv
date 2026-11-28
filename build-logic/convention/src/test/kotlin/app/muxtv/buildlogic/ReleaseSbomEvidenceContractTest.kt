@@ -12,7 +12,7 @@ class ReleaseSbomEvidenceContractTest {
     @Test
     fun `alpha release generates bounded direct CycloneDX SBOM evidence`() {
         val versionCatalog = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
-        assertContains(versionCatalog, "cyclonedx = \"3.4.1\"")
+        assertContains(versionCatalog, "cyclonedx = \"3.6.1\"")
         assertContains(versionCatalog, "id = \"org.cyclonedx.bom\"")
 
         val appBuild = repositoryRoot.resolve("app/tv/build.gradle.kts").readText()
@@ -51,10 +51,13 @@ class ReleaseSbomEvidenceContractTest {
             "Get-FileHash",
             "SHA256",
             "sourceCommit",
+            "pluginVersion = \"3.6.1\"",
             "sbomSha256",
             "release-sbom-evidence.json",
             "cyclonedx-generation.log",
-            "Unable to resolve POM for",
+            "CycloneDxMetadataWarnings.ps1",
+            "Get-CycloneDxMetadataWarningCoordinates",
+            "Assert-CycloneDxWarnedComponentsPresent",
             "metadataResolutionWarningCount",
             "metadataResolutionWarnings",
             "metadataResolutionWarningComponentsPresent",
@@ -76,6 +79,7 @@ class ReleaseSbomEvidenceContractTest {
             "persist-credentials: false",
             "uses: ./.github/actions/setup-muxtv-jdks",
             "Invoke-ReleaseSbomEvidence.ps1",
+            "Test-CycloneDxMetadataWarnings.ps1",
             "uses: ./.github/actions/upload-evidence-with-retry",
             ".work/evidence/release-sbom/**",
             "app/tv/build/reports/sbom/**",

@@ -12,7 +12,7 @@ class R8AnalyzerEvidenceContractTest {
     @Test
     fun `alpha release archives exact-head R8 configuration analyzer evidence`() {
         val versions = repositoryRoot.resolve("gradle/libs.versions.toml").readText()
-        assertContains(versions, "agp = \"9.3.0\"")
+        assertContains(versions, "agp = \"9.5.1\"")
 
         val script = repositoryRoot.resolve("tools/release/Invoke-R8ConfigAnalyzerEvidence.ps1")
         assertTrue(script.isFile, "Missing release R8 Configuration Analyzer evidence entry point.")
