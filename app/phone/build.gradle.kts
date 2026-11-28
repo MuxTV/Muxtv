@@ -17,6 +17,10 @@ dependencies {
     implementation(project(":local-control:enrollment"))
     implementation(project(":local-control:phone-flow"))
     implementation(project(":local-control:native-transport"))
+    implementation(project(":local-control:mxh1-lan"))
+    // Reply-code vocabulary, no catalog/onboarding or legacy HTTP source authority.
+    implementation(project(":local-control:source-command-wire"))
+    implementation(project(":local-control:mxh1-session-lab"))
     implementation(libs.activity.compose)
     implementation(libs.camera.camera2)
     implementation(libs.camera.lifecycle)
@@ -24,6 +28,12 @@ dependencies {
     implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    // Only for an on-emulator, REAL selected-Network/TV-owner six-frame test.
+    androidTestImplementation(project(":local-control:tv-qr"))
+    // On-device original-F6 APPDATA: fake catalogue port only, never prod TV authority.
+    androidTestImplementation(project(":local-control:onboarding"))
+    androidTestImplementation(project(":catalog:api"))
+    androidTestImplementation(project(":local-control:source-command-wire"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)

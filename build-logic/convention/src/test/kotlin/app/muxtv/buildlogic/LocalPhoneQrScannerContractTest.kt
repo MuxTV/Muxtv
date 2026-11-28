@@ -22,13 +22,21 @@ class LocalPhoneQrScannerContractTest {
         assertContains(app, "libs.camera.view")
         assertContains(app, """implementation(project(":local-control:phone-flow"))""")
         assertContains(app, """implementation(project(":local-control:native-transport"))""")
+        // E2 uses a fake catalogue backend in androidTest only. Check
+        // RUNTIME dependencies, not the whole file including test fixtures.
+        val runtime = app.lineSequence().map { it.trimStart() }
+            .filter { it.startsWith("implementation(") }.joinToString("\n")
         for (prohibited in listOf(
             """:local-control:crypto-lab""", """:local-control:server""",
-            """:local-control:onboarding""", """:core:credentials""",
-            """:core:network""", "libs.okhttp", "libs.ktor",
+            """:local-control:onboarding""", """:catalog:api""",
+            """:core:credentials""", """:core:network""",
+            "libs.okhttp", "libs.ktor",
         )) {
-            assertFalse(app.contains(prohibited), "Unexpected phone runtime dependency: $prohibited")
+            assertFalse(runtime.contains(prohibited),
+                "Unexpected phone RUNTIME dependency: $prohibited")
         }
+        assertContains(runtime, """:local-control:source-command-wire""")
+        assertContains(app, """androidTestImplementation(project(":local-control:onboarding"))""")
         val manifest = root.resolve("app/phone/src/main/AndroidManifest.xml").readText()
         assertContains(manifest, """android.permission.CAMERA""")
         for (required in listOf("INTERNET", "ACCESS_NETWORK_STATE", "ACCESS_LOCAL_NETWORK")) {

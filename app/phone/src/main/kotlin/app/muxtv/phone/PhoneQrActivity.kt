@@ -34,7 +34,8 @@ import java.util.concurrent.atomic.AtomicLong
  * QR-pinned phone companion. The camera never opens a network connection.
  * A separate explicit button may start ONLY the native one-shot proof path
  * after scanning the actual TV key and passing the Android LAN permission gate.
- * No browser, provider fields, credentials, legacy /pair or persisted grant.
+ * No browser, legacy /pair or persisted grant. The explicit protected-source
+ * mode accepts an ephemeral HTTPS M3U URL, sent ONLY inside F6-bound AEAD.
  */
 class PhoneQrActivity : ComponentActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -52,6 +53,17 @@ class PhoneQrActivity : ComponentActivity() {
     private lateinit var portInput: EditText
     private lateinit var startNativeButton: Button
     private lateinit var verifyNativeButton: Button
+    private lateinit var mxh1PortInput: EditText
+    private lateinit var mxh1Button: Button
+    private lateinit var sourceHandshakeButton: Button
+    private lateinit var sourcePanel: LinearLayout
+    private lateinit var sourcePortInput: EditText
+    private lateinit var m3uInput: EditText
+    private lateinit var sourceNameInput: EditText
+    private lateinit var prepareButton: Button
+    private lateinit var activateButton: Button
+    private lateinit var confirmButton: Button
+    private lateinit var cancelSourceButton: Button
 
     private lateinit var preview: PreviewView
     private lateinit var status: TextView
@@ -179,6 +191,89 @@ class PhoneQrActivity : ComponentActivity() {
         nativePanel.addView(portInput)
         nativePanel.addView(startNativeButton)
         nativePanel.addView(verifyNativeButton)
+        mxh1PortInput = EditText(this).apply {
+            setSingleLine(true)
+            hint = getString(R.string.scan_mxh1_port)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(5))
+            visibility = View.GONE
+        }
+        mxh1Button = Button(this).apply {
+            tag = "lc04-phone-mxh1-second-opt-in"
+            setText(R.string.scan_mxh1_start)
+            visibility = View.GONE
+            setOnClickListener { startMxH1FromGesture() }
+        }
+        nativePanel.addView(mxh1PortInput)
+        nativePanel.addView(mxh1Button)
+        sourceHandshakeButton = Button(this).apply {
+            tag = "lc04-phone-source-mxh1-opt-in"
+            text = "Передать M3U: проверить защищённый канал"
+            visibility = View.GONE
+            setOnClickListener { beginSourceHandshakeFromGesture() }
+        }
+        nativePanel.addView(sourceHandshakeButton)
+        sourcePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            tag = "lc04-phone-source-appdata-panel"
+            visibility = View.GONE
+        }
+        sourcePanel.addView(TextView(this).apply {
+            text = "После F6 откройте APPDATA на ТВ и введите показанный порт. " +
+                "Ссылка M3U передаётся только зашифрованной."
+        })
+        sourcePortInput = EditText(this).apply {
+            tag = "lc04-phone-source-appdata-port"
+            hint = "APPDATA-порт ТВ"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(5))
+        }
+        m3uInput = EditText(this).apply {
+            tag = "lc04-phone-source-m3u-url"
+            hint = "HTTPS-ссылка M3U"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            filters = arrayOf(InputFilter.LengthFilter(4096))
+        }
+        sourceNameInput = EditText(this).apply {
+            tag = "lc04-phone-source-name"
+            hint = "Имя источника (например, Каналы)"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT
+            filters = arrayOf(InputFilter.LengthFilter(120))
+        }
+        prepareButton = Button(this).apply {
+            tag = "lc04-phone-source-prepare"
+            text = "Защищённо отправить M3U"
+            setOnClickListener { prepareM3uFromGesture() }
+        }
+        activateButton = Button(this).apply {
+            tag = "lc04-phone-source-activate"
+            text = "Запросить добавление на ТВ"
+            visibility = View.GONE
+            setOnClickListener { requestSourceActivationFromGesture() }
+        }
+        confirmButton = Button(this).apply {
+            tag = "lc04-phone-source-confirm-after-tv"
+            text = "Подтвердил на ТВ — завершить"
+            visibility = View.GONE
+            setOnClickListener { confirmSourceActivationFromGesture() }
+        }
+        cancelSourceButton = Button(this).apply {
+            tag = "lc04-phone-source-cancel"
+            text = "Отменить подготовленный источник"
+            visibility = View.GONE
+            setOnClickListener { cancelPreparedSourceFromGesture() }
+        }
+        sourcePanel.addView(sourcePortInput)
+        sourcePanel.addView(m3uInput)
+        sourcePanel.addView(sourceNameInput)
+        sourcePanel.addView(prepareButton)
+        sourcePanel.addView(activateButton)
+        sourcePanel.addView(confirmButton)
+        sourcePanel.addView(cancelSourceButton)
+        nativePanel.addView(sourcePanel)
         content.addView(nativePanel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(10) })
@@ -292,6 +387,97 @@ class PhoneQrActivity : ComponentActivity() {
         hostInput.isEnabled = true
         portInput.isEnabled = true
         verifyNativeButton.visibility = View.GONE
+        mxh1PortInput.visibility = View.GONE
+        mxh1Button.visibility = View.GONE
+        sourceHandshakeButton.visibility = View.GONE
+        sourcePanel.visibility = View.GONE
+    }
+
+    /** Always a second, separate gesture after successful MXW1 proof. */
+    private fun startMxH1FromGesture() {
+        val session = nativeSession ?: return
+        val endpoint = PhoneNativeEndpoint.parseOrNull(
+            hostInput.text.toString(), mxh1PortInput.text.toString(),
+        )
+        if (endpoint == null) {
+            status.setText(R.string.scan_native_endpoint_invalid)
+            return
+        }
+        if (session.beginSealedMxH1(endpoint)) {
+            mxh1Button.isEnabled = false
+            mxh1PortInput.isEnabled = false
+            status.setText(R.string.scan_mxh1_verifying)
+        } else {
+            status.setText(R.string.scan_native_failed)
+        }
+    }
+
+    /** User selects PRODUCT F6/EOF, not the destructive diagnostic MXH1. */
+    private fun beginSourceHandshakeFromGesture() {
+        val endpoint = PhoneNativeEndpoint.parseOrNull(
+            hostInput.text.toString(), mxh1PortInput.text.toString(),
+        )
+        if (endpoint == null) {
+            status.setText(R.string.scan_native_endpoint_invalid)
+            return
+        }
+        if (nativeSession?.beginSourceMxH1(endpoint) == true) {
+            sourceHandshakeButton.isEnabled = false
+            mxh1Button.isEnabled = false
+            mxh1PortInput.isEnabled = false
+            status.text = "Ожидание настоящего F6/EOF…"
+        } else {
+            status.setText(R.string.scan_native_failed)
+        }
+    }
+
+    private fun prepareM3uFromGesture() {
+        val endpoint = PhoneNativeEndpoint.parseOrNull(
+            hostInput.text.toString(), sourcePortInput.text.toString(),
+        )
+        val url = m3uInput.text.toString().trim()
+        val name = sourceNameInput.text.toString().trim()
+        if (endpoint == null || url.isBlank() || name.isBlank() ||
+            !url.startsWith("https://", ignoreCase = true)
+        ) {
+            status.text = "Укажите APPDATA-порт, HTTPS M3U и имя источника."
+            return
+        }
+        if (nativeSession?.prepareSourceM3u(endpoint, url, name) == true) {
+            prepareButton.isEnabled = false
+            m3uInput.isEnabled = false
+            sourcePortInput.isEnabled = false
+            sourceNameInput.isEnabled = false
+            status.text = "Передача M3U по защищённому каналу…"
+        } else {
+            status.text = "Передача не началась. Создайте новую сессию QR."
+        }
+    }
+
+    private fun requestSourceActivationFromGesture() {
+        if (nativeSession?.requestSourceActivation() == true) {
+            activateButton.isEnabled = false
+            status.text = "Ожидание ответа ТВ…"
+        }
+    }
+
+    /** Cancels a prepared TV-owned credential; never retries ambiguous writes. */
+    private fun cancelPreparedSourceFromGesture() {
+        if (nativeSession?.cancelPreparedSource() == true) {
+            cancelSourceButton.isEnabled = false
+            activateButton.visibility = View.GONE
+            confirmButton.visibility = View.GONE
+            status.text = "Отмена и удаление подготовленного источника на ТВ…"
+        } else {
+            status.text = "Отменить сейчас нельзя. Проверьте состояние на ТВ."
+        }
+    }
+
+    private fun confirmSourceActivationFromGesture() {
+        if (nativeSession?.completeSourceActivationAfterTvGesture() == true) {
+            confirmButton.isEnabled = false
+            status.text = "Проверка подтверждения пультом ТВ…"
+        }
     }
 
     private fun startNativeFromGesture() {
@@ -347,12 +533,104 @@ class PhoneQrActivity : ComponentActivity() {
                         PhoneNativeProofSession.State.VERIFIED -> {
                             status.setText(R.string.scan_native_verified)
                             verifyNativeButton.visibility = View.GONE
+                            mxh1PortInput.visibility = View.VISIBLE
+                            mxh1Button.visibility = View.VISIBLE
+                            mxh1Button.isEnabled = true
+                            mxh1PortInput.isEnabled = true
+                            sourceHandshakeButton.visibility = View.VISIBLE
+                            sourceHandshakeButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.SOURCE_HANDSHAKE_RUNNING -> {
+                            status.text = "Ожидание оригинального F6 и TCP EOF…"
+                            sourceHandshakeButton.visibility = View.GONE
+                            mxh1Button.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_READY -> {
+                            status.text = "F6/EOF проверен. Откройте APPDATA на ТВ, " +
+                                "введите второй порт и HTTPS M3U."
+                            mxh1PortInput.visibility = View.GONE
+                            sourcePanel.visibility = View.VISIBLE
+                            prepareButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.SOURCE_PREPARING ->
+                            status.text = "M3U передаётся внутри AES-GCM…"
+                        PhoneNativeProofSession.State.SOURCE_PREPARED -> {
+                            status.text = "M3U подготовлен. Запросите активацию на ТВ."
+                            m3uInput.text?.clear()
+                            activateButton.visibility = View.VISIBLE
+                            activateButton.isEnabled = true
+                            cancelSourceButton.visibility = View.VISIBLE
+                            cancelSourceButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.SOURCE_REQUESTING_APPROVAL -> {
+                            cancelSourceButton.visibility = View.GONE
+                            status.text = "Ожидание защищённого ответа ТВ…"
+                        }
+                        PhoneNativeProofSession.State.SOURCE_WAIT_TV_APPROVAL -> {
+                            status.text = "Сначала подтвердите имя источника пультом ТВ, " +
+                                "затем нажмите кнопку ниже в течение 15 секунд."
+                            activateButton.visibility = View.GONE
+                            confirmButton.visibility = View.VISIBLE
+                            confirmButton.isEnabled = true
+                            cancelSourceButton.visibility = View.VISIBLE
+                            cancelSourceButton.isEnabled = true
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCELING -> {
+                            status.text = "Удаление временных данных источника на ТВ…"
+                            cancelSourceButton.isEnabled = false
+                            confirmButton.visibility = View.GONE
+                            activateButton.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCELED -> {
+                            status.text = "Источник отменён. ТВ подтвердил удаление подготовки."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCEL_CLEANUP_PENDING -> {
+                            status.text = "Отмена получена, но очистка на ТВ ещё не завершена. " +
+                                "Не повторяйте запрос. Проверьте источники на ТВ."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_CANCEL_RESULT_UNKNOWN -> {
+                            status.text = "Результат отмены неизвестен. Не повторяйте команду; " +
+                                "проверьте источники на ТВ."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_ACTIVATED -> {
+                            status.text = "Источник активирован на ТВ."
+                            m3uInput.text?.clear()
+                            sourceNameInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                            cancelSourceButton.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.SOURCE_OUTCOME_UNKNOWN -> {
+                            status.text = "Результат активации неизвестен. Не отправляйте " +
+                                "повторно: сначала проверьте источники на ТВ."
+                            m3uInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
+                        }
+                        PhoneNativeProofSession.State.MXH1_VERIFYING ->
+                            status.setText(R.string.scan_mxh1_verifying)
+                        PhoneNativeProofSession.State.MXH1_VERIFIED -> {
+                            status.setText(R.string.scan_mxh1_verified)
+                            mxh1Button.visibility = View.GONE
+                            mxh1PortInput.visibility = View.GONE
                         }
                         PhoneNativeProofSession.State.FAILED,
                         PhoneNativeProofSession.State.REVOKED -> {
                             status.setText(if (state == PhoneNativeProofSession.State.REVOKED)
                                 R.string.scan_native_revoked else R.string.scan_native_failed)
                             verifyNativeButton.visibility = View.GONE
+                            mxh1Button.visibility = View.GONE
+                            mxh1PortInput.visibility = View.GONE
+                            sourceHandshakeButton.visibility = View.GONE
+                            m3uInput.text?.clear()
+                            sourcePanel.visibility = View.GONE
                         }
                     }
                 }
@@ -383,6 +661,23 @@ class PhoneQrActivity : ComponentActivity() {
         hostInput.text?.clear()
         portInput.text?.clear()
         verifyNativeButton.visibility = View.GONE
+        mxh1Button.visibility = View.GONE
+        mxh1PortInput.visibility = View.GONE
+        mxh1PortInput.text?.clear()
+        sourceHandshakeButton.visibility = View.GONE
+        sourceHandshakeButton.isEnabled = true
+        sourcePanel.visibility = View.GONE
+        sourcePortInput.text?.clear()
+        sourcePortInput.isEnabled = true
+        m3uInput.text?.clear()
+        m3uInput.isEnabled = true
+        sourceNameInput.text?.clear()
+        sourceNameInput.isEnabled = true
+        prepareButton.isEnabled = true
+        activateButton.visibility = View.GONE
+        confirmButton.visibility = View.GONE
+        cancelSourceButton.visibility = View.GONE
+        cancelSourceButton.isEnabled = true
     }
 
     override fun onStop() {

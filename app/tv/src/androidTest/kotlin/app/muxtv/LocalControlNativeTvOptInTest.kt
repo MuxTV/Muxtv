@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import app.muxtv.designsystem.MuxTvTheme
 import app.muxtv.localcontrol.PhonePairingRoute
 import app.muxtv.localcontrol.TvPairingController
@@ -28,6 +30,13 @@ class LocalControlNativeTvOptInTest {
     @Test fun tvExplicitDpadActionAloneEnablesAndDisposingRevokesNativeEndpoint() {
         var screenVisible by mutableStateOf(true)
         var nativeStarts = 0
+        var mxh1Starts = 0
+        var sourceMxH1Starts = 0
+        var appdataStarts = 0
+        var tvSourceApprovals = 0
+        var sourceFinished by mutableStateOf(false)
+        var pendingSource by mutableStateOf<String?>(null)
+        var mxh1Verified by mutableStateOf(false)
         var legacyHttpStarts = 0
         var revocations = 0
         val expires = SystemClock.elapsedRealtime() + 120_000L
@@ -47,6 +56,26 @@ class LocalControlNativeTvOptInTest {
                         onEnableNativeProbe = {
                             nativeStarts++
                             TvPairingController.NativeProbeEndpoint("192.168.1.2", 43210)
+                        },
+                        onEnableMxH1 = {
+                            mxh1Starts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43211)
+                        },
+                        mxh1PhoneIsVerified = { mxh1Verified },
+                        onEnableSourceMxH1 = {
+                            sourceMxH1Starts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43212)
+                        },
+                        onEnableSourceAppData = {
+                            appdataStarts++
+                            TvPairingController.NativeProbeEndpoint("192.168.1.2", 43213)
+                        },
+                        sourceMxH1Finished = { sourceFinished },
+                        pendingSourceActivationName = { pendingSource },
+                        onApproveSourceActivation = {
+                            tvSourceApprovals++
+                            pendingSource = null
+                            true
                         },
                         onRevokePublicKeyPreview = { revocations++ },
                         publicKeyPreviewIsActive = { true },
@@ -104,8 +133,86 @@ class LocalControlNativeTvOptInTest {
         rule.waitUntil(10_000) {
             rule.onAllNodesWithTag("local-tv-native-endpoint").fetchSemanticsNodes().size == 1
         }
+        check(rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
+            .fetchSemanticsNodes().isEmpty()) { "MXH1 visible before verified Ed25519." }
         rule.runOnIdle {
             check(nativeStarts == 1) { "Native transport must start on exactly one TV action." }
+            check(mxh1Starts == 0) { "MXH1 must not start during MXW1 QR/proof." }
+            check(sourceMxH1Starts == 0 && appdataStarts == 0 && tvSourceApprovals == 0) {
+                "Protected source endpoints must not start from QR/native enrollment."
+            }
+            mxh1Verified = true // Simulates the verified TV-owner read, NOT remote approval
+        }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-mxh1-second-opt-in")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-source-mxh1-opt-in")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle {
+            check(mxh1Starts == 0 && sourceMxH1Starts == 0 && appdataStarts == 0) {
+                "Verified phone cannot silently grant APPDATA."
+            }
+        }
+        // The original diagnostic six-frame listener remains inert; users
+        // must deliberately choose the distinct source-key-retaining mode.
+        // This is a TV remote action, NOT a mouse/touch semantics click:
+        // the protected-source button must be focused after original approval.
+        rule.onNodeWithTag("local-tv-source-mxh1-opt-in").assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.waitUntil(10_000) { sourceMxH1Starts == 1 }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-mxh1-endpoint")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle {
+            check(sourceMxH1Starts == 1 && mxh1Starts == 0 && appdataStarts == 0) {
+                "Source handshake cannot silently start APPDATA."
+            }
+            mxh1Verified = false // Original QR is consumed by F1; not a stale approval
+            sourceFinished = true // Simulated real F6/EOF from TV owner
+        }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-source-appdata-opt-in")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle { check(appdataStarts == 0) { "F6 is not automatic source permission." } }
+        rule.waitForIdle()
+        rule.onNodeWithTag("local-tv-source-appdata-opt-in").assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.waitUntil(10_000) { appdataStarts == 1 }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-source-appdata-endpoint")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle {
+            check(appdataStarts == 1 && tvSourceApprovals == 0)
+            pendingSource = "Каналы"
+        }
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithTag("local-tv-source-activation-approve")
+                .fetchSemanticsNodes().size == 1
+        }
+        rule.runOnIdle { check(tvSourceApprovals == 0) { "Source reply is not TV consent." } }
+        // Approving a SOURCE may never be the default focus: the TV user
+        // must navigate to it and press Enter AFTER seeing the exact name.
+        rule.onNodeWithTag("local-tv-source-activation-approve")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+            .assertIsFocused()
+            .performKeyInput {
+                keyDown(Key.Enter)
+                keyUp(Key.Enter)
+            }
+        rule.runOnIdle {
+            check(tvSourceApprovals == 1) { "Only explicit TV surface may approve." }
             screenVisible = false
         }
         rule.waitForIdle()

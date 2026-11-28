@@ -2,7 +2,9 @@ package app.muxtv.localcontrol.protectedchannel
 
 import java.security.GeneralSecurityException
 import java.security.MessageDigest
+import javax.crypto.Cipher
 import javax.crypto.Mac
+import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -182,6 +184,83 @@ class Lc04SyntheticDerivedKeys(
         val expected = syntheticTvFinishedForPhoneFrameDigest(phoneFrameDigest) ?: return false
         return try { MessageDigest.isEqual(expected, receivedTag) }
         finally { expected.fill(0) }
+    }
+
+    /**
+     * One-time claim of the existing HKDF-derived secret owner. The returned
+     * digest is PUBLIC transcript binding, never raw AES traffic key material.
+     * Reopening a channel with counter reset is prohibited for nonce safety.
+     */
+    private var syntheticRecordLabClaimed = false
+
+    @Synchronized
+    internal fun claimSyntheticRecordLabOwner(): ByteArray? {
+        if (closed || syntheticRecordLabClaimed) return null
+        syntheticRecordLabClaimed = true
+        return binding.clone()
+    }
+
+    /**
+     * Synthetic-only ownership transfer after the original caller verifies
+     * every authenticated MXH1 frame, including TV_FINISHED on the phone.
+     * The key schedule itself makes NO assertion about that proof.
+     *
+     * This method exposes no raw traffic key and can succeed only once.
+     * Every error revokes this key owner rather than permitting nonce reset.
+     */
+    @Synchronized
+    fun handOffToSyntheticProbeLab(
+        phoneSide: Boolean,
+        clock: () -> Long,
+    ): Lc04MxH1SyntheticProbePort? {
+        if (closed || syntheticRecordLabClaimed) return null
+        return try {
+            Lc04MxH1SyntheticSealedRecords.fromDerivedLabKeys(
+                this,
+                if (phoneSide) Lc04SyntheticRecordRole.PHONE else Lc04SyntheticRecordRole.TV,
+                clock,
+            )
+        } catch (_: RuntimeException) {
+            close()
+            null
+        }
+    }
+
+    /** AES-256-GCM is deliberately private to this module; callers cannot submit app data. */
+    @Synchronized
+    internal fun sealSyntheticLabRecord(
+        phoneToTv: Boolean, nonce: ByteArray, plain: ByteArray, aad: ByteArray,
+    ): ByteArray? {
+        if (closed || !syntheticRecordLabClaimed || nonce.size != 12 ||
+            plain.size != 32 || aad.isEmpty()) return null
+        val key = (if (phoneToTv) phoneToTvKey else tvToPhoneKey) ?: return null
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"),
+                GCMParameterSpec(128, nonce))
+            cipher.updateAAD(aad)
+            cipher.doFinal(plain)
+        } catch (_: GeneralSecurityException) {
+            null
+        }
+    }
+
+    @Synchronized
+    internal fun openSyntheticLabRecord(
+        phoneToTv: Boolean, nonce: ByteArray, cipherText: ByteArray, aad: ByteArray,
+    ): ByteArray? {
+        if (closed || !syntheticRecordLabClaimed || nonce.size != 12 ||
+            cipherText.size != 48 || aad.isEmpty()) return null
+        val key = (if (phoneToTv) phoneToTvKey else tvToPhoneKey) ?: return null
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"),
+                GCMParameterSpec(128, nonce))
+            cipher.updateAAD(aad)
+            cipher.doFinal(cipherText)
+        } catch (_: GeneralSecurityException) {
+            null
+        }
     }
 
     @Synchronized

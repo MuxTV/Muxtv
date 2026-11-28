@@ -19,6 +19,7 @@ import app.muxtv.catalog.UnhandledPlaybackArchiveResolver
 import app.muxtv.catalog.UnhandledPlaybackReferenceResolver
 
 class MuxTvDatabaseComponents internal constructor(
+    private val database: MuxTvDatabase,
     val initializer: DatabaseInitializer,
     val sourceRevisionStore: SourceRevisionStore,
     val sourceRefreshStore: SourceRefreshStore,
@@ -35,7 +36,9 @@ class MuxTvDatabaseComponents internal constructor(
     val epgMatchingStore: EpgMatchingStore,
     val epgGuideRepository: EpgGuideRepository,
     val guideWindowRepository: GuideWindowRepository,
-)
+) : AutoCloseable {
+    override fun close() = database.close()
+}
 
 object MuxTvDatabaseFactory {
     fun create(
@@ -46,11 +49,15 @@ object MuxTvDatabaseFactory {
             UnhandledPlaybackReferenceResolver,
         playbackArchiveResolver: PlaybackArchiveResolver =
             UnhandledPlaybackArchiveResolver,
+        databaseName: String = "muxtv.db",
     ): MuxTvDatabaseComponents {
+        require(databaseName.isNotBlank() && '/' !in databaseName && '\\' !in databaseName) {
+            "Database name must be a simple filename."
+        }
         val database = Room.databaseBuilder(
             context = context.applicationContext,
             klass = MuxTvDatabase::class.java,
-            name = "muxtv.db",
+            name = databaseName,
         )
             .addMigrations(*CURRENT_DATABASE_MIGRATIONS)
             .build()
@@ -66,6 +73,7 @@ object MuxTvDatabaseFactory {
             playbackArchiveResolver = playbackArchiveResolver,
         )
         return MuxTvDatabaseComponents(
+            database = database,
             initializer = DatabaseInitializer(database),
             sourceRevisionStore = RoomSourceRevisionStore(database.sourceRevisionDao()),
             sourceRefreshStore = RoomSourceRefreshStore(database.sourceRefreshDao()),

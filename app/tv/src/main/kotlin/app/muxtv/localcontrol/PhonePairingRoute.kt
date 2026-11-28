@@ -56,6 +56,13 @@ fun PhonePairingRoute(
     onStop: () -> Unit,
     onStartPublicKeyPreview: suspend () -> TvHpkeQrPresentation?,
     onEnableNativeProbe: suspend () -> TvPairingController.NativeProbeEndpoint?,
+    onEnableMxH1: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
+    onEnableSourceMxH1: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
+    onEnableSourceAppData: suspend () -> TvPairingController.NativeProbeEndpoint? = { null },
+    sourceMxH1Finished: () -> Boolean = { false },
+    pendingSourceActivationName: () -> String? = { null },
+    onApproveSourceActivation: () -> Boolean = { false },
+    mxh1PhoneIsVerified: () -> Boolean = { false },
     onRevokePublicKeyPreview: () -> Unit,
     publicKeyPreviewIsActive: () -> Boolean,
     pendingPhoneKeyFingerprint: () -> String?,
@@ -82,6 +89,14 @@ fun PhonePairingRoute(
     var nativeEndpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
     var nativeLoading by remember { mutableStateOf(false) }
     var nativeError by remember { mutableStateOf(false) }
+    var mxh1Endpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
+    var mxh1Loading by remember { mutableStateOf(false) }
+    var mxh1Error by remember { mutableStateOf(false) }
+    var sourceMxH1Mode by remember { mutableStateOf(false) }
+    var appDataEndpoint by remember { mutableStateOf<TvPairingController.NativeProbeEndpoint?>(null) }
+    var appDataLoading by remember { mutableStateOf(false) }
+    var appDataError by remember { mutableStateOf(false) }
+    var pendingSourceName by remember { mutableStateOf<String?>(null) }
     var keySecondsRemaining by remember { mutableLongStateOf(0L) }
     var requestedPhoneFingerprint by remember { mutableStateOf<String?>(null) }
     var phoneKeyApproved by remember { mutableStateOf(false) }
@@ -89,11 +104,19 @@ fun PhonePairingRoute(
     val closeFocus = remember { FocusRequester() }
     val denyFocus = remember { FocusRequester() }
     val returnFocus = remember { FocusRequester() }
+    val sourceMxH1Focus = remember { FocusRequester() }
+    val sourceAppdataFocus = remember { FocusRequester() }
 
     suspend fun restart() {
         onRevokePublicKeyPreview()
         keyPreview = null
         nativeEndpoint = null
+        mxh1Endpoint = null
+        mxh1Error = false
+        sourceMxH1Mode = false
+        appDataEndpoint = null
+        appDataError = false
+        pendingSourceName = null
         nativeError = false
         requestedPhoneFingerprint = null
         phoneKeyApproved = false
@@ -119,6 +142,12 @@ fun PhonePairingRoute(
             onRevokePublicKeyPreview()
             keyPreview = null
             nativeEndpoint = null
+            mxh1Endpoint = null
+            mxh1Error = false
+            sourceMxH1Mode = false
+            appDataEndpoint = null
+            appDataError = false
+            pendingSourceName = null
             nativeError = false
             // Entering LC04 stops the legacy HTTP session; never present it as active.
             session = null
@@ -159,6 +188,43 @@ fun PhonePairingRoute(
         }
     }
 
+    fun enableMxH1AfterTvApproval(forSources: Boolean) {
+        if (mxh1Loading || mxh1Endpoint != null ||
+            nativeEndpoint == null || !mxh1PhoneIsVerified()
+        ) return
+        scope.launch {
+            mxh1Loading = true
+            mxh1Error = false
+            try {
+                mxh1Endpoint = if (forSources) onEnableSourceMxH1() else onEnableMxH1()
+                mxh1Error = mxh1Endpoint == null
+                if (mxh1Endpoint != null) sourceMxH1Mode = forSources
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                mxh1Error = true
+            } finally { mxh1Loading = false }
+        }
+    }
+
+    fun enableSourceAppDataAfterTvGesture() {
+        if (!sourceMxH1Mode || mxh1Endpoint == null || appDataEndpoint != null ||
+            appDataLoading || !sourceMxH1Finished()
+        ) return
+        scope.launch {
+            appDataLoading = true
+            appDataError = false
+            try {
+                appDataEndpoint = onEnableSourceAppData()
+                appDataError = appDataEndpoint == null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                appDataError = true
+            } finally { appDataLoading = false }
+        }
+    }
+
     // Neither legacy HTTP nor LC04 TCP is opened merely by navigating here.
     LaunchedEffect(restartRequest) { if (restartRequest > 0) restart() }
     LaunchedEffect(session) {
@@ -168,6 +234,9 @@ fun PhonePairingRoute(
                 error = true
             }
             pending = pendingFromTv()
+            pendingSourceName = if (sourceMxH1Mode && appDataEndpoint != null) {
+                pendingSourceActivationName()
+            } else null
             accepted = pairedCount()
             val now = SystemClock.elapsedRealtime()
             secondsRemaining = session?.let {
@@ -191,6 +260,7 @@ fun PhonePairingRoute(
             if (keyPreview != null && keySecondsRemaining == 0L) {
                 onRevokePublicKeyPreview()
                 nativeEndpoint = null
+                mxh1Endpoint = null
             }
             delay(700)
         }
@@ -211,6 +281,29 @@ fun PhonePairingRoute(
         if (keyPreview != null) {
             withFrameNanos { }
             returnFocus.requestFocus()
+        }
+    }
+    // Focus the real PRODUCT path only after original TV-approved Ed25519
+    // enrollment, when no MXH1 listener already owns this QR. Focus is not
+    // an opt-in: only the remote's subsequent D-pad Enter can open TCP.
+    val sourceStartReady = keyPreview != null && keySecondsRemaining > 0 &&
+        nativeEndpoint != null && mxh1Endpoint == null && mxh1PhoneIsVerified()
+    LaunchedEffect(sourceStartReady) {
+        if (sourceStartReady) {
+            withFrameNanos { }
+            sourceMxH1Focus.requestFocus()
+        }
+    }
+    // The original QR/F6 key owner must first prove authentic F6 and TCP
+    // half-close. Focusing APPDATA merely makes the TV remote usable; ONLY
+    // a following user D-pad Enter can create the second private listener.
+    val appdataStartReady = keyPreview != null && keySecondsRemaining > 0 &&
+        sourceMxH1Mode && mxh1Endpoint != null && appDataEndpoint == null &&
+        !appDataLoading && sourceMxH1Finished()
+    LaunchedEffect(appdataStartReady) {
+        if (appdataStartReady) {
+            withFrameNanos { }
+            sourceAppdataFocus.requestFocus()
         }
     }
     DisposableEffect(Unit) {
@@ -259,6 +352,7 @@ fun PhonePairingRoute(
                                     requestedPhoneFingerprint = null
                                     keyPreview = null
                                     nativeEndpoint = null
+                                    mxh1Endpoint = null
                                     phoneKeyApproved = false
                                 }
                             },
@@ -281,6 +375,95 @@ fun PhonePairingRoute(
                                 "TCP listener: ${endpoint.privateIpv4}:${endpoint.port}",
                                 modifier = Modifier.testTag("local-tv-native-endpoint"),
                             )
+                            // Ed25519 qualification is a one-use *start* gate:
+                            // once F1 is accepted, original MXH1 phase leaves NEW
+                            // and isApprovedMxH1PhoneReady() becomes false.
+                            // Keep the already opted-in endpoint visible through
+                            // F6 and TV D-pad APPDATA consent, never re-open it.
+                            if (mxh1PhoneIsVerified() || mxh1Endpoint != null) {
+                                val finished = mxh1Endpoint
+                                if (finished == null) {
+                                    MuxTvActionButton(
+                                        text = if (mxh1Loading) "Запуск MXH1…" else
+                                            "Включить MXH1/MXR1 (6 кадров) после подтверждения телефона",
+                                        onClick = { enableMxH1AfterTvApproval(false) },
+                                        modifier = Modifier.testTag("local-tv-mxh1-second-opt-in"),
+                                    )
+                                    MuxTvActionButton(
+                                        text = if (mxh1Loading) "Запуск защищённого канала…" else
+                                            "Разрешить передачу M3U/Xtream с телефона",
+                                        onClick = { enableMxH1AfterTvApproval(true) },
+                                        modifier = Modifier.focusRequester(sourceMxH1Focus)
+                                            .testTag("local-tv-source-mxh1-opt-in"),
+                                    )
+                                    if (mxh1Error) Text(
+                                        "MXH1 не открыт: дождитесь завершения проверки телефона и проверьте LAN.",
+                                    )
+                                } else {
+                                    Text(
+                                        "MXH1/MXR1: ${finished.privateIpv4}:${finished.port}",
+                                        modifier = Modifier.testTag("local-tv-mxh1-endpoint"),
+                                    )
+                                    if (sourceMxH1Mode) {
+                                        Text(
+                                            "Это защищённый источник: дождитесь F6/EOF на телефоне. " +
+                                                "Открытие команд требует отдельного действия на ТВ.",
+                                        )
+                                        if (sourceMxH1Finished()) {
+                                            val appdata = appDataEndpoint
+                                            if (appdata == null) {
+                                                MuxTvActionButton(
+                                                    text = if (appDataLoading) "Открытие APPDATA…" else
+                                                        "Открыть защищённый приём источников",
+                                                    onClick = ::enableSourceAppDataAfterTvGesture,
+                                                    modifier = Modifier
+                                                        .focusRequester(sourceAppdataFocus)
+                                                        .testTag("local-tv-source-appdata-opt-in"),
+                                                )
+                                                if (appDataError) {
+                                                    Text("APPDATA не открыт: обновите одноразовую сессию.")
+                                                }
+                                            } else {
+                                                Text(
+                                                    "APPDATA: ${appdata.privateIpv4}:${appdata.port}",
+                                                    modifier = Modifier.testTag(
+                                                        "local-tv-source-appdata-endpoint",
+                                                    ),
+                                                )
+                                                Text(
+                                                    "Этот адрес — только locator. Телефон обязан " +
+                                                        "использовать исходные QR/F6-ключи. " +
+                                                        "Срок подключения ограничен.",
+                                                )
+                                                pendingSourceName?.let { name ->
+                                                    Text(
+                                                        "Подтвердить добавление источника: $name",
+                                                        modifier = Modifier.testTag(
+                                                            "local-tv-source-activation-pending",
+                                                        ),
+                                                    )
+                                                    MuxTvActionButton(
+                                                        text = "Подтвердить источник пультом",
+                                                        onClick = {
+                                                            if (onApproveSourceActivation()) {
+                                                                pendingSourceName = null
+                                                            }
+                                                        },
+                                                        modifier = Modifier.testTag(
+                                                            "local-tv-source-activation-approve",
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            "Введите этот второй порт на телефоне. MXH1/MXR1 требует " +
+                                                "проверки HMAC и двух AES-GCM кадров, без IPTV-паролей.",
+                                        )
+                                    }
+                                }
+                            }
                             Text(
                                 "Адрес и порт — только способ связи, не подтверждение подлинности TV. " +
                                     "На телефоне: сканируйте этот QR, вручную введите IP и порт " +
