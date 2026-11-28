@@ -9,6 +9,8 @@ on:
       - 'build-logic/convention/src/test/kotlin/app/muxtv/buildlogic/ReleaseSbomEvidenceContractTest.kt'
       - 'tools/ci/Assert-EvidenceCommit.ps1'
       - 'tools/release/Invoke-ReleaseSbomEvidence.ps1'
+      - 'tools/release/CycloneDxMetadataWarnings.ps1'
+      - 'tools/release/Test-CycloneDxMetadataWarnings.ps1'
       - '.github/actions/setup-muxtv-jdks/**'
       - '.github/actions/upload-evidence-with-retry/**'
       - '.github/workflows/release-sbom-evidence.yml'
@@ -54,6 +56,10 @@ jobs:
             --no-problems-report
           if ($LASTEXITCODE -ne 0) { throw "Release SBOM evidence contract failed." }
 
+      - name: Test CycloneDX metadata warning parser
+        shell: pwsh
+        run: ./tools/release/Test-CycloneDxMetadataWarnings.ps1
+
       - name: Generate and inspect exact-head release SBOM
         shell: pwsh
         run: |
@@ -61,6 +67,7 @@ jobs:
             -SourceCommit "$env:SOURCE_COMMIT"
 
       - name: Upload release SBOM evidence
+        if: always()
         uses: ./.github/actions/upload-evidence-with-retry
         with:
           name-prefix: release-sbom-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}

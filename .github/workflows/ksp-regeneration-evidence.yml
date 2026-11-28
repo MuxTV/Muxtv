@@ -1,0 +1,62 @@
+name: KSP regeneration evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - 'build-logic/**'
+      - 'app/tv/build.gradle.kts'
+      - 'core/database/build.gradle.kts'
+      - 'tools/ci/ksp_probe.py'
+      - 'tools/ci/test_ksp_probe.py'
+      - '.github/workflows/ksp-regeneration-evidence.yml'
+      - '.github/actions/setup-muxtv-jdks/**'
+      - 'tools/ci/Assert-GradleWrapperIntegrity.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ksp-regeneration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  regeneration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      SOURCE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          persist-credentials: false
+      - name: Set up MuxTV JDK toolchains
+        uses: ./.github/actions/setup-muxtv-jdks
+      - name: Test probe contract
+        shell: bash
+        run: python3 -m unittest discover -s tools/ci -p 'test_ksp_probe.py'
+      - name: Qualify debug Room and Hilt regeneration
+        timeout-minutes: 58
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/ci/ksp_probe.py --source-commit "$SOURCE_COMMIT" --directory .work/evidence/ksp-regeneration
+      - name: Upload KSP regeneration evidence
+        if: always()
+        uses: ./.github/actions/upload-evidence-with-retry
+        with:
+          name-prefix: ksp-regeneration-${{ env.SOURCE_COMMIT }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .work/evidence/ksp-regeneration/**
+          retention-days: 7
+          github-token: ${{ github.token }}
